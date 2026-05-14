@@ -8,7 +8,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -49,48 +48,82 @@
             <div class="content-views">
                 <div id="home-view" class="view active">
                     <h2>Trending Airing Anime</h2>
-                    <div class="carousel" id="trending-carousel"><div class="loading">Fetching trending anime...</div></div>
-                    <h2 id="home-feed-title">Recent WeeBee Reviews</h2>
+                    <div class="carousel-container">
+                        <button class="carousel-arrow left" onclick="scrollCarousel('trending-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                        <div class="carousel" id="trending-carousel"><div class="loading">Fetching trending anime...</div></div>
+                        <button class="carousel-arrow right" onclick="scrollCarousel('trending-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                    </div>
+
+                    <div id="home-news-section" style="display:none; margin-bottom: 40px; margin-top: 20px;">
+                        <h2>News from your Follows</h2>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('home-news-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="home-news-carousel"><div class="loading">Fetching news...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('home-news-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
+                    </div>
+
+                    <h2 id="home-feed-title" style="margin-top: 20px;">Recent WeeBee Reviews</h2>
                     <div class="review-feed" id="review-feed"><div class="loading">Fetching recent reviews...</div></div>
                 </div>
 
                 <div id="discover-view" class="view">
-                    <div style="margin-bottom: 40px;">
-                        <h2 style="margin-bottom: 5px;">WeeBee's Top 10 All Time</h2>
-                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">Ranked purely by WeeBee community scores</p>
-                        <div class="top10-grid" id="weebee-top10-grid"><div class="loading">Calculating WeeBee scores...</div></div>
+                    <div style="margin-bottom: 50px;">
+                        <h2 style="margin-bottom: 5px; text-align: center;">WeeBee's Top 10 All Time</h2>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px; text-align: center;">Ranked purely by WeeBee community scores</p>
+                        <div id="weebee-top10-container"><div class="loading">Calculating WeeBee scores...</div></div>
                     </div>
 
-                    <div style="margin-bottom: 40px;">
+                    <div style="margin-bottom: 40px; border-top: 1px solid #E0E0E0; padding-top: 40px;">
                         <h2 style="margin-bottom: 5px;">Suggested by Friends</h2>
                         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Recently reviewed or suggested by people you follow</p>
-                        <div class="carousel" id="friends-suggested-carousel"><div class="loading">Loading suggestions...</div></div>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('friends-suggested-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="friends-suggested-carousel"><div class="loading">Loading suggestions...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('friends-suggested-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 40px;">
                         <h2>Trending Now</h2>
-                        <div class="carousel" id="discover-trending-carousel"><div class="loading">Loading trending...</div></div>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('discover-trending-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="discover-trending-carousel"><div class="loading">Loading trending...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('discover-trending-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 40px;">
                         <h2>Top Action</h2>
-                        <div class="carousel" id="discover-action-carousel"><div class="loading">Loading action...</div></div>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('discover-action-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="discover-action-carousel"><div class="loading">Loading action...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('discover-action-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 40px;">
                         <h2>Top Romance</h2>
-                        <div class="carousel" id="discover-romance-carousel"><div class="loading">Loading romance...</div></div>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('discover-romance-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="discover-romance-carousel"><div class="loading">Loading romance...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('discover-romance-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 40px;">
                         <h2>Top Comedy</h2>
-                        <div class="carousel" id="discover-comedy-carousel"><div class="loading">Loading comedy...</div></div>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('discover-comedy-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="discover-comedy-carousel"><div class="loading">Loading comedy...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('discover-comedy-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
                     </div>
                 </div>
 
                 <div id="my-list-view" class="view">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-                        <h2>My Anime List</h2>
+                        <h2 id="my-list-header-title">My Anime List</h2>
                         <button class="action-btn" onclick="openAddToListModal()"><span class="material-symbols-outlined">add</span> Add to List</button>
                     </div>
 
@@ -146,13 +179,13 @@
                                 <div id="currently-watching-list" class="watching-mini">
                                     <p class="empty-msg">Not tracking anything yet.</p>
                                 </div>
-                                <p style="font-size: 11px; text-align: center; margin-top: 10px; color: var(--text-muted);">Manage in My List</p>
+                                <p style="font-size: 11px; text-align: center; margin-top: 10px; color: var(--text-muted);">See Full List</p>
                             </div>
                 
                             <div class="profile-card">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                                    <h4 id="top-anime-title" style="margin-bottom: 0; color: var(--text-dark); font-weight: 800;">User's Top Anime</h4>
-                                    <button class="action-btn" style="padding: 4px 10px; font-size: 11px;" onclick="openTopAnimeModal()">Edit</button>
+                                    <h4 id="top-anime-title" style="margin-bottom: 0; color: var(--text-dark); font-weight: 800;">Top Anime</h4>
+                                    <button class="action-btn" id="edit-top-anime-btn" style="padding: 4px 10px; font-size: 11px;" onclick="openTopAnimeModal()">Edit</button>
                                 </div>
                                 <div id="top-anime-list" class="top-list">
                                     <p class="empty-msg">List is empty.</p>
@@ -174,9 +207,14 @@
                             <div id="p-social" class="p-tab-content" style="display:none;">
                                 <div class="social-section">
                                     <h5>Following Anime</h5>
-                                    <div id="followed-anime-list" class="carousel mini"></div>
-                                    <h5 style="margin-top:20px;">Following Users</h5>
-                                    <div id="followed-users-list" class="user-chip-grid"></div>
+                                    <div class="carousel-container" style="margin-top: 10px; margin-bottom: 25px;">
+                                        <button class="carousel-arrow left" onclick="scrollCarousel('followed-anime-list', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                                        <div id="followed-anime-list" class="carousel"></div>
+                                        <button class="carousel-arrow right" onclick="scrollCarousel('followed-anime-list', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                                    </div>
+                                    
+                                    <h5>Following Users</h5>
+                                    <div id="followed-users-list" class="user-chip-grid" style="margin-top: 10px;"></div>
                                 </div>
                             </div>
                 
@@ -233,7 +271,7 @@
                     <input type="number" id="list-entry-score" min="1" max="10" step="0.1" placeholder="e.g. 8.5" style="margin-bottom:0;">
                 </div>
                 <div style="flex: 1;">
-                    <label style="display:flex; align-items:center; gap: 5px;">Fan Service <span class="material-symbols-outlined" style="font-size:12px; color:var(--text-muted);" title="Background Stat">info</span></label>
+                    <label style="display:flex; align-items:center; gap: 5px;">Fan Service <span class="material-symbols-outlined tooltip-icon" data-tooltip="A 1-10 scale indicating the amount of fan service. 1 = None, 10 = Heavy fan service. This is a background community stat and does not affect the anime's overall score." style="font-size:12px; color:var(--text-muted);">info</span></label>
                     <input type="number" id="list-entry-fanservice" min="1" max="10" step="0.1" placeholder="Scale 1-10" style="margin-bottom:0;">
                 </div>
             </div>
