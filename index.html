@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeeBee - Desktop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo">WeeBee</div>
+            <nav>
+                <button class="nav-btn active" data-target="home-view" onclick="switchView('home-view')">
+                    <span class="material-symbols-outlined">home</span> Home
+                </button>
+                <button class="nav-btn" data-target="discover-view" onclick="switchView('discover-view')">
+                    <span class="material-symbols-outlined">explore</span> Discover
+                </button>
+                <button class="nav-btn" data-target="news-view" onclick="switchView('news-view')">
+                    <span class="material-symbols-outlined">newspaper</span> News
+                </button>
+                <button class="nav-btn">
+                    <span class="material-symbols-outlined">groups</span> Community
+                </button>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div class="search-bar">
+                    <span class="material-symbols-outlined">search</span>
+                    <input type="text" placeholder="Search anime, users, clubs...">
+                </div>
+                
+                <div class="user-profile" id="user-auth-section" style="position: relative;">
+                    <div class="loading" style="padding: 0;">Loading...</div>
+                </div>
+            </header>
+
+            <div class="content-views">
+                <div id="home-view" class="view active">
+                    <h2>Trending Airing Anime</h2>
+                    <div class="carousel" id="trending-carousel"><div class="loading">Fetching trending anime...</div></div>
+                    <h2 id="home-feed-title">Recent WeeBee Reviews</h2>
+                    <div class="review-feed" id="review-feed"><div class="loading">Fetching recent reviews...</div></div>
+                </div>
+
+                <div id="discover-view" class="view">
+                    <h2>WeeBee's Top 10 All Time</h2>
+                    <div class="top10-grid" id="top10-grid"><div class="loading">Fetching top anime...</div></div>
+                </div>
+
+                <div id="news-view" class="view">
+                    <h2>Global Anime News</h2>
+                    <div id="global-news-feed" class="news-grid">
+                        <div class="loading">Fetching latest headlines...</div>
+                    </div>
+                </div>
+
+                <div id="profile-view" class="view">
+                    <div id="profile-header-container"></div>
+                    
+                    <div class="profile-layout-grid">
+                        <aside class="profile-side-deck">
+                            <div class="profile-card">
+                                <h4>Anime Stats</h4>
+                                <div id="profile-stats-content"></div>
+                            </div>
+                
+                            <div class="profile-card">
+                                <h4>Currently Watching</h4>
+                                <div id="currently-watching-content" class="watching-mini">
+                                    <p class="empty-msg">Not tracking anything yet.</p>
+                                </div>
+                            </div>
+                
+                            <div class="profile-card">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                    <h4 id="top-anime-title" style="margin-bottom: 0; color: var(--text-dark); font-weight: 800;">User's Top Anime</h4>
+                                    <button class="action-btn" style="padding: 4px 10px; font-size: 11px;" onclick="openTopAnimeModal()">Edit</button>
+                                </div>
+                                <div id="top-anime-list" class="top-list">
+                                    <p class="empty-msg">List is empty.</p>
+                                </div>
+                            </div>
+                        </aside>
+                
+                        <div class="profile-main-feed">
+                            <div class="profile-tabs">
+                                <button class="p-tab active" onclick="switchProfileTab(event, 'p-reviews')">Reviews</button>
+                                <button class="p-tab" onclick="switchProfileTab(event, 'p-social')">Following</button>
+                                <button class="p-tab" onclick="switchProfileTab(event, 'p-comments')">Guestbook</button>
+                            </div>
+                
+                            <div id="p-reviews" class="p-tab-content active">
+                                <div id="user-reviews-feed" class="review-feed"></div>
+                            </div>
+                
+                            <div id="p-social" class="p-tab-content" style="display:none;">
+                                <div class="social-section">
+                                    <h5>Following Anime</h5>
+                                    <div id="followed-anime-list" class="carousel mini"></div>
+                                    <h5 style="margin-top:20px;">Following Users</h5>
+                                    <div id="followed-users-list" class="user-chip-grid"></div>
+                                </div>
+                            </div>
+                
+                            <div id="p-comments" class="p-tab-content" style="display:none;">
+                                <div class="guestbook-input">
+                                    <textarea id="profile-comment-input" placeholder="Leave a message on this profile..."></textarea>
+                                    <button class="action-btn" onclick="submitProfileComment()">Post Message</button>
+                                </div>
+                                <div id="profile-comments-feed" class="comment-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="anime-detail-view" class="view">
+                    <button class="back-btn" onclick="goBack()"><span class="material-symbols-outlined">arrow_back</span> Back</button>
+                    <div class="detail-layout" id="anime-detail-content"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="choice-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3>Write a Review</h3>
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+                <button onclick="openInDepthModal()" class="action-btn" style="justify-content: center; padding: 15px; font-size: 15px;">
+                    <span class="material-symbols-outlined">analytics</span> In-Depth Review
+                </button>
+                <button onclick="openQuickScoreModal()" class="action-btn" style="justify-content: center; padding: 15px; font-size: 15px; background-color: var(--bg-gray-darker); color: var(--text-dark);">
+                    <span class="material-symbols-outlined">speed</span> Quick Score
+                </button>
+            </div>
+            <div class="modal-actions" style="justify-content: center; margin-top: 20px;">
+                <button onclick="closeAllModals()" class="cancel-btn" style="width: 100%;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="quick-score-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content">
+            <h3>Quick Score</h3>
+            <label>Overall Score (1-10)</label>
+            <input type="number" id="quick-score-value" min="1" max="10" step="0.1" value="10">
+            <label>Your Thoughts</label>
+            <textarea id="quick-score-text" rows="4" placeholder="What did you think?"></textarea>
+            <div class="modal-actions">
+                <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
+                <button onclick="submitQuickReview()" class="submit-btn">Submit Review</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="in-depth-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content">
+            <h3>In-Depth Review</h3>
+            <div id="in-depth-categories"></div>
+            <div class="modal-actions" style="position: sticky; bottom: -30px; background: var(--bg-white); padding: 15px 0; border-top: 1px solid #E0E0E0;">
+                <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
+                <button onclick="previewInDepthReview()" class="submit-btn">Preview Review</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="preview-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content">
+            <h3>Review Preview</h3>
+            <div id="preview-content"></div>
+            <div class="modal-actions" style="margin-top: 20px;">
+                <button onclick="openInDepthModal()" class="cancel-btn">Edit</button>
+                <button onclick="submitInDepthReview()" class="submit-btn">Submit to WeeBee</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="suggest-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content">
+            <h3>Suggest this Anime</h3>
+            <div class="profile-tabs" style="margin-bottom: 20px; border-bottom: 1px solid #E0E0E0;">
+                <button class="p-tab active" onclick="toggleSuggestType('feed', this)" style="flex: 1;">Post to Feed</button>
+                <button class="p-tab" onclick="toggleSuggestType('friend', this)" style="flex: 1;">Send to Friend</button>
+            </div>
+            
+            <div id="suggest-feed-form">
+                <label>Why are you suggesting this?</label>
+                <textarea id="suggest-feed-text" rows="3" placeholder="You gotta watch this because..." style="width: 100%; border-radius: 8px; border: 1px solid #E0E0E0; padding: 10px; font-family: inherit; resize: vertical; margin-bottom: 10px;"></textarea>
+            </div>
+
+            <div id="suggest-friend-form" style="display:none;">
+                <label>Select a Friend</label>
+                <select id="suggest-friend-select" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #E0E0E0; margin-bottom: 15px; font-family: inherit;">
+                    <option value="">Loading friends...</option>
+                </select>
+                <label>Add a Message (Optional)</label>
+                <textarea id="suggest-friend-text" rows="2" placeholder="Check this out!" style="width: 100%; border-radius: 8px; border: 1px solid #E0E0E0; padding: 10px; font-family: inherit; resize: vertical; margin-bottom: 10px;"></textarea>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 10px;">
+                <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
+                <button onclick="submitSuggestion()" class="submit-btn">Send Suggestion</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="top-anime-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width: 500px;">
+            <h3>Rank Your Top 10 Anime</h3>
+            
+            <div style="display:flex; gap:10px; margin-bottom: 15px;">
+                <input type="text" id="top-anime-search-input" placeholder="Search anime to add..." style="flex:1; padding:10px; border-radius:8px; border:1px solid #E0E0E0;" onkeydown="if(event.key === 'Enter') searchTopAnime()">
+                <button class="action-btn" onclick="searchTopAnime()">Search</button>
+            </div>
+            
+            <div id="top-anime-search-results" style="display:none; max-height: 200px; overflow-y:auto; border: 1px solid #E0E0E0; border-radius:8px; padding:10px; margin-bottom:15px; background: var(--bg-gray);"></div>
+
+            <h4 style="margin-bottom: 5px;">Your Ranked List (Max 10)</h4>
+            <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 15px;">Use the arrows to rank them from 1 (Masterpiece) to 10.</p>
+            
+            <div id="top-anime-edit-list" style="display:flex; flex-direction:column; gap:10px; margin-bottom: 20px;"></div>
+
+            <div class="modal-actions" style="border-top: 1px solid #E0E0E0; padding-top: 15px;">
+                <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
+                <button onclick="saveTopAnime()" class="submit-btn">Save Ranked List</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="auth-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width: 350px;">
+            <h3 id="auth-title">Welcome to WeeBee</h3>
+            <div id="auth-error" style="color: red; font-size: 12px; margin-bottom: 15px; text-align: center;"></div>
+            
+            <button onclick="signInWithGoogle()" class="action-btn" style="width: 100%; justify-content: center; background-color: var(--bg-gray-darker); color: var(--text-dark); margin-bottom: 15px; border: 1px solid #E0E0E0;">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" style="width: 18px; margin-right: 5px;">
+                Continue with Google
+            </button>
+            
+            <div style="display: flex; align-items: center; text-align: center; color: var(--text-muted); font-size: 12px; margin-bottom: 15px;">
+                <div style="flex: 1; border-bottom: 1px solid #E0E0E0;"></div>
+                <span style="padding: 0 10px;">or</span>
+                <div style="flex: 1; border-bottom: 1px solid #E0E0E0;"></div>
+            </div>
+
+            <div id="signup-fields" style="display:none;">
+                <label>Choose a Username</label>
+                <input type="text" id="auth-username" placeholder="e.g. StrawHatJesse">
+            </div>
+            
+            <label>Email</label>
+            <input type="email" id="auth-email" placeholder="you@example.com">
+            
+            <label>Password</label>
+            <input type="password" id="auth-password" placeholder="••••••••">
+            
+            <div class="modal-actions" style="flex-direction: column; gap: 10px; margin-top: 10px;">
+                <button onclick="submitAuth()" class="submit-btn" style="width: 100%;" id="auth-submit-btn">Sign In</button>
+                <button onclick="closeAllModals()" class="cancel-btn" style="width: 100%; background: transparent;">Cancel</button>
+            </div>
+            
+            <p style="text-align: center; margin-top: 20px; font-size: 12px; cursor: pointer; color: var(--text-muted); font-weight: 600;" onclick="toggleAuthMode()">
+                <span id="auth-toggle-text">Need an account? Sign up here.</span>
+            </p>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
