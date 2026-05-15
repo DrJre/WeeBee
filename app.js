@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, updateDoc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, updateDoc, getDoc, setDoc, increment } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -15,8 +15,49 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app); 
+const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
+
+// --- RANK SYSTEM ---
+window.myReviewCount = 0;
+window.userRankCache = {};
+
+window.getRankInfo = function(count) {
+    if (count >= 100) return { name: 'Diamond',  icon: 'diamond',           color: '#00BCD4', next: null, min: 100 };
+    if (count >= 40)  return { name: 'Gold',     icon: 'workspace_premium', color: '#FFC107', next: 100,  min: 40  };
+    if (count >= 15)  return { name: 'Silver',   icon: 'workspace_premium', color: '#9E9E9E', next: 40,   min: 15  };
+    if (count >= 5)   return { name: 'Bronze',   icon: 'workspace_premium', color: '#CD7F32', next: 15,   min: 5   };
+    return             { name: 'Newcomer', icon: 'grade',             color: '#BDBDBD', next: 5,    min: 0   };
+};
+
+window.getRankBadgeHTML = function(count, size = 18) {
+    const r = window.getRankInfo(count);
+    const tip = r.next ? `${r.name} · ${count}/${r.next} reviews` : `${r.name} · ${count} reviews`;
+    return `<span class="material-symbols-outlined" title="${tip}" style="font-size:${size}px; color:${r.color}; cursor:default; vertical-align:middle; line-height:1;">${r.icon}</span>`;
+};
+
+window.prefetchRankCache = async function(uids) {
+    const unique = [...new Set(uids)].filter(uid => uid && window.userRankCache[uid] === undefined);
+    if (!unique.length) return;
+    await Promise.all(unique.map(async uid => {
+        try {
+            const d = await getDoc(doc(db, "profiles", uid));
+            window.userRankCache[uid] = d.exists() ? (d.data().reviewCount || 0) : 0;
+        } catch(e) { window.userRankCache[uid] = 0; }
+    }));
+};
+
+window.updateTopbarRank = async function() {
+    if (!auth.currentUser) return;
+    try {
+        const pd = await getDoc(doc(db, "profiles", auth.currentUser.uid));
+        const count = pd.exists() ? (pd.data().reviewCount || 0) : 0;
+        window.myReviewCount = count;
+        window.userRankCache[auth.currentUser.uid] = count;
+        const el = document.getElementById('topbar-rank-badge');
+        if (el) el.innerHTML = window.getRankBadgeHTML(count, 16);
+    } catch(e) {}
+};
 
 window.currentActiveViewId = 'home-view';
 window.previousViewId = 'home-view';
@@ -29,6 +70,7 @@ window.isSignUpMode = false;
 window.myAnimeList = [];
 window.currentListTab = 'all';
 window.currentListSort = { key: 'score', desc: true };
+window.myFollowedUserIds = new Set();
 window.currentListEntryTotalEps = 0; 
 window.currentAnimeEpisodes = []; 
 window.unreadNotifDocs = [];
@@ -45,7 +87,7 @@ window.scrollCarousel = function(containerId, direction) {
 onAuthStateChanged(auth, (user) => {
     const authSection = document.getElementById('user-auth-section');
     if (user) {
-        const avatarUrl = user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.displayName}`;
+        const avatarUrl = user.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(user.displayName)}&backgroundColor=ffc107&fontColor=333333`;
         authSection.innerHTML = `
             <div style="position:relative; display:flex; align-items:center; margin-right: 15px;">
                 <span class="material-symbols-outlined" style="font-size:26px; cursor:pointer; color:var(--text-dark);" onclick="toggleNotifications(event)">notifications</span>
@@ -57,19 +99,21 @@ onAuthStateChanged(auth, (user) => {
                 </div>
             </div>
             <div style="display:flex; align-items:center; gap: 10px; cursor:pointer;" onclick="toggleDropdown(event)">
-                <span style="font-weight:600; font-size:14px;">${user.displayName}</span>
+                <span style="font-weight:600; font-size:14px;">${user.displayName}</span><span id="topbar-rank-badge" style="display:inline-flex; align-items:center; margin-left:2px;"></span>
                 <img src="${avatarUrl}" alt="User" class="avatar">
                 <span class="material-symbols-outlined" style="font-size:18px;">expand_more</span>
             </div>
             <div id="profile-dropdown" class="dropdown-menu" style="display: none; right:0; top:50px;">
                 <div class="dropdown-item" onclick="viewUserProfile('${user.uid}')"><span class="material-symbols-outlined">person</span> My Profile</div>
-                <div class="dropdown-item"><span class="material-symbols-outlined">settings</span> Settings</div>
+                <div class="dropdown-item" onclick="openSettingsModal()"><span class="material-symbols-outlined">settings</span> Settings</div>
                 <div class="dropdown-divider"></div>
                 <div class="dropdown-item logout" onclick="logoutUser()"><span class="material-symbols-outlined">logout</span> Sign Out</div>
             </div>
         `;
-        fetchMyList(); 
+        fetchMyList();
         fetchNotifications();
+        fetchMyFollows();
+        window.updateTopbarRank();
     } else {
         authSection.innerHTML = `<button class="action-btn" onclick="openAuthModal()"><span class="material-symbols-outlined">login</span> Sign In</button>`;
         if(window.currentActiveViewId === 'profile-view' || window.currentActiveViewId === 'my-list-view') switchView('home-view');
@@ -158,7 +202,168 @@ window.fetchNotifications = async function() {
     } catch(e) { console.error("Notif error", e); }
 };
 
+window.closeAllModals = function() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); };
+
+window.fetchMyFollows = async function() {
+    if (!auth.currentUser) { window.myFollowedUserIds.clear(); return; }
+    try {
+        const snap = await getDocs(query(collection(db, "follows"), where("followerUid", "==", auth.currentUser.uid), where("type", "==", "user")));
+        window.myFollowedUserIds.clear();
+        snap.forEach(d => window.myFollowedUserIds.add(d.data().targetId));
+    } catch(e) {}
+};
+
+window.getFollowBtnHTML = function(uid) {
+    if (!uid || !auth.currentUser || uid === auth.currentUser.uid) return '';
+    if (window.myFollowedUserIds.has(uid)) {
+        return `<button onclick="event.stopPropagation(); toggleFollow('${uid}', 'user', this)" class="action-btn" style="padding:4px 10px; font-size:11px; background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined" style="font-size:14px;">check</span> Following</button>`;
+    }
+    return `<button onclick="event.stopPropagation(); toggleFollow('${uid}', 'user', this)" class="action-btn" style="padding:4px 10px; font-size:11px;"><span class="material-symbols-outlined" style="font-size:14px;">person_add</span> Follow</button>`;
+};
 window.openAuthModal = function() { window.closeAllModals(); document.getElementById('auth-modal').style.display = 'flex'; };
+
+window.openSettingsModal = function() {
+    document.getElementById('profile-dropdown').style.display = 'none';
+    window.closeAllModals();
+    document.getElementById('settings-modal').style.display = 'flex';
+    document.getElementById('dark-mode-toggle').checked = document.body.getAttribute('data-theme') === 'dark';
+};
+
+window.toggleDarkMode = function() {
+    const newTheme = document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.body.setAttribute('data-theme', newTheme);
+    localStorage.setItem('weebee-theme', newTheme);
+};
+
+// --- REVIEW SYSTEM ---
+const REVIEW_CATEGORIES = ['Story', 'Animation', 'Sound', 'Characters', 'Enjoyment'];
+
+window.openReviewModal = function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    window.closeAllModals();
+    document.getElementById('choice-modal').style.display = 'flex';
+};
+
+window.openQuickScoreModal = function() {
+    window.closeAllModals();
+    document.getElementById('quick-score-value').value = '';
+    document.getElementById('quick-fanservice-value').value = '';
+    document.getElementById('quick-score-text').value = '';
+    document.getElementById('quick-score-modal').style.display = 'flex';
+};
+
+window.openInDepthModal = function() {
+    window.closeAllModals();
+    const existing = window.pendingInDepthData;
+    document.getElementById('in-depth-categories').innerHTML = REVIEW_CATEGORIES.map((cat, i) => `
+        <div class="category-block">
+            <div class="cat-header">
+                <label>${cat}</label>
+                <input type="number" id="cat-score-${i}" min="1" max="10" step="0.1" placeholder="1-10" value="${existing?.categories?.[i]?.score || ''}">
+            </div>
+            <textarea id="cat-text-${i}" placeholder="Your thoughts on ${cat.toLowerCase()}... (Optional)" rows="2">${existing?.categories?.[i]?.text || ''}</textarea>
+        </div>
+    `).join('');
+    if (existing?.fanService) document.getElementById('in-depth-fanservice-value').value = existing.fanService;
+    document.getElementById('in-depth-modal').style.display = 'flex';
+};
+
+window.previewInDepthReview = function() {
+    const categories = REVIEW_CATEGORIES.map((cat, i) => ({
+        label: cat,
+        score: parseFloat(document.getElementById(`cat-score-${i}`).value) || null,
+        text: document.getElementById(`cat-text-${i}`).value.trim()
+    }));
+    const scored = categories.filter(c => c.score);
+    if (scored.length === 0) return alert('Please score at least one category.');
+    const overallScore = (scored.reduce((sum, c) => sum + c.score, 0) / scored.length).toFixed(1);
+    const fanService = parseFloat(document.getElementById('in-depth-fanservice-value').value) || null;
+    window.pendingInDepthData = { categories, overallScore, fanService };
+
+    const catBadges = scored.map(c => `
+        <div style="display:flex;flex-direction:column;align-items:center;width:75px;">
+            <span style="font-size:10px;font-weight:600;margin-bottom:8px;text-align:center;height:24px;display:flex;align-items:flex-end;">${c.label}</span>
+            <div class="rating-badge ${window.getScoreTier(c.score)}" style="width:55px;height:55px;font-size:18px;">${c.score}</div>
+        </div>`).join('');
+
+    const catDetails = scored.map(c => `
+        <div style="background:var(--bg-gray);padding:12px;border-radius:10px;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${c.text ? '8px' : '0'};">
+                <strong>${c.label}</strong>
+                <div class="rating-badge ${window.getScoreTier(c.score)}" style="width:32px;height:32px;font-size:11px;">${c.score}</div>
+            </div>
+            ${c.text ? `<p style="font-size:13px;color:var(--text-muted);margin:0;">${c.text}</p>` : ''}
+        </div>`).join('');
+
+    document.getElementById('preview-content').innerHTML = `
+        <p style="text-align:center;font-size:13px;color:var(--text-muted);margin-bottom:20px;">Reviewing: <strong>${window.currentAnime?.title_english || window.currentAnime?.title || 'Unknown'}</strong></p>
+        <div style="display:flex;gap:15px;flex-wrap:wrap;justify-content:center;align-items:flex-end;margin-bottom:20px;">
+            ${catBadges}
+            <div style="width:1px;height:45px;background:#E0E0E0;margin:0 10px;margin-bottom:5px;"></div>
+            <div style="display:flex;flex-direction:column;align-items:center;width:75px;">
+                <span style="font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;height:24px;display:flex;align-items:flex-end;">Overall</span>
+                <div class="rating-badge ${window.getScoreTier(overallScore)}" style="width:55px;height:55px;font-size:18px;">${overallScore}</div>
+            </div>
+        </div>
+        ${catDetails}
+        ${fanService ? `<p style="font-size:12px;color:var(--text-muted);text-align:center;margin-top:10px;">Fan Service rating: ${fanService}/10</p>` : ''}`;
+
+    window.closeAllModals();
+    document.getElementById('preview-modal').style.display = 'flex';
+};
+
+window.submitInDepthReview = async function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    const { categories, overallScore, fanService } = window.pendingInDepthData;
+    try {
+        await addDoc(collection(db, "reviews"), {
+            mal_id: window.currentAnimeId,
+            animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
+            animeImage: window.currentAnime?.images?.jpg?.image_url,
+            type: 'in-depth', score: parseFloat(overallScore), categories,
+            fanService: fanService || null, text: '',
+            username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
+            uid: auth.currentUser.uid, timestamp: new Date(),
+            likes: [], dislikes: [], commentCount: 0
+        });
+        window.myReviewCount = (window.myReviewCount || 0) + 1;
+        window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
+        const _avId = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        setDoc(doc(db, "profiles", auth.currentUser.uid), { reviewCount: increment(1), displayName: auth.currentUser.displayName, avatar: _avId }, { merge: true }).catch(() => {});
+        const _tb = document.getElementById('topbar-rank-badge');
+        if (_tb) _tb.innerHTML = window.getRankBadgeHTML(window.myReviewCount, 16);
+        window.pendingInDepthData = null;
+        window.closeAllModals();
+        window.loadAnimeDetails(window.currentAnimeId);
+    } catch(e) { alert('Failed to submit review.'); console.error(e); }
+};
+
+window.submitQuickReview = async function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    const score = parseFloat(document.getElementById('quick-score-value').value);
+    const text = document.getElementById('quick-score-text').value.trim();
+    const fanService = parseFloat(document.getElementById('quick-fanservice-value').value) || null;
+    if (!score || score < 1 || score > 10) return alert('Please enter a score between 1 and 10.');
+    try {
+        await addDoc(collection(db, "reviews"), {
+            mal_id: window.currentAnimeId,
+            animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
+            animeImage: window.currentAnime?.images?.jpg?.image_url,
+            type: 'quick', score, fanService, text,
+            username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
+            uid: auth.currentUser.uid, timestamp: new Date(),
+            likes: [], dislikes: [], commentCount: 0
+        });
+        window.myReviewCount = (window.myReviewCount || 0) + 1;
+        window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
+        const _avIq = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        setDoc(doc(db, "profiles", auth.currentUser.uid), { reviewCount: increment(1), displayName: auth.currentUser.displayName, avatar: _avIq }, { merge: true }).catch(() => {});
+        const _tbq = document.getElementById('topbar-rank-badge');
+        if (_tbq) _tbq.innerHTML = window.getRankBadgeHTML(window.myReviewCount, 16);
+        window.closeAllModals();
+        window.loadAnimeDetails(window.currentAnimeId);
+    } catch(e) { alert('Failed to submit review.'); console.error(e); }
+};
 window.toggleAuthMode = function() {
     window.isSignUpMode = !window.isSignUpMode;
     const title = document.getElementById('auth-title');
@@ -174,7 +379,7 @@ window.submitAuth = async function() {
     try {
         if (window.isSignUpMode) {
             const userCred = await createUserWithEmailAndPassword(auth, email, password);
-            await updateProfile(userCred.user, { displayName: username, photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}` });
+            await updateProfile(userCred.user, { displayName: username, photoURL: `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(username)}&backgroundColor=ffc107&fontColor=333333` });
             
             await addDoc(collection(db, "notifications"), {
                 targetUid: userCred.user.uid, type: 'system', senderName: 'WeeBee Team', senderUid: 'system',
@@ -208,7 +413,7 @@ window.toggleFollow = async function(targetId, type, btnElement) {
         extraData.image = window.currentAnime.images.jpg.image_url;
     } else if (type === 'user' && window.targetProfileUid) {
         const uName = document.querySelector('.profile-header h1')?.innerText || 'User';
-        const uImg = document.querySelector('.profile-avatar-large')?.src || `https://api.dicebear.com/7.x/avataaars/svg?seed=${targetId}`;
+        const uImg = document.querySelector('.profile-avatar-large')?.src || `https://api.dicebear.com/9.x/initials/svg?seed=${targetId}`;
         extraData.username = uName;
         extraData.avatar = uImg;
     }
@@ -216,6 +421,7 @@ window.toggleFollow = async function(targetId, type, btnElement) {
     if(snap.empty) {
         await addDoc(collection(db, "follows"), { followerUid: auth.currentUser.uid, targetId: targetId, type: type, ...extraData });
         btnElement.innerHTML = `<span class="material-symbols-outlined">check</span> Following`; btnElement.style.backgroundColor = "var(--bg-gray-darker)";
+        if(type === 'user') window.myFollowedUserIds.add(targetId);
         
         if(type === 'user') {
             await addDoc(collection(db, "notifications"), {
@@ -228,6 +434,7 @@ window.toggleFollow = async function(targetId, type, btnElement) {
         await deleteDoc(doc(db, "follows", snap.docs[0].id));
         btnElement.innerHTML = type === 'anime' ? `<span class="material-symbols-outlined">bookmark_add</span> Follow Anime` : `<span class="material-symbols-outlined">person_add</span> Follow`;
         btnElement.style.backgroundColor = "var(--accent-yellow)";
+        if(type === 'user') window.myFollowedUserIds.delete(targetId);
     }
 };
 
@@ -764,12 +971,12 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                 <div style="display:flex; gap: 15px;">
                     <img src="${rev.avatar}" class="avatar clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">
                     <div>
-                        <strong class="clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</strong> 
+                        <strong class="clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</strong> ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)}
                         <span class="source-badge" style="background: #4CAF50; color: white; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase;">Suggestion</span><br>
                         <span style="font-size: 12px; color: var(--text-muted);">Suggested: <strong style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong></span>
                     </div>
                 </div>
-                <button onclick="event.stopPropagation(); toggleFollow('${safeUid}', 'user', this)" class="action-btn" style="padding: 4px 10px; font-size: 11px;"><span class="material-symbols-outlined" style="font-size:14px;">person_add</span> Follow</button>
+                ${window.getFollowBtnHTML(safeUid)}
             </div>
             <div style="padding-right: 170px; position: relative; z-index: 2;">
                 <p class="review-text" style="margin-top: 20px; font-style: italic; font-size: 15px; color: var(--text-dark); border-left: 3px solid #4CAF50; padding-left: 15px; background: var(--bg-white); border-radius: 0 8px 8px 0; padding-top: 10px; padding-bottom: 10px;">"${rev.text || 'You should definitely check this out!'}"</p>
@@ -817,10 +1024,10 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             <div class="review-header" style="justify-content: space-between; position: relative; z-index: 3;">
                 <div style="display:flex; gap: 15px;">
                     <img src="${rev.avatar}" class="avatar clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">
-                    <div><strong><span class="clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> <span class="source-badge badge-weebee">WeeBee</span><br>
+                    <div><strong><span class="clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)} <span class="source-badge badge-weebee">WeeBee</span><br>
                     <span style="font-size: 12px; color: var(--text-muted);">Reviewed: <strong style="cursor:pointer;" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong></span></div>
                 </div>
-                <button onclick="event.stopPropagation(); toggleFollow('${safeUid}', 'user', this)" class="action-btn" style="padding: 4px 10px; font-size: 11px;"><span class="material-symbols-outlined" style="font-size:14px;">person_add</span> Follow</button>
+                ${window.getFollowBtnHTML(safeUid)}
             </div>
             ${badgesHTML}
             ${fullHTML}
@@ -867,12 +1074,12 @@ window.fetchUserProfile = async function(targetUid = null) {
     document.getElementById('profile-header-container').innerHTML = '<div class="loading">Loading Profile...</div>';
     
     let pName = 'WeeBee User';
-    let pAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${uidToFetch}`;
+    let pAvatar = `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent('WeeBee User')}&backgroundColor=ffc107&fontColor=333333`;
     let pJoined = new Date().toLocaleDateString();
 
     if(isMe && auth.currentUser) {
         pName = auth.currentUser.displayName;
-        pAvatar = auth.currentUser.photoURL || pAvatar;
+        pAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
         pJoined = new Date(auth.currentUser.metadata.creationTime).toLocaleDateString();
     } else {
         const checkQ = query(collection(db, "reviews"), where("uid", "==", uidToFetch), limit(1));
@@ -889,7 +1096,7 @@ window.fetchUserProfile = async function(targetUid = null) {
 
     document.getElementById('profile-header-container').innerHTML = `
         <div class="profile-header">
-            <img src="${pAvatar}" class="profile-avatar-large">
+            <img src="${pAvatar}" class="profile-avatar-large" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(pName)}&backgroundColor=ffc107&fontColor=333333'">
             <div style="flex:1;">
                 <h1 style="font-size: 32px; margin-bottom: 5px;">${pName}</h1>
                 <p style="color: var(--text-muted); font-size: 14px;">WeeBee Member since ${pJoined}</p>
@@ -912,6 +1119,10 @@ window.fetchUserProfile = async function(targetUid = null) {
     });
     myReviews.sort((a,b) => b.timestamp - a.timestamp);
     const avg = reviewCount > 0 ? (totalScore / reviewCount).toFixed(1) : "0.0";
+    window.userRankCache[uidToFetch] = reviewCount;
+    const _ri = window.getRankInfo(reviewCount);
+    const _rPct = _ri.next ? Math.min(100, Math.round((reviewCount - _ri.min) / (_ri.next - _ri.min) * 100)) : 100;
+    const _rLabel = _ri.next ? `${reviewCount} / ${_ri.next} to ${window.getRankInfo(_ri.next).name}` : `${reviewCount} reviews · Max rank!`;
 
     const listQuery = query(collection(db, "anime_lists"), where("uid", "==", uidToFetch));
     const listSnap = await getDocs(listQuery);
@@ -919,6 +1130,18 @@ window.fetchUserProfile = async function(targetUid = null) {
     listSnap.forEach(d => { if(d.data().status === 'watching') watchAnimes.push(d.data()); });
     
     document.getElementById('profile-stats-content').innerHTML = `
+        <div style="margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--bg-gray);">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                ${window.getRankBadgeHTML(reviewCount, 22)}
+                <span style="font-weight:700; font-size:16px; color:${_ri.color};">${_ri.name}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <div style="flex:1; height:6px; background:var(--bg-gray); border-radius:3px; overflow:hidden;">
+                    <div style="width:${_rPct}%; height:100%; background:${_ri.color}; border-radius:3px; transition:width 0.5s ease;"></div>
+                </div>
+            </div>
+            <p style="font-size:11px; color:var(--text-muted); margin-top:4px;">${_rLabel}</p>
+        </div>
         <div class="profile-stat-row"><strong>Reviews Written</strong> <span>${reviewCount}</span></div>
         <div class="profile-stat-row"><strong>Average Rating</strong> <span>${avg}</span></div>
         <div class="profile-stat-row"><strong>Watch List</strong> <span id="watch-list-count">${watchAnimes.length}</span></div>
@@ -965,20 +1188,48 @@ window.fetchUserProfile = async function(targetUid = null) {
     const fUserList = document.getElementById('followed-users-list'); fUserList.innerHTML = '';
     
     let hasAnime = false; let hasUser = false;
+    const missingAnimeData = [];
     followsSnap.forEach(d => {
         const f = d.data();
         if(f.type === 'anime') {
             hasAnime = true;
-            const title = f.title || 'Unknown Anime'; const img = f.image || 'https://via.placeholder.com/120x170';
-            fAnimeList.innerHTML += `<div class="anime-card" style="min-width:100px; padding:8px;" onclick="loadAnimeDetails(${f.targetId})"><img src="${img}" style="width:80px; height:120px; margin-bottom:5px;"><p style="font-size:11px; max-width:80px;">${title}</p></div>`;
+            const title = f.title; const img = f.image;
+            const needsFetch = !title || !img || title === 'Unknown Anime';
+            fAnimeList.innerHTML += `<div class="anime-card" id="follow-card-${f.targetId}" style="min-width:100px; padding:8px;" onclick="loadAnimeDetails(${f.targetId})">
+                <img id="follow-img-${f.targetId}" src="${img || ''}" style="width:80px; height:120px; margin-bottom:5px; background:var(--bg-gray-darker);" onerror="this.removeAttribute('src')">
+                <p id="follow-title-${f.targetId}" style="font-size:11px; max-width:80px;">${needsFetch ? '...' : title}</p>
+            </div>`;
+            if(needsFetch) missingAnimeData.push({ docId: d.id, mal_id: f.targetId });
         } else {
             hasUser = true;
-            const uName = f.username || 'User ' + f.targetId.substring(0,6); const uImg = f.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${f.targetId}`;
-            fUserList.innerHTML += `<div class="user-chip clickable-user" onclick="viewUserProfile('${f.targetId}')"><img src="${uImg}"> <span>${uName}</span></div>`;
+            const uName = f.username || 'User ' + f.targetId.substring(0,6);
+            const uImg = f.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(uName)}&backgroundColor=ffc107&fontColor=333333`;
+            fUserList.innerHTML += `<div class="user-chip clickable-user" onclick="viewUserProfile('${f.targetId}')"><img src="${uImg}" onerror="this.style.display='none'"> <span>${uName}</span></div>`;
         }
     });
     if(!hasAnime) fAnimeList.parentElement.innerHTML = '<h5>Following Anime</h5><p class="empty-msg" style="color:var(--text-muted); font-size:13px;">Not following any anime yet.</p>';
     if(!hasUser) fUserList.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); font-size:13px;">Not following any users yet.</p>';
+
+    // Re-fetch and repair any follows saved without title/image
+    for(let i = 0; i < missingAnimeData.length; i++) {
+        const { docId, mal_id } = missingAnimeData[i];
+        if(i > 0) await new Promise(r => setTimeout(r, 400));
+        try {
+            const res = await fetch(`https://api.jikan.moe/v4/anime/${mal_id}`);
+            const { data: anime } = await res.json();
+            if(!anime) continue;
+            const newTitle = anime.title_english || anime.title;
+            const newImg = anime.images.jpg.image_url;
+            const imgEl = document.getElementById(`follow-img-${mal_id}`);
+            const titleEl = document.getElementById(`follow-title-${mal_id}`);
+            if(imgEl) imgEl.src = newImg;
+            if(titleEl) titleEl.textContent = newTitle;
+            updateDoc(doc(db, "follows", docId), { title: newTitle, image: newImg }).catch(() => {});
+        } catch(e) {
+            const titleEl = document.getElementById(`follow-title-${mal_id}`);
+            if(titleEl) titleEl.textContent = 'Unknown Anime';
+        }
+    }
 
     fetchProfileComments(uidToFetch);
 };
@@ -1010,6 +1261,8 @@ window.fetchHomepageReviews = async function() {
     try {
         const q = query(collection(db, "reviews"), orderBy("timestamp", "desc"), limit(20));
         const snap = await getDocs(q);
+        const uids = []; snap.forEach(d => { if(d.data().uid) uids.push(d.data().uid); });
+        await window.prefetchRankCache(uids);
         const feed = document.getElementById('review-feed'); feed.innerHTML = '';
         snap.forEach(d => feed.innerHTML += window.generateReviewCardHTML({ ...d.data(), id: d.id }));
     } catch(e) { console.error("Error loading home feed:", e); }
@@ -1067,67 +1320,151 @@ window.fetchGlobalNews = async function() {
 // --- NEW DISCOVER PAGE LOGIC (PODIUM UPDATE) ---
 window.fetchDiscoverPage = async function() {
     const top10Container = document.getElementById('weebee-top10-container');
+    const lbContainer = document.getElementById('reviewer-leaderboard-container');
     top10Container.innerHTML = '<div class="loading">Calculating WeeBee scores...</div>';
+    if (lbContainer) lbContainer.innerHTML = '<div class="loading">Loading...</div>';
     try {
         const revSnap = await getDocs(collection(db, "reviews"));
         let animeStats = {};
+        const reviewerMap = {};
         revSnap.forEach(d => {
             const data = d.data();
             if(data.type !== 'suggestion' && data.score && data.mal_id) {
                 if(!animeStats[data.mal_id]) { animeStats[data.mal_id] = { mal_id: data.mal_id, title: data.animeTitle, image: data.animeImage, totalScore: 0, count: 0 }; }
+                // Fill in missing title/image from any review that has them
+                if(!animeStats[data.mal_id].title && data.animeTitle) { animeStats[data.mal_id].title = data.animeTitle; animeStats[data.mal_id].image = data.animeImage; }
                 animeStats[data.mal_id].totalScore += parseFloat(data.score); animeStats[data.mal_id].count++;
             }
+            if(data.uid && data.type !== 'suggestion' && data.score) {
+                if(!reviewerMap[data.uid]) reviewerMap[data.uid] = { uid: data.uid, displayName: data.username || 'Unknown', avatar: data.avatar, count: 0 };
+                reviewerMap[data.uid].count++;
+            }
         });
+        Object.values(reviewerMap).forEach(r => { window.userRankCache[r.uid] = r.count; });
+
+        // For entries still missing title, fetch from Jikan and patch the bad review docs
+        const missingMeta = Object.values(animeStats).filter(a => !a.title);
+        for (const anime of missingMeta) {
+            try {
+                await new Promise(r => setTimeout(r, 420));
+                const res = await fetch(`https://api.jikan.moe/v4/anime/${anime.mal_id}`);
+                if (res.ok) {
+                    const json = await res.json();
+                    anime.title = json.data.title;
+                    anime.image = json.data.images?.jpg?.image_url || '';
+                    // Patch the underlying review docs so this doesn't happen again
+                    revSnap.forEach(d => {
+                        const data = d.data();
+                        if(data.mal_id === anime.mal_id && !data.animeTitle) {
+                            setDoc(d.ref, { animeTitle: anime.title, animeImage: anime.image }, { merge: true }).catch(() => {});
+                        }
+                    });
+                }
+            } catch(e) {}
+        }
+
+        let top10 = Object.values(animeStats).filter(a => a.title).map(a => ({ ...a, avgScore: (a.totalScore / a.count).toFixed(1) })).sort((a, b) => b.avgScore - a.avgScore).slice(0, 10);
         
-        let top10 = Object.values(animeStats).map(a => ({ ...a, avgScore: (a.totalScore / a.count).toFixed(1) })).sort((a, b) => b.avgScore - a.avgScore).slice(0, 10);
-        
-        if(top10.length === 0) { 
-            top10Container.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); text-align:center;">No reviews on WeeBee yet! Be the first!</p>'; 
+        if(top10.length === 0) {
+            top10Container.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); text-align:center;">No reviews on WeeBee yet! Be the first!</p>';
         } else {
-            
+            // Read previous snapshot for rank movement indicators
+            let prevRankMap = {};
+            try {
+                const snapDoc = await getDoc(doc(db, "meta", "rankSnapshot"));
+                if (snapDoc.exists()) snapDoc.data().rankings.forEach(r => { prevRankMap[r.mal_id] = r.rank; });
+            } catch(e) {}
+
+            // Read rank history for permanent achievement badges
+            const historyMap = {};
+            await Promise.all(top10.map(async a => {
+                try {
+                    const d = await getDoc(doc(db, "rankHistory", String(a.mal_id)));
+                    historyMap[a.mal_id] = d.exists() ? d.data() : {};
+                } catch(e) { historyMap[a.mal_id] = {}; }
+            }));
+
+            // Record new top-3 achievements (only writes when a new milestone is hit)
+            const histUpdates = [];
+            [['hasBeenFirst', 'firstDate', 0], ['hasBeenSecond', 'secondDate', 1], ['hasBeenThird', 'thirdDate', 2]].forEach(([flag, dateField, i]) => {
+                if (top10[i] && !historyMap[top10[i].mal_id][flag]) {
+                    const now = new Date();
+                    historyMap[top10[i].mal_id][flag] = true;
+                    historyMap[top10[i].mal_id][dateField] = now;
+                    histUpdates.push(setDoc(doc(db, "rankHistory", String(top10[i].mal_id)), { [flag]: true, [dateField]: now }, { merge: true }));
+                }
+            });
+            if (histUpdates.length) Promise.all(histUpdates).catch(() => {});
+
+            // Save current rankings for next load's movement comparison (fire-and-forget)
+            setDoc(doc(db, "meta", "rankSnapshot"), { rankings: top10.map((a, i) => ({ mal_id: a.mal_id, rank: i + 1 })) }).catch(() => {});
+
             const getRankChange = (id) => {
-                const val = id % 10;
-                if (val < 3) return `<span class="material-symbols-outlined change-down" title="Rank decreased">arrow_drop_down</span>`;
-                if (val > 6) return `<span class="material-symbols-outlined change-up" title="Rank increased">arrow_drop_up</span>`;
-                return `<span class="material-symbols-outlined change-same" title="No change">horizontal_rule</span>`;
+                const prev = prevRankMap[id];
+                if (prev === undefined) return '';
+                const curr = top10.findIndex(a => a.mal_id === id) + 1;
+                const diff = prev - curr;
+                if (diff > 0) return `<span class="change-up" title="Moved up ${diff} place${diff > 1 ? 's' : ''}">▲</span>`;
+                if (diff < 0) return `<span class="change-down" title="Moved down ${Math.abs(diff)} place${Math.abs(diff) > 1 ? 's' : ''}">▼</span>`;
+                return `<span class="change-same">—</span>`;
+            };
+
+            const fmtDate = (ts) => {
+                if (!ts) return null;
+                try { const d = ts.toDate ? ts.toDate() : new Date(ts); return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }); } catch(e) { return null; }
+            };
+
+            const getHistBadges = (id, inline = false) => {
+                const h = historyMap[id] || {};
+                let b = '';
+                if (h.hasBeenFirst) b += `<span class="material-symbols-outlined hist-badge hist-gem" title="${fmtDate(h.firstDate) ? `Reached #1 on ${fmtDate(h.firstDate)}` : 'Has reached #1 on WeeBee'}">diamond</span>`;
+                if (h.hasBeenSecond) b += `<span class="material-symbols-outlined hist-badge hist-silver" title="${fmtDate(h.secondDate) ? `Reached #2 on ${fmtDate(h.secondDate)}` : 'Has reached #2 on WeeBee'}">military_tech</span>`;
+                if (h.hasBeenThird) b += `<span class="material-symbols-outlined hist-badge hist-bronze" title="${fmtDate(h.thirdDate) ? `Reached #3 on ${fmtDate(h.thirdDate)}` : 'Has reached #3 on WeeBee'}">military_tech</span>`;
+                if (!b) return '';
+                return inline ? b : `<div class="hist-badges">${b}</div>`;
             };
 
             let html = '<div class="podium-container">';
-            
-            // Podium 2
+
+            // #2 — Left
             if (top10[1]) {
                 html += `
                     <div class="podium-item podium-2" onclick="loadAnimeDetails(${top10[1].mal_id})">
-                        <div class="podium-rank">2 ${getRankChange(top10[1].mal_id)}</div>
-                        <img src="${top10[1].image}">
-                        <h4 style="font-size:13px; margin-bottom:10px; display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${top10[1].title}</h4>
-                        <div class="rating-badge silver" style="width:35px;height:35px;font-size:12px; margin-top:auto;">${top10[1].avgScore}</div>
+                        ${getHistBadges(top10[1].mal_id)}
+                        <div class="podium-rank-change">${getRankChange(top10[1].mal_id)}</div>
+                        <img src="${top10[1].image}" alt="${top10[1].title}">
+                        <h4>${top10[1].title}</h4>
+                        <div class="rating-badge tier-silver" style="width:38px;height:38px;font-size:13px;">${top10[1].avgScore}</div>
+                        <div class="podium-step step-2">2</div>
                     </div>`;
             }
 
-            // Podium 1
+            // #1 — Center (elevated)
             if (top10[0]) {
                 html += `
                     <div class="podium-item podium-1" onclick="loadAnimeDetails(${top10[0].mal_id})">
-                        <span class="material-symbols-outlined amber-gem" title="WeeBee Amber Gem - Historical #1">diamond</span>
-                        <div class="podium-rank">1 ${getRankChange(top10[0].mal_id)}</div>
-                        <img src="${top10[0].image}">
-                        <h4 style="font-size:15px; margin-bottom:10px; display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${top10[0].title}</h4>
-                        <div class="rating-badge gold large" style="width:45px;height:45px;font-size:15px; margin-top:auto;">${top10[0].avgScore}</div>
+                        ${getHistBadges(top10[0].mal_id)}
+                        <div class="podium-rank-change">${getRankChange(top10[0].mal_id)}</div>
+                        <img src="${top10[0].image}" alt="${top10[0].title}">
+                        <h4>${top10[0].title}</h4>
+                        <div class="rating-badge tier-royal" style="width:48px;height:48px;font-size:16px;">${top10[0].avgScore}</div>
+                        <div class="podium-step step-1">1</div>
                     </div>`;
             }
 
-            // Podium 3
+            // #3 — Right
             if (top10[2]) {
                 html += `
                     <div class="podium-item podium-3" onclick="loadAnimeDetails(${top10[2].mal_id})">
-                        <div class="podium-rank">3 ${getRankChange(top10[2].mal_id)}</div>
-                        <img src="${top10[2].image}">
-                        <h4 style="font-size:13px; margin-bottom:10px; display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${top10[2].title}</h4>
-                        <div class="rating-badge bronze" style="width:35px;height:35px;font-size:12px; margin-top:auto;">${top10[2].avgScore}</div>
+                        ${getHistBadges(top10[2].mal_id)}
+                        <div class="podium-rank-change">${getRankChange(top10[2].mal_id)}</div>
+                        <img src="${top10[2].image}" alt="${top10[2].title}">
+                        <h4>${top10[2].title}</h4>
+                        <div class="rating-badge tier-bronze" style="width:38px;height:38px;font-size:13px;">${top10[2].avgScore}</div>
+                        <div class="podium-step step-3">3</div>
                     </div>`;
             }
-            
+
             html += '</div>';
 
             // List 4-10
@@ -1138,13 +1475,16 @@ window.fetchDiscoverPage = async function() {
                     html += `
                         <div class="top10-list-item" onclick="loadAnimeDetails(${anime.mal_id})">
                             <div class="list-rank-number">${i + 1}</div>
-                            <div class="rank-change">${getRankChange(anime.mal_id)}</div>
-                            <img src="${anime.image}">
+                            <div class="rank-change-col">${getRankChange(anime.mal_id)}</div>
+                            <img src="${anime.image}" alt="${anime.title}">
                             <div style="flex:1; min-width:0;">
-                                <h3 style="margin-bottom:4px; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${anime.title}</h3>
-                                <p style="font-size:12px; color:var(--text-muted);">${anime.count} WeeBee Reviews</p>
+                                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                    <h3 style="margin-bottom:2px; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${anime.title}</h3>
+                                    ${getHistBadges(anime.mal_id, true)}
+                                </div>
+                                <p style="font-size:12px; color:var(--text-muted);">${anime.count} WeeBee Review${anime.count !== 1 ? 's' : ''}</p>
                             </div>
-                            <div class="rating-badge blue" style="width:40px; height:40px; font-size:14px; flex-shrink:0;">${anime.avgScore}</div>
+                            <div class="rating-badge blue" style="width:42px;height:42px;font-size:14px;flex-shrink:0;">${anime.avgScore}</div>
                         </div>
                     `;
                 }
@@ -1153,7 +1493,31 @@ window.fetchDiscoverPage = async function() {
 
             top10Container.innerHTML = html;
         }
-    } catch(e) { top10Container.innerHTML = '<p>Failed to calculate WeeBee Top 10.</p>'; console.error(e); }
+
+        // Render leaderboard
+        if (lbContainer) {
+            const leaderboard = Object.values(reviewerMap).sort((a, b) => b.count - a.count).slice(0, 10);
+            if (leaderboard.length === 0) {
+                lbContainer.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); text-align:center;">No reviews yet — be the first!</p>';
+            } else {
+                const numColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+                lbContainer.innerHTML = leaderboard.map((reviewer, i) => {
+                    const numColor = numColors[i] || 'var(--text-muted)';
+                    const avUrl = reviewer.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(reviewer.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+                    return `
+                        <div style="display:flex; align-items:center; gap:12px; padding:12px 0; ${i < leaderboard.length - 1 ? 'border-bottom:1px solid var(--bg-gray);' : ''} cursor:pointer;" onclick="viewUserProfile('${reviewer.uid}')">
+                            <div style="font-size:18px; font-weight:900; color:${numColor}; width:24px; text-align:center; flex-shrink:0;">${i + 1}</div>
+                            <img src="${avUrl}" class="avatar" style="width:38px; height:38px; flex-shrink:0;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(reviewer.displayName)}&backgroundColor=ffc107&fontColor=333333'">
+                            <div style="flex:1; min-width:0;">
+                                <div style="font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${reviewer.displayName}</div>
+                                <div style="font-size:12px; color:var(--text-muted);">${reviewer.count} review${reviewer.count !== 1 ? 's' : ''}</div>
+                            </div>
+                            ${window.getRankBadgeHTML(reviewer.count, 22)}
+                        </div>`;
+                }).join('');
+            }
+        }
+    } catch(e) { top10Container.innerHTML = '<p>Failed to calculate WeeBee Top 10.</p>'; if(lbContainer) lbContainer.innerHTML = ''; console.error(e); }
 
     const friendsCarousel = document.getElementById('friends-suggested-carousel');
     friendsCarousel.innerHTML = '<div class="loading">Loading suggestions...</div>';
@@ -1190,8 +1554,34 @@ window.fetchDiscoverPage = async function() {
     fetchAPI_CategoriesSequentially();
 };
 
+function getCurrentSeasonLabel() {
+    const m = new Date().getMonth() + 1, y = new Date().getFullYear();
+    if (m <= 3) return `Winter ${y}`;
+    if (m <= 6) return `Spring ${y}`;
+    if (m <= 9) return `Summer ${y}`;
+    return `Fall ${y}`;
+}
+function getNextSeasonLabel() {
+    const m = new Date().getMonth() + 1, y = new Date().getFullYear();
+    if (m <= 3) return `Spring ${y}`;
+    if (m <= 6) return `Summer ${y}`;
+    if (m <= 9) return `Fall ${y}`;
+    return `Winter ${y + 1}`;
+}
+
 async function fetchAPI_CategoriesSequentially() {
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/seasons/now?limit=15', 'discover-trending-carousel'); await new Promise(r => setTimeout(r, 500)); 
+    const cur = getCurrentSeasonLabel(), next = getNextSeasonLabel();
+    const tTitle = document.getElementById('discover-trending-title');
+    const tSub = document.getElementById('discover-trending-subtitle');
+    const uTitle = document.getElementById('discover-upcoming-title');
+    const uSub = document.getElementById('discover-upcoming-subtitle');
+    if (tTitle) tTitle.innerText = cur;
+    if (tSub) tSub.innerText = `Currently airing — ${cur}`;
+    if (uTitle) uTitle.innerText = `Upcoming: ${next}`;
+    if (uSub) uSub.innerText = `Announced anime airing in ${next}`;
+
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/seasons/now?limit=15', 'discover-trending-carousel'); await new Promise(r => setTimeout(r, 500));
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/seasons/upcoming?limit=15', 'discover-upcoming-carousel'); await new Promise(r => setTimeout(r, 500));
     await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=1&order_by=score&sort=desc&limit=15', 'discover-action-carousel'); await new Promise(r => setTimeout(r, 500));
     await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=22&order_by=score&sort=desc&limit=15', 'discover-romance-carousel'); await new Promise(r => setTimeout(r, 500));
     await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=4&order_by=score&sort=desc&limit=15', 'discover-comedy-carousel');
@@ -1220,6 +1610,7 @@ window.searchAnime = async function(queryStr) {
     document.getElementById('friends-suggested-carousel').parentElement.style.display = 'none'; document.getElementById('discover-trending-carousel').parentElement.style.display = 'none';
     document.getElementById('discover-action-carousel').parentElement.style.display = 'none'; document.getElementById('discover-romance-carousel').parentElement.style.display = 'none';
     document.getElementById('discover-comedy-carousel').parentElement.style.display = 'none';
+    const _lb = document.getElementById('reviewer-leaderboard-container'); if(_lb) _lb.parentElement.style.display = 'none';
     
     try {
         const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(queryStr)}&limit=10`);
@@ -1303,12 +1694,28 @@ window.loadAnimeDetails = async function(mal_id) {
     const fanServiceHTML = `
         <div style="margin-top: 15px; border-top: 1px dashed #E0E0E0; padding-top: 15px;">
             <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:5px;">
-                <span style="display:flex; align-items:center; gap:5px;">Fan Service <span class="material-symbols-outlined tooltip-icon" data-tooltip="A 1-10 scale indicating the amount of fan service. 1 = None, 10 = Heavy fan service. This is a background community stat and does not affect the anime's overall score." style="font-size:14px; color:var(--text-muted);">info</span></span>
+                <span style="display:flex; align-items:center; gap:5px;">Fan Service <span class="material-symbols-outlined tooltip-icon" data-tooltip="A 0-10 scale indicating the amount of fan service. 0 = None, 10 = Heavy fan service. This is a background community stat and does not affect the anime's overall score." style="font-size:14px; color:var(--text-muted);">info</span></span>
                 <span>${fanServiceAvg === 'N/A' ? 'No Data' : fanServiceAvg + ' / 10'}</span>
             </div>
             <div style="width: 100%; height: 8px; background: #E0E0E0; border-radius: 4px; overflow: hidden;"><div style="width: ${fanServicePercentage}%; height: 100%; background: linear-gradient(90deg, #FFB74D, #FF5252);"></div></div>
         </div>
     `;
+
+    const rankHistDoc = await getDoc(doc(db, "rankHistory", String(mal_id))).catch(() => null);
+    const rankHist = rankHistDoc?.exists() ? rankHistDoc.data() : {};
+    const fmtRankDate = (ts) => {
+        if (!ts) return null;
+        try { const d = ts.toDate ? ts.toDate() : new Date(ts); return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }); } catch(e) { return null; }
+    };
+    let rankHistoryHTML = '';
+    if (rankHist.hasBeenFirst || rankHist.hasBeenSecond || rankHist.hasBeenThird) {
+        let badges = '';
+        const d1 = fmtRankDate(rankHist.firstDate), d2 = fmtRankDate(rankHist.secondDate), d3 = fmtRankDate(rankHist.thirdDate);
+        if (rankHist.hasBeenFirst) badges += `<div class="detail-rank-badge hist-gem-badge" data-tooltip="${d1 ? `Reached #1 on ${d1}` : 'Has reached #1 on WeeBee'}"><span class="material-symbols-outlined">diamond</span>#1 on WeeBee</div>`;
+        if (rankHist.hasBeenSecond) badges += `<div class="detail-rank-badge hist-silver-badge" data-tooltip="${d2 ? `Reached #2 on ${d2}` : 'Has reached #2 on WeeBee'}"><span class="material-symbols-outlined">military_tech</span>#2 on WeeBee</div>`;
+        if (rankHist.hasBeenThird) badges += `<div class="detail-rank-badge hist-bronze-badge" data-tooltip="${d3 ? `Reached #3 on ${d3}` : 'Has reached #3 on WeeBee'}"><span class="material-symbols-outlined">military_tech</span>#3 on WeeBee</div>`;
+        rankHistoryHTML = `<div class="detail-rank-badges">${badges}</div>`;
+    }
 
     document.getElementById('anime-detail-content').innerHTML = `
         <div class="detail-sidebar">
@@ -1338,6 +1745,7 @@ window.loadAnimeDetails = async function(mal_id) {
         </div>
         <div class="detail-main">
             <h1>${anime.title_english || anime.title}</h1>
+            ${rankHistoryHTML}
             <div class="tags" style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;">${anime.genres?.map(g => g.name).join(', ')}</div>
             <div class="content-section"><h3>Synopsis</h3><p>${anime.synopsis}</p></div>
             <div id="detail-chars-container" class="content-section"><div class="loading">Loading Characters...</div></div>
@@ -1392,6 +1800,9 @@ window.loadAnimeDetails = async function(mal_id) {
 };
 
 window.onload = function() {
+    const saved = localStorage.getItem('weebee-theme') || 'light';
+    document.body.setAttribute('data-theme', saved);
+
     const loadTrending = async () => {
         try {
             const r = await fetch('https://api.jikan.moe/v4/seasons/now?limit=15'); const d = await r.json();

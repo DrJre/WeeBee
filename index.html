@@ -75,6 +75,12 @@
                     </div>
 
                     <div style="margin-bottom: 40px; border-top: 1px solid #E0E0E0; padding-top: 40px;">
+                        <h2 style="margin-bottom: 5px;">Top Reviewers</h2>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">The most active WeeBee critics</p>
+                        <div id="reviewer-leaderboard-container"><div class="loading">Loading...</div></div>
+                    </div>
+
+                    <div style="margin-bottom: 40px; border-top: 1px solid #E0E0E0; padding-top: 40px;">
                         <h2 style="margin-bottom: 5px;">Suggested by Friends</h2>
                         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Recently reviewed or suggested by people you follow</p>
                         <div class="carousel-container">
@@ -85,11 +91,22 @@
                     </div>
 
                     <div style="margin-bottom: 40px;">
-                        <h2>Trending Now</h2>
+                        <h2 id="discover-trending-title">This Season</h2>
+                        <p id="discover-trending-subtitle" style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Currently airing</p>
                         <div class="carousel-container">
                             <button class="carousel-arrow left" onclick="scrollCarousel('discover-trending-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
-                            <div class="carousel" id="discover-trending-carousel"><div class="loading">Loading trending...</div></div>
+                            <div class="carousel" id="discover-trending-carousel"><div class="loading">Loading...</div></div>
                             <button class="carousel-arrow right" onclick="scrollCarousel('discover-trending-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 40px;">
+                        <h2 id="discover-upcoming-title">Upcoming Season</h2>
+                        <p id="discover-upcoming-subtitle" style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Announced for next season</p>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('discover-upcoming-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="discover-upcoming-carousel"><div class="loading">Loading upcoming...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('discover-upcoming-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
                         </div>
                     </div>
 
@@ -271,8 +288,8 @@
                     <input type="number" id="list-entry-score" min="1" max="10" step="0.1" placeholder="e.g. 8.5" style="margin-bottom:0;">
                 </div>
                 <div style="flex: 1;">
-                    <label style="display:flex; align-items:center; gap: 5px;">Fan Service <span class="material-symbols-outlined tooltip-icon" data-tooltip="A 1-10 scale indicating the amount of fan service. 1 = None, 10 = Heavy fan service. This is a background community stat and does not affect the anime's overall score." style="font-size:12px; color:var(--text-muted);">info</span></label>
-                    <input type="number" id="list-entry-fanservice" min="1" max="10" step="0.1" placeholder="Scale 1-10" style="margin-bottom:0;">
+                    <label style="display:flex; align-items:center; gap: 5px;">Fan Service <span class="material-symbols-outlined tooltip-icon" data-tooltip="A 0-10 scale indicating the amount of fan service. 0 = None, 10 = Heavy fan service. This is a background community stat and does not affect the anime's overall score." style="font-size:12px; color:var(--text-muted);">info</span></label>
+                    <input type="number" id="list-entry-fanservice" min="0" max="10" step="0.1" placeholder="Scale 0-10" style="margin-bottom:0;">
                 </div>
             </div>
             <p id="list-entry-review-hint" style="font-size: 11px; color: #4CAF50; margin-top: -10px; margin-bottom: 15px; display: none;">Pre-filled from your existing review!</p>
@@ -318,7 +335,7 @@
                 </div>
                 <div style="flex: 1;">
                     <label>Fan Service (Optional)</label>
-                    <input type="number" id="quick-fanservice-value" min="1" max="10" step="0.1" placeholder="Scale 1-10">
+                    <input type="number" id="quick-fanservice-value" min="0" max="10" step="0.1" placeholder="Scale 0-10">
                 </div>
             </div>
             <label>Your Thoughts</label>
@@ -338,7 +355,7 @@
             <div style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed #E0E0E0;">
                 <label>Fan Service Scale (Optional)</label>
                 <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; margin-top: -5px;">This background stat won't affect your overall score.</p>
-                <input type="number" id="in-depth-fanservice-value" min="1" max="10" step="0.1" placeholder="Rank 1-10">
+                <input type="number" id="in-depth-fanservice-value" min="0" max="10" step="0.1" placeholder="Rank 0-10">
             </div>
 
             <div class="modal-actions" style="position: sticky; bottom: -30px; background: var(--bg-white); padding: 15px 0; border-top: 1px solid #E0E0E0;">
@@ -456,6 +473,30 @@
             <p style="text-align: center; margin-top: 20px; font-size: 12px; cursor: pointer; color: var(--text-muted); font-weight: 600;" onclick="toggleAuthMode()">
                 <span id="auth-toggle-text">Need an account? Sign up here.</span>
             </p>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width: 420px;">
+            <h3>Settings</h3>
+
+            <div class="settings-row">
+                <div class="settings-row-info">
+                    <span class="material-symbols-outlined">dark_mode</span>
+                    <div>
+                        <div class="settings-row-label">Dark Mode</div>
+                        <div class="settings-row-sub">Switch between light and dark theme</div>
+                    </div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="dark-mode-toggle" onchange="toggleDarkMode()">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 24px;">
+                <button onclick="closeAllModals()" class="submit-btn" style="width:100%;">Done</button>
+            </div>
         </div>
     </div>
 
