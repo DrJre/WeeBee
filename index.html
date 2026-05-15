@@ -8,42 +8,78 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
     <div class="app-container">
-        <aside class="sidebar">
-            <div class="logo">WeeBee</div>
-            <nav>
-                <button class="nav-btn active" data-target="home-view" onclick="switchView('home-view')">
-                    <span class="material-symbols-outlined">home</span> Home
-                </button>
-                <button class="nav-btn" data-target="discover-view" onclick="switchView('discover-view')">
-                    <span class="material-symbols-outlined">explore</span> Discover
-                </button>
-                <button class="nav-btn" data-target="my-list-view" onclick="switchView('my-list-view')">
-                    <span class="material-symbols-outlined">list_alt</span> My List
-                </button>
-                <button class="nav-btn" data-target="news-view" onclick="switchView('news-view')">
-                    <span class="material-symbols-outlined">newspaper</span> News
-                </button>
-                <button class="nav-btn">
-                    <span class="material-symbols-outlined">groups</span> Community
-                </button>
-            </nav>
-        </aside>
-
-        <main class="main-content">
-            <header class="topbar">
+        <header class="topbar">
+            <div class="topbar-left">
+                <div class="logo">WeeBee</div>
+                <nav class="top-nav">
+                    <button class="nav-btn active" data-target="home-view" onclick="switchView('home-view')">
+                        <span class="material-symbols-outlined">home</span> Home
+                    </button>
+                    <button class="nav-btn" data-target="discover-view" onclick="switchView('discover-view')">
+                        <span class="material-symbols-outlined">explore</span> Discover
+                    </button>
+                    <button class="nav-btn" data-target="my-list-view" onclick="switchView('my-list-view')">
+                        <span class="material-symbols-outlined">list_alt</span> My List
+                    </button>
+                    <button class="nav-btn" data-target="news-view" onclick="switchView('news-view')">
+                        <span class="material-symbols-outlined">newspaper</span> News
+                    </button>
+                    <button class="nav-btn" onclick="document.getElementById('coming-soon-modal').style.display='flex'">
+                        <span class="material-symbols-outlined">groups</span> Community
+                    </button>
+                </nav>
+            </div>
+            <div class="topbar-right">
                 <div class="search-bar">
                     <span class="material-symbols-outlined">search</span>
-                    <input type="text" id="main-search-input" placeholder="Search anime, users, clubs..." onkeydown="if(event.key === 'Enter' && this.value.trim() !== '') { searchAnime(this.value.trim()); this.value = ''; }">
+                    <input type="text" id="main-search-input" placeholder="Search anime..." onkeydown="if(event.key === 'Enter' && this.value.trim() !== '') { searchAnime(this.value.trim()); this.value = ''; }">
                 </div>
-                
+                <button class="search-icon-btn" onclick="toggleMobileSearch()" aria-label="Search">
+                    <span class="material-symbols-outlined">search</span>
+                </button>
                 <div class="user-profile" id="user-auth-section" style="position: relative;">
                     <div class="loading" style="padding: 0;">Loading...</div>
                 </div>
-            </header>
+                <button class="hamburger-btn" onclick="toggleMobileMenu()" aria-label="Menu">
+                    <span class="material-symbols-outlined">menu</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="mobile-search-bar" id="mobile-search-bar">
+            <div class="mobile-search-inner">
+                <span class="material-symbols-outlined">search</span>
+                <input type="text" id="mobile-search-input" placeholder="Search anime..."
+                       onkeydown="if(event.key==='Enter'&&this.value.trim()!==''){searchAnime(this.value.trim());this.value='';closeMobileSearch();}">
+                <button class="search-close-btn" onclick="closeMobileSearch()">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="mobile-menu" id="mobile-menu">
+            <button class="nav-btn" data-target="home-view" onclick="switchView('home-view'); closeMobileMenu()">
+                <span class="material-symbols-outlined">home</span> Home
+            </button>
+            <button class="nav-btn" data-target="discover-view" onclick="switchView('discover-view'); closeMobileMenu()">
+                <span class="material-symbols-outlined">explore</span> Discover
+            </button>
+            <button class="nav-btn" data-target="my-list-view" onclick="switchView('my-list-view'); closeMobileMenu()">
+                <span class="material-symbols-outlined">list_alt</span> My List
+            </button>
+            <button class="nav-btn" data-target="news-view" onclick="switchView('news-view'); closeMobileMenu()">
+                <span class="material-symbols-outlined">newspaper</span> News
+            </button>
+            <button class="nav-btn" onclick="document.getElementById('coming-soon-modal').style.display='flex'; closeMobileMenu()">
+                <span class="material-symbols-outlined">groups</span> Community
+            </button>
+        </div>
+
+        <main class="main-content">
 
             <div class="content-views">
                 <div id="home-view" class="view active">
@@ -74,13 +110,13 @@
                         <div id="weebee-top10-container"><div class="loading">Calculating WeeBee scores...</div></div>
                     </div>
 
-                    <div style="margin-bottom: 40px; border-top: 1px solid #E0E0E0; padding-top: 40px;">
+                    <div id="discover-reviewers-section" style="margin-bottom: 40px; border-top: 1px solid #E0E0E0; padding-top: 40px;">
                         <h2 style="margin-bottom: 5px;">Top Reviewers</h2>
                         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">The most active WeeBee critics</p>
                         <div id="reviewer-leaderboard-container"><div class="loading">Loading...</div></div>
                     </div>
 
-                    <div style="margin-bottom: 40px; border-top: 1px solid #E0E0E0; padding-top: 40px;">
+                    <div id="discover-friends-section" style="margin-bottom: 40px; border-top: 1px solid #E0E0E0; padding-top: 40px;">
                         <h2 style="margin-bottom: 5px;">Suggested by Friends</h2>
                         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Recently reviewed or suggested by people you follow</p>
                         <div class="carousel-container">
@@ -90,7 +126,7 @@
                         </div>
                     </div>
 
-                    <div style="margin-bottom: 40px;">
+                    <div id="discover-trending-section" style="margin-bottom: 40px;">
                         <h2 id="discover-trending-title">This Season</h2>
                         <p id="discover-trending-subtitle" style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Currently airing</p>
                         <div class="carousel-container">
@@ -100,7 +136,7 @@
                         </div>
                     </div>
 
-                    <div style="margin-bottom: 40px;">
+                    <div id="discover-upcoming-section" style="margin-bottom: 40px;">
                         <h2 id="discover-upcoming-title">Upcoming Season</h2>
                         <p id="discover-upcoming-subtitle" style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Announced for next season</p>
                         <div class="carousel-container">
@@ -110,7 +146,7 @@
                         </div>
                     </div>
 
-                    <div style="margin-bottom: 40px;">
+                    <div id="discover-action-section" style="margin-bottom: 40px;">
                         <h2>Top Action</h2>
                         <div class="carousel-container">
                             <button class="carousel-arrow left" onclick="scrollCarousel('discover-action-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
@@ -119,7 +155,7 @@
                         </div>
                     </div>
 
-                    <div style="margin-bottom: 40px;">
+                    <div id="discover-romance-section" style="margin-bottom: 40px;">
                         <h2>Top Romance</h2>
                         <div class="carousel-container">
                             <button class="carousel-arrow left" onclick="scrollCarousel('discover-romance-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
@@ -128,7 +164,7 @@
                         </div>
                     </div>
 
-                    <div style="margin-bottom: 40px;">
+                    <div id="discover-comedy-section" style="margin-bottom: 40px;">
                         <h2>Top Comedy</h2>
                         <div class="carousel-container">
                             <button class="carousel-arrow left" onclick="scrollCarousel('discover-comedy-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
@@ -500,6 +536,37 @@
         </div>
     </div>
 
-    <script type="module" src="app.js"></script>
+    <div id="episode-score-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width: 420px;">
+            <h3 id="ep-modal-title" style="margin-bottom: 4px; font-size: 16px;"></h3>
+            <p id="ep-modal-subtitle" style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;"></p>
+            <div style="margin-bottom: 15px;">
+                <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 8px;">Score (1–10)</label>
+                <input type="number" id="ep-score-input" min="1" max="10" step="0.1" placeholder="e.g. 8.5" style="width:100%; padding:10px; border-radius:8px; border:1px solid #E0E0E0;">
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 8px;">Comments <span style="font-weight:400; color:var(--text-muted);">(Optional)</span></label>
+                <textarea id="ep-score-comment" placeholder="What did you think of this episode?" rows="3" style="width:100%; padding:10px; border-radius:8px; border:1px solid #E0E0E0; resize:vertical;"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button id="ep-delete-btn" onclick="deleteEpisodeScore()" class="cancel-btn" style="display:none; color:red; border-color:red;">Delete</button>
+                <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
+                <button onclick="submitEpisodeScore()" class="submit-btn" id="ep-submit-btn">Save Score</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="coming-soon-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width: 360px; text-align: center;">
+            <span class="material-symbols-outlined" style="font-size: 48px; color: var(--yellow);">groups</span>
+            <h2 style="margin: 12px 0 8px;">Community</h2>
+            <p style="color: var(--text-gray); margin-bottom: 20px;">This feature is coming soon. Stay tuned!</p>
+            <div class="modal-actions" style="justify-content: center;">
+                <button onclick="closeAllModals()" class="submit-btn" style="width: 100%;">Got it</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js?v=3"></script>
 </body>
 </html>

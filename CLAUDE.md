@@ -5,10 +5,15 @@ These are features Jesse wants to build (no particular order):
 
 - [ ] **Achievement system** — reward users for milestones (e.g. first review, 10 reviews, 50 reviews, etc.)
 - [x] **Rank system** — users rank up based on reviews written: Newcomer → Bronze (5) → Silver (15) → Gold (40) → Diamond (100)
-- [ ] **Community tab** — sidebar Community button currently does nothing; needs a full page
+- [x] **Community tab** — sidebar Community button currently shows "Coming Soon" popup; needs a full page
 - [ ] **Upload WeeBee logo/fonts** — branding assets to replace the plain text logo
 - [ ] **Edit profile function** — "Edit Profile" button on the profile page is a placeholder; needs username, avatar, bio, etc.
 - [ ] **Upcoming/Seasonal categories** — mentioned but not fully fleshed out; Discover page already has carousels
+- [ ] **Black text in search bar** — search bar input text is hard to read
+- [ ] **Episode ranking** — ability to rate/rank individual episodes of an anime
+- [ ] **Move overall score in review previews** — overall score should appear to the left of the category scores, not the right
+- [ ] **Fix review category names** — category labels on review previews are incorrect/need updating
+- [ ] **Flesh out Discover page** — carousels and sections need real data and polish
 
 ## Tech Stack
 - **Frontend:** Vanilla JS (ES modules), HTML, CSS

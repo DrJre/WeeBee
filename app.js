@@ -236,7 +236,18 @@ window.toggleDarkMode = function() {
 };
 
 // --- REVIEW SYSTEM ---
-const REVIEW_CATEGORIES = ['Story', 'Animation', 'Sound', 'Characters', 'Enjoyment'];
+const REVIEW_CATEGORIES = ['Plot', 'Animation', 'Soundtrack', 'Character Development', 'World Building', 'Art Style', 'Pacing', 'Voice Acting', 'Overall Enjoyment'];
+const CATEGORY_DESCRIPTIONS = {
+    'Plot': 'How well the story is written — its structure, originality, and narrative coherence.',
+    'Animation': 'The quality, fluidity, and consistency of the animation throughout the series.',
+    'Soundtrack': 'The quality of music and sound effects, and how well they complement each scene.',
+    'Character Development': 'How well characters grow, evolve, and are written throughout the story.',
+    'World Building': 'The depth, creativity, and consistency of the world and its lore.',
+    'Art Style': 'The visual aesthetic, character design, and overall artistic direction.',
+    'Pacing': 'How well the story\'s speed is managed — not too rushed, not too slow.',
+    'Voice Acting': 'The quality and expressiveness of the voice performances.',
+    'Overall Enjoyment': 'Your personal overall enjoyment — how the anime made you feel beyond the individual scores.',
+};
 
 window.openReviewModal = function() {
     if (!auth.currentUser) return window.openAuthModal();
@@ -258,7 +269,7 @@ window.openInDepthModal = function() {
     document.getElementById('in-depth-categories').innerHTML = REVIEW_CATEGORIES.map((cat, i) => `
         <div class="category-block">
             <div class="cat-header">
-                <label>${cat}</label>
+                <label style="display:flex; align-items:center; gap:5px;">${cat} <span class="material-symbols-outlined tooltip-icon" data-tooltip="${CATEGORY_DESCRIPTIONS[cat]}" style="font-size:14px; color:var(--text-muted);">info</span></label>
                 <input type="number" id="cat-score-${i}" min="1" max="10" step="0.1" placeholder="1-10" value="${existing?.categories?.[i]?.score || ''}">
             </div>
             <textarea id="cat-text-${i}" placeholder="Your thoughts on ${cat.toLowerCase()}... (Optional)" rows="2">${existing?.categories?.[i]?.text || ''}</textarea>
@@ -989,16 +1000,16 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
         let fullHTML = '';
 
         if(rev.type === 'in-depth' && rev.categories) {
-            badgesHTML = '<div style="display:flex; gap: 15px; margin-top: 20px; flex-wrap: wrap; justify-content: flex-start; align-items: flex-end; padding-right: 170px; position: relative; z-index: 2;">';
-            rev.categories.forEach(cat => { 
-                badgesHTML += `<div style="display:flex; flex-direction:column; align-items:center; width: 75px;"><span style="font-size: 10px; font-weight: 600; margin-bottom: 8px; text-align: center; height: 24px; display: flex; align-items: flex-end;">${cat.label}</span><div class="rating-badge ${window.getScoreTier(cat.score)}" style="width: 55px; height: 55px; font-size: 18px;">${cat.score}</div></div>`; 
-            }); 
-            badgesHTML += `
-                <div style="width: 1px; height: 45px; background: #E0E0E0; margin: 0 10px; align-self: flex-end; margin-bottom: 5px;"></div>
+            badgesHTML = `<div class="review-badges-row" style="display:flex; gap: 15px; margin-top: 20px; flex-wrap: wrap; justify-content: flex-start; align-items: flex-end; padding-right: 170px; position: relative; z-index: 2;">
                 <div style="display:flex; flex-direction:column; align-items:center; width: 75px;">
-                    <span style="font-size: 10px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; height: 24px; display: flex; align-items: flex-end;">Overall</span>
-                    <div class="rating-badge ${overallTier}" style="width: 55px; height: 55px; font-size: 18px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));">${overallScore}</div>
-                </div></div>`;
+                    <span style="font-size: 10px; font-weight: 800; color: var(--text-dark); text-transform: uppercase; margin-bottom: 8px; height: 24px; display: flex; align-items: flex-end;">Overall</span>
+                    <div class="rating-badge ${overallTier}" style="width: 65px; height: 65px; font-size: 22px; filter: drop-shadow(0 3px 8px rgba(0,0,0,0.2)); outline: 3px solid rgba(255,255,255,0.3);">${overallScore}</div>
+                </div>
+                <div style="width: 1px; height: 55px; background: var(--border-color); margin: 0 10px; align-self: flex-end; margin-bottom: 5px;"></div>`;
+            rev.categories.forEach(cat => {
+                badgesHTML += `<div style="display:flex; flex-direction:column; align-items:center; width: 75px;"><span style="font-size: 10px; font-weight: 600; margin-bottom: 8px; text-align: center; height: 24px; display: flex; align-items: flex-end;">${cat.label}</span><div class="rating-badge ${window.getScoreTier(cat.score)}" style="width: 55px; height: 55px; font-size: 18px;">${cat.score}</div></div>`;
+            });
+            badgesHTML += `</div>`;
 
             fullHTML = `<div class="full-review-content" style="display:none; margin-top: 25px; padding-right: 170px; position: relative; z-index: 2;">`;
             rev.categories.forEach(cat => { 
@@ -1007,7 +1018,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             fullHTML += `</div>`;
         } else {
             badgesHTML = `
-                <div style="display:flex; padding-right: 170px; margin-top: 15px; position: relative; z-index: 2;">
+                <div class="review-badges-row" style="display:flex; padding-right: 170px; margin-top: 15px; position: relative; z-index: 2;">
                     <div style="display:flex; flex-direction:column; align-items:center; width: 75px;">
                         <span style="font-size: 10px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px;">Overall</span>
                         <div class="rating-badge ${overallTier}" style="width: 55px; height: 55px; font-size: 18px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));">${overallScore}</div>
@@ -1024,8 +1035,8 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             <div class="review-header" style="justify-content: space-between; position: relative; z-index: 3;">
                 <div style="display:flex; gap: 15px;">
                     <img src="${rev.avatar}" class="avatar clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">
-                    <div><strong><span class="clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)} <span class="source-badge badge-weebee">WeeBee</span><br>
-                    <span style="font-size: 12px; color: var(--text-muted);">Reviewed: <strong style="cursor:pointer;" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong></span></div>
+                    <div><strong><span class="clickable-user" style="color:var(--text-dark);" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)} <span class="source-badge badge-weebee">WeeBee</span><br>
+                    <span style="font-size: 12px; color: var(--text-muted); display:flex; align-items:center; gap:6px; margin-top:3px;">${rev.animeImage ? `<img src="${rev.animeImage}" class="review-cover-mobile" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">` : ''}Reviewed: <strong style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong></span></div>
                 </div>
                 ${window.getFollowBtnHTML(safeUid)}
             </div>
@@ -1038,10 +1049,11 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
         <div class="review-card weebee-review interactive review-item" onclick="${rev.type === 'in-depth' ? 'toggleReviewExpand(this)' : ''}">
             ${innerContent}
             <div class="review-actions">
-                <div class="action-stat"><button onclick="window.toggleComments(event, '${rev.id}')"><span class="material-symbols-outlined">chat_bubble</span></button><span id="comment-count-${rev.id}">${rev.commentCount || 0} Comments</span></div>
-                <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'like', this)"><span class="material-symbols-outlined">thumb_up</span></button><span>${rev.likes?.length || 0} Likes</span></div>
-                <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'dislike', this)"><span class="material-symbols-outlined">thumb_down</span></button><span>${rev.dislikes?.length || 0} Dislikes</span></div>
+                <div class="action-stat"><button onclick="window.toggleComments(event, '${rev.id}')"><span class="material-symbols-outlined">chat_bubble</span></button><span class="action-label" id="comment-count-${rev.id}">${rev.commentCount || 0} Comments</span></div>
+                <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'like', this)"><span class="material-symbols-outlined">thumb_up</span></button><span class="action-label">${rev.likes?.length || 0} Likes</span></div>
+                <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'dislike', this)"><span class="material-symbols-outlined">thumb_down</span></button><span class="action-label">${rev.dislikes?.length || 0} Dislikes</span></div>
             </div>
+            ${rev.type === 'in-depth' ? '<div class="expand-hint-row"><span class="expand-hint">Tap to expand ›</span></div>' : ''}
             <div id="comments-container-${rev.id}" class="inline-comments" style="display:none; margin-top: 15px; padding-top: 15px; position: relative; z-index: 2;" onclick="event.stopPropagation();">
                 <div id="comments-list-${rev.id}"></div>
                 <div style="display:flex; gap:10px; margin-top:10px;">
@@ -1370,9 +1382,13 @@ window.fetchDiscoverPage = async function() {
         } else {
             // Read previous snapshot for rank movement indicators
             let prevRankMap = {};
+            let lastSnapshotTime = 0;
             try {
                 const snapDoc = await getDoc(doc(db, "meta", "rankSnapshot"));
-                if (snapDoc.exists()) snapDoc.data().rankings.forEach(r => { prevRankMap[r.mal_id] = r.rank; });
+                if (snapDoc.exists()) {
+                    snapDoc.data().rankings.forEach(r => { prevRankMap[r.mal_id] = r.rank; });
+                    lastSnapshotTime = snapDoc.data().lastUpdated || 0;
+                }
             } catch(e) {}
 
             // Read rank history for permanent achievement badges
@@ -1396,8 +1412,14 @@ window.fetchDiscoverPage = async function() {
             });
             if (histUpdates.length) Promise.all(histUpdates).catch(() => {});
 
-            // Save current rankings for next load's movement comparison (fire-and-forget)
-            setDoc(doc(db, "meta", "rankSnapshot"), { rankings: top10.map((a, i) => ({ mal_id: a.mal_id, rank: i + 1 })) }).catch(() => {});
+            // Only update the snapshot every 12 hours (~twice a day) so arrows reflect real movement
+            const daysSinceSnapshot = (Date.now() - lastSnapshotTime) / 86400000;
+            if (daysSinceSnapshot >= 0.5) {
+                setDoc(doc(db, "meta", "rankSnapshot"), {
+                    rankings: top10.map((a, i) => ({ mal_id: a.mal_id, rank: i + 1 })),
+                    lastUpdated: Date.now()
+                }).catch(() => {});
+            }
 
             const getRankChange = (id) => {
                 const prev = prevRankMap[id];
@@ -1607,19 +1629,21 @@ window.searchAnime = async function(queryStr) {
     top10Container.innerHTML = '<div class="loading">Searching Anime Database...</div>';
     
     // Hide default discovery sections
-    document.getElementById('friends-suggested-carousel').parentElement.style.display = 'none'; document.getElementById('discover-trending-carousel').parentElement.style.display = 'none';
-    document.getElementById('discover-action-carousel').parentElement.style.display = 'none'; document.getElementById('discover-romance-carousel').parentElement.style.display = 'none';
-    document.getElementById('discover-comedy-carousel').parentElement.style.display = 'none';
-    const _lb = document.getElementById('reviewer-leaderboard-container'); if(_lb) _lb.parentElement.style.display = 'none';
+    ['discover-reviewers-section','discover-friends-section','discover-trending-section',
+     'discover-upcoming-section','discover-action-section','discover-romance-section',
+     'discover-comedy-section'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
     
     try {
         const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(queryStr)}&limit=10`);
-        const { data } = await res.json(); 
-        
+        if (!res.ok) throw new Error(`Jikan returned ${res.status}`);
+        const json = await res.json();
+        const data = json.data;
+        if (!Array.isArray(data)) throw new Error('Unexpected response format');
+
         let html = '<div class="top10-list-container">';
-        if(data.length === 0) { html = '<p style="color:var(--text-muted); text-align:center;">No anime found matching your search.</p>'; }
+        if (data.length === 0) { html = '<p style="color:var(--text-muted); text-align:center;">No anime found matching your search.</p>'; }
         else {
-            data.forEach(anime => { 
+            data.forEach(anime => {
                 html += `
                     <div class="top10-list-item" onclick="loadAnimeDetails(${anime.mal_id})">
                         <img src="${anime.images.jpg.image_url}">
@@ -1628,19 +1652,24 @@ window.searchAnime = async function(queryStr) {
                             <p style="font-size:12px; color:var(--text-muted);">${anime.type}, ${anime.year || 'N/A'}</p>
                         </div>
                         <div class="rating-badge blue" style="width:40px; height:40px; font-size:14px; flex-shrink:0;">${anime.score || 'N/A'}</div>
-                    </div>`; 
+                    </div>`;
             });
         }
         html += '</div>';
         top10Container.innerHTML = html;
-        
-    } catch(e) { top10Container.innerHTML = '<p>Search failed to load.</p>'; console.error(e); }
+
+    } catch(e) {
+        top10Container.innerHTML = '<p style="color:var(--text-muted); text-align:center;">Search failed — Jikan may be busy. Try again in a moment.</p>';
+        console.error(e);
+    }
 };
 
 // --- Navigation ---
 window.switchView = function(targetId, isSearch = false) {
+    window.closeMobileMenu?.();
+    window.closeMobileSearch?.();
     if(targetId !== 'anime-detail-view') window.previousViewId = targetId;
-    if(targetId !== 'profile-view') window.targetProfileUid = null; 
+    if(targetId !== 'profile-view') window.targetProfileUid = null;
     
     document.querySelectorAll(".nav-btn").forEach(btn => { btn.classList.remove("active"); if(btn.getAttribute("data-target") === targetId) btn.classList.add("active"); });
     document.querySelectorAll(".view").forEach(view => view.classList.remove("active"));
@@ -1654,9 +1683,9 @@ window.switchView = function(targetId, isSearch = false) {
     if(targetId === 'discover-view' && !isSearch) {
         document.querySelector('#discover-view h2').innerText = "WeeBee's Top 10 All Time";
         document.querySelector('#discover-view p').innerText = "Ranked purely by WeeBee community scores";
-        document.getElementById('friends-suggested-carousel').parentElement.style.display = 'block'; document.getElementById('discover-trending-carousel').parentElement.style.display = 'block';
-        document.getElementById('discover-action-carousel').parentElement.style.display = 'block'; document.getElementById('discover-romance-carousel').parentElement.style.display = 'block';
-        document.getElementById('discover-comedy-carousel').parentElement.style.display = 'block';
+        ['discover-reviewers-section','discover-friends-section','discover-trending-section',
+         'discover-upcoming-section','discover-action-section','discover-romance-section',
+         'discover-comedy-section'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'block'; });
         fetchDiscoverPage();
     }
 };
@@ -1717,16 +1746,37 @@ window.loadAnimeDetails = async function(mal_id) {
         rankHistoryHTML = `<div class="detail-rank-badges">${badges}</div>`;
     }
 
+    let weebeeRank = '—';
+    try {
+        const snapDoc = await getDoc(doc(db, 'meta', 'rankSnapshot'));
+        if (snapDoc.exists()) {
+            const entry = snapDoc.data().rankings?.find(r => r.mal_id === mal_id);
+            if (entry) weebeeRank = `#${entry.rank}`;
+        }
+    } catch(e) {}
+
     document.getElementById('anime-detail-content').innerHTML = `
         <div class="detail-sidebar">
             <img src="${anime.images.jpg.image_url}">
             <div class="stat-box">
-                <div class="stat-row" style="margin-bottom: 15px; gap: 10px;">
-                    <div class="stat-col" style="flex:1;"><h4>Global</h4><span class="value" style="font-size:18px;">${anime.score || 'N/A'}</span></div>
-                    <div style="width: 1px; height: 30px; background: #E0E0E0;"></div>
-                    <div class="stat-col" style="flex:1;"><h4>WeeBee</h4><span class="value" style="font-size:18px; color:var(--accent-yellow);">${weebeeAvg}</span></div>
-                    <div style="width: 1px; height: 30px; background: #E0E0E0;"></div>
-                    <div class="stat-col" style="flex:1;"><h4>Rank</h4><span class="value" style="font-size:18px;">#${anime.rank || 'N/A'}</span></div>
+                <div class="stat-row" style="margin-bottom: 15px; gap: 12px; align-items: stretch;">
+                    <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+                        <span style="font-size:10px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Global</span>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <div class="stat-col" style="flex:1;"><h4>Score</h4><span class="value" style="font-size:18px;">${anime.score || 'N/A'}</span></div>
+                            <div style="width:1px; background:var(--border-color); align-self:stretch;"></div>
+                            <div class="stat-col" style="flex:1;"><h4>Rank</h4><span class="value" style="font-size:18px;">${anime.rank ? '#' + anime.rank : 'N/A'}</span></div>
+                        </div>
+                    </div>
+                    <div style="width:2px; background:var(--accent-yellow); border-radius:2px; align-self:stretch;"></div>
+                    <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+                        <span style="font-size:10px; font-weight:800; color:var(--accent-yellow); text-transform:uppercase; letter-spacing:0.5px;">WeeBee</span>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <div class="stat-col" style="flex:1;"><h4>Score</h4><span class="value" style="font-size:18px; color:var(--accent-yellow);">${weebeeAvg}</span></div>
+                            <div style="width:1px; background:var(--border-color); align-self:stretch;"></div>
+                            <div class="stat-col" style="flex:1;"><h4>Rank</h4><span class="value" style="font-size:18px; color:var(--accent-yellow);">${weebeeRank}</span></div>
+                        </div>
+                    </div>
                 </div>
                 <div style="height: 1px; background: #E0E0E0; margin: 15px 0;"></div>
                 <div class="info-list">
@@ -1747,12 +1797,21 @@ window.loadAnimeDetails = async function(mal_id) {
             <h1>${anime.title_english || anime.title}</h1>
             ${rankHistoryHTML}
             <div class="tags" style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;">${anime.genres?.map(g => g.name).join(', ')}</div>
-            <div class="content-section"><h3>Synopsis</h3><p>${anime.synopsis}</p></div>
-            <div id="detail-chars-container" class="content-section"><div class="loading">Loading Characters...</div></div>
-            <div id="detail-eps-container" class="content-section"><div class="loading">Loading Episodes...</div></div>
-            <div id="detail-recs-container" class="content-section"><div class="loading">Loading Similar Anime...</div></div>
-            <div id="detail-news-container" class="content-section"><div class="loading">Loading News...</div></div>
-            <div class="content-section no-bg">
+            <div class="detail-tabs">
+                <button class="detail-tab active" onclick="switchDetailTab(event, 'tab-overview')">Overview</button>
+                <button class="detail-tab" onclick="switchDetailTab(event, 'tab-episodes')">Episodes</button>
+                <button class="detail-tab" onclick="switchDetailTab(event, 'tab-reviews')">Reviews</button>
+            </div>
+            <div id="tab-overview" class="detail-tab-content">
+                <div class="content-section"><h3>Synopsis</h3><p>${anime.synopsis}</p></div>
+                <div id="detail-chars-container" class="content-section"><div class="loading">Loading Characters...</div></div>
+                <div id="detail-recs-container" class="content-section"><div class="loading">Loading Similar Anime...</div></div>
+                <div id="detail-news-container" class="content-section"><div class="loading">Loading News...</div></div>
+            </div>
+            <div id="tab-episodes" class="detail-tab-content" style="display:none;">
+                <div id="detail-eps-container"><div class="loading">Loading Episodes...</div></div>
+            </div>
+            <div id="tab-reviews" class="detail-tab-content" style="display:none;">
                 <div class="review-header-container">
                     <h3>Reviews</h3>
                     <button class="action-btn" onclick="event.stopPropagation(); openReviewModal()">Write a Review</button>
@@ -1772,17 +1831,7 @@ window.loadAnimeDetails = async function(mal_id) {
         } else { cContainer.style.display = 'none'; }
     }).catch(() => document.getElementById('detail-chars-container').style.display = 'none');
 
-    fetch(`https://api.jikan.moe/v4/anime/${mal_id}/episodes`).then(r=>r.json()).then(d => {
-        const eContainer = document.getElementById('detail-eps-container'); if(!eContainer) return;
-        if(d.data && d.data.length > 0) {
-            window.currentAnimeEpisodes = d.data; const displayEps = d.data.slice(0, 5);
-            let html = `<h3>Episodes</h3><div style="display:flex; flex-direction:column; gap:10px;">`;
-            displayEps.forEach(ep => { html += `<details style="background: var(--bg-white); border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;"><summary style="padding: 15px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: space-between; outline: none;"><span style="flex:1;">Ep ${ep.mal_id}: ${ep.title}</span><span class="material-symbols-outlined" style="color:var(--text-muted);">expand_more</span></summary><div style="padding: 0 15px 15px 15px; font-size: 13px; line-height: 1.5; color: var(--text-muted); border-top: 1px dashed #E0E0E0; margin-top: 5px; padding-top: 10px;">${ep.synopsis ? ep.synopsis : (ep.title_japanese ? `Japanese Title: ${ep.title_japanese}<br><br>No synopsis available.` : 'No synopsis available.')}<br><br><strong style="color:var(--text-dark);">Aired:</strong> ${ep.aired ? new Date(ep.aired).toLocaleDateString() : 'N/A'}</div></details>`; });
-            html += `</div>`;
-            if(d.data.length > 5) html += `<button class="action-btn" style="width:100%; justify-content:center; margin-top:15px; background:transparent; color:var(--text-dark); border:1px solid #E0E0E0;" onclick="openAllEpisodesModal()">View All ${d.data.length} Episodes</button>`;
-            eContainer.innerHTML = html;
-        } else { eContainer.style.display = 'none'; }
-    }).catch(() => document.getElementById('detail-eps-container').style.display = 'none');
+    window.currentEpisodeList = [];
 
     fetch(`https://api.jikan.moe/v4/anime/${mal_id}/recommendations`).then(r=>r.json()).then(d => {
         const rContainer = document.getElementById('detail-recs-container'); if(!rContainer) return;
@@ -1799,6 +1848,163 @@ window.loadAnimeDetails = async function(mal_id) {
     }).catch(() => document.getElementById('detail-news-container').style.display = 'none');
 };
 
+// --- Mobile Menu ---
+window.toggleMobileMenu = function() { document.getElementById('mobile-menu').classList.toggle('open'); };
+window.closeMobileMenu = function() { document.getElementById('mobile-menu').classList.remove('open'); };
+
+// --- Mobile Search ---
+window.toggleMobileSearch = function() {
+    const bar = document.getElementById('mobile-search-bar');
+    if (!bar) return;
+    bar.classList.toggle('open');
+    if (bar.classList.contains('open')) {
+        setTimeout(() => document.getElementById('mobile-search-input')?.focus(), 50);
+    }
+};
+window.closeMobileSearch = function() {
+    document.getElementById('mobile-search-bar')?.classList.remove('open');
+};
+
+// --- Detail Page Tabs ---
+window.switchDetailTab = function(event, tabId) {
+    const detailMain = event.target.closest('.detail-main');
+    detailMain.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
+    detailMain.querySelectorAll('.detail-tab-content').forEach(c => c.style.display = 'none');
+    event.target.classList.add('active');
+    const content = document.getElementById(tabId);
+    content.style.display = 'block';
+    if (tabId === 'tab-episodes' && !content.dataset.loaded) {
+        content.dataset.loaded = 'true';
+        fetchDetailEpisodes(window.currentAnimeId);
+    }
+};
+
+// --- Episode Scoring ---
+async function fetchDetailEpisodes(mal_id, page = 1) {
+    const container = document.getElementById('detail-eps-container');
+    if (!container) return;
+    if (page === 1) {
+        container.innerHTML = '<div class="loading">Loading Episodes...</div>';
+        window.currentEpStats = {};
+        try {
+            const epSnap = await getDocs(query(collection(db, 'episode_reviews'), where('mal_id', '==', mal_id)));
+            const uid = auth.currentUser?.uid;
+            epSnap.forEach(d => {
+                const data = d.data(); const n = data.episode_number;
+                if (!window.currentEpStats[n]) window.currentEpStats[n] = { total: 0, count: 0, userScore: null, userComment: null };
+                window.currentEpStats[n].total += parseFloat(data.score);
+                window.currentEpStats[n].count++;
+                if (uid && data.uid === uid) { window.currentEpStats[n].userScore = data.score; window.currentEpStats[n].userComment = data.comment || ''; }
+            });
+        } catch(e) { console.error('Episode scores fetch error:', e); }
+    }
+    try {
+        const res = await fetch(`https://api.jikan.moe/v4/anime/${mal_id}/episodes?page=${page}`);
+        if (!res.ok) throw new Error(`Jikan ${res.status}`);
+        const json = await res.json();
+        const episodes = json.data || [];
+        const hasNext = json.pagination?.has_next_page;
+        if (page === 1) window.currentEpisodeList = [];
+        window.currentEpisodeList.push(...episodes);
+        if (episodes.length === 0 && page === 1) {
+            container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:30px 0;">No episode data available for this anime yet.</p>';
+            return;
+        }
+        const renderRows = (eps) => eps.map(ep => {
+            const stats = window.currentEpStats[ep.mal_id] || {};
+            const avg = stats.count > 0 ? (stats.total / stats.count).toFixed(1) : null;
+            const userScore = stats.userScore;
+            const flair = [ep.filler ? 'Filler' : '', ep.recap ? 'Recap' : ''].filter(Boolean).join(' · ');
+            return `<div class="episode-row" id="ep-row-${ep.mal_id}">
+                <div class="ep-num">${ep.mal_id}</div>
+                <div class="ep-info">
+                    <strong class="ep-title" title="${(ep.title || '').replace(/"/g, '&quot;')}">${ep.title || `Episode ${ep.mal_id}`}</strong>
+                    <span class="ep-meta">${ep.aired ? new Date(ep.aired).toLocaleDateString() : 'TBA'}${flair ? ` · <em>${flair}</em>` : ''}</span>
+                </div>
+                <div class="ep-score-area">
+                    ${avg ? `<span class="ep-avg">WeeBee ${avg}</span>` : ''}
+                    <button class="ep-score-btn${userScore ? ' scored' : ''}" onclick="openEpisodeScoreModal(${mal_id}, ${ep.mal_id})">${userScore ? `${userScore} ✓` : 'Score'}</button>
+                </div>
+            </div>`;
+        }).join('');
+        if (page === 1) { container.innerHTML = `<div class="episode-list">${renderRows(episodes)}</div>`; }
+        else { const list = container.querySelector('.episode-list'); if (list) list.insertAdjacentHTML('beforeend', renderRows(episodes)); }
+        const oldBtn = container.querySelector('.ep-load-more');
+        if (oldBtn) oldBtn.remove();
+        if (hasNext) {
+            const btn = document.createElement('button');
+            btn.className = 'action-btn ep-load-more';
+            btn.style.cssText = 'width:100%;justify-content:center;margin-top:15px;background:transparent;color:var(--text-dark);border:1px solid var(--border-color);';
+            btn.textContent = `Load More Episodes`;
+            btn.onclick = () => { btn.disabled = true; btn.textContent = 'Loading...'; fetchDetailEpisodes(mal_id, page + 1); };
+            container.appendChild(btn);
+        }
+    } catch(e) {
+        if (page === 1) container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:30px 0;">Failed to load episodes. Try again later.</p>';
+        console.error(e);
+    }
+}
+
+window.openEpisodeScoreModal = function(mal_id, ep_number) {
+    if (!auth.currentUser) return window.openAuthModal();
+    window.currentEpisodeContext = { mal_id, ep_number };
+    const ep = window.currentEpisodeList?.find(e => e.mal_id === ep_number);
+    document.getElementById('ep-modal-title').textContent = `Episode ${ep_number}`;
+    document.getElementById('ep-modal-subtitle').textContent = ep?.title || '';
+    const stats = window.currentEpStats?.[ep_number] || {};
+    document.getElementById('ep-score-input').value = stats.userScore || '';
+    document.getElementById('ep-score-comment').value = stats.userComment || '';
+    document.getElementById('ep-submit-btn').textContent = stats.userScore ? 'Update Score' : 'Save Score';
+    document.getElementById('ep-delete-btn').style.display = stats.userScore ? 'inline-flex' : 'none';
+    document.getElementById('episode-score-modal').style.display = 'flex';
+};
+
+window.submitEpisodeScore = async function() {
+    if (!auth.currentUser) return;
+    const { mal_id, ep_number } = window.currentEpisodeContext;
+    const scoreVal = parseFloat(document.getElementById('ep-score-input').value);
+    const comment = document.getElementById('ep-score-comment').value.trim();
+    if (isNaN(scoreVal) || scoreVal < 1 || scoreVal > 10) return alert('Please enter a score between 1 and 10.');
+    const score = parseFloat(scoreVal.toFixed(1));
+    const uid = auth.currentUser.uid;
+    const ep = window.currentEpisodeList?.find(e => e.mal_id === ep_number);
+    await setDoc(doc(db, 'episode_reviews', `${uid}_${mal_id}_${ep_number}`), {
+        mal_id, episode_number: ep_number, episode_title: ep?.title || `Episode ${ep_number}`,
+        uid, username: auth.currentUser.displayName,
+        avatar: auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`,
+        score, comment, timestamp: new Date()
+    });
+    if (!window.currentEpStats[ep_number]) window.currentEpStats[ep_number] = { total: 0, count: 0, userScore: null, userComment: null };
+    const stats = window.currentEpStats[ep_number];
+    if (stats.userScore !== null) { stats.total = stats.total - parseFloat(stats.userScore) + score; }
+    else { stats.total += score; stats.count++; }
+    stats.userScore = score; stats.userComment = comment;
+    updateEpisodeRowDOM(mal_id, ep_number);
+    window.closeAllModals();
+};
+
+window.deleteEpisodeScore = async function() {
+    if (!auth.currentUser) return;
+    const { mal_id, ep_number } = window.currentEpisodeContext;
+    const uid = auth.currentUser.uid;
+    await deleteDoc(doc(db, 'episode_reviews', `${uid}_${mal_id}_${ep_number}`));
+    const stats = window.currentEpStats[ep_number];
+    if (stats?.userScore !== null) { stats.total -= parseFloat(stats.userScore); stats.count--; stats.userScore = null; stats.userComment = null; }
+    updateEpisodeRowDOM(mal_id, ep_number);
+    window.closeAllModals();
+};
+
+function updateEpisodeRowDOM(mal_id, ep_number) {
+    const row = document.getElementById(`ep-row-${ep_number}`);
+    if (!row) return;
+    const stats = window.currentEpStats[ep_number] || {};
+    const avg = stats.count > 0 ? (stats.total / stats.count).toFixed(1) : null;
+    const userScore = stats.userScore;
+    row.querySelector('.ep-score-area').innerHTML = `
+        ${avg ? `<span class="ep-avg">WeeBee ${avg}</span>` : ''}
+        <button class="ep-score-btn${userScore ? ' scored' : ''}" onclick="openEpisodeScoreModal(${mal_id}, ${ep_number})">${userScore ? `${userScore} ✓` : 'Score'}</button>`;
+}
+
 window.onload = function() {
     const saved = localStorage.getItem('weebee-theme') || 'light';
     document.body.setAttribute('data-theme', saved);
@@ -1810,5 +2016,5 @@ window.onload = function() {
             if(d.data) d.data.forEach(a => c.innerHTML += `<div class="anime-card" onclick="loadAnimeDetails(${a.mal_id})"><img src="${a.images.jpg.image_url}"><p>${a.title_english || a.title}</p></div>`);
         } catch(e) { console.error("Trending error:", e); }
     };
-    loadTrending(); fetchHomepageReviews(); fetchDiscoverPage();
+    loadTrending(); fetchHomepageReviews();
 };
