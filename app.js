@@ -58,7 +58,8 @@ window.updateTopbarRank = async function() {
         if (el) el.innerHTML = window.getRankBadgeHTML(count, 16);
     } catch(e) {}
 };
-
+ 
+// --- GLOBAL STATE ---
 window.currentActiveViewId = 'home-view';
 window.previousViewId = 'home-view';
 window.currentAnime = null; 
