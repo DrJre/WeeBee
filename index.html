@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=20">
+    <link rel="stylesheet" href="styles.css?v=21">
 </head>
 <body>
     <div class="app-container">
@@ -25,8 +25,9 @@
                     <button class="nav-btn" data-target="my-list-view" onclick="switchView('my-list-view')">
                         <span class="material-symbols-outlined">list_alt</span> My List
                     </button>
-                    <button class="nav-btn" data-target="news-view" onclick="switchView('news-view')">
+                    <button class="nav-btn" data-target="news-view" onclick="switchView('news-view')" style="position:relative;">
                         <span class="material-symbols-outlined">newspaper</span> News
+                        <span id="news-badge" style="display:none; position:absolute; top:2px; right:2px; background:#FF4444; color:white; border-radius:50%; min-width:16px; height:16px; font-size:10px; font-weight:bold; align-items:center; justify-content:center; padding:0 3px;">0</span>
                     </button>
                     <button class="nav-btn" onclick="document.getElementById('coming-soon-modal').style.display='flex'">
                         <span class="material-symbols-outlined">groups</span> Community
@@ -359,6 +360,26 @@
                         </div>
                         <div id="news-seasonal-content"></div>
                     </div>
+                    <!-- Admin: Post Patch Notes -->
+                    <div id="patch-notes-admin" style="display:none; margin-bottom:32px; padding:20px; background:var(--bg-gray); border-radius:12px; border:2px solid #FF9800;">
+                        <h3 style="margin-bottom:16px; color:#FF9800;">Post Patch Notes</h3>
+                        <input id="patch-notes-title" type="text" placeholder="Title (e.g. WeeBee Update — May 2026)" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; margin-bottom:10px; box-sizing:border-box;">
+                        <textarea id="patch-notes-body" rows="10" placeholder="Paste patch notes here..." style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; resize:vertical; box-sizing:border-box;"></textarea>
+                        <button onclick="submitPatchNote()" class="submit-btn" style="margin-top:10px;">Post Patch Notes</button>
+                    </div>
+
+                    <!-- Patch Notes Feed -->
+                    <div id="patch-notes-section" style="display:none; margin-bottom:40px;">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:var(--accent-yellow);">campaign</span>
+                            <div>
+                                <h2>WeeBee Updates</h2>
+                                <p>Patch notes and announcements</p>
+                            </div>
+                        </div>
+                        <div id="patch-notes-feed" class="news-grid"></div>
+                    </div>
+
                     <h2>Global Anime News</h2>
                     <div id="global-news-feed" class="news-grid">
                         <div class="loading">Fetching latest headlines...</div>
@@ -909,6 +930,6 @@
         </div>
     </div>
 
-    <script type="module" src="app.js?v=32"></script>
+    <script type="module" src="app.js?v=33"></script>
 </body>
 </html>

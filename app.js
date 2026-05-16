@@ -305,7 +305,8 @@ onAuthStateChanged(auth, (user) => {
         window.updateTopbarRank();
         Promise.all([
             getDoc(doc(db, "admins", auth.currentUser.uid)).then(d => { window.isAdmin = d.exists(); }).catch(() => {}),
-            window.loadActiveSeasonalVote()
+            window.loadActiveSeasonalVote(),
+            window.loadPatchNotes()
         ]).then(() => window.renderSeasonalVoting());
         // Restore last view after login
         const savedView = sessionStorage.getItem('weebee-last-view');
@@ -2598,11 +2599,106 @@ window.renderSeasonalVoting = function() {
     });
 };
 
+// --- PATCH NOTES ---
+window.currentPatchNotes = [];
+
+window.loadPatchNotes = async function() {
+    try {
+        const snap = await getDocs(query(collection(db, "patch_notes"), orderBy("timestamp", "desc"), limit(10)));
+        window.currentPatchNotes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const feed = document.getElementById('patch-notes-feed');
+        const section = document.getElementById('patch-notes-section');
+        if (!feed || !section) return;
+        if (snap.empty) { section.style.display = 'none'; return; }
+        section.style.display = 'block';
+        feed.innerHTML = window.currentPatchNotes.map((p, i) => `
+            <div class="news-card" onclick="openPatchNoteModal(${i})" style="cursor:pointer;">
+                <div style="background:var(--accent-yellow); height:8px; border-radius:10px 10px 0 0;"></div>
+                <div class="news-content">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                        <img src="${p.authorAvatar || ''}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;" onerror="this.style.display='none'">
+                        <div>
+                            <div style="font-size:12px; font-weight:700; color:var(--accent-yellow);">WeeBee Update</div>
+                            <div style="font-size:11px; color:var(--text-muted);">${p.authorName || 'WeeBee'}</div>
+                        </div>
+                    </div>
+                    <h3 style="font-size:14px; font-weight:700; margin-bottom:8px; line-height:1.4;">${p.title}</h3>
+                    <p style="font-size:13px; color:var(--text-muted); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">${p.body.replace(/\n/g, ' ')}</p>
+                    <div class="news-footer" style="margin-top:10px;">
+                        <span style="font-size:12px; color:var(--text-muted);">${p.timestamp?.toDate ? new Date(p.timestamp.toDate()).toLocaleDateString() : ''}</span>
+                        <span class="news-link">Read More</span>
+                    </div>
+                </div>
+            </div>`).join('');
+        window.checkPatchNoteBadge();
+    } catch(e) { console.error('loadPatchNotes', e); }
+};
+
+window.openPatchNoteModal = function(index) {
+    const p = window.currentPatchNotes[index];
+    if (!p) return;
+    document.getElementById('article-reader-img').style.display = 'none';
+    document.getElementById('article-reader-anime').innerText = 'WeeBee Patch Notes';
+    document.getElementById('article-reader-anime').onclick = null;
+    document.getElementById('article-reader-date').innerText = p.timestamp?.toDate ? new Date(p.timestamp.toDate()).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) : '';
+    document.getElementById('article-reader-title').innerText = p.title;
+    const body = document.getElementById('article-reader-body');
+    body.style.whiteSpace = 'pre-line';
+    body.innerText = p.body;
+    const link = document.getElementById('article-reader-link');
+    link.style.display = 'none';
+    window.closeAllModals();
+    document.getElementById('article-reader-modal').style.display = 'flex';
+};
+
+window.submitPatchNote = async function() {
+    if (!auth.currentUser || !window.isAdmin) return;
+    const title = document.getElementById('patch-notes-title').value.trim();
+    const body = document.getElementById('patch-notes-body').value.trim();
+    if (!title || !body) return alert('Please fill in both the title and body.');
+    try {
+        const myAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        await addDoc(collection(db, "patch_notes"), {
+            title, body,
+            authorName: auth.currentUser.displayName,
+            authorAvatar: myAvatar,
+            timestamp: new Date()
+        });
+        document.getElementById('patch-notes-title').value = '';
+        document.getElementById('patch-notes-body').value = '';
+        await window.loadPatchNotes();
+        alert('Patch notes posted!');
+    } catch(e) { alert('Failed to post.'); console.error(e); }
+};
+
+window.checkPatchNoteBadge = function() {
+    const badge = document.getElementById('news-badge');
+    if (!badge || window.currentPatchNotes.length === 0) return;
+    const lastRead = parseInt(localStorage.getItem('weebee-last-read-patch') || '0');
+    const latest = window.currentPatchNotes[0]?.timestamp?.toDate
+        ? window.currentPatchNotes[0].timestamp.toDate().getTime()
+        : 0;
+    const unread = window.currentPatchNotes.filter(p => {
+        const t = p.timestamp?.toDate ? p.timestamp.toDate().getTime() : 0;
+        return t > lastRead;
+    }).length;
+    if (unread > 0) { badge.innerText = unread; badge.style.display = 'flex'; }
+    else { badge.style.display = 'none'; }
+};
+
+window.clearPatchNoteBadge = function() {
+    localStorage.setItem('weebee-last-read-patch', Date.now().toString());
+    const badge = document.getElementById('news-badge');
+    if (badge) badge.style.display = 'none';
+};
+
 window.currentNewsArticles = [];
 
 window.openArticleModal = function(index) {
     const item = window.currentNewsArticles[index];
     if (!item) return;
+    document.getElementById('article-reader-link').style.display = 'inline-flex';
+    document.getElementById('article-reader-body').style.whiteSpace = 'normal';
     const img = document.getElementById('article-reader-img');
     const imgUrl = item.images?.jpg?.image_url || '';
     if (imgUrl) { img.src = imgUrl; img.style.display = 'block'; } else { img.style.display = 'none'; }
@@ -3142,7 +3238,13 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     document.querySelector('.main-content').scrollTo(0,0);
     
     if(targetId === 'home-view') fetchHomepageReviews();
-    if(targetId === 'news-view') fetchGlobalNews();
+    if(targetId === 'news-view') {
+        fetchGlobalNews();
+        window.loadPatchNotes();
+        window.clearPatchNoteBadge();
+        const adminPanel = document.getElementById('patch-notes-admin');
+        if (adminPanel) adminPanel.style.display = window.isAdmin ? 'block' : 'none';
+    }
     if(targetId === 'profile-view') fetchUserProfile(window.targetProfileUid);
     if(targetId === 'my-list-view') fetchMyList(); 
     if(targetId === 'discover-view' && !isSearch) {
