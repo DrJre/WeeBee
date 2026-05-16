@@ -237,10 +237,14 @@ window.loadProfileAchievements = async function(uid) {
 // --- GLOBAL STATE ---
 window.currentActiveViewId = 'home-view';
 window.previousViewId = 'home-view';
-window.currentAnime = null; 
+window.currentAnime = null;
 window.currentAnimeId = null;
-window.pendingInDepthData = null; 
-window.isSignUpMode = false; 
+window.pendingInDepthData = null;
+window.isSignUpMode = false;
+window.myFollowNotifyMap = new Map();
+window.myFriendIds = new Set();
+window.myPendingOutIds = new Set();
+window.myPendingInIds = new Map(); // uid → requestDocId
 
 // LIST & NOTIF STATE
 window.myAnimeList = [];
@@ -282,10 +286,10 @@ onAuthStateChanged(auth, (user) => {
                     <div id="notif-list"><div class="loading" style="font-size:12px; padding: 15px;">Loading...</div></div>
                 </div>
             </div>
-            <div style="display:flex; align-items:center; gap: 10px; cursor:pointer;" onclick="toggleDropdown(event)">
+            <div style="display:flex; align-items:center; gap: 10px;">
                 <span class="topbar-display-name" style="font-weight:600; font-size:14px;">${user.displayName}</span><span id="topbar-rank-badge" style="display:inline-flex; align-items:center; margin-left:2px;"></span>
-                <img src="${avatarUrl}" alt="User" class="avatar">
-                <span class="material-symbols-outlined topbar-chevron" style="font-size:18px;">expand_more</span>
+                <img src="${avatarUrl}" alt="User" class="avatar" style="cursor:pointer;" onclick="event.stopPropagation(); viewUserProfile('${user.uid}')">
+                <span class="material-symbols-outlined topbar-chevron" style="font-size:18px; cursor:pointer;" onclick="toggleDropdown(event)">expand_more</span>
             </div>
             <div id="profile-dropdown" class="dropdown-menu" style="display: none; right:0; top:50px;">
                 <div class="dropdown-item" onclick="viewUserProfile('${user.uid}')"><span class="material-symbols-outlined">person</span> My Profile</div>
@@ -297,7 +301,25 @@ onAuthStateChanged(auth, (user) => {
         fetchMyList();
         fetchNotifications();
         fetchMyFollows();
+        window.fetchFriendData();
         window.updateTopbarRank();
+        Promise.all([
+            getDoc(doc(db, "admins", auth.currentUser.uid)).then(d => { window.isAdmin = d.exists(); }).catch(() => {}),
+            window.loadActiveSeasonalVote()
+        ]).then(() => window.renderSeasonalVoting());
+        // Restore last view after login
+        const savedView = sessionStorage.getItem('weebee-last-view');
+        if (savedView) {
+            try {
+                const { view, profileUid, animeId } = JSON.parse(savedView);
+                if (view && view !== 'home-view') {
+                    if (view === 'anime-detail-view' && animeId) { window.loadAnimeDetails(animeId, true); }
+                    else if (view === 'profile-view' && profileUid) { window.targetProfileUid = profileUid; switchView('profile-view', false, true); }
+                    else { switchView(view, false, true); }
+                }
+            } catch(e) {}
+            sessionStorage.removeItem('weebee-last-view');
+        }
         window.initUserAchievements();
         window.subscribeToDMBadge();
     } else {
@@ -349,10 +371,10 @@ window.subscribeToDMBadge = function() {
     if (window.dmConvUnsubscribe) window.dmConvUnsubscribe();
     const uid = auth.currentUser.uid;
     window.dmConvUnsubscribe = onSnapshot(
-        query(collection(db, "conversations"), where("participants", "array-contains", uid)),
+        query(collection(db, "notifications"), where("targetUid", "==", uid)),
         (snap) => {
             let total = 0;
-            snap.forEach(d => { total += (d.data().unreadCount?.[uid] || 0); });
+            snap.forEach(d => { const n = d.data(); if (n.type === 'dm' && !n.read) total++; });
             const badge = document.getElementById('dm-badge');
             if (badge) { badge.innerText = total > 9 ? '9+' : total; badge.style.display = total > 0 ? 'flex' : 'none'; }
         }
@@ -378,17 +400,22 @@ window.loadDMList = async function() {
     if (!list) return;
     list.innerHTML = '<div class="loading" style="font-size:12px; padding:15px;">Loading...</div>';
     try {
-        const q = query(collection(db, "conversations"), where("participants", "array-contains", auth.currentUser.uid), orderBy("lastUpdated", "desc"), limit(20));
-        const snap = await getDocs(q);
-        if (snap.empty) { list.innerHTML = '<p style="padding:20px; text-align:center; font-size:13px; color:var(--text-muted);">No messages yet.<br>Visit someone\'s profile to start a chat!</p>'; return; }
         const uid = auth.currentUser.uid;
+        const [snap, notifSnap] = await Promise.all([
+            getDocs(query(collection(db, "conversations"), where("participants", "array-contains", uid))),
+            getDocs(query(collection(db, "notifications"), where("targetUid", "==", uid)))
+        ]);
+        if (snap.empty) { list.innerHTML = '<p style="padding:20px; text-align:center; font-size:13px; color:var(--text-muted);">No messages yet.<br>Visit someone\'s profile to start a chat!</p>'; return; }
+        const unreadConvIds = new Set();
+        notifSnap.forEach(d => { const n = d.data(); if (n.type === 'dm' && !n.read) unreadConvIds.add(d.id.replace(/^dm_/, '')); });
+        const sortedDocs = snap.docs.sort((a, b) => (b.data().lastUpdated?.toMillis?.() || 0) - (a.data().lastUpdated?.toMillis?.() || 0)).slice(0, 20);
         list.innerHTML = '';
-        snap.forEach(d => {
+        sortedDocs.forEach(d => {
             const data = d.data();
             const otherUid = data.participants.find(p => p !== uid);
             const otherName = data.participantNames?.[otherUid] || 'User';
             const otherAvatar = data.participantAvatars?.[otherUid] || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(otherName)}&backgroundColor=ffc107&fontColor=333333`;
-            const unread = data.unreadCount?.[uid] || 0;
+            const unread = unreadConvIds.has(d.id) ? 1 : 0;
             const lastMsg = data.lastMessage ? (data.lastMessage.length > 35 ? data.lastMessage.slice(0,35) + '…' : data.lastMessage) : 'Start a conversation';
             list.innerHTML += `
                 <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;border-bottom:1px solid var(--bg-gray);${unread ? 'background:var(--accent-yellow-light);' : ''}" onclick="openDMConversation('${otherUid}','${otherName.replace(/'/g,"\\'")}','${otherAvatar}')">
@@ -405,8 +432,18 @@ window.loadDMList = async function() {
     } catch(e) { list.innerHTML = '<p style="padding:15px;font-size:12px;color:var(--text-muted);">Failed to load.</p>'; console.error(e); }
 };
 
-window.openDMConversation = function(otherUid, otherName, otherAvatar) {
+window.openDMConversation = async function(otherUid, otherName, otherAvatar) {
     if (!auth.currentUser) return window.openAuthModal();
+    if (!window.myFriendIds.has(otherUid)) {
+        try {
+            const pd = await getDoc(doc(db, "profiles", otherUid));
+            const dmOpenToFollowers = pd.exists() ? pd.data().dmOpenToFollowers : false;
+            if (!dmOpenToFollowers) {
+                alert(`${otherName} only accepts messages from friends.`);
+                return;
+            }
+        } catch(e) {}
+    }
     const dd = document.getElementById('dm-dropdown');
     if (dd) dd.style.display = 'none';
     const uid = auth.currentUser.uid;
@@ -426,6 +463,7 @@ window.openDMConversation = function(otherUid, otherName, otherAvatar) {
     const myName = auth.currentUser.displayName;
     const myAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(myName)}&backgroundColor=ffc107&fontColor=333333`;
     setDoc(convRef, { participants: [uid, otherUid].sort(), participantNames: { [uid]: myName, [otherUid]: otherName }, participantAvatars: { [uid]: myAvatar, [otherUid]: otherAvatar }, [`unreadCount.${uid}`]: 0 }, { merge: true }).catch(() => {});
+    setDoc(doc(db, "notifications", `dm_${convId}`), { read: true }, { merge: true }).catch(() => {});
 
     window.dmUnsubscribe = onSnapshot(query(collection(db, "conversations", convId, "messages"), orderBy("timestamp", "asc"), limit(100)), (snap) => {
         const container = document.getElementById('chat-messages');
@@ -454,10 +492,18 @@ window.sendDM = async function() {
     if (!text) return;
     input.value = '';
     const uid = auth.currentUser.uid;
+    const myName = auth.currentUser.displayName || 'Someone';
+    const myAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(myName)}&backgroundColor=ffc107&fontColor=333333`;
     const convRef = doc(db, "conversations", window.currentConversationId);
     try {
         await addDoc(collection(db, "conversations", window.currentConversationId, "messages"), { text, senderUid: uid, timestamp: new Date() });
         setDoc(convRef, { lastMessage: text, lastSenderUid: uid, lastUpdated: new Date(), [`unreadCount.${window.currentChatOtherUid}`]: increment(1) }, { merge: true }).catch(() => {});
+        setDoc(doc(db, "notifications", `dm_${window.currentConversationId}`), {
+            targetUid: window.currentChatOtherUid, type: 'dm',
+            senderUid: uid, senderName: myName, senderAvatar: myAvatar,
+            message: `sent you a message: "${text.length > 40 ? text.slice(0,40) + '…' : text}"`,
+            timestamp: new Date(), read: false
+        }).catch(() => {});
     } catch(e) { console.error('Send failed:', e); }
 };
 
@@ -477,49 +523,83 @@ window.onclick = function() {
     if (dm && dm.style.display === 'block') dm.style.display = 'none';
 };
 
-window.fetchNotifications = async function() {
+window.notifUnsubscribe = null;
+window.fetchNotifications = function() {
     if(!auth.currentUser) return;
-    try {
-        const q = query(collection(db, "notifications"), where("targetUid", "==", auth.currentUser.uid));
-        const snap = await getDocs(q);
+    if(window.notifUnsubscribe) { window.notifUnsubscribe(); window.notifUnsubscribe = null; }
+    const q = query(collection(db, "notifications"), where("targetUid", "==", auth.currentUser.uid));
+    window.notifUnsubscribe = onSnapshot(q, (snap) => {
         const list = document.getElementById('notif-list');
         const badge = document.getElementById('notif-badge');
         if(!list || !badge) return;
-        
+
         let notifs = [];
         snap.forEach(d => notifs.push({ ...d.data(), id: d.id }));
-        notifs.sort((a,b) => b.timestamp - a.timestamp); 
-        notifs = notifs.slice(0, 20); 
-        
+        notifs = notifs.filter(n => n.type !== 'dm');
+        notifs.sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+        notifs = notifs.slice(0, 20);
+
         list.innerHTML = '';
         let unreadCount = 0;
         window.unreadNotifDocs = [];
-        
+
         if(notifs.length === 0) {
-            list.innerHTML = '<div style="padding:15px; text-align:center; color:var(--text-muted); font-size:13px;">No new notifications.</div>';
+            list.innerHTML = '<div style="padding:15px; text-align:center; color:var(--text-muted); font-size:13px;">No notifications yet.</div>';
             badge.style.display = 'none';
             return;
         }
 
         notifs.forEach(n => {
             if(!n.read) { unreadCount++; window.unreadNotifDocs.push(n.id); }
-            let onClickAction = n.type === 'suggestion' && n.linkRef ? `onclick="loadAnimeDetails(${n.linkRef})"` : `onclick="viewUserProfile('${n.senderUid}')"`;
-            const dateStr = n.timestamp?.toDate ? new Date(n.timestamp.toDate()).toLocaleDateString() : new Date().toLocaleDateString();
+            const dateStr = n.timestamp?.toDate ? new Date(n.timestamp.toDate()).toLocaleDateString() : '';
+            const avatar = n.senderAvatar || 'https://api.dicebear.com/9.x/initials/svg?seed=WeeBee&backgroundColor=ffc107&fontColor=333333';
 
+            if (n.type === 'friend_request') {
+                const alreadyFriends = window.myFriendIds.has(n.senderUid);
+                const reqId = n.requestId || '';
+                const actionHtml = alreadyFriends
+                    ? `<span style="font-size:12px; color:var(--text-muted);">Already friends</span>`
+                    : reqId
+                    ? `<div style="display:flex; gap:8px; margin-top:6px;" onclick="event.stopPropagation()">
+                           <button onclick="acceptFriendRequest('${n.senderUid}','${reqId}','${n.id}',this)" class="action-btn" style="padding:4px 10px; font-size:12px; background:#4CAF50; color:white;">Accept</button>
+                           <button onclick="declineFriendRequest('${n.senderUid}','${reqId}','${n.id}',this)" class="action-btn" style="padding:4px 10px; font-size:12px; background:var(--bg-gray-darker); color:var(--text-dark);">Decline</button>
+                       </div>`
+                    : `<span style="font-size:12px; color:var(--text-muted);">Request handled</span>`;
+                list.innerHTML += `
+                    <div class="notif-item ${n.read ? '' : 'unread'}" style="cursor:pointer;" onclick="viewUserProfile('${n.senderUid}')">
+                        <img src="${avatar}">
+                        <div class="notif-content">
+                            <p class="notif-text"><strong>${n.senderName}</strong> ${n.message}</p>
+                            ${actionHtml}
+                            <span class="notif-time">${dateStr}</span>
+                        </div>
+                    </div>`;
+                return;
+            }
+
+            let onClickAction;
+            if ((n.type === 'suggestion' || n.type === 'review') && n.linkRef) {
+                onClickAction = `onclick="loadAnimeDetails(${n.linkRef})"`;
+            } else if (n.type === 'dm') {
+                const safeAvatar = (n.senderAvatar || '').replace(/'/g, "\\'");
+                const safeName = (n.senderName || '').replace(/'/g, "\\'");
+                onClickAction = `onclick="openDMConversation('${n.senderUid}','${safeName}','${safeAvatar}')"`;
+            } else {
+                onClickAction = `onclick="viewUserProfile('${n.senderUid}')"`;
+            }
             list.innerHTML += `
                 <div class="notif-item ${n.read ? '' : 'unread'}" style="cursor:pointer;" ${onClickAction}>
-                    <img src="${n.senderAvatar || 'https://via.placeholder.com/40'}">
+                    <img src="${avatar}">
                     <div class="notif-content">
                         <p class="notif-text"><strong>${n.senderName}</strong> ${n.message}</p>
                         <span class="notif-time">${dateStr}</span>
                     </div>
-                </div>
-            `;
+                </div>`;
         });
 
-        if(unreadCount > 0) { badge.innerText = unreadCount; badge.style.display = 'flex'; } 
+        if(unreadCount > 0) { badge.innerText = unreadCount; badge.style.display = 'flex'; }
         else { badge.style.display = 'none'; }
-    } catch(e) { console.error("Notif error", e); }
+    }, (e) => console.error("Notif error", e));
 };
 
 window.closeAllModals = function() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); };
@@ -529,7 +609,24 @@ window.fetchMyFollows = async function() {
     try {
         const snap = await getDocs(query(collection(db, "follows"), where("followerUid", "==", auth.currentUser.uid), where("type", "==", "user")));
         window.myFollowedUserIds.clear();
-        snap.forEach(d => window.myFollowedUserIds.add(d.data().targetId));
+        window.myFollowNotifyMap.clear();
+        snap.forEach(d => {
+            const fd = d.data();
+            window.myFollowedUserIds.add(fd.targetId);
+            window.myFollowNotifyMap.set(fd.targetId, fd.notifyReviews !== false);
+        });
+        // Update any follow buttons already rendered on screen
+        document.querySelectorAll('.card-follow-btn').forEach(btn => {
+            const onclickStr = btn.getAttribute('onclick') || '';
+            const match = onclickStr.match(/toggleFollow\('([^']+)'/);
+            if (!match) return;
+            const uid = match[1];
+            if (window.myFollowedUserIds.has(uid)) {
+                btn.style.background = 'var(--bg-gray-darker)';
+                btn.style.color = 'var(--text-dark)';
+                btn.innerHTML = `<span class="material-symbols-outlined" style="font-size:14px;">check</span> <span class="follow-btn-label">Following</span>`;
+            }
+        });
     } catch(e) {}
 };
 
@@ -547,6 +644,27 @@ window.openSettingsModal = function() {
     window.closeAllModals();
     document.getElementById('settings-modal').style.display = 'flex';
     document.getElementById('dark-mode-toggle').checked = document.body.getAttribute('data-theme') === 'dark';
+    if (auth.currentUser) {
+        getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
+            const data = pd.exists() ? pd.data() : {};
+            const dmT = document.getElementById('dm-followers-toggle');
+            const listT = document.getElementById('list-private-toggle');
+            if (dmT) dmT.checked = data.dmOpenToFollowers === true;
+            if (listT) listT.checked = data.listPrivate === true;
+        }).catch(() => {});
+    }
+};
+
+window.toggleDmFollowers = function() {
+    if (!auth.currentUser) return;
+    const checked = document.getElementById('dm-followers-toggle').checked;
+    setDoc(doc(db, "profiles", auth.currentUser.uid), { dmOpenToFollowers: checked }, { merge: true }).catch(() => {});
+};
+
+window.toggleListPrivacy = function() {
+    if (!auth.currentUser) return;
+    const checked = document.getElementById('list-private-toggle').checked;
+    setDoc(doc(db, "profiles", auth.currentUser.uid), { listPrivate: checked }, { merge: true }).catch(() => {});
 };
 
 window.toggleDarkMode = function() {
@@ -569,17 +687,50 @@ const CATEGORY_DESCRIPTIONS = {
     'Overall Enjoyment': 'Your personal overall enjoyment — how the anime made you feel beyond the individual scores.',
 };
 
-window.openReviewModal = function() {
+window.openReviewModal = async function() {
     if (!auth.currentUser) return window.openAuthModal();
+    window.existingReviewId = null;
+    window.existingReviewData = null;
+    // Check if user already has a review for this anime
+    try {
+        const existing = await getDocs(query(collection(db, "reviews"),
+            where("uid", "==", auth.currentUser.uid),
+            where("mal_id", "==", window.currentAnimeId)));
+        const nonSuggestion = existing.docs.find(d => d.data().type !== 'suggestion');
+        if (nonSuggestion) {
+            window.existingReviewId = nonSuggestion.id;
+            window.existingReviewData = nonSuggestion.data();
+            const score = window.existingReviewData.score;
+            document.getElementById('already-reviewed-msg').innerText =
+                `You already gave this anime a score of ${score}/10. Would you like to update it?`;
+            window.closeAllModals();
+            document.getElementById('already-reviewed-modal').style.display = 'flex';
+            return;
+        }
+    } catch(e) { console.error(e); }
     window.closeAllModals();
+    document.getElementById('choice-modal').style.display = 'flex';
+};
+
+window.proceedToEditReview = function() {
+    window.closeAllModals();
+    if (window.existingReviewData?.categories) {
+        window.pendingInDepthData = {
+            categories: window.existingReviewData.categories,
+            overallScore: window.existingReviewData.score,
+            fanService: window.existingReviewData.fanService || null
+        };
+    } else {
+        window.pendingInDepthData = null;
+    }
     document.getElementById('choice-modal').style.display = 'flex';
 };
 
 window.openQuickScoreModal = function() {
     window.closeAllModals();
-    document.getElementById('quick-score-value').value = '';
-    document.getElementById('quick-fanservice-value').value = '';
-    document.getElementById('quick-score-text').value = '';
+    document.getElementById('quick-score-value').value = window.existingReviewData?.score || '';
+    document.getElementById('quick-fanservice-value').value = window.existingReviewData?.fanService || '';
+    document.getElementById('quick-score-text').value = window.existingReviewData?.text || '';
     document.getElementById('quick-score-modal').style.display = 'flex';
 };
 
@@ -609,6 +760,8 @@ window.previewInDepthReview = function() {
     if (scored.length === 0) return alert('Please score at least one category.');
     const outOfRange = scored.find(c => c.score < 0 || c.score > 10);
     if (outOfRange) return alert(`Scores must be between 0 and 10. Check your "${outOfRange.label}" score.`);
+    const textWithoutScore = categories.find(c => c.text && !c.score);
+    if (textWithoutScore) return alert(`You left a comment on "${textWithoutScore.label}" but didn't give it a score. Please add a score or remove the comment.`);
     const fanService = parseFloat(document.getElementById('in-depth-fanservice-value').value) || null;
     if (fanService !== null && (fanService < 0 || fanService > 10)) return alert('Fan Service score must be between 0 and 10.');
     const overallScore = (scored.reduce((sum, c) => sum + c.score, 0) / scored.length).toFixed(1);
@@ -650,27 +803,40 @@ window.submitInDepthReview = async function() {
     if (!auth.currentUser) return window.openAuthModal();
     const { categories, overallScore, fanService } = window.pendingInDepthData;
     try {
-        await addDoc(collection(db, "reviews"), {
-            mal_id: window.currentAnimeId,
-            animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
-            animeImage: window.currentAnime?.images?.jpg?.image_url,
-            type: 'in-depth', score: parseFloat(overallScore), categories,
-            fanService: fanService || null, text: '',
-            username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
-            uid: auth.currentUser.uid, timestamp: new Date(),
-            likes: [], dislikes: [], commentCount: 0
-        });
-        window.myReviewCount = (window.myReviewCount || 0) + 1;
-        window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
-        const _avId = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
-        setDoc(doc(db, "profiles", auth.currentUser.uid), { reviewCount: increment(1), indepthCount: increment(1), displayName: auth.currentUser.displayName, avatar: _avId }, { merge: true }).catch(() => {});
-        const _tb = document.getElementById('topbar-rank-badge');
-        if (_tb) _tb.innerHTML = window.getRankBadgeHTML(window.myReviewCount, 16);
-        // Achievement checks (fire-and-forget)
-        getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
-            const p = pd.exists() ? pd.data() : {};
-            window.awardAchievements([...window.getEarnedIds('review',p.reviewCount || window.myReviewCount), ...window.getEarnedIds('indepth', p.indepthCount || 1)]).catch(() => {});
-        }).catch(() => {});
+        if (window.existingReviewId) {
+            await updateDoc(doc(db, "reviews", window.existingReviewId), {
+                score: parseFloat(overallScore), categories, fanService: fanService || null,
+                animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
+                animeImage: window.currentAnime?.images?.jpg?.image_url,
+                username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
+                timestamp: new Date()
+            });
+        } else {
+            await addDoc(collection(db, "reviews"), {
+                mal_id: window.currentAnimeId,
+                animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
+                animeImage: window.currentAnime?.images?.jpg?.image_url,
+                type: 'in-depth', score: parseFloat(overallScore), categories,
+                fanService: fanService || null, text: '',
+                username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
+                uid: auth.currentUser.uid, timestamp: new Date(),
+                likes: [], dislikes: [], commentCount: 0
+            });
+            window.myReviewCount = (window.myReviewCount || 0) + 1;
+            window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
+            const _avId = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+            setDoc(doc(db, "profiles", auth.currentUser.uid), { reviewCount: increment(1), indepthCount: increment(1), displayName: auth.currentUser.displayName, avatar: _avId }, { merge: true }).catch(() => {});
+            const _tb = document.getElementById('topbar-rank-badge');
+            if (_tb) _tb.innerHTML = window.getRankBadgeHTML(window.myReviewCount, 16);
+            getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
+                const p = pd.exists() ? pd.data() : {};
+                window.awardAchievements([...window.getEarnedIds('review', p.reviewCount || window.myReviewCount), ...window.getEarnedIds('indepth', p.indepthCount || 1)]).catch(() => {});
+            }).catch(() => {});
+        }
+        if (!window.existingReviewId) {
+            const _animeTitle = window.currentAnime?.title_english || window.currentAnime?.title;
+            window.sendReviewNotifications(_animeTitle, window.currentAnimeId).catch(() => {});
+        }
         window.pendingInDepthData = null;
         window.closeAllModals();
         window.loadAnimeDetails(window.currentAnimeId);
@@ -685,22 +851,36 @@ window.submitQuickReview = async function() {
     if (!score || score < 1 || score > 10) return alert('Please enter a score between 1 and 10.');
     if (fanService !== null && (fanService < 0 || fanService > 10)) return alert('Fan Service score must be between 0 and 10.');
     try {
-        await addDoc(collection(db, "reviews"), {
-            mal_id: window.currentAnimeId,
-            animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
-            animeImage: window.currentAnime?.images?.jpg?.image_url,
-            type: 'quick', score, fanService, text,
-            username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
-            uid: auth.currentUser.uid, timestamp: new Date(),
-            likes: [], dislikes: [], commentCount: 0
-        });
-        window.myReviewCount = (window.myReviewCount || 0) + 1;
-        window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
-        const _avIq = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
-        setDoc(doc(db, "profiles", auth.currentUser.uid), { reviewCount: increment(1), displayName: auth.currentUser.displayName, avatar: _avIq }, { merge: true }).catch(() => {});
-        const _tbq = document.getElementById('topbar-rank-badge');
-        if (_tbq) _tbq.innerHTML = window.getRankBadgeHTML(window.myReviewCount, 16);
-        window.awardAchievements(window.getEarnedIds('review',window.myReviewCount)).catch(() => {});
+        if (window.existingReviewId) {
+            await updateDoc(doc(db, "reviews", window.existingReviewId), {
+                score, fanService, text,
+                animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
+                animeImage: window.currentAnime?.images?.jpg?.image_url,
+                username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
+                timestamp: new Date()
+            });
+        } else {
+            await addDoc(collection(db, "reviews"), {
+                mal_id: window.currentAnimeId,
+                animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
+                animeImage: window.currentAnime?.images?.jpg?.image_url,
+                type: 'quick', score, fanService, text,
+                username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
+                uid: auth.currentUser.uid, timestamp: new Date(),
+                likes: [], dislikes: [], commentCount: 0
+            });
+            window.myReviewCount = (window.myReviewCount || 0) + 1;
+            window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
+            const _avIq = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+            setDoc(doc(db, "profiles", auth.currentUser.uid), { reviewCount: increment(1), displayName: auth.currentUser.displayName, avatar: _avIq }, { merge: true }).catch(() => {});
+            const _tbq = document.getElementById('topbar-rank-badge');
+            if (_tbq) _tbq.innerHTML = window.getRankBadgeHTML(window.myReviewCount, 16);
+            window.awardAchievements(window.getEarnedIds('review', window.myReviewCount)).catch(() => {});
+        }
+        if (!window.existingReviewId) {
+            const _qTitle = window.currentAnime?.title_english || window.currentAnime?.title;
+            window.sendReviewNotifications(_qTitle, window.currentAnimeId).catch(() => {});
+        }
         window.closeAllModals();
         window.loadAnimeDetails(window.currentAnimeId);
     } catch(e) { alert('Failed to submit review.'); console.error(e); }
@@ -743,7 +923,13 @@ window.submitAuth = async function() {
 };
 
 window.signInWithGoogle = async function() { try { await signInWithPopup(auth, googleProvider); window.closeAllModals(); } catch (error) { alert(error.message); } };
-window.logoutUser = function() { if(confirm("Are you sure you want to log out?")) signOut(auth); };
+window.logoutUser = function() {
+    if(confirm("Are you sure you want to log out?")) {
+        if(window.notifUnsubscribe) { window.notifUnsubscribe(); window.notifUnsubscribe = null; }
+        if(window.dmUnsubscribe) { window.dmUnsubscribe(); window.dmUnsubscribe = null; }
+        signOut(auth);
+    }
+};
 
 window.getScoreTier = function(score) {
     const s = parseFloat(score);
@@ -761,17 +947,24 @@ window.toggleFollow = async function(targetId, type, btnElement) {
         extraData.title = window.currentAnime.title_english || window.currentAnime.title;
         extraData.image = window.currentAnime.images.jpg.image_url;
     } else if (type === 'user' && window.targetProfileUid) {
-        const uName = document.querySelector('.profile-header h1')?.innerText || 'User';
-        const uImg = document.querySelector('.profile-avatar-large')?.src || `https://api.dicebear.com/9.x/initials/svg?seed=${targetId}`;
+        // Get only the text node from h1, not any icon span text
+        const h1 = document.querySelector('.profile-header h1');
+        const uName = h1 ? [...h1.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()).filter(Boolean).join('') || window.currentProfileName || 'User' : window.currentProfileName || 'User';
+        const uImg = document.querySelector('.profile-avatar-large')?.src || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(uName)}&backgroundColor=ffc107&fontColor=333333`;
         extraData.username = uName;
         extraData.avatar = uImg;
     }
 
     if(snap.empty) {
-        await addDoc(collection(db, "follows"), { followerUid: auth.currentUser.uid, targetId: targetId, type: type, ...extraData });
+        await addDoc(collection(db, "follows"), { followerUid: auth.currentUser.uid, targetId: targetId, type: type, notifyReviews: true, ...extraData });
         btnElement.innerHTML = `<span class="material-symbols-outlined">check</span> Following`; btnElement.style.backgroundColor = "var(--bg-gray-darker)";
-        if(type === 'user') { window.myFollowedUserIds.add(targetId); window.awardAchievements(['first_follow']).catch(() => {}); }
-
+        if(type === 'user') {
+            window.myFollowedUserIds.add(targetId);
+            window.myFollowNotifyMap.set(targetId, true);
+            window.awardAchievements(['first_follow']).catch(() => {});
+            const notifyBtn = document.getElementById('profile-notify-btn');
+            if (notifyBtn) notifyBtn.style.display = 'inline-flex';
+        }
         if(type === 'user') {
             await addDoc(collection(db, "notifications"), {
                 targetUid: targetId, type: 'follow', senderUid: auth.currentUser.uid,
@@ -783,11 +976,213 @@ window.toggleFollow = async function(targetId, type, btnElement) {
         await deleteDoc(doc(db, "follows", snap.docs[0].id));
         btnElement.innerHTML = type === 'anime' ? `<span class="material-symbols-outlined">bookmark_add</span> Follow Anime` : `<span class="material-symbols-outlined">person_add</span> Follow`;
         btnElement.style.backgroundColor = "var(--accent-yellow)";
-        if(type === 'user') window.myFollowedUserIds.delete(targetId);
+        if(type === 'user') {
+            window.myFollowedUserIds.delete(targetId);
+            window.myFollowNotifyMap.delete(targetId);
+            const notifyBtn = document.getElementById('profile-notify-btn');
+            if (notifyBtn) notifyBtn.style.display = 'none';
+        }
     }
 };
 
+window.toggleReviewNotify = async function(targetUid, btn) {
+    if (!auth.currentUser) return;
+    const snap = await getDocs(query(collection(db, "follows"), where("followerUid", "==", auth.currentUser.uid), where("targetId", "==", targetUid), where("type", "==", "user")));
+    if (snap.empty) return;
+    const currentNotify = snap.docs[0].data().notifyReviews !== false;
+    const newNotify = !currentNotify;
+    await updateDoc(doc(db, "follows", snap.docs[0].id), { notifyReviews: newNotify });
+    window.myFollowNotifyMap.set(targetUid, newNotify);
+    btn.title = newNotify ? 'Review notifications on' : 'Review notifications off';
+    btn.querySelector('.material-symbols-outlined').textContent = newNotify ? 'notifications_active' : 'notifications_off';
+};
+
+window.fetchFriendData = async function() {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    window.myFriendIds.clear(); window.myPendingOutIds.clear(); window.myPendingInIds.clear();
+    try {
+        const [friendsSnap, sentSnap, receivedSnap] = await Promise.all([
+            getDocs(query(collection(db, "friends"), where("uids", "array-contains", uid))),
+            getDocs(query(collection(db, "friend_requests"), where("fromUid", "==", uid))),
+            getDocs(query(collection(db, "friend_requests"), where("toUid", "==", uid)))
+        ]);
+        friendsSnap.forEach(d => { const other = d.data().uids.find(u => u !== uid); if (other) window.myFriendIds.add(other); });
+        sentSnap.forEach(d => { if (d.data().status === 'pending') window.myPendingOutIds.add(d.data().toUid); });
+        receivedSnap.forEach(d => { if (d.data().status === 'pending') window.myPendingInIds.set(d.data().fromUid, d.id); });
+    } catch(e) { console.error('fetchFriendData error:', e); }
+};
+
+window.sendFriendRequest = async function(toUid, btn) {
+    if (!auth.currentUser) return window.openAuthModal();
+    btn.disabled = true;
+    const myName = auth.currentUser.displayName;
+    const myAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(myName)}&backgroundColor=ffc107&fontColor=333333`;
+    try {
+        const reqRef = await addDoc(collection(db, "friend_requests"), {
+            fromUid: auth.currentUser.uid, toUid, fromName: myName, fromAvatar: myAvatar, status: 'pending', timestamp: new Date()
+        });
+        window.myPendingOutIds.add(toUid);
+        const area = document.getElementById('profile-friend-btns');
+        if (area) area.innerHTML = `<button class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-muted);" disabled><span class="material-symbols-outlined">schedule</span> Pending</button>`;
+        await addDoc(collection(db, "notifications"), {
+            targetUid: toUid, type: 'friend_request', senderUid: auth.currentUser.uid,
+            senderName: myName, senderAvatar: myAvatar,
+            message: 'sent you a friend request', requestId: reqRef.id, timestamp: new Date(), read: false
+        });
+    } catch(e) { btn.disabled = false; console.error(e); }
+};
+
+window.acceptFriendRequest = async function(fromUid, requestId, notifId, btn) {
+    if (!auth.currentUser) return;
+    if (btn) btn.disabled = true;
+    try {
+        const uid = auth.currentUser.uid;
+        const uids = [uid, fromUid].sort();
+        await Promise.all([
+            updateDoc(doc(db, "friend_requests", requestId), { status: 'accepted' }),
+            addDoc(collection(db, "friends"), { uids, timestamp: new Date() })
+        ]);
+        window.myFriendIds.add(fromUid);
+        window.myPendingInIds.delete(fromUid);
+        const area = document.getElementById('profile-friend-btns');
+        if (area) area.innerHTML = `<button onclick="removeFriend('${fromUid}', this)" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">people</span> Friends</button>`;
+        if (btn && btn.parentElement) btn.parentElement.outerHTML = `<span style="font-size:12px; color:#4CAF50; font-weight:600;">Friends!</span>`;
+        if (notifId) setDoc(doc(db, "notifications", notifId), { read: true }, { merge: true }).catch(() => {});
+        const myAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        addDoc(collection(db, "notifications"), {
+            targetUid: fromUid, type: 'friend_accept', senderUid: uid,
+            senderName: auth.currentUser.displayName, senderAvatar: myAvatar,
+            message: 'accepted your friend request', timestamp: new Date(), read: false
+        }).catch(() => {});
+    } catch(e) { if (btn) btn.disabled = false; console.error(e); }
+};
+
+window.declineFriendRequest = async function(fromUid, requestId, notifId, btn) {
+    if (!auth.currentUser) return;
+    try {
+        await updateDoc(doc(db, "friend_requests", requestId), { status: 'declined' });
+        window.myPendingInIds.delete(fromUid);
+        const area = document.getElementById('profile-friend-btns');
+        if (area) area.innerHTML = `<button onclick="sendFriendRequest('${fromUid}', this)" class="action-btn"><span class="material-symbols-outlined">person_add</span> Add Friend</button>`;
+        if (btn && btn.parentElement) btn.parentElement.outerHTML = `<span style="font-size:12px; color:var(--text-muted);">Request declined</span>`;
+        if (notifId) setDoc(doc(db, "notifications", notifId), { read: true }, { merge: true }).catch(() => {});
+    } catch(e) { console.error(e); }
+};
+
+window.removeFriend = async function(friendUid, btn) {
+    if (!auth.currentUser) return;
+    if (!confirm('Remove this friend?')) return;
+    try {
+        const uid = auth.currentUser.uid;
+        const snap = await getDocs(query(collection(db, "friends"), where("uids", "array-contains", uid)));
+        const friendDoc = snap.docs.find(d => d.data().uids.includes(friendUid));
+        if (friendDoc) await deleteDoc(doc(db, "friends", friendDoc.id));
+        window.myFriendIds.delete(friendUid);
+        const area = document.getElementById('profile-friend-btns');
+        if (area) area.innerHTML = `<button onclick="sendFriendRequest('${friendUid}', this)" class="action-btn"><span class="material-symbols-outlined">person_add</span> Add Friend</button>`;
+    } catch(e) { console.error(e); }
+};
+
+window.loadFriendsTab = async function(uid) {
+    const container = document.getElementById('friends-list-container');
+    if (!container) return;
+    container.innerHTML = '<div class="loading">Loading friends...</div>';
+    try {
+        const snap = await getDocs(query(collection(db, "friends"), where("uids", "array-contains", uid)));
+        if (snap.empty) { container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px; font-size:14px;">No friends yet.</p>'; return; }
+        const friendUids = snap.docs.map(d => d.data().uids.find(u => u !== uid)).filter(Boolean);
+        const profileDocs = await Promise.all(friendUids.map(fuid => getDoc(doc(db, "profiles", fuid))));
+        container.innerHTML = '<div style="display:flex; flex-wrap:wrap; gap:10px; padding:16px 0;">' +
+            profileDocs.map((pd, i) => {
+                const p = pd.exists() ? pd.data() : {};
+                const fuid = friendUids[i];
+                const fname = p.displayName || 'WeeBee User';
+                const favatar = p.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(fname)}&backgroundColor=ffc107&fontColor=333333`;
+                return `<div style="display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px; background:var(--bg-gray);">
+                    <img src="${favatar}" class="avatar" style="width:36px; height:36px; flex-shrink:0; cursor:pointer;" onclick="viewUserProfile('${fuid}')">
+                    <span style="font-weight:600; font-size:14px; flex:1; cursor:pointer;" onclick="viewUserProfile('${fuid}')">${fname}</span>
+                    <button onclick="viewFriendList('${fuid}')" class="action-btn" style="padding:4px 10px; font-size:12px; min-width:unset; background:var(--bg-gray-darker); color:var(--text-dark);" title="View list"><span class="material-symbols-outlined" style="font-size:16px;">list_alt</span></button>
+                </div>`;
+            }).join('') + '</div>';
+    } catch(e) { container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px; font-size:14px;">Failed to load friends.</p>'; }
+};
+
+window.viewFriendList = function(uid) {
+    window.currentProfileUid = uid;
+    window.viewFullAnimeList();
+};
+
+window.sendReviewNotifications = async function(animeTitle, mal_id) {
+    if (!auth.currentUser) return;
+    try {
+        const snap = await getDocs(query(collection(db, "follows"), where("targetId", "==", auth.currentUser.uid)));
+        const followers = [];
+        snap.forEach(d => {
+            const fd = d.data();
+            if (fd.type === 'user' && fd.notifyReviews !== false) followers.push(fd.followerUid);
+        });
+        if (followers.length === 0) return;
+        const myAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        await Promise.all(followers.map(followerUid => addDoc(collection(db, "notifications"), {
+            targetUid: followerUid, type: 'review',
+            senderUid: auth.currentUser.uid, senderName: auth.currentUser.displayName, senderAvatar: myAvatar,
+            message: `reviewed "${animeTitle}"`, linkRef: mal_id, timestamp: new Date(), read: false
+        })));
+    } catch(e) { console.error('Review notification error:', e); }
+};
+
+window.openBugReportModal = function() {
+    window.closeAllModals();
+    document.getElementById('bug-report-text').value = '';
+    document.getElementById('bug-report-modal').style.display = 'flex';
+};
+
+window.submitBugReport = async function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    const text = document.getElementById('bug-report-text').value.trim();
+    if (!text) return alert('Please describe the bug before submitting.');
+    try {
+        await addDoc(collection(db, "bug_reports"), {
+            uid: auth.currentUser.uid, displayName: auth.currentUser.displayName,
+            text, timestamp: new Date()
+        });
+        window.closeAllModals();
+        alert('Bug report submitted — thanks for helping make WeeBee better!');
+    } catch(e) { alert('Failed to submit. Please try again.'); }
+};
+
+window.openFeatureSuggestionModal = function() {
+    window.closeAllModals();
+    document.getElementById('feature-suggestion-text').value = '';
+    document.getElementById('feature-suggestion-modal').style.display = 'flex';
+};
+
+window.submitFeatureSuggestion = async function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    const text = document.getElementById('feature-suggestion-text').value.trim();
+    if (!text) return alert('Please describe your idea before submitting.');
+    try {
+        await addDoc(collection(db, "feature_suggestions"), {
+            uid: auth.currentUser.uid, displayName: auth.currentUser.displayName,
+            text, timestamp: new Date()
+        });
+        window.closeAllModals();
+        alert('Feature suggestion submitted — we love hearing ideas!');
+    } catch(e) { alert('Failed to submit. Please try again.'); }
+};
+
 // --- MASTER LIST SYSTEM ---
+window.addCurrentAnimeToList = function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    if (!window.currentAnime) return;
+    const anime = window.currentAnime;
+    const title = anime.title_english || anime.title;
+    const img = anime.images.jpg.image_url;
+    const eps = anime.episodes || 0;
+    window.selectAnimeForList(anime.mal_id, title, img, eps);
+};
+
 window.openAddToListModal = function() {
     if(!auth.currentUser) return window.openAuthModal();
     window.closeAllModals();
@@ -1019,7 +1414,11 @@ window.renderAnimeList = function() {
     rankedList.forEach(anime => {
         const safeTitle = anime.title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
         
-        let editHtml = isMyProfile ? `<button class="action-btn" style="padding:6px; min-width:unset; margin:0 auto;" onclick="selectAnimeForList(${anime.mal_id}, '${safeTitle}', '${anime.image}', ${anime.totalEpisodes})"><span class="material-symbols-outlined" style="font-size:18px;">edit</span></button>` : '';
+        let editHtml = isMyProfile ? `
+            <div style="display:flex; gap:4px; justify-content:center;">
+                <button class="action-btn" style="padding:6px; min-width:unset; margin:0;" title="Edit entry" onclick="selectAnimeForList(${anime.mal_id}, '${safeTitle}', '${anime.image}', ${anime.totalEpisodes})"><span class="material-symbols-outlined" style="font-size:18px;">edit</span></button>
+                <button class="action-btn" style="padding:6px; min-width:unset; margin:0;" title="Write review" onclick="openReviewFromList(${anime.mal_id}, '${safeTitle}', '${anime.image}')"><span class="material-symbols-outlined" style="font-size:18px;">rate_review</span></button>
+            </div>` : '';
 
         tbody.innerHTML += `
             <tr>
@@ -1035,6 +1434,13 @@ window.renderAnimeList = function() {
             </tr>
         `;
     });
+};
+
+window.openReviewFromList = async function(malId, title, image) {
+    if (!auth.currentUser) return window.openAuthModal();
+    window.currentAnimeId = malId;
+    window.currentAnime = { title, title_english: title, images: { jpg: { image_url: image } } };
+    await window.openReviewModal();
 };
 
 // --- Ranked Top Anime System ---
@@ -1320,6 +1726,10 @@ window.fetchInlineComments = async function(reviewId) {
     snap.forEach(doc => { let d = doc.data(); d.id = doc.id; commentsArray.push(d); });
     commentsArray.sort((a, b) => a.timestamp - b.timestamp);
 
+    // Update the comment count display with the real count
+    const countEl = document.getElementById(`comment-count-${reviewId}`);
+    if (countEl) countEl.innerText = commentsArray.length + (commentsArray.length === 1 ? ' Comment' : ' Comments');
+
     commentsArray.forEach(c => {
         const id = c.id;
         const likeStyle = auth.currentUser && c.likes?.includes(auth.currentUser.uid) ? 'color: var(--accent-yellow);' : 'color: var(--text-muted);';
@@ -1334,6 +1744,9 @@ window.submitInlineComment = async function(reviewId) {
     const input = document.getElementById(`comment-input-${reviewId}`);
     if(!input.value.trim()) return;
     await addDoc(collection(db, "comments"), { reviewId, text: input.value.trim(), username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL, uid: auth.currentUser.uid, timestamp: new Date(), likes: [], dislikes: [] });
+    updateDoc(doc(db, "reviews", reviewId), { commentCount: increment(1) }).catch(() => {});
+    const countEl = document.getElementById(`comment-count-${reviewId}`);
+    if (countEl) countEl.innerText = (parseInt(countEl.innerText) + 1) + ' Comments';
     input.value = ''; fetchInlineComments(reviewId);
 };
 
@@ -1352,7 +1765,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                 <div style="display:flex; gap: 15px;">
                     <img src="${rev.avatar}" class="avatar clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">
                     <div>
-                        <strong class="clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</strong> ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)} ${window.getFounderBadgeHTML(safeUid)}
+                        <strong class="clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</strong> ${window.getFounderBadgeHTML(safeUid)} ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)}
                         <span class="source-badge" style="background: #4CAF50; color: white; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase;">Suggestion</span><br>
                         <span style="font-size: 12px; color: var(--text-muted);">Suggested: <strong style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong></span>
                     </div>
@@ -1376,15 +1789,15 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                     <div class="rating-badge ${overallTier}" style="width: 65px; height: 65px; font-size: 22px; filter: drop-shadow(0 3px 8px rgba(0,0,0,0.2)); outline: 3px solid rgba(255,255,255,0.3);">${overallScore}</div>
                 </div>
                 <div style="width: 1px; height: 55px; background: var(--border-color); margin: 0 10px; align-self: flex-end; margin-bottom: 5px;"></div>`;
-            rev.categories.forEach(cat => {
+            rev.categories.filter(cat => cat.score).forEach(cat => {
                 badgesHTML += `<div style="display:flex; flex-direction:column; align-items:center; width: 75px;"><span style="font-size: 10px; font-weight: 600; margin-bottom: 8px; text-align: center; height: 24px; display: flex; align-items: flex-end;">${cat.label}</span><div class="rating-badge ${window.getScoreTier(cat.score)}" style="width: 55px; height: 55px; font-size: 18px;">${cat.score}</div></div>`;
             });
             badgesHTML += `</div>`;
 
             fullHTML = `<div class="full-review-content" style="display:none; margin-top: 25px; padding-right: 170px; position: relative; z-index: 2;">`;
-            rev.categories.forEach(cat => { 
-                fullHTML += `<div style="background: var(--bg-white); padding: 12px; border-radius: 10px; border: 1px solid #E0E0E0; margin-bottom: 10px;"><div style="display: flex; justify-content: space-between; align-items: center;"><strong>${cat.label}</strong><div class="rating-badge ${window.getScoreTier(cat.score)}" style="width: 32px; height: 32px; font-size: 11px;">${cat.score}</div></div><p style="font-size: 13px; margin-top: 8px; border-top: 1px solid #F0F0F0; padding-top: 8px;">${cat.text || 'No comments.'}</p></div>`; 
-            }); 
+            rev.categories.filter(cat => cat.score).forEach(cat => {
+                fullHTML += `<div style="background: var(--bg-white); padding: 12px; border-radius: 10px; border: 1px solid #E0E0E0; margin-bottom: 10px;"><div style="display: flex; justify-content: space-between; align-items: center;"><strong>${cat.label}</strong><div class="rating-badge ${window.getScoreTier(cat.score)}" style="width: 32px; height: 32px; font-size: 11px;">${cat.score}</div></div>${cat.text ? `<p style="font-size: 13px; margin-top: 8px; border-top: 1px solid #F0F0F0; padding-top: 8px;">${cat.text}</p>` : ''}</div>`;
+            });
             fullHTML += `</div>`;
         } else {
             badgesHTML = `
@@ -1405,7 +1818,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             <div class="review-header" style="justify-content: space-between; position: relative; z-index: 3;">
                 <div style="display:flex; gap: 15px;">
                     <img src="${rev.avatar}" class="avatar clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">
-                    <div><strong><span class="clickable-user" style="color:var(--text-dark);" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)} ${window.getFounderBadgeHTML(safeUid)} <span class="source-badge badge-weebee">WeeBee</span><br>
+                    <div><strong><span class="clickable-user" style="color:var(--text-dark);" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> ${window.getFounderBadgeHTML(safeUid)} ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)} <span class="source-badge badge-weebee">WeeBee</span><br>
                     <span style="font-size: 12px; color: var(--text-muted); display:flex; align-items:center; gap:6px; margin-top:3px; min-width:0;">${rev.animeImage ? `<img src="${rev.animeImage}" class="review-cover-mobile" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">` : ''}Reviewed: <strong class="review-anime-title" style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong></span></div>
                 </div>
                 ${window.getFollowBtnHTML(safeUid)}
@@ -1423,7 +1836,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                 <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'like', this)"><span class="material-symbols-outlined">thumb_up</span></button><span class="action-label">${rev.likes?.length || 0} Likes</span></div>
                 <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'dislike', this)"><span class="material-symbols-outlined">thumb_down</span></button><span class="action-label">${rev.dislikes?.length || 0} Dislikes</span></div>
             </div>
-            ${rev.type === 'in-depth' ? '<div class="expand-hint-row"><span class="expand-hint">Tap to expand ›</span></div>' : ''}
+            ${rev.type === 'in-depth' ? '<div class="expand-hint-row"><span class="expand-hint"><span class="material-symbols-outlined" style="font-size:11px; vertical-align:middle;">expand_more</span> Click to expand</span></div>' : ''}
             <div id="comments-container-${rev.id}" class="inline-comments" style="display:none; margin-top: 15px; padding-top: 15px; position: relative; z-index: 2;" onclick="event.stopPropagation();">
                 <div id="comments-list-${rev.id}"></div>
                 <div style="display:flex; gap:10px; margin-top:10px;">
@@ -1572,6 +1985,7 @@ window.switchProfileTab = function(event, tabId) {
     document.getElementById(tabId).style.display = 'block';
     event.currentTarget.classList.add('active');
     if (tabId === 'p-achievements') window.loadProfileAchievements(window.currentProfileUid);
+    if (tabId === 'p-friends') window.loadFriendsTab(window.currentProfileUid);
 };
 
 window.fetchUserProfile = async function(targetUid = null) {
@@ -1602,13 +2016,29 @@ window.fetchUserProfile = async function(targetUid = null) {
     pBio = profileData.bio || '';
     pGenres = profileData.genres || [];
 
+    window.currentProfileName = pName;
     document.getElementById('top-anime-title').innerText = `${pName}'s Top Anime`;
 
+    const isFollowing = window.myFollowedUserIds?.has(uidToFetch);
+    const notifyOn = window.myFollowNotifyMap?.get(uidToFetch) !== false;
+    const pendingInReqId = window.myPendingInIds?.get(uidToFetch);
+    const friendBtnInner = auth.currentUser
+        ? window.myFriendIds.has(uidToFetch)
+            ? `<button onclick="removeFriend('${uidToFetch}', this)" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">people</span> Friends</button>`
+            : window.myPendingOutIds.has(uidToFetch)
+            ? `<button class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-muted);" disabled><span class="material-symbols-outlined">schedule</span> Pending</button>`
+            : pendingInReqId
+            ? `<button onclick="acceptFriendRequest('${uidToFetch}','${pendingInReqId}',null,this)" class="action-btn" style="background:#4CAF50; color:white;"><span class="material-symbols-outlined">check</span> Accept</button>
+               <button onclick="declineFriendRequest('${uidToFetch}','${pendingInReqId}',null,this)" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">close</span> Decline</button>`
+            : `<button onclick="sendFriendRequest('${uidToFetch}', this)" class="action-btn"><span class="material-symbols-outlined">person_add</span> Add Friend</button>`
+        : '';
     const editBtnHtml = isMe
         ? `<button class="action-btn" onclick="openEditProfileModal()" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">edit</span> Edit Profile</button>`
-        : `<div style="display:flex;gap:8px;flex-shrink:0;">
-               <button onclick="openDMConversation('${uidToFetch}','${pName.replace(/'/g,"\\'")}','${pAvatar}')" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">chat_bubble</span> Message</button>
-               <button onclick="toggleFollow('${uidToFetch}', 'user', this)" class="action-btn"><span class="material-symbols-outlined">person_add</span> Follow User</button>
+        : `<div style="display:flex;gap:8px;flex-shrink:0; flex-wrap:wrap;">
+               <button onclick="openDMConversation('${uidToFetch}','${pName.replace(/'/g,"\\'")}','${pAvatar}')" class="action-btn" style="padding:8px; min-width:unset; background:var(--bg-gray-darker); color:var(--text-dark);" title="Message"><span class="material-symbols-outlined">chat_bubble</span></button>
+               <button id="profile-notify-btn" onclick="toggleReviewNotify('${uidToFetch}', this)" class="action-btn" title="${notifyOn ? 'Review notifications on' : 'Review notifications off'}" style="padding:8px; min-width:unset; background:var(--bg-gray-darker); color:var(--text-dark); display:${isFollowing ? 'inline-flex' : 'none'};"><span class="material-symbols-outlined" style="font-size:20px;">${notifyOn && isFollowing ? 'notifications_active' : 'notifications_off'}</span></button>
+               <span id="profile-friend-btns">${friendBtnInner}</span>
+               <button onclick="toggleFollow('${uidToFetch}', 'user', this)" class="action-btn" style="${isFollowing ? 'background:var(--bg-gray-darker);color:var(--text-dark);' : ''}"><span class="material-symbols-outlined">${isFollowing ? 'check' : 'person_add'}</span> ${isFollowing ? 'Following' : 'Follow User'}</button>
            </div>`;
 
     const genreChipsHTML = pGenres.length
@@ -1618,10 +2048,11 @@ window.fetchUserProfile = async function(targetUid = null) {
 
     document.getElementById('profile-header-container').innerHTML = `
         <div class="profile-header">
-            <img src="${pAvatar}" class="profile-avatar-large" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(pName)}&backgroundColor=ffc107&fontColor=333333'">
+            <img src="${pAvatar}" class="profile-avatar-large" style="flex-shrink:0;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(pName)}&backgroundColor=ffc107&fontColor=333333'">
             <div style="flex:1; min-width:0;">
-                <h1 style="font-size: 28px; margin-bottom: 4px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">${pName} ${window.getFounderBadgeHTML(uidToFetch, 22)}</h1>
+                <h1 style="font-size: 28px; margin-bottom: 4px;">${pName} ${window.getFounderBadgeHTML(uidToFetch, 22)}</h1>
                 <p style="color: var(--text-muted); font-size: 13px;">WeeBee Member since ${pJoined}</p>
+                <div id="profile-follow-counts" style="display:flex; gap:12px; margin-top:4px; font-size:14px; font-weight:600;"></div>
                 ${bioHTML}
                 ${genreChipsHTML}
             </div>
@@ -1706,6 +2137,27 @@ window.fetchUserProfile = async function(targetUid = null) {
     if(myReviews.length === 0) feed.innerHTML = '<p class="empty-msg" style="color:var(--text-muted);">No activity to display.</p>';
     else myReviews.forEach(d => feed.innerHTML += window.generateReviewCardHTML(d));
 
+    // Follower / Following counts
+    const [followingSnap, followersSnap, friendsCountSnap] = await Promise.all([
+        getDocs(query(collection(db, "follows"), where("followerUid", "==", uidToFetch), where("type", "==", "user"))),
+        getDocs(query(collection(db, "follows"), where("targetId", "==", uidToFetch), where("type", "==", "user"))),
+        getDocs(query(collection(db, "friends"), where("uids", "array-contains", uidToFetch)))
+    ]);
+    const followingCount = followingSnap.size;
+    const followersCount = followersSnap.size;
+    const friendsCount = friendsCountSnap.size;
+    const countsEl = document.getElementById('profile-follow-counts');
+    if (countsEl) countsEl.innerHTML = `
+        <span style="cursor:pointer;" onclick="switchProfileTab({currentTarget: document.querySelector('.p-tab[onclick*=p-friends]')}, 'p-friends')">
+            <strong>${friendsCount}</strong> <span style="color:var(--text-muted); font-size:13px;">Friends</span>
+        </span>
+        <span style="color:var(--border-color);">·</span>
+        <span style="cursor:pointer;" onclick="switchProfileTab({currentTarget: document.querySelector('.p-tab[onclick*=p-social]')}, 'p-social')">
+            <strong>${followingCount}</strong> <span style="color:var(--text-muted); font-size:13px;">Following</span>
+        </span>
+        <span style="color:var(--border-color);">·</span>
+        <span><strong>${followersCount}</strong> <span style="color:var(--text-muted); font-size:13px;">Followers</span></span>`;
+
     // SOCIAL (FOLLOWING)
     const followsSnap = await getDocs(query(collection(db, "follows"), where("followerUid", "==", uidToFetch)));
     const fAnimeList = document.getElementById('followed-anime-list'); fAnimeList.innerHTML = '';
@@ -1726,13 +2178,49 @@ window.fetchUserProfile = async function(targetUid = null) {
             if(needsFetch) missingAnimeData.push({ docId: d.id, mal_id: f.targetId });
         } else {
             hasUser = true;
-            const uName = f.username || 'User ' + f.targetId.substring(0,6);
-            const uImg = f.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(uName)}&backgroundColor=ffc107&fontColor=333333`;
-            fUserList.innerHTML += `<div class="user-chip clickable-user" onclick="viewUserProfile('${f.targetId}')"><img src="${uImg}" onerror="this.style.display='none'"> <span>${uName}</span></div>`;
+            // Render placeholder, resolve real name below
+            fUserList.innerHTML += `<div class="user-chip clickable-user" id="user-chip-${f.targetId}" onclick="viewUserProfile('${f.targetId}')"><img id="user-chip-img-${f.targetId}" src="${f.avatar || ''}" onerror="this.style.display='none'" style="width:24px;height:24px;border-radius:50%;"> <span id="user-chip-name-${f.targetId}">...</span></div>`;
         }
     });
     if(!hasAnime) fAnimeList.parentElement.innerHTML = '<h5>Following Anime</h5><p class="empty-msg" style="color:var(--text-muted); font-size:13px;">Not following any anime yet.</p>';
     if(!hasUser) fUserList.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); font-size:13px;">Not following any users yet.</p>';
+
+    // Batch-resolve real display names from profiles for all followed users
+    const userFollowDocs = [];
+    followsSnap.forEach(d => { if(d.data().type === 'user') userFollowDocs.push({ docId: d.id, ...d.data() }); });
+    if (userFollowDocs.length > 0) {
+        await Promise.all(userFollowDocs.map(async f => {
+            try {
+                const profileDoc = await getDoc(doc(db, "profiles", f.targetId));
+                let displayName = null, avatar = null;
+                if (profileDoc.exists() && profileDoc.data().displayName) {
+                    displayName = profileDoc.data().displayName;
+                    avatar = profileDoc.data().avatar;
+                }
+                // Fallback: try auth display name from reviews
+                if (!displayName) {
+                    const rSnap = await getDocs(query(collection(db, "reviews"), where("uid", "==", f.targetId), limit(1)));
+                    if (!rSnap.empty) { displayName = rSnap.docs[0].data().username; avatar = avatar || rSnap.docs[0].data().avatar; }
+                }
+                displayName = displayName || 'WeeBee User';
+                const dicebear = `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
+                avatar = avatar || dicebear;
+
+                const nameEl = document.getElementById(`user-chip-name-${f.targetId}`);
+                const imgEl = document.getElementById(`user-chip-img-${f.targetId}`);
+                if (nameEl) nameEl.textContent = displayName;
+                if (imgEl) { imgEl.src = avatar; imgEl.style.display = ''; }
+
+                // Patch the follow doc if name was wrong or missing
+                if (displayName !== f.username || !f.username) {
+                    updateDoc(doc(db, "follows", f.docId), { username: displayName, avatar }).catch(() => {});
+                }
+            } catch(e) {
+                const nameEl = document.getElementById(`user-chip-name-${f.targetId}`);
+                if (nameEl) nameEl.textContent = f.username || 'WeeBee User';
+            }
+        }));
+    }
 
     // Re-fetch and repair any follows saved without title/image
     for(let i = 0; i < missingAnimeData.length; i++) {
@@ -1768,16 +2256,90 @@ window.submitProfileComment = async function() {
     input.value = ''; fetchProfileComments(targetUid);
 };
 
+window.viewFullAnimeList = async function() {
+    const uid = window.currentProfileUid;
+    const isMe = auth.currentUser && uid === auth.currentUser.uid;
+    if (isMe) { switchView('my-list-view'); return; }
+    // For other users, show their list in a modal
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.style.cssText = 'display:flex;';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:600px; max-height:80vh; overflow-y:auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3 style="margin:0;" id="full-list-modal-title">Anime List</h3>
+                <button onclick="this.closest('.modal-overlay').remove()" class="cancel-btn" style="padding:4px 10px;">Close</button>
+            </div>
+            <div id="full-list-modal-content"><div class="loading">Loading...</div></div>
+        </div>`;
+    document.body.appendChild(modal);
+    try {
+        const [ownerProfile, snap] = await Promise.all([
+            getDoc(doc(db, "profiles", uid)),
+            getDocs(query(collection(db, "anime_lists"), where("uid", "==", uid)))
+        ]);
+        const listPrivate = ownerProfile.exists() ? ownerProfile.data().listPrivate : false;
+        const content = document.getElementById('full-list-modal-content');
+        if (listPrivate && !window.myFriendIds.has(uid)) {
+            content.innerHTML = '<div style="text-align:center; padding:40px;"><span class="material-symbols-outlined" style="font-size:48px; color:var(--text-muted);">lock</span><p style="color:var(--text-muted); margin-top:12px;">This list is private. You need to be friends to see it.</p></div>';
+            return;
+        }
+        const items = [];
+        snap.forEach(d => items.push(d.data()));
+        items.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+        const profileName = ownerProfile.exists() ? ownerProfile.data().displayName : 'User';
+        document.getElementById('full-list-modal-title').innerText = `${profileName}'s Anime List`;
+        if (items.length === 0) { content.innerHTML = '<p class="empty-msg" style="color:var(--text-muted);">No anime in this list yet.</p>'; return; }
+        const statusOrder = ['watching','completed','on-hold','dropped','plan-to-watch'];
+        const grouped = {};
+        statusOrder.forEach(s => { grouped[s] = items.filter(a => a.status === s); });
+        const labels = { 'watching':'Watching','completed':'Completed','on-hold':'On Hold','dropped':'Dropped','plan-to-watch':'Plan to Watch' };
+        content.innerHTML = statusOrder.filter(s => grouped[s].length > 0).map(s => `
+            <div style="margin-bottom:20px;">
+                <h4 style="margin-bottom:10px; color:var(--text-muted); font-size:12px; text-transform:uppercase; letter-spacing:1px;">${labels[s]} (${grouped[s].length})</h4>
+                ${grouped[s].map(a => `
+                    <div style="display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid var(--border-color); cursor:pointer;" onclick="this.closest('.modal-overlay').remove(); loadAnimeDetails(${a.mal_id})">
+                        <img src="${a.image}" style="width:36px; height:50px; object-fit:cover; border-radius:4px; flex-shrink:0;">
+                        <div style="flex:1; min-width:0;"><div style="font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${a.title}</div>${a.score ? `<div style="font-size:12px; color:var(--text-muted);">Score: ${a.score}</div>` : ''}</div>
+                    </div>`).join('')}
+            </div>`).join('');
+    } catch(e) { document.getElementById('full-list-modal-content').innerHTML = '<p style="color:var(--text-muted);">Failed to load list.</p>'; }
+};
+
 window.fetchProfileComments = async function(ownerId) {
     const feed = document.getElementById('profile-comments-feed');
-    const q = query(collection(db, "profile_comments"), where("profileOwnerId", "==", ownerId), orderBy("timestamp", "desc"));
+    if (!feed) return;
+    const isOwner = auth.currentUser && auth.currentUser.uid === ownerId;
+    // Show/hide the comment input area
+    const inputArea = document.getElementById('profile-comment-input-area');
+    if (inputArea) inputArea.style.display = auth.currentUser ? 'block' : 'none';
+
+    const q = query(collection(db, "profile_comments"), where("profileOwnerId", "==", ownerId));
     const snap = await getDocs(q);
     feed.innerHTML = '';
-    if(snap.empty) { feed.innerHTML = '<p class="empty-msg" style="color:var(--text-muted);">No messages on this profile yet.</p>'; return; }
-    snap.forEach(doc => {
-        const c = doc.data();
-        feed.innerHTML += `<div style="display:flex; gap:12px; padding:15px; background:var(--bg-white); border:1px solid #F0F0F0; border-radius:10px; margin-bottom:10px;"><img src="${c.authorAvatar}" class="clickable-user" onclick="viewUserProfile('${c.uid}')" style="width:40px; height:40px; border-radius:50%; object-fit:cover;"><div><strong class="clickable-user" onclick="viewUserProfile('${c.uid}')" style="font-size:14px;">${c.authorName}</strong><p style="font-size:14px; margin-top:4px; line-height:1.4;">${c.text}</p></div></div>`;
+    if(snap.empty) { feed.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); font-size:13px;">No comments yet.</p>'; return; }
+    const docs = [];
+    snap.forEach(d => docs.push({ ...d.data(), _id: d.id }));
+    docs.sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+    docs.forEach(c => {
+        const deleteBtn = isOwner ? `<button onclick="deleteProfileComment('${c._id}', '${ownerId}')" style="background:none; border:none; cursor:pointer; color:var(--text-muted); padding:2px 4px; margin-left:auto; flex-shrink:0;" title="Delete comment"><span class="material-symbols-outlined" style="font-size:16px;">delete</span></button>` : '';
+        feed.innerHTML += `
+            <div style="display:flex; gap:12px; padding:14px; background:var(--bg-gray-darker); border:1px solid var(--border-color); border-radius:10px; margin-bottom:10px; align-items:flex-start;">
+                <img src="${c.authorAvatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(c.authorName)}&backgroundColor=ffc107&fontColor=333333`}" class="clickable-user" onclick="viewUserProfile('${c.uid}')" style="width:38px; height:38px; border-radius:50%; object-fit:cover; flex-shrink:0;">
+                <div style="flex:1; min-width:0;">
+                    <strong class="clickable-user" onclick="viewUserProfile('${c.uid}')" style="font-size:14px;">${c.authorName}</strong>
+                    <p style="font-size:14px; margin-top:4px; line-height:1.5; color:var(--text-dark);">${c.text}</p>
+                </div>
+                ${deleteBtn}
+            </div>`;
     });
+};
+
+window.deleteProfileComment = async function(commentId, ownerId) {
+    if (!auth.currentUser || auth.currentUser.uid !== ownerId) return;
+    if (!confirm('Delete this comment?')) return;
+    await deleteDoc(doc(db, "profile_comments", commentId));
+    fetchProfileComments(ownerId);
 };
 
 // --- Home Feed & News from Follows ---
@@ -1785,10 +2347,23 @@ window.fetchHomepageReviews = async function() {
     try {
         const q = query(collection(db, "reviews"), orderBy("timestamp", "desc"), limit(20));
         const snap = await getDocs(q);
-        const uids = []; snap.forEach(d => { if(d.data().uid) uids.push(d.data().uid); });
+        const revDocs = [];
+        snap.forEach(d => revDocs.push({ ...d.data(), id: d.id }));
+
+        const uids = revDocs.map(r => r.uid).filter(Boolean);
         await window.prefetchRankCache(uids);
+
+        // Batch-fetch real comment counts in one query
+        if (revDocs.length > 0) {
+            const reviewIds = revDocs.map(r => r.id);
+            const commSnap = await getDocs(query(collection(db, "comments"), where("reviewId", "in", reviewIds)));
+            const countMap = {};
+            commSnap.forEach(d => { const rid = d.data().reviewId; countMap[rid] = (countMap[rid] || 0) + 1; });
+            revDocs.forEach(r => { r.commentCount = countMap[r.id] || 0; });
+        }
+
         const feed = document.getElementById('review-feed'); feed.innerHTML = '';
-        snap.forEach(d => feed.innerHTML += window.generateReviewCardHTML({ ...d.data(), id: d.id }));
+        revDocs.forEach(r => feed.innerHTML += window.generateReviewCardHTML(r));
     } catch(e) { console.error("Error loading home feed:", e); }
 
     if(auth.currentUser) {
@@ -1830,15 +2405,264 @@ window.fetchHomepageReviews = async function() {
     } else { document.getElementById('home-news-section').style.display = 'none'; }
 };
 
-window.fetchGlobalNews = async function() {
-    const container = document.getElementById('global-news-feed'); container.innerHTML = '<div class="loading">Sourcing latest headlines...</div>';
+// --- SEASONAL VOTING SYSTEM ---
+window.isAdmin = false;
+window.activeSeasonalVote = null;
+window.mySeasonalVote = null;
+
+window.getSeasonLabel = function(season, year) {
+    return `${season.charAt(0).toUpperCase() + season.slice(1)} ${year}`;
+};
+
+window.getPreviousSeason = function() {
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    const seasons = ['winter','spring','summer','fall'];
+    let idx = month < 3 ? 0 : month < 6 ? 1 : month < 9 ? 2 : 3;
+    if (idx === 0) return { season: 'fall', year: year - 1 };
+    return { season: seasons[idx - 1], year };
+};
+
+window.loadActiveSeasonalVote = async function() {
     try {
-        const trendingRes = await fetch('https://api.jikan.moe/v4/seasons/now?limit=3'); const { data: trending } = await trendingRes.json();
+        const snap = await getDocs(query(collection(db, "seasonal_votes"), where("closed", "==", false)));
+        if (snap.empty) { window.activeSeasonalVote = null; return; }
+        const d = snap.docs[0];
+        window.activeSeasonalVote = { id: d.id, ...d.data() };
+        // Check if expired — auto-close
+        const endDate = window.activeSeasonalVote.endDate?.toDate ? window.activeSeasonalVote.endDate.toDate() : new Date(window.activeSeasonalVote.endDate);
+        if (new Date() > endDate) { await window.closeSeasonalVote(d.id); return; }
+        // Check if current user already voted
+        if (auth.currentUser) {
+            const recDoc = await getDoc(doc(db, "seasonal_vote_records", `${d.id}_${auth.currentUser.uid}`));
+            window.mySeasonalVote = recDoc.exists() ? recDoc.data().mal_id : null;
+        }
+    } catch(e) { console.error('loadActiveSeasonalVote', e); }
+};
+
+window.startSeasonalVote = async function(isTest) {
+    if (!window.isAdmin) return;
+    const btn = document.getElementById('admin-start-vote-btn');
+    if (btn) { btn.disabled = true; btn.innerText = 'Creating...'; }
+    try {
+        const { season, year } = isTest ? (() => { const m = new Date().getMonth(); const y = new Date().getFullYear(); const s = m < 3 ? 'winter' : m < 6 ? 'spring' : m < 9 ? 'summer' : 'fall'; return { season: s, year: y }; })() : window.getPreviousSeason();
+        const url = isTest ? `https://api.jikan.moe/v4/seasons/now?limit=25` : `https://api.jikan.moe/v4/seasons/${year}/${season}?limit=25`;
+        const res = await fetch(url);
+        const { data } = await res.json();
+        const seenIds = new Set();
+        const seenTitles = new Set();
+        const baseTitle = t => (t || '').toLowerCase().replace(/[\s:·\-]+(season|part|cour|s\d|p\d|\d+).*$/i, '').trim();
+        const candidates = (data || [])
+            .filter(a => a.type === 'TV' && a.images?.jpg?.image_url)
+            .sort((a, b) => (b.members || 0) - (a.members || 0))
+            .filter(a => {
+                if (seenIds.has(a.mal_id)) return false;
+                const bt = baseTitle(a.title_english || a.title);
+                if (seenTitles.has(bt)) return false;
+                seenIds.add(a.mal_id); seenTitles.add(bt);
+                return true;
+            })
+            .slice(0, 10)
+            .map(a => ({ mal_id: a.mal_id, title: a.title_english || a.title, image: a.images.jpg.image_url }));
+        const now = new Date();
+        const endDate = isTest ? new Date(now.getTime() + 5 * 60 * 1000) : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const docId = isTest ? `test_${Date.now()}` : `${season}_${year}`;
+        const label = window.getSeasonLabel(season, year) + (isTest ? ' (Test)' : '');
+        await setDoc(doc(db, "seasonal_votes", docId), { season: label, startDate: now, endDate, closed: false, candidates, voteCounts: {} });
+        window.activeSeasonalVote = { id: docId, season: label, startDate: now, endDate, closed: false, candidates, voteCounts: {} };
+        window.mySeasonalVote = null;
+        window.renderSeasonalVoting();
+    } catch(e) { console.error(e); alert('Failed to create vote.'); if (btn) { btn.disabled = false; btn.innerText = 'Start Vote'; } }
+};
+
+window.submitSeasonalVote = async function(malId) {
+    if (!auth.currentUser) return window.openAuthModal();
+    if (!window.activeSeasonalVote) return;
+    if (window.mySeasonalVote) return;
+    try {
+        const recordId = `${window.activeSeasonalVote.id}_${auth.currentUser.uid}`;
+        await setDoc(doc(db, "seasonal_vote_records", recordId), { uid: auth.currentUser.uid, mal_id: malId, season: window.activeSeasonalVote.id, timestamp: new Date() });
+        await updateDoc(doc(db, "seasonal_votes", window.activeSeasonalVote.id), { [`voteCounts.${malId}`]: increment(1) });
+        window.mySeasonalVote = malId;
+        window.activeSeasonalVote.voteCounts = { ...window.activeSeasonalVote.voteCounts, [malId]: (window.activeSeasonalVote.voteCounts[malId] || 0) + 1 };
+        window.renderSeasonalVoting();
+    } catch(e) { console.error(e); alert('Failed to submit vote.'); }
+};
+
+window.closeSeasonalVote = async function(voteId) {
+    try {
+        const voteDoc = await getDoc(doc(db, "seasonal_votes", voteId));
+        if (!voteDoc.exists() || voteDoc.data().closed) return;
+        const vote = voteDoc.data();
+        const sorted = Object.entries(vote.voteCounts || {}).sort(([,a],[,b]) => b - a).slice(0, 3);
+        const placeLabels = ['Anime of the Season', 'Runner-Up', '3rd Place'];
+        const winners = sorted.map(([mal_id, votes], i) => {
+            const c = vote.candidates.find(x => String(x.mal_id) === String(mal_id));
+            return { place: i + 1, mal_id: parseInt(mal_id), title: c?.title || 'Unknown', image: c?.image || '', votes };
+        });
+        await updateDoc(doc(db, "seasonal_votes", voteId), { closed: true, winners });
+        for (const w of winners) {
+            const badgeRef = doc(db, "seasonal_badges", String(w.mal_id));
+            const existing = await getDoc(badgeRef);
+            const badge = { season: vote.season, seasonId: voteId, place: w.place, label: placeLabels[w.place - 1], votes: w.votes, timestamp: new Date() };
+            if (existing.exists()) { await updateDoc(badgeRef, { badges: [...(existing.data().badges || []), badge] }); }
+            else { await setDoc(badgeRef, { mal_id: w.mal_id, title: w.title, badges: [badge] }); }
+        }
+        await addDoc(collection(db, "seasonal_winners"), { season: vote.season, seasonId: voteId, winners, timestamp: new Date() });
+        window.activeSeasonalVote = { ...vote, closed: true, winners, id: voteId };
+        window.renderSeasonalVoting();
+    } catch(e) { console.error('closeSeasonalVote', e); }
+};
+
+window.renderSeasonalVoting = function() {
+    const vote = window.activeSeasonalVote;
+    const containers = [
+        { sectionId: 'discover-seasonal-section', contentId: 'discover-seasonal-content', titleId: 'discover-seasonal-title', subId: 'discover-seasonal-sub', adminId: 'discover-seasonal-admin' },
+        { sectionId: 'news-seasonal-section', contentId: 'news-seasonal-content', titleId: 'news-seasonal-title', subId: 'news-seasonal-sub', adminId: null }
+    ];
+    containers.forEach(({ sectionId, contentId, titleId, subId, adminId }) => {
+        const section = document.getElementById(sectionId);
+        const content = document.getElementById(contentId);
+        if (!section || !content) return;
+        // Admin panel
+        if (adminId && window.isAdmin) {
+            const adminEl = document.getElementById(adminId);
+            if (adminEl) {
+                adminEl.style.display = 'flex';
+                adminEl.style.gap = '10px';
+                adminEl.style.flexWrap = 'wrap';
+                if (!vote) {
+                    adminEl.innerHTML = `
+                        <button id="admin-start-vote-btn" onclick="startSeasonalVote(false)" class="action-btn" style="background:#FF9800; color:white;"><span class="material-symbols-outlined">how_to_vote</span> Start Seasonal Vote</button>
+                        <button onclick="startSeasonalVote(true)" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">science</span> Start Test Vote (5 min)</button>`;
+                } else if (!vote.closed) {
+                    adminEl.innerHTML = `<button onclick="closeSeasonalVote('${vote.id}')" class="action-btn" style="background:#f44336; color:white;"><span class="material-symbols-outlined">gavel</span> End Vote Now</button>`;
+                } else {
+                    adminEl.innerHTML = `<span style="font-size:13px; color:var(--text-muted); padding:8px;">Vote closed ✓</span>`;
+                }
+            }
+        }
+        if (!vote) {
+            if (window.isAdmin && adminId) {
+                section.style.display = 'block';
+                const adminEl = document.getElementById(adminId);
+                if (adminEl) {
+                    adminEl.style.cssText = 'display:flex; gap:10px; flex-wrap:wrap;';
+                    adminEl.innerHTML = `
+                        <button id="admin-start-vote-btn" onclick="startSeasonalVote(false)" class="action-btn" style="background:#FF9800; color:white;"><span class="material-symbols-outlined">how_to_vote</span> Start Seasonal Vote</button>
+                        <button onclick="startSeasonalVote(true)" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">science</span> Start Test Vote (5 min)</button>`;
+                }
+                if (contentId) { const c = document.getElementById(contentId); if (c) c.innerHTML = '<p style="color:var(--text-muted); font-size:14px;">No active vote. Use the buttons above to start one.</p>'; }
+            } else {
+                section.style.display = 'none';
+            }
+            return;
+        }
+        section.style.display = 'block';
+        if (titleId) { const t = document.getElementById(titleId); if (t) t.innerText = `Anime of the Season — ${vote.season}`; }
+        const endDate = vote.endDate?.toDate ? vote.endDate.toDate() : new Date(vote.endDate);
+        const timeLeft = Math.max(0, endDate - new Date());
+        const daysLeft = Math.floor(timeLeft / 86400000);
+        const hoursLeft = Math.floor((timeLeft % 86400000) / 3600000);
+        const subText = vote.closed ? 'Voting has closed — results below' : timeLeft < 3600000 ? `Voting closes in ${hoursLeft}h` : daysLeft > 0 ? `Voting closes in ${daysLeft}d ${hoursLeft}h` : `Voting closes soon`;
+        if (subId) { const s = document.getElementById(subId); if (s) s.innerText = subText; }
+        const totalVotes = Object.values(vote.voteCounts || {}).reduce((a, b) => a + b, 0);
+        const hasVoted = !!window.mySeasonalVote || vote.closed;
+        const placeIcons = ['emoji_events', 'military_tech', 'military_tech'];
+        const placeColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+        const winnerIds = vote.winners ? vote.winners.map(w => String(w.mal_id)) : [];
+        const sortedCandidates = hasVoted
+            ? [...vote.candidates].sort((a, b) => (vote.voteCounts?.[b.mal_id] || 0) - (vote.voteCounts?.[a.mal_id] || 0))
+            : vote.candidates;
+        content.innerHTML = `<div style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px;">` +
+            sortedCandidates.map(c => {
+                const votes = vote.voteCounts?.[c.mal_id] || 0;
+                const pct = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
+                const isMyVote = String(c.mal_id) === String(window.mySeasonalVote);
+                const winnerIdx = winnerIds.indexOf(String(c.mal_id));
+                const isWinner = winnerIdx !== -1;
+                const placeLabel = vote.closed && isWinner ? vote.winners[winnerIdx].label : '';
+                return `<div style="border-radius:12px; overflow:hidden; background:var(--bg-gray); position:relative; border:2px solid ${isMyVote ? 'var(--accent-yellow)' : isWinner ? placeColors[winnerIdx] : 'transparent'}; cursor:pointer;" onclick="loadAnimeDetails(${c.mal_id})">
+                    ${isWinner ? `<div style="position:absolute;top:6px;left:6px;z-index:2;"><span class="material-symbols-outlined" style="font-size:20px;color:${placeColors[winnerIdx]};text-shadow:0 1px 3px rgba(0,0,0,0.5);">${placeIcons[winnerIdx]}</span></div>` : ''}
+                    ${isMyVote ? `<div style="position:absolute;top:6px;right:6px;z-index:2;background:var(--accent-yellow);border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="font-size:14px;color:#333;">check</span></div>` : ''}
+                    <img src="${c.image}" style="width:100%;height:220px;object-fit:cover;display:block;">
+                    <div style="padding:8px;">
+                        <div style="font-size:12px;font-weight:700;line-height:1.3;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.title}">${c.title}</div>
+                        ${hasVoted ? `<div style="background:var(--bg-gray-darker);border-radius:4px;height:6px;margin-bottom:4px;overflow:hidden;"><div style="background:${isMyVote ? 'var(--accent-yellow)' : isWinner ? placeColors[winnerIdx] : 'var(--text-muted)'};height:100%;width:${pct}%;transition:width 0.4s;"></div></div><div style="font-size:11px;color:var(--text-muted);">${pct}% · ${votes} vote${votes !== 1 ? 's' : ''}</div>` : ''}
+                        ${!hasVoted ? `<button onclick="event.stopPropagation(); submitSeasonalVote(${c.mal_id})" class="action-btn" style="width:100%;justify-content:center;padding:6px;font-size:12px;margin-top:4px;">Vote</button>` : ''}
+                        ${vote.closed && placeLabel ? `<div style="font-size:11px;font-weight:700;color:${placeColors[winnerIdx]};margin-top:4px;">${placeLabel}</div>` : ''}
+                    </div>
+                </div>`;
+            }).join('') + '</div>';
+    });
+};
+
+window.currentNewsArticles = [];
+
+window.openArticleModal = function(index) {
+    const item = window.currentNewsArticles[index];
+    if (!item) return;
+    const img = document.getElementById('article-reader-img');
+    const imgUrl = item.images?.jpg?.image_url || '';
+    if (imgUrl) { img.src = imgUrl; img.style.display = 'block'; } else { img.style.display = 'none'; }
+    document.getElementById('article-reader-title').innerText = item.title || '';
+    document.getElementById('article-reader-body').innerText = item.excerpt || 'No preview available for this article.';
+    document.getElementById('article-reader-date').innerText = item.date ? new Date(item.date).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) : '';
+    const animeEl = document.getElementById('article-reader-anime');
+    animeEl.innerText = item.animeTitle || '';
+    animeEl.onclick = item.animeId ? () => { window.closeAllModals(); window.loadAnimeDetails(item.animeId); } : null;
+    document.getElementById('article-reader-link').href = item.url || '#';
+    window.closeAllModals();
+    document.getElementById('article-reader-modal').style.display = 'flex';
+};
+
+window.fetchGlobalNews = async function() {
+    const container = document.getElementById('global-news-feed');
+    container.innerHTML = '<div class="loading">Sourcing latest headlines...</div>';
+    try {
+        const res = await fetch('https://api.jikan.moe/v4/seasons/now?limit=6');
+        const { data: seasonal } = await res.json();
+        const topAnime = (seasonal || []).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 5);
         let allNews = [];
-        for (const anime of trending) { const newsRes = await fetch(`https://api.jikan.moe/v4/anime/${anime.mal_id}/news`); const { data: news } = await newsRes.json(); if(news) allNews = [...allNews, ...news.slice(0, 4)]; }
-        container.innerHTML = '';
-        allNews.forEach(item => { container.innerHTML += `<div class="news-card"><img src="${item.images?.jpg?.image_url || 'https://via.placeholder.com/400x200?text=Anime+News'}"><div class="news-content"><h3>${item.title}</h3><p>${item.excerpt}</p><div class="news-footer"><span>${new Date(item.date).toLocaleDateString()}</span><a href="${item.url}" target="_blank" class="news-link">Read Full</a></div></div></div>`; });
-    } catch(e) { container.innerHTML = '<p>Failed to load news.</p>'; }
+        const seenTitles = new Set();
+        for (const anime of topAnime) {
+            await new Promise(r => setTimeout(r, 420));
+            try {
+                const newsRes = await fetch(`https://api.jikan.moe/v4/anime/${anime.mal_id}/news?limit=5`);
+                const { data: news } = await newsRes.json();
+                (news || []).slice(0, 5).forEach(item => {
+                    if (!seenTitles.has(item.title)) {
+                        seenTitles.add(item.title);
+                        allNews.push({ ...item, animeTitle: anime.title_english || anime.title, animeId: anime.mal_id });
+                    }
+                });
+            } catch(_) {}
+        }
+        allNews.sort((a, b) => new Date(b.date) - new Date(a.date));
+        window.currentNewsArticles = allNews;
+        if (allNews.length === 0) {
+            container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:40px;">No news found right now. Check back later!</p>';
+            return;
+        }
+        container.innerHTML = allNews.map((item, i) => `
+            <div class="news-card" onclick="openArticleModal(${i})" style="cursor:pointer;">
+                <img src="${item.images?.jpg?.image_url || ''}" onerror="this.style.display='none'" style="width:100%; height:160px; object-fit:cover; border-radius:10px 10px 0 0;">
+                <div class="news-content">
+                    <div style="font-size:11px; color:var(--accent-yellow); font-weight:700; text-transform:uppercase; margin-bottom:6px;">${item.animeTitle}</div>
+                    <h3 style="font-size:14px; font-weight:700; margin-bottom:6px; line-height:1.4;">${item.title}</h3>
+                    <p style="font-size:13px; color:var(--text-muted); margin-bottom:10px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">${item.excerpt || ''}</p>
+                    <div class="news-footer">
+                        <span style="font-size:12px; color:var(--text-muted);">${new Date(item.date).toLocaleDateString()}</span>
+                        <span class="news-link">Read More</span>
+                    </div>
+                </div>
+            </div>`).join('');
+    } catch(e) {
+        container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:40px;">Failed to load news. Try again later.</p>';
+        console.error(e);
+    }
+    window.renderSeasonalVoting();
 };
 
 // --- NEW DISCOVER PAGE LOGIC (PODIUM UPDATE) ---
@@ -1889,7 +2713,12 @@ window.fetchDiscoverPage = async function() {
             } catch(e) {}
         }
 
+        const MIN_REVIEWS = 5;
         let top10 = Object.values(animeStats).filter(a => a.title).map(a => ({ ...a, avgScore: (a.totalScore / a.count).toFixed(1) })).sort((a, b) => b.avgScore - a.avgScore).slice(0, 10);
+        // Podium: only anime with enough reviews to qualify; list gets everything else
+        const podium = top10.filter(a => a.count >= MIN_REVIEWS).slice(0, 3);
+        const podiumIds = new Set(podium.map(a => a.mal_id));
+        const listItems = top10.filter(a => !podiumIds.has(a.mal_id)).slice(0, 7);
         
         if(top10.length === 0) {
             top10Container.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); text-align:center;">No reviews on WeeBee yet! Be the first!</p>';
@@ -1914,17 +2743,35 @@ window.fetchDiscoverPage = async function() {
                 } catch(e) { historyMap[a.mal_id] = {}; }
             }));
 
-            // Record new top-3 achievements (only writes when a new milestone is hit)
+            // Award badges only to qualified podium anime (MIN_REVIEWS threshold)
             const histUpdates = [];
             [['hasBeenFirst', 'firstDate', 0], ['hasBeenSecond', 'secondDate', 1], ['hasBeenThird', 'thirdDate', 2]].forEach(([flag, dateField, i]) => {
-                if (top10[i] && !historyMap[top10[i].mal_id][flag]) {
+                if (podium[i] && !historyMap[podium[i].mal_id]?.[flag]) {
                     const now = new Date();
-                    historyMap[top10[i].mal_id][flag] = true;
-                    historyMap[top10[i].mal_id][dateField] = now;
-                    histUpdates.push(setDoc(doc(db, "rankHistory", String(top10[i].mal_id)), { [flag]: true, [dateField]: now }, { merge: true }));
+                    if (!historyMap[podium[i].mal_id]) historyMap[podium[i].mal_id] = {};
+                    historyMap[podium[i].mal_id][flag] = true;
+                    historyMap[podium[i].mal_id][dateField] = now;
+                    histUpdates.push(setDoc(doc(db, "rankHistory", String(podium[i].mal_id)), { [flag]: true, [dateField]: now }, { merge: true }));
                 }
             });
             if (histUpdates.length) Promise.all(histUpdates).catch(() => {});
+
+            // Revoke badges from any anime that doesn't meet the minimum review threshold
+            const revokes = [];
+            top10.forEach(a => {
+                if (a.count < MIN_REVIEWS) {
+                    const h = historyMap[a.mal_id] || {};
+                    if (h.hasBeenFirst || h.hasBeenSecond || h.hasBeenThird) {
+                        const updates = {};
+                        if (h.hasBeenFirst)  { updates.hasBeenFirst  = false; updates.firstDate  = null; }
+                        if (h.hasBeenSecond) { updates.hasBeenSecond = false; updates.secondDate = null; }
+                        if (h.hasBeenThird)  { updates.hasBeenThird  = false; updates.thirdDate  = null; }
+                        historyMap[a.mal_id] = { ...h, ...updates };
+                        revokes.push(setDoc(doc(db, "rankHistory", String(a.mal_id)), updates, { merge: true }));
+                    }
+                }
+            });
+            if (revokes.length) Promise.all(revokes).catch(() => {});
 
             // Only update the snapshot every 12 hours (~twice a day) so arrows reflect real movement
             const daysSinceSnapshot = (Date.now() - lastSnapshotTime) / 86400000;
@@ -1962,68 +2809,74 @@ window.fetchDiscoverPage = async function() {
 
             let html = '<div class="podium-container">';
 
-            // #2 — Left
-            if (top10[1]) {
+            // #2 — Left (qualified only)
+            if (podium[1]) {
                 html += `
-                    <div class="podium-item podium-2" onclick="loadAnimeDetails(${top10[1].mal_id})">
-                        ${getHistBadges(top10[1].mal_id)}
-                        <div class="podium-rank-change">${getRankChange(top10[1].mal_id)}</div>
-                        <img src="${top10[1].image}" alt="${top10[1].title}">
-                        <h4>${top10[1].title}</h4>
-                        <div class="rating-badge tier-silver" style="width:38px;height:38px;font-size:13px;">${top10[1].avgScore}</div>
+                    <div class="podium-item podium-2" onclick="loadAnimeDetails(${podium[1].mal_id})">
+                        ${getHistBadges(podium[1].mal_id)}
+                        <div class="podium-rank-change">${getRankChange(podium[1].mal_id)}</div>
+                        <img src="${podium[1].image}" alt="${podium[1].title}">
+                        <h4>${podium[1].title}</h4>
+                        <div class="rating-badge tier-silver" style="width:38px;height:38px;font-size:13px;">${podium[1].avgScore}</div>
                         <div class="podium-step step-2">2</div>
                     </div>`;
             }
 
-            // #1 — Center (elevated)
-            if (top10[0]) {
+            // #1 — Center (qualified only)
+            if (podium[0]) {
                 html += `
-                    <div class="podium-item podium-1" onclick="loadAnimeDetails(${top10[0].mal_id})">
-                        ${getHistBadges(top10[0].mal_id)}
-                        <div class="podium-rank-change">${getRankChange(top10[0].mal_id)}</div>
-                        <img src="${top10[0].image}" alt="${top10[0].title}">
-                        <h4>${top10[0].title}</h4>
-                        <div class="rating-badge tier-royal" style="width:48px;height:48px;font-size:16px;">${top10[0].avgScore}</div>
+                    <div class="podium-item podium-1" onclick="loadAnimeDetails(${podium[0].mal_id})">
+                        ${getHistBadges(podium[0].mal_id)}
+                        <div class="podium-rank-change">${getRankChange(podium[0].mal_id)}</div>
+                        <img src="${podium[0].image}" alt="${podium[0].title}">
+                        <h4>${podium[0].title}</h4>
+                        <div class="rating-badge tier-royal" style="width:48px;height:48px;font-size:16px;">${podium[0].avgScore}</div>
                         <div class="podium-step step-1">1</div>
                     </div>`;
+            } else {
+                html += `<div style="color:var(--text-muted); font-size:13px; text-align:center; align-self:center; padding:20px;">Need ${MIN_REVIEWS}+ reviews to qualify for the podium</div>`;
             }
 
-            // #3 — Right
-            if (top10[2]) {
+            // #3 — Right (qualified only)
+            if (podium[2]) {
                 html += `
-                    <div class="podium-item podium-3" onclick="loadAnimeDetails(${top10[2].mal_id})">
-                        ${getHistBadges(top10[2].mal_id)}
-                        <div class="podium-rank-change">${getRankChange(top10[2].mal_id)}</div>
-                        <img src="${top10[2].image}" alt="${top10[2].title}">
-                        <h4>${top10[2].title}</h4>
-                        <div class="rating-badge tier-bronze" style="width:38px;height:38px;font-size:13px;">${top10[2].avgScore}</div>
+                    <div class="podium-item podium-3" onclick="loadAnimeDetails(${podium[2].mal_id})">
+                        ${getHistBadges(podium[2].mal_id)}
+                        <div class="podium-rank-change">${getRankChange(podium[2].mal_id)}</div>
+                        <img src="${podium[2].image}" alt="${podium[2].title}">
+                        <h4>${podium[2].title}</h4>
+                        <div class="rating-badge tier-bronze" style="width:38px;height:38px;font-size:13px;">${podium[2].avgScore}</div>
                         <div class="podium-step step-3">3</div>
                     </div>`;
             }
 
             html += '</div>';
 
-            // List 4-10
-            if (top10.length > 3) {
+            // List: all non-podium anime ranked below
+            if (listItems.length > 0) {
                 html += '<div class="top10-list-container">';
-                for (let i = 3; i < top10.length; i++) {
-                    const anime = top10[i];
+                listItems.forEach((anime, i) => {
+                    const globalRank = podium.length + i + 1;
+                    const unqualifiedNote = anime.count < MIN_REVIEWS
+                        ? `<span style="font-size:10px; color:var(--text-muted); margin-left:4px;">(${anime.count}/${MIN_REVIEWS} reviews for podium)</span>`
+                        : '';
                     html += `
                         <div class="top10-list-item" onclick="loadAnimeDetails(${anime.mal_id})">
-                            <div class="list-rank-number">${i + 1}</div>
+                            <div class="list-rank-number">${globalRank}</div>
                             <div class="rank-change-col">${getRankChange(anime.mal_id)}</div>
                             <img src="${anime.image}" alt="${anime.title}">
                             <div style="flex:1; min-width:0;">
                                 <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                                     <h3 style="margin-bottom:2px; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${anime.title}</h3>
                                     ${getHistBadges(anime.mal_id, true)}
+                                    ${unqualifiedNote}
                                 </div>
                                 <p style="font-size:12px; color:var(--text-muted);">${anime.count} WeeBee Review${anime.count !== 1 ? 's' : ''}</p>
                             </div>
                             <div class="rating-badge blue" style="width:42px;height:42px;font-size:14px;flex-shrink:0;">${anime.avgScore}</div>
                         </div>
                     `;
-                }
+                });
                 html += '</div>';
             }
 
@@ -2058,10 +2911,10 @@ window.fetchDiscoverPage = async function() {
         }
         // Spotlight — show WeeBee #1, fetch synopsis from Jikan async
         if (spotlightEl) {
-            if (top10.length === 0) {
+            if (podium.length === 0) {
                 spotlightEl.innerHTML = '';
             } else {
-                const s = top10[0];
+                const s = podium[0];
                 spotlightEl.innerHTML = `
                     <div class="spotlight-card" onclick="loadAnimeDetails(${s.mal_id})">
                         <div class="spotlight-bg" style="background-image:url('${s.image}')"></div>
@@ -2178,7 +3031,12 @@ async function fetchAndRenderCarousel(url, containerId) {
         if(!res.ok) { container.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); font-size:13px;">Couldn\'t load right now — try refreshing.</p>'; return; }
         const { data } = await res.json(); container.innerHTML = '';
         if(!data || data.length === 0) { container.innerHTML = '<p class="empty-msg" style="color:var(--text-muted);">No anime found.</p>'; return; }
-        data.forEach(anime => { container.innerHTML += `<div class="anime-card" onclick="loadAnimeDetails(${anime.mal_id})"><img src="${anime.images.jpg.image_url}"><p>${anime.title_english || anime.title}</p></div>`; });
+        const seen = new Set();
+        data.forEach(anime => {
+            if (seen.has(anime.mal_id)) return;
+            seen.add(anime.mal_id);
+            container.innerHTML += `<div class="anime-card" onclick="loadAnimeDetails(${anime.mal_id})"><img src="${anime.images.jpg.image_url}"><p>${anime.title_english || anime.title}</p></div>`;
+        });
     } catch(e) { container.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); font-size:13px;">Couldn\'t load right now — try refreshing.</p>'; }
 }
 
@@ -2193,49 +3051,89 @@ window.searchAnime = async function(queryStr) {
     top10Container.innerHTML = '<div class="loading">Searching Anime Database...</div>';
     
     // Hide default discovery sections
-    ['discover-spotlight-section','discover-reviewers-section','discover-friends-section',
+    ['discover-seasonal-section','discover-spotlight-section','discover-reviewers-section','discover-friends-section',
      'discover-trending-section','discover-upcoming-section','discover-action-section',
      'discover-romance-section','discover-comedy-section','discover-horror-section',
      'discover-scifi-section','discover-fantasy-section','discover-sol-section',
      'discover-sports-section','discover-mecha-section'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
     
     try {
-        const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(queryStr)}&limit=10`);
-        if (!res.ok) throw new Error(`Jikan returned ${res.status}`);
-        const json = await res.json();
+        // Run anime search and user search in parallel
+        const normalized = queryStr.toLowerCase();
+        const [animeRes, userSnap] = await Promise.all([
+            fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(queryStr)}&limit=10`),
+            getDocs(query(collection(db, "profiles"), where("displayName", ">=", queryStr), where("displayName", "<=", queryStr + ''), limit(5)))
+                .catch(() => ({ empty: true, docs: [] }))
+        ]);
+
+        let html = '';
+
+        // User results
+        if (!userSnap.empty) {
+            html += `<div style="margin-bottom:24px;">
+                <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:12px;">Users</h4>
+                <div style="display:flex; flex-direction:column; gap:8px;">`;
+            userSnap.docs.forEach(d => {
+                const p = d.data();
+                const uid = d.id;
+                const avatar = p.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(p.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+                html += `
+                    <div style="display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--bg-gray); border-radius:10px; cursor:pointer;" onclick="viewUserProfile('${uid}')">
+                        <img src="${avatar}" class="avatar" style="width:38px; height:38px;">
+                        <div>
+                            <div style="font-weight:600; font-size:14px;">${p.displayName}</div>
+                            <div style="font-size:12px; color:var(--text-muted);">${p.reviewCount || 0} review${(p.reviewCount || 0) !== 1 ? 's' : ''} · ${window.getRankInfo(p.reviewCount || 0).name}</div>
+                        </div>
+                        ${window.getRankBadgeHTML(p.reviewCount || 0, 18)}
+                    </div>`;
+            });
+            html += `</div></div>`;
+        }
+
+        // Anime results
+        if (!animeRes.ok) throw new Error(`Jikan returned ${animeRes.status}`);
+        const json = await animeRes.json();
         const data = json.data;
         if (!Array.isArray(data)) throw new Error('Unexpected response format');
 
-        let html = '<div class="top10-list-container">';
-        if (data.length === 0) { html = '<p style="color:var(--text-muted); text-align:center;">No anime found matching your search.</p>'; }
-        else {
+        if (data.length === 0 && userSnap.empty) {
+            html = '<p style="color:var(--text-muted); text-align:center;">No results found.</p>';
+        } else if (data.length > 0) {
+            html += `<h4 style="font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:12px;">Anime</h4>
+                <div class="top10-list-container">`;
             data.forEach(anime => {
                 html += `
                     <div class="top10-list-item" onclick="loadAnimeDetails(${anime.mal_id})">
                         <img src="${anime.images.jpg.image_url}">
                         <div style="flex:1; min-width:0;">
-                            <h3 style="margin-bottom:4px; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${anime.title_english || anime.title}">${anime.title_english || anime.title}</h3>
-                            <p style="font-size:12px; color:var(--text-muted);">${anime.type}, ${anime.year || 'N/A'}</p>
+                            <h3 style="margin-bottom:4px; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${anime.title_english || anime.title}</h3>
+                            <p style="font-size:12px; color:var(--text-muted);">${anime.type || ''}, ${anime.year || 'N/A'}</p>
                         </div>
                         <div class="rating-badge blue" style="width:40px; height:40px; font-size:14px; flex-shrink:0;">${anime.score || 'N/A'}</div>
                     </div>`;
             });
+            html += '</div>';
         }
-        html += '</div>';
+
         top10Container.innerHTML = html;
 
     } catch(e) {
-        top10Container.innerHTML = '<p style="color:var(--text-muted); text-align:center;">Search failed — Jikan may be busy. Try again in a moment.</p>';
+        top10Container.innerHTML = '<p style="color:var(--text-muted); text-align:center;">Search failed — try again in a moment.</p>';
         console.error(e);
     }
 };
 
 // --- Navigation ---
-window.switchView = function(targetId, isSearch = false) {
+window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     window.closeMobileMenu?.();
     window.closeMobileSearch?.();
     if(targetId !== 'anime-detail-view') window.previousViewId = targetId;
     if(targetId !== 'profile-view') window.targetProfileUid = null;
+    if (!skipHistory) {
+        history.pushState({ view: targetId, profileUid: window.targetProfileUid, animeId: window.currentAnimeId }, '', window.location.pathname);
+    }
+    // Save state for refresh restoration
+    sessionStorage.setItem('weebee-last-view', JSON.stringify({ view: targetId, profileUid: window.targetProfileUid, animeId: window.currentAnimeId }));
     
     document.querySelectorAll(".nav-btn").forEach(btn => { btn.classList.remove("active"); if(btn.getAttribute("data-target") === targetId) btn.classList.add("active"); });
     document.querySelectorAll(".view").forEach(view => view.classList.remove("active"));
@@ -2250,20 +3148,34 @@ window.switchView = function(targetId, isSearch = false) {
     if(targetId === 'discover-view' && !isSearch) {
         document.querySelector('#discover-view h2').innerText = "WeeBee's Top 10 All Time";
         document.querySelector('#discover-view p').innerText = "Ranked purely by WeeBee community scores";
-        ['discover-spotlight-section','discover-reviewers-section','discover-friends-section',
+        ['discover-seasonal-section','discover-spotlight-section','discover-reviewers-section','discover-friends-section',
          'discover-trending-section','discover-upcoming-section','discover-action-section',
          'discover-romance-section','discover-comedy-section','discover-horror-section',
          'discover-scifi-section','discover-fantasy-section','discover-sol-section',
          'discover-sports-section','discover-mecha-section'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'block'; });
         fetchDiscoverPage();
+        window.renderSeasonalVoting();
     }
 };
 
-window.goBack = function() { switchView(window.previousViewId); };
+window.goBack = function() { history.back(); };
+
+window.addEventListener('popstate', (e) => {
+    if (!e.state) return;
+    const { view, profileUid, animeId } = e.state;
+    if (view === 'anime-detail-view' && animeId) {
+        window.loadAnimeDetails(animeId, true);
+    } else if (view === 'profile-view' && profileUid) {
+        window.targetProfileUid = profileUid;
+        switchView('profile-view', false, true);
+    } else if (view) {
+        switchView(view, false, true);
+    }
+});
 
 // --- ANIME DETAIL SYSTEM ---
-window.loadAnimeDetails = async function(mal_id) {
-    window.currentAnimeId = mal_id; switchView('anime-detail-view');
+window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
+    window.currentAnimeId = mal_id; switchView('anime-detail-view', false, skipHistory);
     const res = await fetch(`https://api.jikan.moe/v4/anime/${mal_id}/full`);
     const { data: anime } = await res.json(); window.currentAnime = anime;
 
@@ -2306,14 +3218,26 @@ window.loadAnimeDetails = async function(mal_id) {
         try { const d = ts.toDate ? ts.toDate() : new Date(ts); return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }); } catch(e) { return null; }
     };
     let rankHistoryHTML = '';
+    let allBadges = '';
     if (rankHist.hasBeenFirst || rankHist.hasBeenSecond || rankHist.hasBeenThird) {
-        let badges = '';
         const d1 = fmtRankDate(rankHist.firstDate), d2 = fmtRankDate(rankHist.secondDate), d3 = fmtRankDate(rankHist.thirdDate);
-        if (rankHist.hasBeenFirst) badges += `<div class="detail-rank-badge hist-gem-badge" data-tooltip="${d1 ? `Reached #1 on ${d1}` : 'Has reached #1 on WeeBee'}"><span class="material-symbols-outlined">diamond</span>#1 on WeeBee</div>`;
-        if (rankHist.hasBeenSecond) badges += `<div class="detail-rank-badge hist-silver-badge" data-tooltip="${d2 ? `Reached #2 on ${d2}` : 'Has reached #2 on WeeBee'}"><span class="material-symbols-outlined">military_tech</span>#2 on WeeBee</div>`;
-        if (rankHist.hasBeenThird) badges += `<div class="detail-rank-badge hist-bronze-badge" data-tooltip="${d3 ? `Reached #3 on ${d3}` : 'Has reached #3 on WeeBee'}"><span class="material-symbols-outlined">military_tech</span>#3 on WeeBee</div>`;
-        rankHistoryHTML = `<div class="detail-rank-badges">${badges}</div>`;
+        if (rankHist.hasBeenFirst) allBadges += `<div class="detail-rank-badge hist-gem-badge" data-tooltip="${d1 ? `Reached #1 on ${d1}` : 'Has reached #1 on WeeBee'}"><span class="material-symbols-outlined">diamond</span>#1 on WeeBee</div>`;
+        if (rankHist.hasBeenSecond) allBadges += `<div class="detail-rank-badge hist-silver-badge" data-tooltip="${d2 ? `Reached #2 on ${d2}` : 'Has reached #2 on WeeBee'}"><span class="material-symbols-outlined">military_tech</span>#2 on WeeBee</div>`;
+        if (rankHist.hasBeenThird) allBadges += `<div class="detail-rank-badge hist-bronze-badge" data-tooltip="${d3 ? `Reached #3 on ${d3}` : 'Has reached #3 on WeeBee'}"><span class="material-symbols-outlined">military_tech</span>#3 on WeeBee</div>`;
     }
+    try {
+        const seasonalBadgeDoc = await getDoc(doc(db, "seasonal_badges", String(mal_id)));
+        if (seasonalBadgeDoc.exists()) {
+            const placeIcons = ['emoji_events','military_tech','military_tech'];
+            const placeColors = ['#FFD700','#C0C0C0','#CD7F32'];
+            const badgeClasses = ['hist-gem-badge','hist-silver-badge','hist-bronze-badge'];
+            (seasonalBadgeDoc.data().badges || []).forEach(b => {
+                const i = (b.place || 1) - 1;
+                allBadges += `<div class="detail-rank-badge ${badgeClasses[i]}" data-tooltip="${b.label} · ${b.season}"><span class="material-symbols-outlined">${placeIcons[i]}</span>${b.label}<br><span style="font-size:10px;opacity:0.8;">${b.season}</span></div>`;
+            });
+        }
+    } catch(e) {}
+    if (allBadges) rankHistoryHTML = `<div class="detail-rank-badges">${allBadges}</div>`;
 
     let weebeeRank = '—';
     try {
@@ -2357,7 +3281,8 @@ window.loadAnimeDetails = async function(mal_id) {
                 </div>
                 ${fanServiceHTML}
             </div>
-            <button onclick="toggleFollow(${mal_id}, 'anime', this)" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px;">Follow Anime</button>
+            <button onclick="addCurrentAnimeToList()" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px;"><span class="material-symbols-outlined">add</span> Add to List</button>
+            <button onclick="toggleFollow(${mal_id}, 'anime', this)" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px; background:var(--bg-gray-darker); color:var(--text-dark);">Follow Anime</button>
             <button onclick="openSuggestModal()" class="action-btn" style="width:100%; justify-content:center; background: transparent; color: var(--text-dark); border: 1px solid #E0E0E0;">
                 <span class="material-symbols-outlined">send</span> Suggest
             </button>
@@ -2370,6 +3295,7 @@ window.loadAnimeDetails = async function(mal_id) {
                 <button class="detail-tab active" onclick="switchDetailTab(event, 'tab-overview')">Overview</button>
                 <button class="detail-tab" onclick="switchDetailTab(event, 'tab-episodes')">Episodes</button>
                 <button class="detail-tab" onclick="switchDetailTab(event, 'tab-reviews')">Reviews</button>
+                <button class="detail-tab" onclick="switchDetailTab(event, 'tab-seasons')">Seasons & Films</button>
             </div>
             <div id="tab-overview" class="detail-tab-content">
                 <div class="content-section"><h3>Synopsis</h3><p>${anime.synopsis}</p></div>
@@ -2387,6 +3313,7 @@ window.loadAnimeDetails = async function(mal_id) {
                 </div>
                 <div class="review-list" id="detail-reviews"></div>
             </div>
+            <div id="tab-seasons" class="detail-tab-content" style="display:none;"></div>
         </div>`;
 
     const revList = document.getElementById('detail-reviews'); revList.innerHTML = '';
@@ -2445,6 +3372,47 @@ window.switchDetailTab = function(event, tabId) {
     if (tabId === 'tab-episodes' && !content.dataset.loaded) {
         content.dataset.loaded = 'true';
         fetchDetailEpisodes(window.currentAnimeId);
+    }
+    if (tabId === 'tab-seasons' && !content.dataset.loaded) {
+        content.dataset.loaded = 'true';
+        window.loadAnimeRelations(window.currentAnimeId);
+    }
+};
+
+window.loadAnimeRelations = async function(mal_id) {
+    const container = document.getElementById('tab-seasons');
+    container.innerHTML = '<div class="loading">Loading related media...</div>';
+    try {
+        const res = await fetch(`https://api.jikan.moe/v4/anime/${mal_id}/relations`);
+        const { data } = await res.json();
+        const entries = [];
+        (data || []).forEach(rel => rel.entry.forEach(e => { if (e.type === 'anime') entries.push({ ...e, relation: rel.relation }); }));
+        if (entries.length === 0) {
+            container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px; font-size:14px;">No related anime found.</p>';
+            return;
+        }
+        container.innerHTML = entries.map(e => `
+            <div style="display:flex; align-items:center; gap:14px; padding:12px; border-radius:10px; background:var(--bg-gray); margin-bottom:8px; cursor:pointer;" onclick="loadAnimeDetails(${e.mal_id})">
+                <div id="rel-img-wrap-${e.mal_id}" style="width:50px; height:70px; border-radius:6px; background:var(--bg-gray-darker); flex-shrink:0; overflow:hidden;">
+                    <img id="rel-img-${e.mal_id}" src="" style="width:100%; height:100%; object-fit:cover; display:none;">
+                </div>
+                <div style="flex:1; min-width:0;">
+                    <div style="font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${e.name}</div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">${e.relation}</div>
+                </div>
+                <span class="material-symbols-outlined" style="color:var(--text-muted); flex-shrink:0;">chevron_right</span>
+            </div>`).join('');
+        for (const e of entries) {
+            await new Promise(r => setTimeout(r, 420));
+            try {
+                const r = await fetch(`https://api.jikan.moe/v4/anime/${e.mal_id}`);
+                const { data: d } = await r.json();
+                const img = document.getElementById(`rel-img-${e.mal_id}`);
+                if (img && d?.images?.jpg?.image_url) { img.src = d.images.jpg.image_url; img.style.display = 'block'; }
+            } catch(_) {}
+        }
+    } catch(e) {
+        container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px; font-size:14px;">Failed to load related media.</p>';
     }
 };
 
@@ -2575,14 +3543,20 @@ function updateEpisodeRowDOM(mal_id, ep_number) {
 }
 
 window.onload = function() {
-    const saved = localStorage.getItem('weebee-theme') || 'light';
+    history.replaceState({ view: 'home-view', profileUid: null, animeId: null }, '', window.location.pathname);
+    const saved = localStorage.getItem('weebee-theme') || 'dark';
     document.body.setAttribute('data-theme', saved);
 
     const loadTrending = async () => {
         try {
             const r = await fetch('https://api.jikan.moe/v4/seasons/now?limit=15'); const d = await r.json();
             const c = document.getElementById('trending-carousel'); c.innerHTML = '';
-            if(d.data) d.data.forEach(a => c.innerHTML += `<div class="anime-card" onclick="loadAnimeDetails(${a.mal_id})"><img src="${a.images.jpg.image_url}"><p>${a.title_english || a.title}</p></div>`);
+            const seen = new Set();
+            if(d.data) d.data.forEach(a => {
+                if (seen.has(a.mal_id)) return;
+                seen.add(a.mal_id);
+                c.innerHTML += `<div class="anime-card" onclick="loadAnimeDetails(${a.mal_id})"><img src="${a.images.jpg.image_url}"><p>${a.title_english || a.title}</p></div>`;
+            });
         } catch(e) { console.error("Trending error:", e); }
     };
     loadTrending(); fetchHomepageReviews();

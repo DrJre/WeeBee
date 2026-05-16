@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=10">
+    <link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body>
     <div class="app-container">
@@ -104,6 +104,19 @@
                 </div>
 
                 <div id="discover-view" class="view">
+
+                    <!-- Seasonal Vote -->
+                    <div id="discover-seasonal-section" style="display:none; margin-bottom:50px;">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#FF9800;">how_to_vote</span>
+                            <div>
+                                <h2 id="discover-seasonal-title">Anime of the Season</h2>
+                                <p id="discover-seasonal-sub">Vote for your favourite anime this season</p>
+                            </div>
+                        </div>
+                        <div id="discover-seasonal-admin" style="display:none; margin-bottom:16px; display:none;"></div>
+                        <div id="discover-seasonal-content"></div>
+                    </div>
 
                     <!-- Spotlight -->
                     <div id="discover-spotlight-section" style="margin-bottom: 50px;">
@@ -336,11 +349,42 @@
                 </div>
 
                 <div id="news-view" class="view">
+                    <div id="news-seasonal-section" style="display:none; margin-bottom:40px;">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#FF9800;">how_to_vote</span>
+                            <div>
+                                <h2 id="news-seasonal-title">Anime of the Season</h2>
+                                <p id="news-seasonal-sub">Vote for your favourite anime this season</p>
+                            </div>
+                        </div>
+                        <div id="news-seasonal-content"></div>
+                    </div>
                     <h2>Global Anime News</h2>
                     <div id="global-news-feed" class="news-grid">
                         <div class="loading">Fetching latest headlines...</div>
                     </div>
                 </div>
+
+    <!-- Article Reader Modal -->
+    <div id="article-reader-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:680px; max-height:85vh; overflow-y:auto; padding:0;">
+            <img id="article-reader-img" src="" style="width:100%; max-height:260px; object-fit:cover; border-radius:12px 12px 0 0; display:none;">
+            <div style="padding:24px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                    <span id="article-reader-anime" style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--accent-yellow); cursor:pointer;"></span>
+                    <span id="article-reader-date" style="font-size:12px; color:var(--text-muted);"></span>
+                </div>
+                <h2 id="article-reader-title" style="font-size:20px; font-weight:800; line-height:1.4; margin-bottom:16px;"></h2>
+                <p id="article-reader-body" style="font-size:15px; line-height:1.8; color:var(--text-dark);"></p>
+                <div style="margin-top:24px; padding-top:16px; border-top:1px solid var(--border-color); display:flex; gap:12px; justify-content:flex-end;">
+                    <button onclick="closeAllModals()" class="cancel-btn">Close</button>
+                    <a id="article-reader-link" href="#" target="_blank" rel="noopener" class="submit-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+                        <span class="material-symbols-outlined" style="font-size:16px;">open_in_new</span> Read on MyAnimeList
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
 
                 <div id="profile-view" class="view">
                     <div id="profile-header-container"></div>
@@ -359,7 +403,7 @@
                                 <div id="currently-watching-list" class="watching-mini">
                                     <p class="empty-msg">Not tracking anything yet.</p>
                                 </div>
-                                <p style="font-size: 11px; text-align: center; margin-top: 10px; color: var(--text-muted);">See Full List</p>
+                                <p id="see-full-list-btn" style="font-size: 11px; text-align: center; margin-top: 10px; color: var(--accent-yellow); cursor: pointer; font-weight: 600;" onclick="viewFullAnimeList()">See Full List →</p>
                             </div>
                 
                             <div class="profile-card">
@@ -376,15 +420,15 @@
                         <div class="profile-main-feed">
                             <div class="profile-tabs">
                                 <button class="p-tab active" onclick="switchProfileTab(event, 'p-reviews')">Reviews</button>
+                                <button class="p-tab" onclick="switchProfileTab(event, 'p-friends')">Friends</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-social')">Following</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-achievements')">Achievements</button>
-                                <button class="p-tab" onclick="switchProfileTab(event, 'p-comments')">Guestbook</button>
                             </div>
-                
+
                             <div id="p-reviews" class="p-tab-content active">
                                 <div id="user-reviews-feed" class="review-feed"></div>
                             </div>
-                
+
                             <div id="p-social" class="p-tab-content" style="display:none;">
                                 <div class="social-section">
                                     <h5>Following Anime</h5>
@@ -393,24 +437,33 @@
                                         <div id="followed-anime-list" class="carousel"></div>
                                         <button class="carousel-arrow right" onclick="scrollCarousel('followed-anime-list', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
                                     </div>
-                                    
+
                                     <h5>Following Users</h5>
                                     <div id="followed-users-list" class="user-chip-grid" style="margin-top: 10px;"></div>
                                 </div>
                             </div>
-                
+
                             <div id="p-achievements" class="p-tab-content" style="display:none;">
                                 <div id="achievements-grid-container"></div>
                             </div>
 
-                            <div id="p-comments" class="p-tab-content" style="display:none;">
-                                <div class="guestbook-input">
-                                    <textarea id="profile-comment-input" placeholder="Leave a message on this profile..."></textarea>
-                                    <button class="action-btn" onclick="submitProfileComment()">Post Message</button>
-                                </div>
-                                <div id="profile-comments-feed" class="comment-list"></div>
+                            <div id="p-friends" class="p-tab-content" style="display:none;">
+                                <div id="friends-list-container"></div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <!-- Profile Comments (bottom of profile, always visible) -->
+                    <div id="profile-comments-section" style="margin-top: 40px; border-top: 1px solid var(--border-color); padding-top: 30px;">
+                        <h3 style="margin-bottom: 16px;">Profile Comments</h3>
+                        <div id="profile-comment-input-area" style="margin-bottom: 20px; display:none;">
+                            <textarea id="profile-comment-input" rows="3" placeholder="Leave a comment on this profile..." style="width:100%; resize:vertical; padding:12px; border:1px solid var(--border-color); border-radius:10px; background:var(--bg-gray); color:var(--text-dark); font-family:inherit; font-size:14px; outline:none;"></textarea>
+                            <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                                <button class="action-btn" onclick="submitProfileComment()">Post</button>
                             </div>
                         </div>
+                        <div id="profile-comments-feed"></div>
                     </div>
                 </div>
 
@@ -489,6 +542,21 @@
             </div>
             <div class="modal-actions" style="justify-content: center; margin-top: 20px;">
                 <button onclick="closeAllModals()" class="cancel-btn" style="width: 100%;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Already Reviewed Modal -->
+    <div id="already-reviewed-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width: 400px; text-align:center;">
+            <span class="material-symbols-outlined" style="font-size:40px; color:var(--accent-yellow); margin-bottom:10px;">rate_review</span>
+            <h3 style="margin-bottom:8px;">Already Reviewed!</h3>
+            <p id="already-reviewed-msg" style="color:var(--text-muted); font-size:14px; margin-bottom:24px;"></p>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                <button onclick="proceedToEditReview()" class="action-btn" style="justify-content:center; padding:12px; font-size:14px;">
+                    <span class="material-symbols-outlined">edit</span> Edit My Review
+                </button>
+                <button onclick="closeAllModals()" class="cancel-btn" style="width:100%; padding:12px; font-size:14px; border-radius:8px;">Keep My Current Review</button>
             </div>
         </div>
     </div>
@@ -662,8 +730,86 @@
                 </label>
             </div>
 
+            <div class="settings-row">
+                <div class="settings-row-info">
+                    <span class="material-symbols-outlined">chat_bubble</span>
+                    <div>
+                        <div class="settings-row-label">Messages from Followers</div>
+                        <div class="settings-row-sub">Allow followers who aren't friends to message you</div>
+                    </div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="dm-followers-toggle" onchange="toggleDmFollowers()">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+            </div>
+
+            <div class="settings-row">
+                <div class="settings-row-info">
+                    <span class="material-symbols-outlined">lock</span>
+                    <div>
+                        <div class="settings-row-label">Private Anime List</div>
+                        <div class="settings-row-sub">Only friends can see your anime list</div>
+                    </div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="list-private-toggle" onchange="toggleListPrivacy()">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+            </div>
+
+            <div class="settings-row" style="cursor:pointer;" onclick="openBugReportModal()">
+                <div class="settings-row-info">
+                    <span class="material-symbols-outlined">bug_report</span>
+                    <div>
+                        <div class="settings-row-label">Report a Bug</div>
+                        <div class="settings-row-sub">Let us know about something that's broken</div>
+                    </div>
+                </div>
+                <span class="material-symbols-outlined" style="color:var(--text-muted);">chevron_right</span>
+            </div>
+
+            <div class="settings-row" style="cursor:pointer;" onclick="openFeatureSuggestionModal()">
+                <div class="settings-row-info">
+                    <span class="material-symbols-outlined">lightbulb</span>
+                    <div>
+                        <div class="settings-row-label">Feature Suggestion</div>
+                        <div class="settings-row-sub">Share an idea for something new</div>
+                    </div>
+                </div>
+                <span class="material-symbols-outlined" style="color:var(--text-muted);">chevron_right</span>
+            </div>
+
             <div class="modal-actions" style="margin-top: 24px;">
                 <button onclick="closeAllModals()" class="submit-btn" style="width:100%;">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bug Report Modal -->
+    <div id="bug-report-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:480px;">
+            <span class="material-symbols-outlined" style="font-size:36px; color:#FF5252; margin-bottom:8px; display:block;">bug_report</span>
+            <h3 style="margin-bottom:6px;">Report a Bug</h3>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Describe what happened and how to reproduce it. We'll look into it!</p>
+            <textarea id="bug-report-text" rows="5" placeholder="e.g. When I click 'Write a Review' on mobile, nothing happens..." style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark); font-size:14px; resize:vertical; box-sizing:border-box;"></textarea>
+            <div class="modal-actions" style="margin-top:16px;">
+                <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
+                <button onclick="submitBugReport()" class="submit-btn">Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Suggestion Modal -->
+    <div id="feature-suggestion-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:480px;">
+            <span class="material-symbols-outlined" style="font-size:36px; color:var(--accent-yellow); margin-bottom:8px; display:block;">lightbulb</span>
+            <h3 style="margin-bottom:6px;">Feature Suggestion</h3>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Got an idea for something we should add? We'd love to hear it.</p>
+            <textarea id="feature-suggestion-text" rows="5" placeholder="e.g. It would be cool if we could sort reviews by score..." style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark); font-size:14px; resize:vertical; box-sizing:border-box;"></textarea>
+            <div class="modal-actions" style="margin-top:16px;">
+                <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
+                <button onclick="submitFeatureSuggestion()" class="submit-btn">Submit</button>
             </div>
         </div>
     </div>
@@ -763,6 +909,6 @@
         </div>
     </div>
 
-    <script type="module" src="app.js?v=6"></script>
+    <script type="module" src="app.js?v=32"></script>
 </body>
 </html>

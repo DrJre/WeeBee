@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WeeBee DB Reset</title>
+    <style>
+        body { font-family: monospace; background: #111; color: #eee; padding: 40px; max-width: 600px; margin: 0 auto; }
+        h2 { color: #FF4444; }
+        button { background: #FF4444; color: white; border: none; padding: 14px 28px; font-size: 16px; border-radius: 8px; cursor: pointer; margin-top: 20px; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        #log { margin-top: 24px; line-height: 2; }
+        .ok { color: #4CAF50; }
+        .err { color: #FF4444; }
+        .done { color: #FFD700; font-weight: bold; font-size: 18px; margin-top: 16px; }
+        p { color: #aaa; line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <h2>⚠️ WeeBee Database Reset</h2>
+    <p>This will permanently delete all reviews, lists, profiles, followers, friends, badges, DMs, notifications, and founders. The <strong style="color:white;">admins</strong> collection will NOT be touched — you stay admin.</p>
+    <p>Make sure you're ready. This cannot be undone.</p>
+    <button id="btn" onclick="runReset()">Reset Database</button>
+    <div id="log"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+        import { getFirestore, collection, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBcRQzzJthjzpvsMdlTg_surpbD01NOnm0",
+            authDomain: "weebee-fbbd8.firebaseapp.com",
+            projectId: "weebee-fbbd8",
+            storageBucket: "weebee-fbbd8.firebasestorage.app",
+            messagingSenderId: "974032186291",
+            appId: "1:974032186291:web:25c92c430ba204b63839c6"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const COLLECTIONS = [
+            'reviews',
+            'follows',
+            'friends',
+            'friend_requests',
+            'anime_lists',
+            'top_anime_lists',
+            'profiles',
+            'notifications',
+            'usernames',
+            'profile_comments',
+            'comments',
+            'rankHistory',
+            'meta',
+            'achievements',
+            'conversations',
+            'seasonal_votes',
+            'seasonal_vote_records',
+            'seasonal_winners',
+            'seasonal_badges',
+            'bug_reports',
+            'feature_suggestions',
+            'direct_suggestions',
+            'founders',
+        ];
+
+        function log(msg, type = '') {
+            const div = document.getElementById('log');
+            const line = document.createElement('div');
+            line.className = type;
+            line.innerHTML = msg;
+            div.appendChild(line);
+        }
+
+        async function deleteCollection(name) {
+            const snap = await getDocs(collection(db, name));
+            if (snap.empty) { log(`${name} — empty, skipped`); return; }
+            const deletes = snap.docs.map(d => deleteDoc(doc(db, name, d.id)));
+            await Promise.all(deletes);
+            log(`<span class="ok">✓</span> ${name} — ${snap.size} docs deleted`);
+        }
+
+        window.runReset = async function() {
+            if (!confirm('Are you absolutely sure? This wipes everything.')) return;
+            const btn = document.getElementById('btn');
+            btn.disabled = true;
+            btn.innerText = 'Resetting...';
+            document.getElementById('log').innerHTML = '';
+
+            for (const col of COLLECTIONS) {
+                try {
+                    log(`Deleting ${col}...`);
+                    await deleteCollection(col);
+                } catch(e) {
+                    log(`<span class="err">✗</span> ${col} — ${e.message}`, 'err');
+                }
+            }
+
+            log('<div class="done">✓ Reset complete. admins collection untouched.</div>');
+            btn.innerText = 'Done';
+        };
+    </script>
+</body>
+</html>

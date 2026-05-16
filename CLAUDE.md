@@ -9,34 +9,36 @@ These are features Jesse wants to build (no particular order):
 - [ ] **Upload WeeBee logo/fonts** — branding assets to replace the plain text logo
 - [x] **Edit profile function** — Display Name (unique, transaction-backed), Bio, Avatar URL, Favorite Genres (up to 3); uniqueness enforced via usernames collection
 - [x] **Upcoming/Seasonal categories** — carousels live on Discover page
-- [ ] **DM notifications** — users aren't getting notified when they receive a message; DM dropdown shows "failed to load"
-- [ ] **Follow button state** — users still see Follow button after already following someone; state not persisting correctly
-- [ ] **User search** — search bar only searches anime; should also be able to search for other users by display name
-- [ ] **Dark mode as default** — currently defaults to light mode; flip the default to dark
-- [ ] **Friends system** — separate from Follow; users can "friend" people (mutual, requires acceptance) vs "follow" (one-way); Friends tab on profiles
-- [ ] **DM privacy settings** — toggleable setting so only friends (not all followers) can message you
-- [ ] **Following tab usernames** — Following tab on user profiles not displaying usernames correctly
-- [ ] **Live notifications** — currently requires refresh to see new notifications; should update in real-time via onSnapshot
-- [ ] **Profile pic click goes to profile** — clicking avatar in topbar should go directly to profile; dropdown should only trigger on the arrow chevron
-- [ ] **Followers / Following counts on profiles** — show follower and following counts on profile pages
-- [ ] **Add to list from anime page** — ability to add an anime to your list directly from its detail page
-- [ ] **Comment count bug** — posts show 0 comments but comments are there when you click; count not updating correctly
-- [ ] **Back arrow not working** — back navigation broken on anime detail / profile pages
-- [ ] **Top 3 review threshold** — anime shouldn't reach top 3 unless it has at least 10 reviews
-- [ ] **Rename Guestbook to Comments** — on user profile pages
+- [x] **DM notifications** — red badge on chat bubble; DM list highlights unread conversations; notification writes to notifications collection, cleared on open
+- [x] **Follow button state** — fixed: profile page checks myFollowedUserIds on render; fetchMyFollows patches visible buttons after load
+- [x] **User search** — search bar now searches both anime and profiles by display name
+- [x] **Dark mode as default** — currently defaults to light mode; flip the default to dark
+- [x] **Friends system** — mutual friend requests with Accept/Decline in notification bell; Friends tab on profiles; friend count shown on profile header; Add Friend / Pending / Friends button states
+- [x] **DM privacy settings** — Settings toggle (off by default); only friends can DM you unless "Messages from Followers" is enabled
+- [x] **Following tab usernames** — fixed: batch-fetches real display names from profiles collection; patches corrupted follow docs
+- [x] **Live notifications** — converted to onSnapshot; notification badge and panel update in real-time without refresh
+- [x] **Profile pic click goes to profile** — avatar now goes directly to profile; dropdown only opens on chevron click
+- [x] **Followers / Following counts on profiles** — shown below join date on profile header
+- [x] **Add to list from anime page** — "Add to List" button added to anime detail sidebar
+- [x] **Comment count bug** — fixed: submitInlineComment now increments commentCount on the review doc and updates the DOM counter
+- [x] **Back arrow not working** — fixed: History API (pushState/popstate) added so browser back navigates between WeeBee views instead of leaving the site
+- [x] **Refresh restores last view** — sessionStorage saves current view/profile/anime on navigation; onAuthStateChanged restores it after page reload
+- [x] **Founder badge order on posts** — review and suggestion cards now show: display name → founder badge → rank badge
+- [x] **Top 3 review threshold** — 5 review minimum required for podium; badges auto-revoked if anime drops below threshold
+- [x] **Rename Guestbook to Comments** — renamed to "Profile Comments", moved out of tab to bottom of profile, owner can delete comments
 - [ ] **Group anime seasons** — group all seasons of an anime under its first season rather than listing them separately
-- [ ] **Review notifications for follows** — ability to toggle notifications on/off per followed user; notifies you when that person writes a new review
-- [ ] **Seasons tab on anime pages** — dedicated tab on anime detail pages showing all seasons of that series
-- [ ] **Report a bug feature** — in-app bug reporting so users can flag issues without leaving the site
-- [ ] **Share lists / view friends lists / make private** — ability to share your anime list, browse friends' lists, and toggle list visibility (public vs private)
-- [ ] **Post reviews from My List page** — write a review directly from an entry in your list without navigating to the anime's page
-- [ ] **"See full list" button on profile not working** — button exists but does nothing; needs to navigate to the user's full anime list
-- [ ] **Reviews showing "null" rating** — when a rating isn't entered the display shows "null" instead of hiding or showing N/A
-- [ ] **One review per person per anime** — prevent a user from submitting multiple reviews on the same anime; prompt to edit existing instead
-- [ ] **Editable reviews** — allow a user to edit or update their own review after submitting
-- [ ] **Duplicate anime in carousels** — two Dr. Stones appearing in Trending; need to deduplicate Jikan results by mal_id
-- [ ] **Seasonal Top 5** — a WeeBee-voted Top 5 for the current season; winners get a permanent seasonal badge similar to the all-time Top 3 gems
-- [ ] **News articles on WeeBee** — display anime news articles natively on the site rather than linking out; likely pull from Jikan's news endpoint and render on a News page
+- [x] **Review notifications for follows** — bell toggle on profiles (on by default when following); followers get a notification linking to the anime when a new review is posted
+- [x] **Seasons tab on anime pages** — "Seasons & Films" tab on anime detail pages; fetches Jikan relations endpoint, shows all related anime with cover art loading progressively
+- [x] **Report a bug feature** — bug report + feature suggestion buttons in Settings; each opens a modal and writes to Firestore (bug_reports / feature_suggestions)
+- [x] **Share lists / view friends lists / make private** — Private List toggle in Settings; friends can always view; View List button on each friend card; non-friends blocked by lock screen
+- [x] **Post reviews from My List page** — rate_review button on each list row; triggers existing review modal including already-reviewed check
+- [x] **"See full list" button on profile not working** — navigates to My List for own profile; shows grouped list modal for other users
+- [x] **Reviews showing "null" rating** — unscored categories now hidden on review cards; validation warns if user comments on a category without scoring it
+- [x] **One review per person per anime** — checks for existing review on open; shows "Already Reviewed" modal with Edit / Keep options
+- [x] **Editable reviews** — quick and in-depth review forms pre-fill with existing data when editing; uses updateDoc instead of addDoc
+- [x] **Duplicate anime in carousels** — fixed: fetchAndRenderCarousel now deduplicates by mal_id using a Set
+- [x] **Seasonal Top 5** — community vote for Anime of the Season; top 3 get gold/silver/bronze seasonal badges on their anime page; admin panel to start/end votes; auto-closes on expiry; shown on Discover and News
+- [x] **News articles on WeeBee** — fetches top 5 seasonal anime news via Jikan; article reader modal shows full excerpt, image, and anime link natively; "Read on MAL" fallback
 - [ ] **Tier lists** — ability to create anime tier lists (S/A/B/C/D ranks), comment on them, like them, and share them with the community
 - [x] **Black text in search bar** — fixed
 - [x] **Episode ranking** — done
