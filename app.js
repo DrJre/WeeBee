@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, updateDoc, getDoc, setDoc, increment } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyBcRQzzJthjzpvsMdlTg_surpbD01NOnm0",
@@ -16,6 +17,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 
 // --- RANK SYSTEM ---
@@ -59,6 +61,179 @@ window.updateTopbarRank = async function() {
     } catch(e) {}
 };
  
+// --- FOUNDER BADGE ---
+window.founderUids = new Set();
+(async () => {
+    try {
+        const d = await getDoc(doc(db, "meta", "founders"));
+        if (d.exists()) (d.data().uids || []).forEach(uid => window.founderUids.add(uid));
+    } catch(e) {}
+})();
+
+window.getFounderBadgeHTML = function(uid, size = 15) {
+    if (!window.founderUids.has(uid)) return '';
+    return `<span class="material-symbols-outlined founder-badge" title="WeeBee Founder · One of the first 25 members" style="font-size:${size}px; color:#FFD700; cursor:default; vertical-align:middle; line-height:1;">workspace_premium</span>`;
+};
+
+// --- ACHIEVEMENT SYSTEM ---
+const ACHIEVEMENTS = [
+    // Critic: Reviews Written
+    { id: 'review_1',     name: 'First Word',           desc: 'Wrote your first review',                     icon: 'rate_review',       cat: 'Critic',    color: '#FFC107' },
+    { id: 'review_10',    name: 'Budding Critic',        desc: 'Wrote 10 reviews',                           icon: 'edit_note',         cat: 'Critic',    color: '#FFC107' },
+    { id: 'review_25',    name: 'Opinion Machine',       desc: 'Wrote 25 reviews',                           icon: 'reviews',           cat: 'Critic',    color: '#FFC107' },
+    { id: 'review_50',    name: 'Anime Authority',       desc: 'Wrote 50 reviews',                           icon: 'workspace_premium', cat: 'Critic',    color: '#FFC107' },
+    { id: 'review_100',   name: 'Century Critic',        desc: 'Wrote 100 reviews',                          icon: 'emoji_events',      cat: 'Critic',    color: '#FFC107' },
+    { id: 'review_250',   name: 'The Analyst',           desc: 'Wrote 250 reviews',                          icon: 'analytics',         cat: 'Critic',    color: '#FFC107' },
+    { id: 'review_500',   name: 'Legendary Reviewer',    desc: 'Wrote 500 reviews',                          icon: 'diamond',           cat: 'Critic',    color: '#FFC107' },
+    { id: 'review_1000',  name: 'Reviewing God',         desc: 'Wrote 1000 reviews',                         icon: 'auto_awesome',      cat: 'Critic',    color: '#FFC107' },
+    // Critic: In-Depth Reviews
+    { id: 'indepth_1',    name: 'Deep Thinker',          desc: 'Wrote your first in-depth review',           icon: 'psychology',        cat: 'Critic',    color: '#9C27B0' },
+    { id: 'indepth_10',   name: 'The Essayist',          desc: 'Wrote 10 in-depth reviews',                  icon: 'description',       cat: 'Critic',    color: '#9C27B0' },
+    { id: 'indepth_25',   name: 'Critical Eye',          desc: 'Wrote 25 in-depth reviews',                  icon: 'visibility',        cat: 'Critic',    color: '#9C27B0' },
+    { id: 'indepth_50',   name: 'The Philosopher',       desc: 'Wrote 50 in-depth reviews',                  icon: 'school',            cat: 'Critic',    color: '#9C27B0' },
+    { id: 'indepth_100',  name: 'Academic',              desc: 'Wrote 100 in-depth reviews',                 icon: 'local_library',     cat: 'Critic',    color: '#9C27B0' },
+    { id: 'indepth_250',  name: 'Grand Critic',          desc: 'Wrote 250 in-depth reviews',                 icon: 'military_tech',     cat: 'Critic',    color: '#9C27B0' },
+    { id: 'indepth_500',  name: 'The Maestro',           desc: 'Wrote 500 in-depth reviews',                 icon: 'verified',          cat: 'Critic',    color: '#9C27B0' },
+    { id: 'indepth_1000', name: 'Omniscient',            desc: 'Wrote 1000 in-depth reviews',                icon: 'all_inclusive',     cat: 'Critic',    color: '#9C27B0' },
+    // Social: Reactions Given
+    { id: 'react_1',      name: 'First Impression',      desc: 'Reacted to your first post',                 icon: 'thumb_up',          cat: 'Social',    color: '#4CAF50' },
+    { id: 'react_10',     name: 'Social Butterfly',      desc: 'Reacted to 10 posts',                        icon: 'groups',            cat: 'Social',    color: '#4CAF50' },
+    { id: 'react_25',     name: 'Engaged',               desc: 'Reacted to 25 posts',                        icon: 'favorite',          cat: 'Social',    color: '#4CAF50' },
+    { id: 'react_50',     name: 'Community Pillar',       desc: 'Reacted to 50 posts',                        icon: 'handshake',         cat: 'Social',    color: '#4CAF50' },
+    { id: 'react_100',    name: 'The Influencer',         desc: 'Reacted to 100 posts',                       icon: 'trending_up',       cat: 'Social',    color: '#4CAF50' },
+    { id: 'react_250',    name: 'Active Voice',           desc: 'Reacted to 250 posts',                       icon: 'campaign',          cat: 'Social',    color: '#4CAF50' },
+    { id: 'react_500',    name: 'The Connector',          desc: 'Reacted to 500 posts',                       icon: 'hub',               cat: 'Social',    color: '#4CAF50' },
+    { id: 'react_1000',   name: 'Community Legend',       desc: 'Reacted to 1000 posts',                      icon: 'public',            cat: 'Social',    color: '#4CAF50' },
+    // Collector: Completed Anime
+    { id: 'complete_1',   name: 'First Finish',           desc: 'Completed your first anime',                 icon: 'done_all',          cat: 'Collector', color: '#00BCD4' },
+    { id: 'complete_10',  name: 'Casual Viewer',          desc: 'Completed 10 anime',                         icon: 'tv',                cat: 'Collector', color: '#00BCD4' },
+    { id: 'complete_25',  name: 'Devoted Fan',            desc: 'Completed 25 anime',                         icon: 'favorite_border',   cat: 'Collector', color: '#00BCD4' },
+    { id: 'complete_50',  name: 'Seasoned Watcher',       desc: 'Completed 50 anime',                         icon: 'live_tv',           cat: 'Collector', color: '#00BCD4' },
+    { id: 'complete_100', name: 'Century Club',           desc: 'Completed 100 anime',                        icon: 'military_tech',     cat: 'Collector', color: '#00BCD4' },
+    { id: 'complete_250', name: 'Anime Veteran',          desc: 'Completed 250 anime',                        icon: 'workspace_premium', cat: 'Collector', color: '#00BCD4' },
+    { id: 'complete_500', name: 'Marathon Runner',        desc: 'Completed 500 anime',                        icon: 'sprint',            cat: 'Collector', color: '#00BCD4' },
+    { id: 'complete_1000',name: 'The Completionist',      desc: 'Completed 1000 anime',                       icon: 'check_circle',      cat: 'Collector', color: '#00BCD4' },
+    // Special
+    { id: 'top_reviewer', name: 'Chart Topper',           desc: 'Made it onto the Top Reviewers leaderboard', icon: 'leaderboard',       cat: 'Special',   color: '#FF9800' },
+    { id: 'founder',      name: 'Day One',                desc: 'One of the first 25 members of WeeBee',      icon: 'workspace_premium', cat: 'Special',   color: '#FFD700' },
+    { id: 'dropout',      name: "It's Not You, It's Me",  desc: 'Dropped 10 anime from your list',            icon: 'heart_broken',      cat: 'Special',   color: '#F44336' },
+    { id: 'first_follow', name: 'Making Friends',         desc: 'Followed your first user on WeeBee',         icon: 'person_add',        cat: 'Special',   color: '#E91E63' },
+    { id: 'suggestor_5',  name: 'The Recommender',        desc: 'Made 5 anime suggestions to the community',  icon: 'lightbulb',         cat: 'Special',   color: '#FF9800' },
+];
+
+window.awardAchievements = async function(ids) {
+    if (!auth.currentUser) return;
+    try {
+        const uid = auth.currentUser.uid;
+        const achDoc = await getDoc(doc(db, "achievements", uid));
+        const existing = achDoc.exists() ? achDoc.data() : {};
+        const toAward = [...new Set(ids)].filter(id => !existing[id]);
+        if (!toAward.length) return;
+        const updates = {};
+        const now = new Date();
+        toAward.forEach(id => { updates[id] = { earnedAt: now }; });
+        await setDoc(doc(db, "achievements", uid), updates, { merge: true });
+        for (let i = 0; i < toAward.length; i++) {
+            const ach = ACHIEVEMENTS.find(a => a.id === toAward[i]);
+            if (ach) { if (i > 0) await new Promise(r => setTimeout(r, 3800)); window.showAchievementToast(ach); }
+        }
+    } catch(e) {}
+};
+
+window.getEarnedIds = function(category, count) {
+    const t = { review:[1,10,25,50,100,250,500,1000], indepth:[1,10,25,50,100,250,500,1000], react:[1,10,25,50,100,250,500,1000], complete:[1,10,25,50,100,250,500,1000] };
+    return (t[category] || []).filter(n => count >= n).map(n => `${category}_${n}`);
+};
+
+window.showAchievementToast = function(ach) {
+    const toast = document.getElementById('achievement-toast');
+    if (!toast) return;
+    document.getElementById('toast-ach-icon').innerText = ach.icon;
+    document.getElementById('toast-ach-icon').style.color = ach.color;
+    document.getElementById('toast-ach-name').innerText = ach.name;
+    document.getElementById('toast-ach-desc').innerText = ach.desc;
+    toast.style.display = 'flex';
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => { toast.style.display = 'none'; }, 4500);
+};
+
+window.initUserAchievements = async function() {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    try {
+        const [profileDoc, achDoc, foundersDoc] = await Promise.all([
+            getDoc(doc(db, "profiles", uid)),
+            getDoc(doc(db, "achievements", uid)),
+            getDoc(doc(db, "meta", "founders"))
+        ]);
+        const profile = profileDoc.exists() ? profileDoc.data() : {};
+        const existing = achDoc.exists() ? achDoc.data() : {};
+
+        const toCheck = [
+            ...window.getEarnedIds('review', profile.reviewCount  || 0),
+            ...window.getEarnedIds('indepth',  profile.indepthCount || 0),
+            ...window.getEarnedIds('react',    profile.reactionCount|| 0),
+            ...window.getEarnedIds('complete', profile.completedCount|| 0),
+        ];
+        if ((profile.droppedCount || 0) >= 10) toCheck.push('dropout');
+
+        const founders = foundersDoc.exists() ? (foundersDoc.data().uids || []) : [];
+        founders.forEach(id => window.founderUids.add(id));
+        if (founders.includes(uid)) {
+            toCheck.push('founder');
+        } else if (founders.length < 25) {
+            setDoc(doc(db, "meta", "founders"), { uids: [...founders, uid] }, { merge: true }).catch(() => {});
+            toCheck.push('founder');
+        }
+
+        const followSnap = await getDocs(query(collection(db, "follows"), where("followerUid", "==", uid), where("type", "==", "user"), limit(1)));
+        if (!followSnap.empty) toCheck.push('first_follow');
+
+        const toAward = [...new Set(toCheck)].filter(id => !existing[id]);
+        if (toAward.length) {
+            const updates = {};
+            const now = new Date();
+            toAward.forEach(id => { updates[id] = { earnedAt: now }; });
+            setDoc(doc(db, "achievements", uid), updates, { merge: true }).catch(() => {});
+        }
+    } catch(e) {}
+};
+
+window.loadProfileAchievements = async function(uid) {
+    const container = document.getElementById('achievements-grid-container');
+    if (!container || !uid) return;
+    container.innerHTML = '<div class="loading">Loading achievements...</div>';
+    try {
+        const achDoc = await getDoc(doc(db, "achievements", uid));
+        const earned = achDoc.exists() ? achDoc.data() : {};
+        const cats = ['Critic', 'Social', 'Collector', 'Special'];
+        const fmtDate = ts => { try { const d = ts?.toDate ? ts.toDate() : new Date(ts); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch(e) { return null; }};
+        let html = '';
+        cats.forEach(cat => {
+            const catAchs = ACHIEVEMENTS.filter(a => a.cat === cat);
+            const earnedCount = catAchs.filter(a => earned[a.id]).length;
+            html += `<div style="margin-bottom:28px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+                    <h4 style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--text-muted);">${cat}</h4>
+                    <span style="font-size:11px; color:var(--text-muted);">${earnedCount} / ${catAchs.length}</span>
+                </div>
+                <div class="achievement-grid">`;
+            catAchs.forEach(ach => {
+                const isEarned = !!earned[ach.id];
+                const date = isEarned ? fmtDate(earned[ach.id]?.earnedAt) : null;
+                html += `<div class="achievement-card ${isEarned ? 'earned' : 'locked'}" title="${ach.name}: ${ach.desc}">
+                    <span class="material-symbols-outlined ach-icon" style="${isEarned ? `color:${ach.color}` : ''}">${ach.icon}</span>
+                    <div class="ach-name">${ach.name}</div>
+                    <div class="ach-desc">${ach.desc}</div>
+                    ${date ? `<div class="ach-date">${date}</div>` : ''}
+                </div>`;
+            });
+            html += `</div></div>`;
+        });
+        container.innerHTML = html;
+    } catch(e) { container.innerHTML = '<p style="color:var(--text-muted); font-size:13px; text-align:center;">Failed to load achievements.</p>'; }
+};
+
 // --- GLOBAL STATE ---
 window.currentActiveViewId = 'home-view';
 window.previousViewId = 'home-view';
@@ -90,8 +265,16 @@ onAuthStateChanged(auth, (user) => {
     if (user) {
         const avatarUrl = user.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(user.displayName)}&backgroundColor=ffc107&fontColor=333333`;
         authSection.innerHTML = `
-            <div style="position:relative; display:flex; align-items:center; margin-right: 15px;">
-                <span class="material-symbols-outlined" style="font-size:26px; cursor:pointer; color:var(--text-dark);" onclick="toggleNotifications(event)">notifications</span>
+            <div class="topbar-dm-wrap" style="position:relative; display:flex; align-items:center;" onclick="event.stopPropagation()">
+                <span class="material-symbols-outlined" style="font-size:24px; cursor:pointer; color:var(--text-dark);" onclick="toggleDMDropdown(event)">chat_bubble</span>
+                <span id="dm-badge" style="display:none; position:absolute; top:-5px; right:-5px; background:#FF4444; color:white; border-radius:50%; min-width:18px; height:18px; font-size:10px; font-weight:bold; align-items:center; justify-content:center; padding:0 3px; pointer-events:none;">0</span>
+                <div id="dm-dropdown" class="dropdown-menu notification-menu" style="display:none; right:-10px; top:40px; width:300px; padding:0; max-height:420px; overflow-y:auto; cursor:default;" onclick="event.stopPropagation()">
+                    <div style="padding:15px; font-weight:bold; border-bottom:1px solid var(--border-color); position:sticky; top:0; background:var(--bg-white); z-index:10;">Messages</div>
+                    <div id="dm-conversation-list"></div>
+                </div>
+            </div>
+            <div class="topbar-notif-wrap" style="position:relative; display:flex; align-items:center;">
+                <span class="material-symbols-outlined" style="font-size:24px; cursor:pointer; color:var(--text-dark);" onclick="toggleNotifications(event)">notifications</span>
                 <span class="notification-badge" id="notif-badge" style="display:none; position:absolute; top:-5px; right:-5px; background:#FF4444; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; font-weight:bold; align-items:center; justify-content:center; pointer-events:none;">0</span>
                 
                 <div id="notification-dropdown" class="dropdown-menu notification-menu" style="display: none; right:-10px; top:40px; width:320px; padding:0; max-height:400px; overflow-y:auto; cursor:default;" onclick="event.stopPropagation()">
@@ -100,9 +283,9 @@ onAuthStateChanged(auth, (user) => {
                 </div>
             </div>
             <div style="display:flex; align-items:center; gap: 10px; cursor:pointer;" onclick="toggleDropdown(event)">
-                <span style="font-weight:600; font-size:14px;">${user.displayName}</span><span id="topbar-rank-badge" style="display:inline-flex; align-items:center; margin-left:2px;"></span>
+                <span class="topbar-display-name" style="font-weight:600; font-size:14px;">${user.displayName}</span><span id="topbar-rank-badge" style="display:inline-flex; align-items:center; margin-left:2px;"></span>
                 <img src="${avatarUrl}" alt="User" class="avatar">
-                <span class="material-symbols-outlined" style="font-size:18px;">expand_more</span>
+                <span class="material-symbols-outlined topbar-chevron" style="font-size:18px;">expand_more</span>
             </div>
             <div id="profile-dropdown" class="dropdown-menu" style="display: none; right:0; top:50px;">
                 <div class="dropdown-item" onclick="viewUserProfile('${user.uid}')"><span class="material-symbols-outlined">person</span> My Profile</div>
@@ -115,6 +298,8 @@ onAuthStateChanged(auth, (user) => {
         fetchNotifications();
         fetchMyFollows();
         window.updateTopbarRank();
+        window.initUserAchievements();
+        window.subscribeToDMBadge();
     } else {
         authSection.innerHTML = `<button class="action-btn" onclick="openAuthModal()"><span class="material-symbols-outlined">login</span> Sign In</button>`;
         if(window.currentActiveViewId === 'profile-view' || window.currentActiveViewId === 'my-list-view') switchView('home-view');
@@ -151,11 +336,145 @@ window.toggleNotifications = function(e) {
     } else { nd.style.display = 'none'; }
 };
 
+// --- DIRECT MESSAGES ---
+window.currentConversationId = null;
+window.currentChatOtherUid = null;
+window.dmUnsubscribe = null;
+window.dmConvUnsubscribe = null;
+
+window.getConversationId = (a, b) => [a, b].sort().join('_');
+
+window.subscribeToDMBadge = function() {
+    if (!auth.currentUser) return;
+    if (window.dmConvUnsubscribe) window.dmConvUnsubscribe();
+    const uid = auth.currentUser.uid;
+    window.dmConvUnsubscribe = onSnapshot(
+        query(collection(db, "conversations"), where("participants", "array-contains", uid)),
+        (snap) => {
+            let total = 0;
+            snap.forEach(d => { total += (d.data().unreadCount?.[uid] || 0); });
+            const badge = document.getElementById('dm-badge');
+            if (badge) { badge.innerText = total > 9 ? '9+' : total; badge.style.display = total > 0 ? 'flex' : 'none'; }
+        }
+    );
+};
+
+window.toggleDMDropdown = function(e) {
+    e.stopPropagation();
+    const dd = document.getElementById('dm-dropdown');
+    const nd = document.getElementById('notification-dropdown');
+    const pd = document.getElementById('profile-dropdown');
+    if (nd) nd.style.display = 'none';
+    if (pd) pd.style.display = 'none';
+    if (!dd) return;
+    const opening = dd.style.display === 'none' || dd.style.display === '';
+    dd.style.display = opening ? 'block' : 'none';
+    if (opening) window.loadDMList();
+};
+
+window.loadDMList = async function() {
+    if (!auth.currentUser) return;
+    const list = document.getElementById('dm-conversation-list');
+    if (!list) return;
+    list.innerHTML = '<div class="loading" style="font-size:12px; padding:15px;">Loading...</div>';
+    try {
+        const q = query(collection(db, "conversations"), where("participants", "array-contains", auth.currentUser.uid), orderBy("lastUpdated", "desc"), limit(20));
+        const snap = await getDocs(q);
+        if (snap.empty) { list.innerHTML = '<p style="padding:20px; text-align:center; font-size:13px; color:var(--text-muted);">No messages yet.<br>Visit someone\'s profile to start a chat!</p>'; return; }
+        const uid = auth.currentUser.uid;
+        list.innerHTML = '';
+        snap.forEach(d => {
+            const data = d.data();
+            const otherUid = data.participants.find(p => p !== uid);
+            const otherName = data.participantNames?.[otherUid] || 'User';
+            const otherAvatar = data.participantAvatars?.[otherUid] || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(otherName)}&backgroundColor=ffc107&fontColor=333333`;
+            const unread = data.unreadCount?.[uid] || 0;
+            const lastMsg = data.lastMessage ? (data.lastMessage.length > 35 ? data.lastMessage.slice(0,35) + '…' : data.lastMessage) : 'Start a conversation';
+            list.innerHTML += `
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;border-bottom:1px solid var(--bg-gray);${unread ? 'background:var(--accent-yellow-light);' : ''}" onclick="openDMConversation('${otherUid}','${otherName.replace(/'/g,"\\'")}','${otherAvatar}')">
+                    <img src="${otherAvatar}" class="avatar" style="width:40px;height:40px;flex-shrink:0;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <span style="font-weight:600;font-size:14px;">${otherName}</span>
+                            ${unread ? `<span style="background:#FF4444;color:white;border-radius:50%;min-width:18px;height:18px;font-size:10px;font-weight:bold;display:flex;align-items:center;justify-content:center;padding:0 3px;">${unread}</span>` : ''}
+                        </div>
+                        <div style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lastMsg}</div>
+                    </div>
+                </div>`;
+        });
+    } catch(e) { list.innerHTML = '<p style="padding:15px;font-size:12px;color:var(--text-muted);">Failed to load.</p>'; console.error(e); }
+};
+
+window.openDMConversation = function(otherUid, otherName, otherAvatar) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const dd = document.getElementById('dm-dropdown');
+    if (dd) dd.style.display = 'none';
+    const uid = auth.currentUser.uid;
+    const convId = window.getConversationId(uid, otherUid);
+    window.currentConversationId = convId;
+    window.currentChatOtherUid = otherUid;
+
+    document.getElementById('chat-partner-avatar').src = otherAvatar;
+    document.getElementById('chat-partner-name').innerText = otherName;
+    document.getElementById('chat-messages').innerHTML = '<div class="loading" style="text-align:center;padding:20px;">Loading...</div>';
+    document.getElementById('chat-modal').style.display = 'flex';
+    document.getElementById('chat-input').focus();
+
+    if (window.dmUnsubscribe) { window.dmUnsubscribe(); window.dmUnsubscribe = null; }
+
+    const convRef = doc(db, "conversations", convId);
+    const myName = auth.currentUser.displayName;
+    const myAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(myName)}&backgroundColor=ffc107&fontColor=333333`;
+    setDoc(convRef, { participants: [uid, otherUid].sort(), participantNames: { [uid]: myName, [otherUid]: otherName }, participantAvatars: { [uid]: myAvatar, [otherUid]: otherAvatar }, [`unreadCount.${uid}`]: 0 }, { merge: true }).catch(() => {});
+
+    window.dmUnsubscribe = onSnapshot(query(collection(db, "conversations", convId, "messages"), orderBy("timestamp", "asc"), limit(100)), (snap) => {
+        const container = document.getElementById('chat-messages');
+        if (!container) return;
+        if (snap.empty) { container.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:13px;margin-top:40px;">No messages yet — say hello!</p>'; return; }
+        container.innerHTML = '';
+        snap.forEach(d => {
+            const msg = d.data();
+            const isMe = msg.senderUid === uid;
+            const time = msg.timestamp?.toDate ? msg.timestamp.toDate().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+            container.innerHTML += `
+                <div style="display:flex;flex-direction:column;align-items:${isMe ? 'flex-end' : 'flex-start'};margin-bottom:4px;">
+                    <div class="chat-bubble ${isMe ? 'chat-bubble-me' : 'chat-bubble-them'}">${msg.text}</div>
+                    <span style="font-size:10px;color:var(--text-muted);margin-top:2px;padding:0 4px;">${time}</span>
+                </div>`;
+        });
+        container.scrollTop = container.scrollHeight;
+        setDoc(convRef, { [`unreadCount.${uid}`]: 0 }, { merge: true }).catch(() => {});
+    });
+};
+
+window.sendDM = async function() {
+    if (!auth.currentUser || !window.currentConversationId) return;
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    const uid = auth.currentUser.uid;
+    const convRef = doc(db, "conversations", window.currentConversationId);
+    try {
+        await addDoc(collection(db, "conversations", window.currentConversationId, "messages"), { text, senderUid: uid, timestamp: new Date() });
+        setDoc(convRef, { lastMessage: text, lastSenderUid: uid, lastUpdated: new Date(), [`unreadCount.${window.currentChatOtherUid}`]: increment(1) }, { merge: true }).catch(() => {});
+    } catch(e) { console.error('Send failed:', e); }
+};
+
+window.closeChatModal = function() {
+    document.getElementById('chat-modal').style.display = 'none';
+    if (window.dmUnsubscribe) { window.dmUnsubscribe(); window.dmUnsubscribe = null; }
+    window.currentConversationId = null;
+    window.currentChatOtherUid = null;
+};
+
 window.onclick = function() {
     const dd = document.getElementById('profile-dropdown');
     if (dd && dd.style.display === 'block') dd.style.display = 'none';
     const nd = document.getElementById('notification-dropdown');
     if (nd && nd.style.display === 'block') nd.style.display = 'none';
+    const dm = document.getElementById('dm-dropdown');
+    if (dm && dm.style.display === 'block') dm.style.display = 'none';
 };
 
 window.fetchNotifications = async function() {
@@ -217,9 +536,9 @@ window.fetchMyFollows = async function() {
 window.getFollowBtnHTML = function(uid) {
     if (!uid || !auth.currentUser || uid === auth.currentUser.uid) return '';
     if (window.myFollowedUserIds.has(uid)) {
-        return `<button onclick="event.stopPropagation(); toggleFollow('${uid}', 'user', this)" class="action-btn" style="padding:4px 10px; font-size:11px; background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined" style="font-size:14px;">check</span> Following</button>`;
+        return `<button onclick="event.stopPropagation(); toggleFollow('${uid}', 'user', this)" class="action-btn card-follow-btn" style="padding:4px 10px; font-size:11px; background:var(--bg-gray-darker); color:var(--text-dark); flex-shrink:0;"><span class="material-symbols-outlined" style="font-size:14px;">check</span> <span class="follow-btn-label">Following</span></button>`;
     }
-    return `<button onclick="event.stopPropagation(); toggleFollow('${uid}', 'user', this)" class="action-btn" style="padding:4px 10px; font-size:11px;"><span class="material-symbols-outlined" style="font-size:14px;">person_add</span> Follow</button>`;
+    return `<button onclick="event.stopPropagation(); toggleFollow('${uid}', 'user', this)" class="action-btn card-follow-btn" style="padding:4px 10px; font-size:11px; flex-shrink:0;"><span class="material-symbols-outlined" style="font-size:14px;">person_add</span> <span class="follow-btn-label">Follow</span></button>`;
 };
 window.openAuthModal = function() { window.closeAllModals(); document.getElementById('auth-modal').style.display = 'flex'; };
 
@@ -288,8 +607,11 @@ window.previewInDepthReview = function() {
     }));
     const scored = categories.filter(c => c.score);
     if (scored.length === 0) return alert('Please score at least one category.');
-    const overallScore = (scored.reduce((sum, c) => sum + c.score, 0) / scored.length).toFixed(1);
+    const outOfRange = scored.find(c => c.score < 0 || c.score > 10);
+    if (outOfRange) return alert(`Scores must be between 0 and 10. Check your "${outOfRange.label}" score.`);
     const fanService = parseFloat(document.getElementById('in-depth-fanservice-value').value) || null;
+    if (fanService !== null && (fanService < 0 || fanService > 10)) return alert('Fan Service score must be between 0 and 10.');
+    const overallScore = (scored.reduce((sum, c) => sum + c.score, 0) / scored.length).toFixed(1);
     window.pendingInDepthData = { categories, overallScore, fanService };
 
     const catBadges = scored.map(c => `
@@ -341,9 +663,14 @@ window.submitInDepthReview = async function() {
         window.myReviewCount = (window.myReviewCount || 0) + 1;
         window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
         const _avId = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
-        setDoc(doc(db, "profiles", auth.currentUser.uid), { reviewCount: increment(1), displayName: auth.currentUser.displayName, avatar: _avId }, { merge: true }).catch(() => {});
+        setDoc(doc(db, "profiles", auth.currentUser.uid), { reviewCount: increment(1), indepthCount: increment(1), displayName: auth.currentUser.displayName, avatar: _avId }, { merge: true }).catch(() => {});
         const _tb = document.getElementById('topbar-rank-badge');
         if (_tb) _tb.innerHTML = window.getRankBadgeHTML(window.myReviewCount, 16);
+        // Achievement checks (fire-and-forget)
+        getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
+            const p = pd.exists() ? pd.data() : {};
+            window.awardAchievements([...window.getEarnedIds('review',p.reviewCount || window.myReviewCount), ...window.getEarnedIds('indepth', p.indepthCount || 1)]).catch(() => {});
+        }).catch(() => {});
         window.pendingInDepthData = null;
         window.closeAllModals();
         window.loadAnimeDetails(window.currentAnimeId);
@@ -356,6 +683,7 @@ window.submitQuickReview = async function() {
     const text = document.getElementById('quick-score-text').value.trim();
     const fanService = parseFloat(document.getElementById('quick-fanservice-value').value) || null;
     if (!score || score < 1 || score > 10) return alert('Please enter a score between 1 and 10.');
+    if (fanService !== null && (fanService < 0 || fanService > 10)) return alert('Fan Service score must be between 0 and 10.');
     try {
         await addDoc(collection(db, "reviews"), {
             mal_id: window.currentAnimeId,
@@ -372,6 +700,7 @@ window.submitQuickReview = async function() {
         setDoc(doc(db, "profiles", auth.currentUser.uid), { reviewCount: increment(1), displayName: auth.currentUser.displayName, avatar: _avIq }, { merge: true }).catch(() => {});
         const _tbq = document.getElementById('topbar-rank-badge');
         if (_tbq) _tbq.innerHTML = window.getRankBadgeHTML(window.myReviewCount, 16);
+        window.awardAchievements(window.getEarnedIds('review',window.myReviewCount)).catch(() => {});
         window.closeAllModals();
         window.loadAnimeDetails(window.currentAnimeId);
     } catch(e) { alert('Failed to submit review.'); console.error(e); }
@@ -390,9 +719,17 @@ window.submitAuth = async function() {
     const username = document.getElementById('auth-username').value;
     try {
         if (window.isSignUpMode) {
+            if (!username.trim()) return document.getElementById('auth-error').innerText = 'Please enter a display name.';
+            const normName = username.trim().toLowerCase().replace(/\s+/g, ' ');
+            const nameTaken = await getDoc(doc(db, "usernames", normName));
+            if (nameTaken.exists()) return document.getElementById('auth-error').innerText = 'That display name is already taken.';
+
             const userCred = await createUserWithEmailAndPassword(auth, email, password);
-            await updateProfile(userCred.user, { displayName: username, photoURL: `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(username)}&backgroundColor=ffc107&fontColor=333333` });
-            
+            const avatarUrl = `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(username.trim())}&backgroundColor=ffc107&fontColor=333333`;
+            await updateProfile(userCred.user, { displayName: username.trim(), photoURL: avatarUrl });
+            setDoc(doc(db, "usernames", normName), { uid: userCred.user.uid }).catch(() => {});
+            setDoc(doc(db, "profiles", userCred.user.uid), { displayName: username.trim(), avatar: avatarUrl, bio: '', genres: [] }, { merge: true }).catch(() => {});
+
             await addDoc(collection(db, "notifications"), {
                 targetUid: userCred.user.uid, type: 'system', senderName: 'WeeBee Team', senderUid: 'system',
                 senderAvatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=WeeBee',
@@ -433,8 +770,8 @@ window.toggleFollow = async function(targetId, type, btnElement) {
     if(snap.empty) {
         await addDoc(collection(db, "follows"), { followerUid: auth.currentUser.uid, targetId: targetId, type: type, ...extraData });
         btnElement.innerHTML = `<span class="material-symbols-outlined">check</span> Following`; btnElement.style.backgroundColor = "var(--bg-gray-darker)";
-        if(type === 'user') window.myFollowedUserIds.add(targetId);
-        
+        if(type === 'user') { window.myFollowedUserIds.add(targetId); window.awardAchievements(['first_follow']).catch(() => {}); }
+
         if(type === 'user') {
             await addDoc(collection(db, "notifications"), {
                 targetUid: targetId, type: 'follow', senderUid: auth.currentUser.uid,
@@ -551,6 +888,8 @@ window.saveListEntry = async function(docId, mal_id, title, img, totalEps) {
     
     const score = scoreVal ? parseFloat(scoreVal) : null;
     const fanService = fsVal ? parseFloat(fsVal) : null;
+    if (score !== null && (score < 0 || score > 10)) return alert('Score must be between 0 and 10.');
+    if (fanService !== null && (fanService < 0 || fanService > 10)) return alert('Fan Service score must be between 0 and 10.');
     let watched = parseInt(document.getElementById('list-entry-watched').value) || 0;
 
     if (totalEps > 0 && watched > totalEps) watched = totalEps;
@@ -563,14 +902,36 @@ window.saveListEntry = async function(docId, mal_id, title, img, totalEps) {
     };
 
     try {
+        // Determine if this status change earns achievements
+        const prevEntry = window.myAnimeList.find(a => a.mal_id === mal_id);
+        const prevStatus = prevEntry?.status;
+
         if(docId) {
             await updateDoc(doc(db, "anime_lists", docId), entryData);
         } else {
             await addDoc(collection(db, "anime_lists"), entryData);
         }
+
+        // Track completed/dropped counts for achievements
+        if (auth.currentUser && status !== prevStatus) {
+            const profileUpdates = {};
+            if (status === 'completed') profileUpdates.completedCount = increment(1);
+            if (status === 'dropped') profileUpdates.droppedCount = increment(1);
+            if (Object.keys(profileUpdates).length) {
+                setDoc(doc(db, "profiles", auth.currentUser.uid), profileUpdates, { merge: true }).then(() =>
+                    getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
+                        const p = pd.exists() ? pd.data() : {};
+                        const ids = [...window.getEarnedIds('complete', p.completedCount || 0)];
+                        if ((p.droppedCount || 0) >= 10) ids.push('dropout');
+                        window.awardAchievements(ids).catch(() => {});
+                    })
+                ).catch(() => {});
+            }
+        }
+
         window.closeAllModals();
-        fetchMyList(); 
-        if(window.currentActiveViewId === 'profile-view') fetchUserProfile(window.targetProfileUid); 
+        fetchMyList();
+        if(window.currentActiveViewId === 'profile-view') fetchUserProfile(window.targetProfileUid);
     } catch(e) { alert("Failed to save entry"); console.error(e); }
 };
 
@@ -892,9 +1253,17 @@ window.toggleReaction = async function(event, reviewId, type, btn) {
     const revSnap = await getDoc(reviewRef);
     if(revSnap.exists()) {
         let likes = revSnap.data().likes || []; let dislikes = revSnap.data().dislikes || [];
-        if(type === 'like') { if(likes.includes(auth.currentUser.uid)) likes = likes.filter(id => id !== auth.currentUser.uid); else { likes.push(auth.currentUser.uid); dislikes = dislikes.filter(id => id !== auth.currentUser.uid); } }
-        else { if(dislikes.includes(auth.currentUser.uid)) dislikes = dislikes.filter(id => id !== auth.currentUser.uid); else { dislikes.push(auth.currentUser.uid); likes = likes.filter(id => id !== auth.currentUser.uid); } }
+        let addedReaction = false;
+        if(type === 'like') { if(likes.includes(auth.currentUser.uid)) likes = likes.filter(id => id !== auth.currentUser.uid); else { likes.push(auth.currentUser.uid); dislikes = dislikes.filter(id => id !== auth.currentUser.uid); addedReaction = true; } }
+        else { if(dislikes.includes(auth.currentUser.uid)) dislikes = dislikes.filter(id => id !== auth.currentUser.uid); else { dislikes.push(auth.currentUser.uid); likes = likes.filter(id => id !== auth.currentUser.uid); addedReaction = true; } }
         await updateDoc(reviewRef, { likes, dislikes });
+        if (addedReaction) {
+            setDoc(doc(db, "profiles", auth.currentUser.uid), { reactionCount: increment(1) }, { merge: true }).then(() =>
+                getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
+                    window.awardAchievements(window.getEarnedIds('react', pd.exists() ? (pd.data().reactionCount || 1) : 1)).catch(() => {});
+                })
+            ).catch(() => {});
+        }
     }
 };
 
@@ -983,7 +1352,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                 <div style="display:flex; gap: 15px;">
                     <img src="${rev.avatar}" class="avatar clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">
                     <div>
-                        <strong class="clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</strong> ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)}
+                        <strong class="clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</strong> ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)} ${window.getFounderBadgeHTML(safeUid)}
                         <span class="source-badge" style="background: #4CAF50; color: white; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase;">Suggestion</span><br>
                         <span style="font-size: 12px; color: var(--text-muted);">Suggested: <strong style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong></span>
                     </div>
@@ -1036,8 +1405,8 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             <div class="review-header" style="justify-content: space-between; position: relative; z-index: 3;">
                 <div style="display:flex; gap: 15px;">
                     <img src="${rev.avatar}" class="avatar clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">
-                    <div><strong><span class="clickable-user" style="color:var(--text-dark);" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)} <span class="source-badge badge-weebee">WeeBee</span><br>
-                    <span style="font-size: 12px; color: var(--text-muted); display:flex; align-items:center; gap:6px; margin-top:3px;">${rev.animeImage ? `<img src="${rev.animeImage}" class="review-cover-mobile" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">` : ''}Reviewed: <strong style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong></span></div>
+                    <div><strong><span class="clickable-user" style="color:var(--text-dark);" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)} ${window.getFounderBadgeHTML(safeUid)} <span class="source-badge badge-weebee">WeeBee</span><br>
+                    <span style="font-size: 12px; color: var(--text-muted); display:flex; align-items:center; gap:6px; margin-top:3px; min-width:0;">${rev.animeImage ? `<img src="${rev.animeImage}" class="review-cover-mobile" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">` : ''}Reviewed: <strong class="review-anime-title" style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong></span></div>
                 </div>
                 ${window.getFollowBtnHTML(safeUid)}
             </div>
@@ -1072,47 +1441,189 @@ window.viewUserProfile = function(uid) {
     switchView('profile-view');
 };
 
+const EDIT_GENRES = ['Action','Adventure','Comedy','Drama','Fantasy','Horror','Mystery','Romance','Sci-Fi','Slice of Life','Sports','Supernatural','Thriller','Mecha'];
+
+window.toggleGenreChip = function(el) {
+    const selected = document.querySelectorAll('#edit-genre-chips .genre-chip.active');
+    if (el.classList.contains('active')) { el.classList.remove('active'); }
+    else if (selected.length < 3) { el.classList.add('active'); }
+};
+
+async function compressAvatar(file, size = 400, quality = 0.82) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = size; canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                const shortest = Math.min(img.width, img.height);
+                const sx = (img.width - shortest) / 2;
+                const sy = (img.height - shortest) / 2;
+                ctx.drawImage(img, sx, sy, shortest, shortest, 0, 0, size, size);
+                canvas.toBlob(resolve, 'image/jpeg', quality);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+window.previewAvatarUpload = function(input) {
+    if (!input.files[0]) return;
+    if (input.files[0].size > 10 * 1024 * 1024) {
+        alert('Please choose an image under 10MB.');
+        input.value = '';
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('edit-avatar-preview').src = e.target.result;
+        document.getElementById('edit-profile-avatar').value = '';
+    };
+    reader.readAsDataURL(input.files[0]);
+};
+
+window.openEditProfileModal = async function() {
+    if (!auth.currentUser) return;
+    const profileDoc = await getDoc(doc(db, "profiles", auth.currentUser.uid));
+    const pd = profileDoc.exists() ? profileDoc.data() : {};
+    const currentName = pd.displayName || auth.currentUser.displayName || '';
+    const currentBio = pd.bio || '';
+    const currentAvatar = pd.avatar || auth.currentUser.photoURL || '';
+    const currentGenres = pd.genres || [];
+
+    document.getElementById('edit-profile-name').value = currentName;
+    document.getElementById('edit-profile-bio').value = currentBio;
+    document.getElementById('edit-profile-avatar').value = currentAvatar;
+    document.getElementById('edit-profile-error').innerText = '';
+    document.getElementById('edit-avatar-preview').src = currentAvatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(currentName)}&backgroundColor=ffc107&fontColor=333333`;
+    document.getElementById('avatar-file-input').value = '';
+
+    const chipsContainer = document.getElementById('edit-genre-chips');
+    chipsContainer.innerHTML = EDIT_GENRES.map(g =>
+        `<button type="button" class="genre-chip ${currentGenres.includes(g) ? 'active' : ''}" onclick="toggleGenreChip(this)">${g}</button>`
+    ).join('');
+
+    document.getElementById('edit-profile-modal').style.display = 'flex';
+};
+
+window.saveEditProfile = async function() {
+    if (!auth.currentUser) return;
+    const newName = document.getElementById('edit-profile-name').value.trim();
+    const bio = document.getElementById('edit-profile-bio').value.trim();
+    const genres = [...document.querySelectorAll('#edit-genre-chips .genre-chip.active')].map(el => el.innerText);
+    const fileInput = document.getElementById('avatar-file-input');
+    let avatar = document.getElementById('edit-profile-avatar').value.trim();
+    const errEl = document.getElementById('edit-profile-error');
+
+    if (!newName) return errEl.innerText = 'Display name cannot be empty.';
+    if (newName.length < 2) return errEl.innerText = 'Display name must be at least 2 characters.';
+
+    const uid = auth.currentUser.uid;
+    const oldName = (await getDoc(doc(db, "profiles", uid))).data()?.displayName || auth.currentUser.displayName || '';
+    const oldNorm = oldName.trim().toLowerCase().replace(/\s+/g, ' ');
+    const newNorm = newName.toLowerCase().replace(/\s+/g, ' ');
+    const saveBtn = document.getElementById('edit-profile-save-btn');
+    saveBtn.disabled = true; saveBtn.innerText = 'Saving...';
+
+    try {
+        // Upload file if one was selected
+        if (fileInput.files[0]) {
+            saveBtn.innerText = 'Uploading...';
+            const compressed = await compressAvatar(fileInput.files[0]);
+            const sRef = storageRef(storage, `avatars/${uid}/profile.jpg`);
+            await uploadBytes(sRef, compressed);
+            avatar = await getDownloadURL(sRef);
+        }
+
+        if (newNorm !== oldNorm) {
+            const taken = await getDoc(doc(db, "usernames", newNorm));
+            if (taken.exists() && taken.data().uid !== uid) {
+                errEl.innerText = 'That display name is already taken.';
+                saveBtn.disabled = false; saveBtn.innerText = 'Save';
+                return;
+            }
+            await runTransaction(db, async (t) => {
+                t.delete(doc(db, "usernames", oldNorm));
+                t.set(doc(db, "usernames", newNorm), { uid });
+            });
+            await updateProfile(auth.currentUser, { displayName: newName, photoURL: avatar || auth.currentUser.photoURL });
+        } else if (avatar !== auth.currentUser.photoURL) {
+            await updateProfile(auth.currentUser, { photoURL: avatar });
+        }
+
+        await setDoc(doc(db, "profiles", uid), { displayName: newName, bio, avatar: avatar || auth.currentUser.photoURL, genres }, { merge: true });
+
+        window.closeAllModals();
+        fetchUserProfile(uid);
+    } catch(e) {
+        errEl.innerText = 'Failed to save. Please try again.';
+        console.error(e);
+    } finally {
+        saveBtn.disabled = false; saveBtn.innerText = 'Save';
+    }
+};
+
 window.switchProfileTab = function(event, tabId) {
     document.querySelectorAll('.profile-main-feed .p-tab-content').forEach(c => c.style.display = 'none');
     document.querySelectorAll('.profile-main-feed .p-tab').forEach(t => t.classList.remove('active'));
     document.getElementById(tabId).style.display = 'block';
     event.currentTarget.classList.add('active');
+    if (tabId === 'p-achievements') window.loadProfileAchievements(window.currentProfileUid);
 };
 
 window.fetchUserProfile = async function(targetUid = null) {
     const isMe = !targetUid || (auth.currentUser && targetUid === auth.currentUser.uid);
     const uidToFetch = isMe ? auth.currentUser?.uid : targetUid;
     if(!uidToFetch) return window.openAuthModal();
+    window.currentProfileUid = uidToFetch;
     
     document.getElementById('profile-header-container').innerHTML = '<div class="loading">Loading Profile...</div>';
     
     let pName = 'WeeBee User';
     let pAvatar = `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent('WeeBee User')}&backgroundColor=ffc107&fontColor=333333`;
     let pJoined = new Date().toLocaleDateString();
+    let pBio = ''; let pGenres = [];
+
+    // Fetch profile doc (bio, genres, custom avatar/name) alongside auth data
+    const profileDoc = await getDoc(doc(db, "profiles", uidToFetch));
+    const profileData = profileDoc.exists() ? profileDoc.data() : {};
 
     if(isMe && auth.currentUser) {
-        pName = auth.currentUser.displayName;
-        pAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        pName = profileData.displayName || auth.currentUser.displayName;
+        pAvatar = profileData.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(pName)}&backgroundColor=ffc107&fontColor=333333`;
         pJoined = new Date(auth.currentUser.metadata.creationTime).toLocaleDateString();
     } else {
-        const checkQ = query(collection(db, "reviews"), where("uid", "==", uidToFetch), limit(1));
-        const checkSnap = await getDocs(checkQ);
-        if(!checkSnap.empty) {
-            pName = checkSnap.docs[0].data().username || pName;
-            pAvatar = checkSnap.docs[0].data().avatar || pAvatar;
-        }
+        pName = profileData.displayName || pName;
+        pAvatar = profileData.avatar || pAvatar;
     }
+    pBio = profileData.bio || '';
+    pGenres = profileData.genres || [];
 
     document.getElementById('top-anime-title').innerText = `${pName}'s Top Anime`;
 
-    const editBtnHtml = isMe ? `<button class="action-btn" style="background:#EEE; color:#555;">Edit Profile</button>` : `<button onclick="toggleFollow('${uidToFetch}', 'user', this)" class="action-btn"><span class="material-symbols-outlined">person_add</span> Follow User</button>`;
+    const editBtnHtml = isMe
+        ? `<button class="action-btn" onclick="openEditProfileModal()" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">edit</span> Edit Profile</button>`
+        : `<div style="display:flex;gap:8px;flex-shrink:0;">
+               <button onclick="openDMConversation('${uidToFetch}','${pName.replace(/'/g,"\\'")}','${pAvatar}')" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">chat_bubble</span> Message</button>
+               <button onclick="toggleFollow('${uidToFetch}', 'user', this)" class="action-btn"><span class="material-symbols-outlined">person_add</span> Follow User</button>
+           </div>`;
+
+    const genreChipsHTML = pGenres.length
+        ? `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;">${pGenres.map(g => `<span class="genre-chip active" style="pointer-events:none;">${g}</span>`).join('')}</div>`
+        : '';
+    const bioHTML = pBio ? `<p style="font-size:14px; color:var(--text-dark); line-height:1.6; margin-top:6px;">${pBio}</p>` : '';
 
     document.getElementById('profile-header-container').innerHTML = `
         <div class="profile-header">
             <img src="${pAvatar}" class="profile-avatar-large" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(pName)}&backgroundColor=ffc107&fontColor=333333'">
-            <div style="flex:1;">
-                <h1 style="font-size: 32px; margin-bottom: 5px;">${pName}</h1>
-                <p style="color: var(--text-muted); font-size: 14px;">WeeBee Member since ${pJoined}</p>
+            <div style="flex:1; min-width:0;">
+                <h1 style="font-size: 28px; margin-bottom: 4px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">${pName} ${window.getFounderBadgeHTML(uidToFetch, 22)}</h1>
+                <p style="color: var(--text-muted); font-size: 13px;">WeeBee Member since ${pJoined}</p>
+                ${bioHTML}
+                ${genreChipsHTML}
             </div>
             ${editBtnHtml}
         </div>
@@ -1334,8 +1845,10 @@ window.fetchGlobalNews = async function() {
 window.fetchDiscoverPage = async function() {
     const top10Container = document.getElementById('weebee-top10-container');
     const lbContainer = document.getElementById('reviewer-leaderboard-container');
+    const spotlightEl = document.getElementById('discover-spotlight');
     top10Container.innerHTML = '<div class="loading">Calculating WeeBee scores...</div>';
     if (lbContainer) lbContainer.innerHTML = '<div class="loading">Loading...</div>';
+    if (spotlightEl) spotlightEl.innerHTML = '<div class="loading">Loading spotlight...</div>';
     try {
         const revSnap = await getDocs(collection(db, "reviews"));
         let animeStats = {};
@@ -1520,6 +2033,9 @@ window.fetchDiscoverPage = async function() {
         // Render leaderboard
         if (lbContainer) {
             const leaderboard = Object.values(reviewerMap).sort((a, b) => b.count - a.count).slice(0, 10);
+            if (auth.currentUser && leaderboard.some(r => r.uid === auth.currentUser.uid)) {
+                window.awardAchievements(['top_reviewer']).catch(() => {});
+            }
             if (leaderboard.length === 0) {
                 lbContainer.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); text-align:center;">No reviews yet — be the first!</p>';
             } else {
@@ -1532,7 +2048,7 @@ window.fetchDiscoverPage = async function() {
                             <div style="font-size:18px; font-weight:900; color:${numColor}; width:24px; text-align:center; flex-shrink:0;">${i + 1}</div>
                             <img src="${avUrl}" class="avatar" style="width:38px; height:38px; flex-shrink:0;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(reviewer.displayName)}&backgroundColor=ffc107&fontColor=333333'">
                             <div style="flex:1; min-width:0;">
-                                <div style="font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${reviewer.displayName}</div>
+                                <div style="font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${reviewer.displayName} ${window.getFounderBadgeHTML(reviewer.uid)}</div>
                                 <div style="font-size:12px; color:var(--text-muted);">${reviewer.count} review${reviewer.count !== 1 ? 's' : ''}</div>
                             </div>
                             ${window.getRankBadgeHTML(reviewer.count, 22)}
@@ -1540,7 +2056,45 @@ window.fetchDiscoverPage = async function() {
                 }).join('');
             }
         }
-    } catch(e) { top10Container.innerHTML = '<p>Failed to calculate WeeBee Top 10.</p>'; if(lbContainer) lbContainer.innerHTML = ''; console.error(e); }
+        // Spotlight — show WeeBee #1, fetch synopsis from Jikan async
+        if (spotlightEl) {
+            if (top10.length === 0) {
+                spotlightEl.innerHTML = '';
+            } else {
+                const s = top10[0];
+                spotlightEl.innerHTML = `
+                    <div class="spotlight-card" onclick="loadAnimeDetails(${s.mal_id})">
+                        <div class="spotlight-bg" style="background-image:url('${s.image}')"></div>
+                        <div class="spotlight-content">
+                            <img src="${s.image}" class="spotlight-cover" alt="${s.title}">
+                            <div class="spotlight-info">
+                                <div class="spotlight-label"><span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle;margin-right:3px;">emoji_events</span>WeeBee's #1 Rated</div>
+                                <h2 class="spotlight-title">${s.title}</h2>
+                                <p class="spotlight-meta" id="spotlight-meta-text">Loading details...</p>
+                                <div class="spotlight-footer">
+                                    <div class="rating-badge tier-royal" style="width:50px;height:50px;font-size:17px;">${s.avgScore}</div>
+                                    <button class="action-btn spotlight-btn" onclick="event.stopPropagation(); loadAnimeDetails(${s.mal_id})">View Anime</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                // Fetch synopsis + genres from Jikan (non-blocking)
+                ;(async () => {
+                    try {
+                        await new Promise(r => setTimeout(r, 420));
+                        const res = await fetch(`https://api.jikan.moe/v4/anime/${s.mal_id}`);
+                        if (!res.ok) return;
+                        const json = await res.json();
+                        const genres = json.data.genres?.slice(0, 3).map(g => g.name).join(' · ') || '';
+                        const synopsis = (json.data.synopsis || '').replace(/\[Written by.*?\]/g, '').trim();
+                        const el = document.getElementById('spotlight-meta-text');
+                        if (el) el.innerHTML = `${genres ? `<span class="spotlight-genres">${genres}</span>` : ''}${synopsis ? `<span class="spotlight-synopsis">${synopsis.substring(0, 240)}...</span>` : ''}`;
+                    } catch(e) {}
+                })();
+            }
+        }
+
+    } catch(e) { top10Container.innerHTML = '<p>Failed to calculate WeeBee Top 10.</p>'; if(lbContainer) lbContainer.innerHTML = ''; if(spotlightEl) spotlightEl.innerHTML = ''; console.error(e); }
 
     const friendsCarousel = document.getElementById('friends-suggested-carousel');
     friendsCarousel.innerHTML = '<div class="loading">Loading suggestions...</div>';
@@ -1603,20 +2157,29 @@ async function fetchAPI_CategoriesSequentially() {
     if (uTitle) uTitle.innerText = `Upcoming: ${next}`;
     if (uSub) uSub.innerText = `Announced anime airing in ${next}`;
 
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/seasons/now?limit=15', 'discover-trending-carousel'); await new Promise(r => setTimeout(r, 500));
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/seasons/upcoming?limit=15', 'discover-upcoming-carousel'); await new Promise(r => setTimeout(r, 500));
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=1&order_by=score&sort=desc&limit=15', 'discover-action-carousel'); await new Promise(r => setTimeout(r, 500));
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=22&order_by=score&sort=desc&limit=15', 'discover-romance-carousel'); await new Promise(r => setTimeout(r, 500));
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=4&order_by=score&sort=desc&limit=15', 'discover-comedy-carousel');
+    const delay = () => new Promise(r => setTimeout(r, 800));
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/seasons/now?limit=15', 'discover-trending-carousel'); await delay();
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/seasons/upcoming?limit=15', 'discover-upcoming-carousel'); await delay();
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=1&order_by=score&sort=desc&limit=15', 'discover-action-carousel'); await delay();
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=22&order_by=score&sort=desc&limit=15', 'discover-romance-carousel'); await delay();
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=4&order_by=score&sort=desc&limit=15', 'discover-comedy-carousel'); await delay();
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=14&order_by=score&sort=desc&limit=15', 'discover-horror-carousel'); await delay();
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=24&order_by=score&sort=desc&limit=15', 'discover-scifi-carousel'); await delay();
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=10&order_by=score&sort=desc&limit=15', 'discover-fantasy-carousel'); await delay();
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=36&order_by=score&sort=desc&limit=15', 'discover-sol-carousel'); await delay();
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=30&order_by=score&sort=desc&limit=15', 'discover-sports-carousel'); await delay();
+    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=18&order_by=score&sort=desc&limit=15', 'discover-mecha-carousel');
 }
 
 async function fetchAndRenderCarousel(url, containerId) {
     const container = document.getElementById(containerId); if(!container) return;
     try {
-        const res = await fetch(url); const { data } = await res.json(); container.innerHTML = '';
+        const res = await fetch(url);
+        if(!res.ok) { container.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); font-size:13px;">Couldn\'t load right now — try refreshing.</p>'; return; }
+        const { data } = await res.json(); container.innerHTML = '';
         if(!data || data.length === 0) { container.innerHTML = '<p class="empty-msg" style="color:var(--text-muted);">No anime found.</p>'; return; }
         data.forEach(anime => { container.innerHTML += `<div class="anime-card" onclick="loadAnimeDetails(${anime.mal_id})"><img src="${anime.images.jpg.image_url}"><p>${anime.title_english || anime.title}</p></div>`; });
-    } catch(e) { container.innerHTML = '<p style="color:red; font-size:12px;">Failed to load category.</p>'; }
+    } catch(e) { container.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); font-size:13px;">Couldn\'t load right now — try refreshing.</p>'; }
 }
 
 // --- Search Logic ---
@@ -1630,9 +2193,11 @@ window.searchAnime = async function(queryStr) {
     top10Container.innerHTML = '<div class="loading">Searching Anime Database...</div>';
     
     // Hide default discovery sections
-    ['discover-reviewers-section','discover-friends-section','discover-trending-section',
-     'discover-upcoming-section','discover-action-section','discover-romance-section',
-     'discover-comedy-section'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
+    ['discover-spotlight-section','discover-reviewers-section','discover-friends-section',
+     'discover-trending-section','discover-upcoming-section','discover-action-section',
+     'discover-romance-section','discover-comedy-section','discover-horror-section',
+     'discover-scifi-section','discover-fantasy-section','discover-sol-section',
+     'discover-sports-section','discover-mecha-section'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
     
     try {
         const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(queryStr)}&limit=10`);
@@ -1675,6 +2240,7 @@ window.switchView = function(targetId, isSearch = false) {
     document.querySelectorAll(".nav-btn").forEach(btn => { btn.classList.remove("active"); if(btn.getAttribute("data-target") === targetId) btn.classList.add("active"); });
     document.querySelectorAll(".view").forEach(view => view.classList.remove("active"));
     document.getElementById(targetId).classList.add("active");
+    window.currentActiveViewId = targetId;
     document.querySelector('.main-content').scrollTo(0,0);
     
     if(targetId === 'home-view') fetchHomepageReviews();
@@ -1684,9 +2250,11 @@ window.switchView = function(targetId, isSearch = false) {
     if(targetId === 'discover-view' && !isSearch) {
         document.querySelector('#discover-view h2').innerText = "WeeBee's Top 10 All Time";
         document.querySelector('#discover-view p').innerText = "Ranked purely by WeeBee community scores";
-        ['discover-reviewers-section','discover-friends-section','discover-trending-section',
-         'discover-upcoming-section','discover-action-section','discover-romance-section',
-         'discover-comedy-section'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'block'; });
+        ['discover-spotlight-section','discover-reviewers-section','discover-friends-section',
+         'discover-trending-section','discover-upcoming-section','discover-action-section',
+         'discover-romance-section','discover-comedy-section','discover-horror-section',
+         'discover-scifi-section','discover-fantasy-section','discover-sol-section',
+         'discover-sports-section','discover-mecha-section'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'block'; });
         fetchDiscoverPage();
     }
 };

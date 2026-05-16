@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=6">
+    <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
     <div class="app-container">
@@ -104,21 +104,45 @@
                 </div>
 
                 <div id="discover-view" class="view">
+
+                    <!-- Spotlight -->
+                    <div id="discover-spotlight-section" style="margin-bottom: 50px;">
+                        <div id="discover-spotlight"><div class="loading">Loading spotlight...</div></div>
+                    </div>
+
+                    <!-- WeeBee Top 10 -->
                     <div style="margin-bottom: 50px;">
-                        <h2 style="margin-bottom: 5px; text-align: center;">WeeBee's Top 10 All Time</h2>
-                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px; text-align: center;">Ranked purely by WeeBee community scores</p>
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#FFD700;">emoji_events</span>
+                            <div>
+                                <h2>WeeBee's Top 10 All Time</h2>
+                                <p>Ranked purely by WeeBee community scores</p>
+                            </div>
+                        </div>
                         <div id="weebee-top10-container"><div class="loading">Calculating WeeBee scores...</div></div>
                     </div>
 
-                    <div id="discover-reviewers-section" style="margin-bottom: 40px; border-top: 1px solid #E0E0E0; padding-top: 40px;">
-                        <h2 style="margin-bottom: 5px;">Top Reviewers</h2>
-                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">The most active WeeBee critics</p>
+                    <!-- Top Reviewers -->
+                    <div id="discover-reviewers-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#FFC107;">military_tech</span>
+                            <div>
+                                <h2>Top Reviewers</h2>
+                                <p>The most active WeeBee critics</p>
+                            </div>
+                        </div>
                         <div id="reviewer-leaderboard-container"><div class="loading">Loading...</div></div>
                     </div>
 
-                    <div id="discover-friends-section" style="margin-bottom: 40px; border-top: 1px solid #E0E0E0; padding-top: 40px;">
-                        <h2 style="margin-bottom: 5px;">Suggested by Friends</h2>
-                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Recently reviewed or suggested by people you follow</p>
+                    <!-- Friends -->
+                    <div id="discover-friends-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#4CAF50;">group</span>
+                            <div>
+                                <h2>Suggested by Friends</h2>
+                                <p>Recently reviewed or suggested by people you follow</p>
+                            </div>
+                        </div>
                         <div class="carousel-container">
                             <button class="carousel-arrow left" onclick="scrollCarousel('friends-suggested-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
                             <div class="carousel" id="friends-suggested-carousel"><div class="loading">Loading suggestions...</div></div>
@@ -126,9 +150,15 @@
                         </div>
                     </div>
 
-                    <div id="discover-trending-section" style="margin-bottom: 40px;">
-                        <h2 id="discover-trending-title">This Season</h2>
-                        <p id="discover-trending-subtitle" style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Currently airing</p>
+                    <!-- Current Season -->
+                    <div id="discover-trending-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#FF9800;">live_tv</span>
+                            <div>
+                                <h2 id="discover-trending-title">This Season</h2>
+                                <p id="discover-trending-subtitle">Currently airing</p>
+                            </div>
+                        </div>
                         <div class="carousel-container">
                             <button class="carousel-arrow left" onclick="scrollCarousel('discover-trending-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
                             <div class="carousel" id="discover-trending-carousel"><div class="loading">Loading...</div></div>
@@ -136,9 +166,15 @@
                         </div>
                     </div>
 
-                    <div id="discover-upcoming-section" style="margin-bottom: 40px;">
-                        <h2 id="discover-upcoming-title">Upcoming Season</h2>
-                        <p id="discover-upcoming-subtitle" style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Announced for next season</p>
+                    <!-- Upcoming Season -->
+                    <div id="discover-upcoming-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#9C27B0;">upcoming</span>
+                            <div>
+                                <h2 id="discover-upcoming-title">Upcoming Season</h2>
+                                <p id="discover-upcoming-subtitle">Announced for next season</p>
+                            </div>
+                        </div>
                         <div class="carousel-container">
                             <button class="carousel-arrow left" onclick="scrollCarousel('discover-upcoming-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
                             <div class="carousel" id="discover-upcoming-carousel"><div class="loading">Loading upcoming...</div></div>
@@ -146,8 +182,12 @@
                         </div>
                     </div>
 
-                    <div id="discover-action-section" style="margin-bottom: 40px;">
-                        <h2>Top Action</h2>
+                    <!-- Action -->
+                    <div id="discover-action-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#F44336;">sports_martial_arts</span>
+                            <div><h2>Top Action</h2><p>High-octane fights and adventure</p></div>
+                        </div>
                         <div class="carousel-container">
                             <button class="carousel-arrow left" onclick="scrollCarousel('discover-action-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
                             <div class="carousel" id="discover-action-carousel"><div class="loading">Loading action...</div></div>
@@ -155,8 +195,12 @@
                         </div>
                     </div>
 
-                    <div id="discover-romance-section" style="margin-bottom: 40px;">
-                        <h2>Top Romance</h2>
+                    <!-- Romance -->
+                    <div id="discover-romance-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#E91E63;">favorite</span>
+                            <div><h2>Top Romance</h2><p>Love, heartbreak, and everything in between</p></div>
+                        </div>
                         <div class="carousel-container">
                             <button class="carousel-arrow left" onclick="scrollCarousel('discover-romance-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
                             <div class="carousel" id="discover-romance-carousel"><div class="loading">Loading romance...</div></div>
@@ -164,14 +208,97 @@
                         </div>
                     </div>
 
-                    <div id="discover-comedy-section" style="margin-bottom: 40px;">
-                        <h2>Top Comedy</h2>
+                    <!-- Comedy -->
+                    <div id="discover-comedy-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#FF9800;">sentiment_very_satisfied</span>
+                            <div><h2>Top Comedy</h2><p>Guaranteed to make you laugh</p></div>
+                        </div>
                         <div class="carousel-container">
                             <button class="carousel-arrow left" onclick="scrollCarousel('discover-comedy-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
                             <div class="carousel" id="discover-comedy-carousel"><div class="loading">Loading comedy...</div></div>
                             <button class="carousel-arrow right" onclick="scrollCarousel('discover-comedy-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
                         </div>
                     </div>
+
+                    <!-- Horror -->
+                    <div id="discover-horror-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#607D8B;">skull</span>
+                            <div><h2>Top Horror</h2><p>Terrifying stories that keep you up at night</p></div>
+                        </div>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('discover-horror-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="discover-horror-carousel"><div class="loading">Loading horror...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('discover-horror-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
+                    </div>
+
+                    <!-- Sci-Fi -->
+                    <div id="discover-scifi-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#00BCD4;">rocket_launch</span>
+                            <div><h2>Top Sci-Fi</h2><p>Futuristic worlds and mind-bending concepts</p></div>
+                        </div>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('discover-scifi-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="discover-scifi-carousel"><div class="loading">Loading sci-fi...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('discover-scifi-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
+                    </div>
+
+                    <!-- Fantasy -->
+                    <div id="discover-fantasy-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#9C27B0;">auto_fix_high</span>
+                            <div><h2>Top Fantasy</h2><p>Magic, mythical creatures, and epic quests</p></div>
+                        </div>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('discover-fantasy-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="discover-fantasy-carousel"><div class="loading">Loading fantasy...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('discover-fantasy-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
+                    </div>
+
+                    <!-- Slice of Life -->
+                    <div id="discover-sol-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#4CAF50;">coffee</span>
+                            <div><h2>Top Slice of Life</h2><p>Warm, everyday stories about ordinary moments</p></div>
+                        </div>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('discover-sol-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="discover-sol-carousel"><div class="loading">Loading slice of life...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('discover-sol-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
+                    </div>
+
+                    <!-- Sports -->
+                    <div id="discover-sports-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#FF9800;">sports_soccer</span>
+                            <div><h2>Top Sports</h2><p>Triumph, teamwork, and the thrill of competition</p></div>
+                        </div>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('discover-sports-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="discover-sports-carousel"><div class="loading">Loading sports...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('discover-sports-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
+                    </div>
+
+                    <!-- Mecha -->
+                    <div id="discover-mecha-section" class="discover-section">
+                        <div class="discover-section-header">
+                            <span class="material-symbols-outlined section-icon" style="color:#607D8B;">smart_toy</span>
+                            <div><h2>Top Mecha</h2><p>Giant robots, epic battles, and mechanical marvels</p></div>
+                        </div>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('discover-mecha-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="discover-mecha-carousel"><div class="loading">Loading mecha...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('discover-mecha-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
+                    </div>
+
                 </div>
 
                 <div id="my-list-view" class="view">
@@ -250,6 +377,7 @@
                             <div class="profile-tabs">
                                 <button class="p-tab active" onclick="switchProfileTab(event, 'p-reviews')">Reviews</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-social')">Following</button>
+                                <button class="p-tab" onclick="switchProfileTab(event, 'p-achievements')">Achievements</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-comments')">Guestbook</button>
                             </div>
                 
@@ -271,6 +399,10 @@
                                 </div>
                             </div>
                 
+                            <div id="p-achievements" class="p-tab-content" style="display:none;">
+                                <div id="achievements-grid-container"></div>
+                            </div>
+
                             <div id="p-comments" class="p-tab-content" style="display:none;">
                                 <div class="guestbook-input">
                                     <textarea id="profile-comment-input" placeholder="Leave a message on this profile..."></textarea>
@@ -567,6 +699,70 @@
         </div>
     </div>
 
-    <script type="module" src="app.js?v=3"></script>
+    <!-- Edit Profile Modal -->
+    <div id="edit-profile-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:500px;">
+            <h3 style="margin-bottom:20px;">Edit Profile</h3>
+            <div id="edit-profile-error" style="color:red; font-size:12px; margin-bottom:12px;"></div>
+
+            <label>Display Name</label>
+            <input type="text" id="edit-profile-name" placeholder="Your display name" maxlength="30">
+
+            <label>Bio <span style="font-weight:400; color:var(--text-muted); font-size:12px;">(Optional)</span></label>
+            <textarea id="edit-profile-bio" rows="3" placeholder="Tell the community a bit about yourself..." style="resize:vertical;"></textarea>
+
+            <label>Profile Picture</label>
+            <div style="display:flex; align-items:center; gap:16px; margin-bottom:12px;">
+                <img id="edit-avatar-preview" src="" alt="Preview" style="width:64px; height:64px; border-radius:50%; object-fit:cover; border:2px solid var(--border-color); flex-shrink:0;">
+                <div>
+                    <button type="button" onclick="document.getElementById('avatar-file-input').click()" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark); margin-bottom:6px;">
+                        <span class="material-symbols-outlined">upload</span> Upload Photo
+                    </button>
+                    <input type="file" id="avatar-file-input" accept="image/*" style="display:none;" onchange="previewAvatarUpload(this)">
+                    <p style="font-size:11px; color:var(--text-muted);">JPG, PNG, GIF · Max 10MB</p>
+                </div>
+            </div>
+            <label style="font-size:12px; color:var(--text-muted); font-weight:400;">Or paste an image URL</label>
+            <input type="url" id="edit-profile-avatar" placeholder="https://..." style="margin-bottom:20px;">
+
+            <label>Favorite Genres <span style="font-weight:400; color:var(--text-muted); font-size:12px;">(pick up to 3)</span></label>
+            <div id="edit-genre-chips" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px;"></div>
+
+            <div class="modal-actions">
+                <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
+                <button onclick="saveEditProfile()" class="submit-btn" id="edit-profile-save-btn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Modal -->
+    <div id="chat-modal" class="modal-overlay" style="display:none;" onclick="event.stopPropagation()">
+        <div class="modal-content chat-modal-content">
+            <div class="chat-header">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <img id="chat-partner-avatar" class="avatar" src="" style="width:38px; height:38px;">
+                    <strong id="chat-partner-name" style="font-size:16px;"></strong>
+                </div>
+                <button onclick="closeChatModal()" style="background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:24px; line-height:1; padding:4px;">×</button>
+            </div>
+            <div id="chat-messages" class="chat-messages"></div>
+            <div class="chat-input-row">
+                <input type="text" id="chat-input" placeholder="Type a message..." maxlength="500" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendDM();}">
+                <button onclick="sendDM()" class="action-btn" style="border-radius:50%; width:40px; height:40px; padding:0; justify-content:center; flex-shrink:0;"><span class="material-symbols-outlined">send</span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Achievement Toast -->
+    <div id="achievement-toast" style="display:none; position:fixed; bottom:24px; right:24px; z-index:9999; background:var(--bg-white); border:1px solid var(--accent-yellow); border-radius:14px; padding:14px 18px; box-shadow:0 8px 24px rgba(0,0,0,0.15); flex-direction:row; align-items:center; gap:14px; min-width:280px; max-width:340px; animation: slideInToast 0.4s ease;">
+        <span class="material-symbols-outlined" id="toast-ach-icon" style="font-size:32px; flex-shrink:0;"></span>
+        <div>
+            <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--accent-yellow); margin-bottom:2px;">Achievement Unlocked!</div>
+            <div id="toast-ach-name" style="font-weight:700; font-size:14px; color:var(--text-dark);"></div>
+            <div id="toast-ach-desc" style="font-size:12px; color:var(--text-muted); margin-top:2px;"></div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js?v=6"></script>
 </body>
 </html>
