@@ -234,6 +234,9 @@ window.loadProfileAchievements = async function(uid) {
     } catch(e) { container.innerHTML = '<p style="color:var(--text-muted); font-size:13px; text-align:center;">Failed to load achievements.</p>'; }
 };
 
+// Prevent scroll wheel from changing number input values
+document.addEventListener('wheel', () => { if (document.activeElement?.type === 'number') document.activeElement.blur(); }, { passive: true });
+
 // --- GLOBAL STATE ---
 window.currentActiveViewId = 'home-view';
 window.previousViewId = 'home-view';
@@ -282,7 +285,7 @@ onAuthStateChanged(auth, (user) => {
                 <span class="notification-badge" id="notif-badge" style="display:none; position:absolute; top:-5px; right:-5px; background:#FF4444; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; font-weight:bold; align-items:center; justify-content:center; pointer-events:none;">0</span>
                 
                 <div id="notification-dropdown" class="dropdown-menu notification-menu" style="display: none; right:-10px; top:40px; width:320px; padding:0; max-height:400px; overflow-y:auto; cursor:default;" onclick="event.stopPropagation()">
-                    <div class="notif-header" style="padding:15px; font-weight:bold; border-bottom:1px solid #E0E0E0; position:sticky; top:0; background:var(--bg-white); z-index:10;">Notifications</div>
+                    <div class="notif-header" style="padding:12px 15px; font-weight:bold; border-bottom:1px solid #E0E0E0; position:sticky; top:0; background:var(--bg-white); z-index:10; display:flex; align-items:center; justify-content:space-between;">Notifications<button onclick="clearAllNotifications()" style="font-size:11px; font-weight:500; color:var(--text-muted); background:none; border:none; cursor:pointer; padding:4px 8px; border-radius:6px;">Clear All</button></div>
                     <div id="notif-list"><div class="loading" style="font-size:12px; padding: 15px;">Loading...</div></div>
                 </div>
             </div>
@@ -604,6 +607,13 @@ window.fetchNotifications = function() {
         if(unreadCount > 0) { badge.innerText = unreadCount; badge.style.display = 'flex'; }
         else { badge.style.display = 'none'; }
     }, (e) => console.error("Notif error", e));
+};
+
+window.clearAllNotifications = async function() {
+    if (!auth.currentUser) return;
+    const snap = await getDocs(query(collection(db, "notifications"), where("targetUid", "==", auth.currentUser.uid)));
+    if (snap.empty) return;
+    await Promise.all(snap.docs.map(d => deleteDoc(doc(db, "notifications", d.id))));
 };
 
 window.closeAllModals = function() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); };
@@ -1350,10 +1360,14 @@ window.deleteListEntry = async function(docId) {
 window.fetchMyList = async function(targetUid = null) {
     const uidToFetch = targetUid || (auth.currentUser ? auth.currentUser.uid : null);
     if(!uidToFetch) return;
-    const q = query(collection(db, "anime_lists"), where("uid", "==", uidToFetch));
-    const snap = await getDocs(q);
+    const [snap, revSnap] = await Promise.all([
+        getDocs(query(collection(db, "anime_lists"), where("uid", "==", uidToFetch))),
+        getDocs(query(collection(db, "reviews"), where("uid", "==", uidToFetch)))
+    ]);
     window.myAnimeList = [];
     snap.forEach(d => window.myAnimeList.push({ ...d.data(), id: d.id }));
+    window.myReviewedMalIds = new Set();
+    revSnap.forEach(d => { if(d.data().type !== 'suggestion') window.myReviewedMalIds.add(d.data().mal_id); });
     if(window.currentActiveViewId === 'my-list-view') renderAnimeList();
 };
 
@@ -1432,7 +1446,7 @@ window.renderAnimeList = function() {
                 <td style="text-align:center; font-weight:bold; font-size:16px; color:var(--text-muted);">${anime._absoluteRank}</td>
                 <td><img src="${anime.image}" style="width:50px; height:70px; border-radius:4px; object-fit:cover; cursor:pointer;" onclick="loadAnimeDetails(${anime.mal_id})"></td>
                 <td style="font-weight:600; cursor:pointer;" onclick="loadAnimeDetails(${anime.mal_id})">${anime.title}</td>
-                <td style="text-align:center; font-weight:800; font-size:16px;">${anime.score ? anime.score.toFixed(1) : '-'}</td>
+                <td style="text-align:center; font-weight:800; font-size:16px;">${window.myReviewedMalIds?.has(anime.mal_id) && anime.score ? anime.score.toFixed(1) : '-'}</td>
                 <td style="text-align:center; color:var(--text-muted);">
                     <strong style="color:var(--text-dark);">${anime.watchedEpisodes}</strong> / ${anime.totalEpisodes > 0 ? anime.totalEpisodes : '?'}
                 </td>
@@ -2103,7 +2117,11 @@ window.fetchUserProfile = async function(targetUid = null) {
     const listQuery = query(collection(db, "anime_lists"), where("uid", "==", uidToFetch));
     const listSnap = await getDocs(listQuery);
     let watchAnimes = [];
-    listSnap.forEach(d => { if(d.data().status === 'watching') watchAnimes.push(d.data()); });
+    let completedCount = 0;
+    listSnap.forEach(d => {
+        if(d.data().status === 'watching') watchAnimes.push(d.data());
+        if(d.data().status === 'completed') completedCount++;
+    });
     
     document.getElementById('profile-stats-content').innerHTML = `
         <div style="margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--bg-gray);">
@@ -2120,6 +2138,7 @@ window.fetchUserProfile = async function(targetUid = null) {
         </div>
         <div class="profile-stat-row"><strong>Reviews Written</strong> <span>${reviewCount}</span></div>
         <div class="profile-stat-row"><strong>Average Rating</strong> <span>${avg}</span></div>
+        <div class="profile-stat-row"><strong>Completed</strong> <span>${completedCount}</span></div>
         <div class="profile-stat-row"><strong>Watch List</strong> <span id="watch-list-count">${watchAnimes.length}</span></div>
     `;
 
@@ -3735,6 +3754,15 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
         }
     } catch(e) {}
 
+    let isFollowingAnime = false;
+    if (auth.currentUser) {
+        const fSnap = await getDocs(query(collection(db, "follows"),
+            where("followerUid", "==", auth.currentUser.uid),
+            where("targetId", "==", mal_id),
+            where("type", "==", "anime")));
+        isFollowingAnime = !fSnap.empty;
+    }
+
     document.getElementById('anime-detail-content').innerHTML = `
         <div class="detail-sidebar">
             <img src="${anime.images.jpg.image_url}">
@@ -3765,11 +3793,15 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
                     <div class="info-row"><strong>Status</strong><span>${anime.status || 'Unknown'}</span></div>
                     <div class="info-row"><strong>Aired</strong><span>${anime.aired?.string || 'Unknown'}</span></div>
                     <div class="info-row"><strong>Studios</strong><span>${anime.studios?.map(s => s.name).join(', ') || 'Unknown'}</span></div>
+                    <div class="info-row"><strong>Genres</strong><span>${anime.genres?.map(g => g.name).join(', ') || 'Unknown'}</span></div>
                 </div>
                 ${fanServiceHTML}
             </div>
             <button id="add-to-list-btn" onclick="addCurrentAnimeToList()" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px; ${window.myAnimeList?.some(a => a.mal_id === mal_id) ? 'background:var(--bg-gray-darker); color:var(--text-muted);' : ''}"><span class="material-symbols-outlined">${window.myAnimeList?.some(a => a.mal_id === mal_id) ? 'check' : 'add'}</span> ${window.myAnimeList?.some(a => a.mal_id === mal_id) ? 'In My List' : 'Add to List'}</button>
-            <button onclick="toggleFollow(${mal_id}, 'anime', this)" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px; background:var(--bg-gray-darker); color:var(--text-dark);">Follow Anime</button>
+            <button id="follow-anime-btn" onclick="toggleFollow(${mal_id}, 'anime', this)" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px; background:${isFollowingAnime ? 'var(--bg-gray-darker)' : 'var(--accent-yellow)'}; color:var(--text-dark);"><span class="material-symbols-outlined">${isFollowingAnime ? 'check' : 'bookmark_add'}</span> ${isFollowingAnime ? 'Following' : 'Follow Anime'}</button>
+            <button onclick="openReviewModal()" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px; background: transparent; color: var(--text-dark); border: 1px solid #E0E0E0;">
+                <span class="material-symbols-outlined">rate_review</span> Review Anime
+            </button>
             <button onclick="openSuggestModal()" class="action-btn" style="width:100%; justify-content:center; background: transparent; color: var(--text-dark); border: 1px solid #E0E0E0;">
                 <span class="material-symbols-outlined">send</span> Suggest
             </button>

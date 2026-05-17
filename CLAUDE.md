@@ -39,7 +39,8 @@ These are features Jesse wants to build (no particular order):
 - [x] **Duplicate anime in carousels** — fixed: fetchAndRenderCarousel now deduplicates by mal_id using a Set
 - [x] **Seasonal Top 5** — community vote for Anime of the Season; top 3 get gold/silver/bronze seasonal badges on their anime page; admin panel to start/end votes; auto-closes on expiry; shown on Discover and News
 - [x] **News articles on WeeBee** — fetches top 5 seasonal anime news via Jikan; article reader modal shows full excerpt, image, and anime link natively; "Read on MAL" fallback
-- [ ] **Tier lists** — ability to create anime tier lists (S/A/B/C/D ranks), comment on them, like them, and share them with the community
+- [x] **Tier lists** — anime and character tier lists with drag-and-drop, custom tiers/colors, like/share, profile tab, Community page, home feed
+- [ ] **Unified activity feed** — replace sectioned home page with a single chronological feed (reviews, tier lists, patch notes); use an `activity` Firestore collection written to on each post; refactor home feed renderer to handle mixed content types
 - [x] **Black text in search bar** — fixed
 - [x] **Episode ranking** — done
 - [x] **Move overall score in review previews** — done

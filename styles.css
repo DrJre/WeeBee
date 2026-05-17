@@ -337,7 +337,7 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 .review-header { display: flex; align-items: center; gap: 15px; margin-bottom: 15px; position: relative; z-index: 2; }
 .review-header span { color: var(--text-muted); font-size: 14px; }
 .review-text { font-size: 14px; line-height: 1.6; margin-bottom: 15px; position: relative; z-index: 2; }
-.review-anime-thumb { position: absolute; top: 0; right: 0; height: 100%; width: 160px; object-fit: cover; opacity: 0.85; -webkit-mask-image: linear-gradient(to right, transparent 15%, black 65%); mask-image: linear-gradient(to right, transparent 15%, black 65%); z-index: 3; cursor: pointer; border-radius: 0 var(--border-radius) var(--border-radius) 0; transition: height 0.3s ease, border-radius 0.3s ease, opacity 0.2s; }
+.review-anime-thumb { position: absolute; top: 0; right: 0; height: 100%; width: 185px; object-fit: cover; opacity: 0.85; -webkit-mask-image: linear-gradient(to right, transparent 0%, black 55%); mask-image: linear-gradient(to right, transparent 0%, black 55%); z-index: 3; cursor: pointer; border-radius: 0 var(--border-radius) var(--border-radius) 0; transition: height 0.3s ease, border-radius 0.3s ease, opacity 0.2s; }
 .review-anime-thumb:hover { opacity: 1; }
 .review-anime-hint { position: absolute; bottom: 10px; right: 10px; z-index: 4; background: rgba(0,0,0,0.75); color: white; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; }
 .review-card:hover .review-anime-hint { opacity: 1; }
