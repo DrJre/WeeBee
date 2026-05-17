@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=21">
+    <link rel="stylesheet" href="styles.css?v=25">
 </head>
 <body>
     <div class="app-container">
@@ -29,7 +29,7 @@
                         <span class="material-symbols-outlined">newspaper</span> News
                         <span id="news-badge" style="display:none; position:absolute; top:2px; right:2px; background:#FF4444; color:white; border-radius:50%; min-width:16px; height:16px; font-size:10px; font-weight:bold; align-items:center; justify-content:center; padding:0 3px;">0</span>
                     </button>
-                    <button class="nav-btn" onclick="document.getElementById('coming-soon-modal').style.display='flex'">
+                    <button class="nav-btn" data-target="community-view" onclick="switchView('community-view')">
                         <span class="material-symbols-outlined">groups</span> Community
                     </button>
                 </nav>
@@ -75,7 +75,7 @@
             <button class="nav-btn" data-target="news-view" onclick="switchView('news-view'); closeMobileMenu()">
                 <span class="material-symbols-outlined">newspaper</span> News
             </button>
-            <button class="nav-btn" onclick="document.getElementById('coming-soon-modal').style.display='flex'; closeMobileMenu()">
+            <button class="nav-btn" data-target="community-view" onclick="switchView('community-view'); closeMobileMenu()">
                 <span class="material-symbols-outlined">groups</span> Community
             </button>
         </div>
@@ -102,6 +102,11 @@
 
                     <h2 id="home-feed-title" style="margin-top: 20px;">Recent WeeBee Reviews</h2>
                     <div class="review-feed" id="review-feed"><div class="loading">Fetching recent reviews...</div></div>
+
+                    <div id="home-tierlists-section" style="margin-top:40px; display:none;">
+                        <h2>Recent Tier Lists</h2>
+                        <div id="home-tierlists-feed" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px; margin-top:16px;"></div>
+                    </div>
                 </div>
 
                 <div id="discover-view" class="view">
@@ -386,6 +391,128 @@
                     </div>
                 </div>
 
+                <div id="community-view" class="view">
+                    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:24px;">
+                        <div>
+                            <h2 style="margin:0 0 4px;">Community Tier Lists</h2>
+                            <p style="color:var(--text-muted); margin:0; font-size:14px;">Browse and discover tier lists from the WeeBee community</p>
+                        </div>
+                        <button onclick="openTierListCreator()" class="action-btn"><span class="material-symbols-outlined">add</span> Create Tier List</button>
+                    </div>
+                    <input type="text" id="community-tl-search" placeholder="Search tier lists..." oninput="filterCommunityTierLists()" style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark); font-size:14px; box-sizing:border-box; margin-bottom:20px;">
+                    <div id="community-tierlists-feed" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px;"></div>
+
+                    <!-- Coming Soon -->
+                    <div style="margin-top:60px; padding-top:40px; border-top:1px solid var(--border-color);">
+                        <h3 style="margin-bottom:6px; color:var(--text-muted);">More coming soon</h3>
+                        <p style="color:var(--text-muted); font-size:14px; margin-bottom:28px;">We're just getting started. Here's what's on the way for the Community tab.</p>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px;">
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:20px; opacity:0.6;">
+                                <span class="material-symbols-outlined" style="font-size:32px; color:var(--accent-yellow); display:block; margin-bottom:10px;">groups</span>
+                                <div style="font-weight:700; font-size:15px; margin-bottom:4px;">Community Reviews Feed</div>
+                                <div style="font-size:13px; color:var(--text-muted);">Browse and discover reviews from the whole WeeBee community in one place</div>
+                            </div>
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:20px; opacity:0.6;">
+                                <span class="material-symbols-outlined" style="font-size:32px; color:var(--accent-yellow); display:block; margin-bottom:10px;">workspace_premium</span>
+                                <div style="font-weight:700; font-size:15px; margin-bottom:4px;">WeeBee Awards</div>
+                                <div style="font-size:13px; color:var(--text-muted);">Community-voted awards for the best anime, characters, and moments each year</div>
+                            </div>
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:20px; opacity:0.6;">
+                                <span class="material-symbols-outlined" style="font-size:32px; color:var(--accent-yellow); display:block; margin-bottom:10px;">forum</span>
+                                <div style="font-weight:700; font-size:15px; margin-bottom:4px;">Discussion Threads</div>
+                                <div style="font-size:13px; color:var(--text-muted);">Start and join conversations about your favourite anime with the community</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+    <!-- Tier List Creator Modal -->
+    <div id="tier-list-creator" class="modal-overlay" style="display:none; overflow-y:auto; align-items:flex-start; padding:8px;">
+        <div class="modal-content" style="max-width:1300px; width:100%; margin:0 auto; padding:24px; min-height:calc(100vh - 16px); box-sizing:border-box;">
+
+            <!-- Step: Type Selection -->
+            <div id="tl-step-type">
+                <h3 style="margin-bottom:6px;">Create a Tier List</h3>
+                <p style="color:var(--text-muted); margin-bottom:24px;">What would you like to rank?</p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; max-width:480px; margin-bottom:24px;">
+                    <div onclick="selectTierListType('anime')" style="padding:24px; border-radius:12px; background:var(--bg-gray); cursor:pointer; text-align:center; border:2px solid transparent;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='transparent'">
+                        <span class="material-symbols-outlined" style="font-size:40px; color:var(--accent-yellow); display:block; margin-bottom:8px;">movie</span>
+                        <div style="font-weight:700; font-size:16px; margin-bottom:4px;">Anime</div>
+                        <div style="font-size:12px; color:var(--text-muted);">Rank anime titles</div>
+                    </div>
+                    <div onclick="selectTierListType('characters')" style="padding:24px; border-radius:12px; background:var(--bg-gray); cursor:pointer; text-align:center; border:2px solid transparent;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='transparent'">
+                        <span class="material-symbols-outlined" style="font-size:40px; color:var(--accent-yellow); display:block; margin-bottom:8px;">person</span>
+                        <div style="font-weight:700; font-size:16px; margin-bottom:4px;">Characters</div>
+                        <div style="font-size:12px; color:var(--text-muted);">Rank characters from an anime</div>
+                    </div>
+                </div>
+                <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
+            </div>
+
+            <!-- Step: Source Anime (Characters Mode) -->
+            <div id="tl-step-source" style="display:none;">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+                    <button onclick="showTierStep('type')" class="cancel-btn" style="padding:6px 12px;"><span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">arrow_back</span></button>
+                    <h3 style="margin:0;">Choose Source Anime</h3>
+                </div>
+                <p style="color:var(--text-muted); margin-bottom:16px;">Which anime's characters do you want to rank?</p>
+                <input type="text" id="tl-source-search" placeholder="Search anime..." oninput="searchTierSource()" style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark); font-size:14px; box-sizing:border-box; margin-bottom:8px;">
+                <div id="tl-source-results" style="border-radius:8px; overflow:hidden; border:1px solid var(--border-color); max-height:320px; overflow-y:auto;"></div>
+            </div>
+
+            <!-- Step: Main Editor -->
+            <div id="tl-step-editor" style="display:none;">
+                <!-- Header bar -->
+                <div style="display:flex; gap:12px; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:200px;">
+                        <input type="text" id="tl-title-input" placeholder="Give your tier list a title..." style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark); font-size:16px; font-weight:600; box-sizing:border-box; margin-bottom:4px;">
+                        <div id="tl-source-label" style="font-size:12px; color:var(--text-muted); padding-left:4px;"></div>
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+                        <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer; color:var(--text-dark);">
+                            <input type="checkbox" id="tl-public-toggle" checked> Public
+                        </label>
+                        <button onclick="saveTierList()" class="submit-btn"><span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">save</span> Save</button>
+                        <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Side-by-side layout: tiers left, pool right -->
+                <div style="display:grid; grid-template-columns:1fr 300px; gap:16px; align-items:start;">
+
+                    <!-- Left: tier rows -->
+                    <div>
+                        <div id="tl-tiers-container"></div>
+                        <button onclick="addTierRow()" class="action-btn" style="font-size:13px; padding:6px 14px; background:var(--bg-gray-darker); color:var(--text-dark); margin-top:6px;">
+                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">add</span> Add Tier
+                        </button>
+                    </div>
+
+                    <!-- Right: pool + search (sticky so it stays visible while scrolling tiers) -->
+                    <div style="position:sticky; top:12px;">
+                        <div style="background:var(--bg-gray); border-radius:10px; padding:12px; margin-bottom:10px;">
+                            <div style="font-weight:700; font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Unranked Pool</div>
+                            <div id="tl-unranked-zone" ondragover="tlDragOver(event)" ondrop="tlDrop(event,'unranked')" ondragleave="this.classList.remove('drag-over')"
+                                style="display:flex; flex-wrap:wrap; gap:6px; min-height:80px; max-height:calc(100vh - 280px); overflow-y:auto; padding:4px; border-radius:6px;"></div>
+                        </div>
+                        <div style="background:var(--bg-gray); border-radius:10px; padding:12px;">
+                            <div style="font-weight:700; font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Add to Pool</div>
+                            <input type="text" id="tl-pool-search" placeholder="Search to add..." oninput="searchTierPool()" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; box-sizing:border-box; margin-bottom:6px;">
+                            <div id="tl-pool-results" style="max-height:200px; overflow-y:auto;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tier List Viewer Modal -->
+    <div id="tier-list-viewer" class="modal-overlay" style="display:none; overflow-y:auto; align-items:flex-start; padding:16px;">
+        <div class="modal-content" style="max-width:1000px; width:100%; margin:0 auto; padding:24px;">
+            <div id="tier-list-viewer-content"></div>
+        </div>
+    </div>
+
     <!-- Article Reader Modal -->
     <div id="article-reader-modal" class="modal-overlay" style="display:none;">
         <div class="modal-content" style="max-width:680px; max-height:85vh; overflow-y:auto; padding:0;">
@@ -442,6 +569,7 @@
                             <div class="profile-tabs">
                                 <button class="p-tab active" onclick="switchProfileTab(event, 'p-reviews')">Reviews</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-friends')">Friends</button>
+                                <button class="p-tab" onclick="switchProfileTab(event, 'p-tierlists')">Tier Lists</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-social')">Following</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-achievements')">Achievements</button>
                             </div>
@@ -466,6 +594,10 @@
 
                             <div id="p-achievements" class="p-tab-content" style="display:none;">
                                 <div id="achievements-grid-container"></div>
+                            </div>
+
+                            <div id="p-tierlists" class="p-tab-content" style="display:none;">
+                                <div id="tier-lists-container"></div>
                             </div>
 
                             <div id="p-friends" class="p-tab-content" style="display:none;">
@@ -930,6 +1062,6 @@
         </div>
     </div>
 
-    <script type="module" src="app.js?v=33"></script>
+    <script type="module" src="app.js?v=47"></script>
 </body>
 </html>

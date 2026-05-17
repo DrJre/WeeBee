@@ -307,7 +307,10 @@ onAuthStateChanged(auth, (user) => {
             getDoc(doc(db, "admins", auth.currentUser.uid)).then(d => { window.isAdmin = d.exists(); }).catch(() => {}),
             window.loadActiveSeasonalVote(),
             window.loadPatchNotes()
-        ]).then(() => window.renderSeasonalVoting());
+        ]).then(() => { window.renderSeasonalVoting(); window.fetchHomepageTierLists(); });
+        // Open shared tier list if URL param present
+        const _tlId = new URLSearchParams(window.location.search).get('tl');
+        if (_tlId) { history.replaceState({}, '', window.location.pathname); setTimeout(() => window.openTierListViewer(_tlId), 600); }
         // Restore last view after login
         const savedView = sessionStorage.getItem('weebee-last-view');
         if (savedView) {
@@ -633,9 +636,7 @@ window.fetchMyFollows = async function() {
 
 window.getFollowBtnHTML = function(uid) {
     if (!uid || !auth.currentUser || uid === auth.currentUser.uid) return '';
-    if (window.myFollowedUserIds.has(uid)) {
-        return `<button onclick="event.stopPropagation(); toggleFollow('${uid}', 'user', this)" class="action-btn card-follow-btn" style="padding:4px 10px; font-size:11px; background:var(--bg-gray-darker); color:var(--text-dark); flex-shrink:0;"><span class="material-symbols-outlined" style="font-size:14px;">check</span> <span class="follow-btn-label">Following</span></button>`;
-    }
+    if (window.myFollowedUserIds.has(uid)) return '';
     return `<button onclick="event.stopPropagation(); toggleFollow('${uid}', 'user', this)" class="action-btn card-follow-btn" style="padding:4px 10px; font-size:11px; flex-shrink:0;"><span class="material-symbols-outlined" style="font-size:14px;">person_add</span> <span class="follow-btn-label">Follow</span></button>`;
 };
 window.openAuthModal = function() { window.closeAllModals(); document.getElementById('auth-modal').style.display = 'flex'; };
@@ -763,7 +764,8 @@ window.previewInDepthReview = function() {
     if (outOfRange) return alert(`Scores must be between 0 and 10. Check your "${outOfRange.label}" score.`);
     const textWithoutScore = categories.find(c => c.text && !c.score);
     if (textWithoutScore) return alert(`You left a comment on "${textWithoutScore.label}" but didn't give it a score. Please add a score or remove the comment.`);
-    const fanService = parseFloat(document.getElementById('in-depth-fanservice-value').value) || null;
+    const _fsVal = document.getElementById('in-depth-fanservice-value').value;
+    const fanService = _fsVal !== '' ? parseFloat(_fsVal) : null;
     if (fanService !== null && (fanService < 0 || fanService > 10)) return alert('Fan Service score must be between 0 and 10.');
     const overallScore = (scored.reduce((sum, c) => sum + c.score, 0) / scored.length).toFixed(1);
     window.pendingInDepthData = { categories, overallScore, fanService };
@@ -806,7 +808,7 @@ window.submitInDepthReview = async function() {
     try {
         if (window.existingReviewId) {
             await updateDoc(doc(db, "reviews", window.existingReviewId), {
-                score: parseFloat(overallScore), categories, fanService: fanService || null,
+                score: parseFloat(overallScore), categories, fanService: fanService !== null ? fanService : null,
                 animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
                 animeImage: window.currentAnime?.images?.jpg?.image_url,
                 username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
@@ -818,7 +820,7 @@ window.submitInDepthReview = async function() {
                 animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
                 animeImage: window.currentAnime?.images?.jpg?.image_url,
                 type: 'in-depth', score: parseFloat(overallScore), categories,
-                fanService: fanService || null, text: '',
+                fanService: fanService !== null ? fanService : null, text: '',
                 username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
                 uid: auth.currentUser.uid, timestamp: new Date(),
                 likes: [], dislikes: [], commentCount: 0
@@ -848,7 +850,8 @@ window.submitQuickReview = async function() {
     if (!auth.currentUser) return window.openAuthModal();
     const score = parseFloat(document.getElementById('quick-score-value').value);
     const text = document.getElementById('quick-score-text').value.trim();
-    const fanService = parseFloat(document.getElementById('quick-fanservice-value').value) || null;
+    const _qfsVal = document.getElementById('quick-fanservice-value').value;
+    const fanService = _qfsVal !== '' ? parseFloat(_qfsVal) : null;
     if (!score || score < 1 || score > 10) return alert('Please enter a score between 1 and 10.');
     if (fanService !== null && (fanService < 0 || fanService > 10)) return alert('Fan Service score must be between 0 and 10.');
     try {
@@ -965,6 +968,7 @@ window.toggleFollow = async function(targetId, type, btnElement) {
             window.awardAchievements(['first_follow']).catch(() => {});
             const notifyBtn = document.getElementById('profile-notify-btn');
             if (notifyBtn) notifyBtn.style.display = 'inline-flex';
+            if (btnElement.classList.contains('card-follow-btn')) btnElement.style.display = 'none';
         }
         if(type === 'user') {
             await addDoc(collection(db, "notifications"), {
@@ -1328,6 +1332,8 @@ window.saveListEntry = async function(docId, mal_id, title, img, totalEps) {
         window.closeAllModals();
         fetchMyList();
         if(window.currentActiveViewId === 'profile-view') fetchUserProfile(window.targetProfileUid);
+        const addBtn = document.getElementById('add-to-list-btn');
+        if (addBtn) { addBtn.innerHTML = '<span class="material-symbols-outlined">check</span> In My List'; addBtn.style.background = 'var(--bg-gray-darker)'; addBtn.style.color = 'var(--text-muted)'; }
     } catch(e) { alert("Failed to save entry"); console.error(e); }
 };
 
@@ -1761,7 +1767,8 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
 
     if(rev.type === 'suggestion') {
         innerContent = `
-            <img src="${rev.animeImage}" class="review-anime-thumb" alt="Cover" style="cursor:pointer;" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">
+            <img src="${rev.animeImage}" class="review-anime-thumb" alt="Cover" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">
+            <span class="review-anime-hint">View Anime →</span>
             <div class="review-header" style="justify-content: space-between; position: relative; z-index: 3;">
                 <div style="display:flex; gap: 15px;">
                     <img src="${rev.avatar}" class="avatar clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">
@@ -1815,11 +1822,12 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
         }
 
         innerContent = `
-            <img src="${rev.animeImage}" class="review-anime-thumb" alt="Cover" style="cursor:pointer;" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">
+            <img src="${rev.animeImage}" class="review-anime-thumb" alt="Cover" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">
+            <span class="review-anime-hint">View Anime →</span>
             <div class="review-header" style="justify-content: space-between; position: relative; z-index: 3;">
                 <div style="display:flex; gap: 15px;">
                     <img src="${rev.avatar}" class="avatar clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">
-                    <div><strong><span class="clickable-user" style="color:var(--text-dark);" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> ${window.getFounderBadgeHTML(safeUid)} ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)} <span class="source-badge badge-weebee">WeeBee</span><br>
+                    <div><strong><span class="clickable-user" style="color:var(--text-dark);" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> ${window.getFounderBadgeHTML(safeUid)} ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)}<br>
                     <span style="font-size: 12px; color: var(--text-muted); display:flex; align-items:center; gap:6px; margin-top:3px; min-width:0;">${rev.animeImage ? `<img src="${rev.animeImage}" class="review-cover-mobile" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">` : ''}Reviewed: <strong class="review-anime-title" style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong></span></div>
                 </div>
                 ${window.getFollowBtnHTML(safeUid)}
@@ -1834,8 +1842,8 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             ${innerContent}
             <div class="review-actions">
                 <div class="action-stat"><button onclick="window.toggleComments(event, '${rev.id}')"><span class="material-symbols-outlined">chat_bubble</span></button><span class="action-label" id="comment-count-${rev.id}">${rev.commentCount || 0} Comments</span></div>
-                <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'like', this)"><span class="material-symbols-outlined">thumb_up</span></button><span class="action-label">${rev.likes?.length || 0} Likes</span></div>
-                <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'dislike', this)"><span class="material-symbols-outlined">thumb_down</span></button><span class="action-label">${rev.dislikes?.length || 0} Dislikes</span></div>
+                <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'like', this)" style="${auth.currentUser && rev.likes?.includes(auth.currentUser.uid) ? 'color:var(--accent-yellow);' : ''}"><span class="material-symbols-outlined">thumb_up</span></button><span class="action-label">${rev.likes?.length || 0} Likes</span></div>
+                <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'dislike', this)" style="${auth.currentUser && rev.dislikes?.includes(auth.currentUser.uid) ? 'color:red;' : ''}"><span class="material-symbols-outlined">thumb_down</span></button><span class="action-label">${rev.dislikes?.length || 0} Dislikes</span></div>
             </div>
             ${rev.type === 'in-depth' ? '<div class="expand-hint-row"><span class="expand-hint"><span class="material-symbols-outlined" style="font-size:11px; vertical-align:middle;">expand_more</span> Click to expand</span></div>' : ''}
             <div id="comments-container-${rev.id}" class="inline-comments" style="display:none; margin-top: 15px; padding-top: 15px; position: relative; z-index: 2;" onclick="event.stopPropagation();">
@@ -1987,6 +1995,7 @@ window.switchProfileTab = function(event, tabId) {
     event.currentTarget.classList.add('active');
     if (tabId === 'p-achievements') window.loadProfileAchievements(window.currentProfileUid);
     if (tabId === 'p-friends') window.loadFriendsTab(window.currentProfileUid);
+    if (tabId === 'p-tierlists') window.loadTierListsTab(window.currentProfileUid);
 };
 
 window.fetchUserProfile = async function(targetUid = null) {
@@ -2177,10 +2186,9 @@ window.fetchUserProfile = async function(targetUid = null) {
                 <p id="follow-title-${f.targetId}" style="font-size:11px; max-width:80px;">${needsFetch ? '...' : title}</p>
             </div>`;
             if(needsFetch) missingAnimeData.push({ docId: d.id, mal_id: f.targetId });
-        } else {
+        } else if (f.type === 'user' && f.targetId) {
             hasUser = true;
-            // Render placeholder, resolve real name below
-            fUserList.innerHTML += `<div class="user-chip clickable-user" id="user-chip-${f.targetId}" onclick="viewUserProfile('${f.targetId}')"><img id="user-chip-img-${f.targetId}" src="${f.avatar || ''}" onerror="this.style.display='none'" style="width:24px;height:24px;border-radius:50%;"> <span id="user-chip-name-${f.targetId}">...</span></div>`;
+            fUserList.innerHTML += `<div class="user-chip clickable-user" id="user-chip-${f.targetId}" onclick="viewUserProfile('${f.targetId}')"><img id="user-chip-img-${f.targetId}" src="${f.avatar || ''}" onerror="this.style.display='none'" style="width:24px;height:24px;border-radius:50%;"> <span id="user-chip-name-${f.targetId}">${f.username || '...'}</span></div>`;
         }
     });
     if(!hasAnime) fAnimeList.parentElement.innerHTML = '<h5>Following Anime</h5><p class="empty-msg" style="color:var(--text-muted); font-size:13px;">Not following any anime yet.</p>';
@@ -2203,7 +2211,7 @@ window.fetchUserProfile = async function(targetUid = null) {
                     const rSnap = await getDocs(query(collection(db, "reviews"), where("uid", "==", f.targetId), limit(1)));
                     if (!rSnap.empty) { displayName = rSnap.docs[0].data().username; avatar = avatar || rSnap.docs[0].data().avatar; }
                 }
-                displayName = displayName || 'WeeBee User';
+                displayName = displayName || f.username || 'WeeBee User';
                 const dicebear = `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
                 avatar = avatar || dicebear;
 
@@ -2479,14 +2487,20 @@ window.startSeasonalVote = async function(isTest) {
 
 window.submitSeasonalVote = async function(malId) {
     if (!auth.currentUser) return window.openAuthModal();
-    if (!window.activeSeasonalVote) return;
-    if (window.mySeasonalVote) return;
+    const vote = window.activeSeasonalVote;
+    if (!vote || vote.closed) return;
+    if (String(window.mySeasonalVote) === String(malId)) return;
     try {
-        const recordId = `${window.activeSeasonalVote.id}_${auth.currentUser.uid}`;
-        await setDoc(doc(db, "seasonal_vote_records", recordId), { uid: auth.currentUser.uid, mal_id: malId, season: window.activeSeasonalVote.id, timestamp: new Date() });
-        await updateDoc(doc(db, "seasonal_votes", window.activeSeasonalVote.id), { [`voteCounts.${malId}`]: increment(1) });
+        const recordId = `${vote.id}_${auth.currentUser.uid}`;
+        await setDoc(doc(db, "seasonal_vote_records", recordId), { uid: auth.currentUser.uid, mal_id: malId, season: vote.id, timestamp: new Date() });
+        const updates = { [`voteCounts.${malId}`]: increment(1) };
+        if (window.mySeasonalVote) updates[`voteCounts.${window.mySeasonalVote}`] = increment(-1);
+        await updateDoc(doc(db, "seasonal_votes", vote.id), updates);
+        if (window.mySeasonalVote) {
+            vote.voteCounts[window.mySeasonalVote] = Math.max(0, (vote.voteCounts[window.mySeasonalVote] || 0) - 1);
+        }
+        vote.voteCounts[malId] = (vote.voteCounts[malId] || 0) + 1;
         window.mySeasonalVote = malId;
-        window.activeSeasonalVote.voteCounts = { ...window.activeSeasonalVote.voteCounts, [malId]: (window.activeSeasonalVote.voteCounts[malId] || 0) + 1 };
         window.renderSeasonalVoting();
     } catch(e) { console.error(e); alert('Failed to submit vote.'); }
 };
@@ -2597,6 +2611,365 @@ window.renderSeasonalVoting = function() {
                 </div>`;
             }).join('') + '</div>';
     });
+};
+
+// --- TIER LIST SYSTEM ---
+window.tierListState = null;
+window.tlDragging = null;
+const TL_COLORS = ['#FF7F7F','#FFBF7F','#FFFF7F','#7FFF7F','#7FBFFF','#BF7FFF','#FF7FBF'];
+const TL_DEFAULT_TIERS = () => [
+    { label:'S', color:'#FF7F7F', items:[] }, { label:'A', color:'#FFBF7F', items:[] },
+    { label:'B', color:'#FFFF7F', items:[] }, { label:'C', color:'#7FFF7F', items:[] },
+    { label:'D', color:'#7FBFFF', items:[] }
+];
+
+window.openTierListCreator = function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    window.tierListState = { editingId:null, type:null, sourceAnimeId:null, sourceAnimeTitle:null, tiers:TL_DEFAULT_TIERS(), unranked:[], isPublic:true };
+    window.closeAllModals();
+    document.getElementById('tier-list-creator').style.display = 'flex';
+    window.showTierStep('type');
+};
+
+window.showTierStep = function(step) {
+    ['type','source','editor'].forEach(s => { const el = document.getElementById(`tl-step-${s}`); if(el) el.style.display = 'none'; });
+    const el = document.getElementById(`tl-step-${step}`); if(el) el.style.display = 'block';
+};
+
+window.selectTierListType = function(type) {
+    window.tierListState.type = type;
+    if (type === 'characters') { window.showTierStep('source'); }
+    else { window.showTierStep('editor'); document.getElementById('tl-source-label').innerText = 'Anime tier list'; window.renderTierEditor(); }
+};
+
+window.searchTierSource = async function() {
+    const q = document.getElementById('tl-source-search').value.trim();
+    const results = document.getElementById('tl-source-results');
+    if (q.length < 2) { results.innerHTML = ''; return; }
+    results.innerHTML = '<div class="loading" style="padding:12px;">Searching...</div>';
+    try {
+        const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8&type=tv`);
+        const { data } = await res.json();
+        results.innerHTML = (data || []).map(a => `
+            <div onclick="selectTierSource(${a.mal_id},'${(a.title_english||a.title).replace(/'/g,"\\'")}')"
+                style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--bg-gray);background:var(--bg-white);"
+                onmouseover="this.style.background='var(--bg-gray)'" onmouseout="this.style.background='var(--bg-white)'">
+                <img src="${a.images.jpg.image_url}" style="width:36px;height:50px;object-fit:cover;border-radius:4px;flex-shrink:0;">
+                <span style="font-weight:600;font-size:14px;">${a.title_english||a.title}</span>
+            </div>`).join('');
+    } catch(e) { results.innerHTML = '<div style="padding:12px;color:var(--text-muted);">Failed to search.</div>'; }
+};
+
+window.selectTierSource = async function(malId, title) {
+    window.tierListState.sourceAnimeId = malId; window.tierListState.sourceAnimeTitle = title;
+    window.showTierStep('editor');
+    document.getElementById('tl-source-label').innerText = `Characters from: ${title}`;
+    window.tierListState.unranked = [];
+    window.renderTierEditor();
+    const zone = document.getElementById('tl-unranked-zone');
+    if (zone) zone.innerHTML = '<div class="loading" style="padding:10px;">Loading characters...</div>';
+    try {
+        const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}/characters`);
+        const { data } = await res.json();
+        const toItem = c => ({ id:`char_${c.character.mal_id}`, title:c.character.name, image:c.character.images?.jpg?.image_url||'' });
+        const mains = (data||[]).filter(c=>c.role==='Main').sort((a,b)=>(b.favorites||0)-(a.favorites||0)).map(toItem);
+        const supporting = (data||[]).filter(c=>c.role==='Supporting').sort((a,b)=>(b.favorites||0)-(a.favorites||0)).map(toItem);
+        window.tierListState.unranked = [...mains, ...supporting];
+        window.renderTierEditor();
+    } catch(e) { if(zone) zone.innerHTML = '<div style="color:var(--text-muted);padding:10px;">Failed to load characters.</div>'; }
+};
+
+window.renderTierEditor = function() {
+    const tc = document.getElementById('tl-tiers-container');
+    const uz = document.getElementById('tl-unranked-zone');
+    if (!tc || !uz) return;
+    const st = window.tierListState;
+    tc.innerHTML = st.tiers.map((tier, i) => `
+        <div style="display:flex;min-height:80px;margin-bottom:3px;border-radius:8px;overflow:hidden;">
+            <div style="width:72px;flex-shrink:0;background:${tier.color};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:4px;">
+                <input type="text" value="${tier.label}" maxlength="4" onclick="this.select()"
+                    oninput="window.tierListState.tiers[${i}].label=this.value"
+                    style="background:transparent;border:none;text-align:center;font-size:22px;font-weight:900;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.5);width:100%;outline:none;cursor:text;">
+                <input type="color" value="${tier.color}" oninput="window.tierListState.tiers[${i}].color=this.value; window.renderTierEditor()"
+                    style="width:28px;height:18px;border:none;border-radius:3px;cursor:pointer;padding:0;">
+                <button onclick="removeTierRow(${i})" style="background:rgba(0,0,0,0.25);color:white;border:none;border-radius:4px;font-size:10px;padding:2px 6px;cursor:pointer;">✕</button>
+            </div>
+            <div class="tl-drop-zone" ondragover="tlDragOver(event)" ondrop="tlDrop(event,'tier_${i}')" ondragleave="this.classList.remove('drag-over')"
+                style="flex:1;background:${tier.color}22;display:flex;flex-wrap:wrap;gap:6px;padding:8px;align-content:flex-start;min-height:80px;border-left:2px solid ${tier.color}88;">
+                ${tier.items.map(item => window.renderTlItem(item,`tier_${i}`)).join('')}
+            </div>
+        </div>`).join('');
+    uz.innerHTML = st.unranked.length === 0
+        ? '<div style="color:var(--text-muted);font-size:13px;padding:8px;">Use the search below to add items, then drag them into tiers</div>'
+        : st.unranked.map(item => window.renderTlItem(item,'unranked')).join('');
+};
+
+window.renderTlItem = function(item, zone) {
+    const safe = item.title.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    return `<div draggable="true" ondragstart="tlDragStart(event,'${item.id}','${zone}')"
+        style="width:65px;flex-shrink:0;cursor:grab;position:relative;user-select:none;" title="${safe}">
+        <img src="${item.image}" style="width:65px;height:88px;object-fit:cover;border-radius:6px;display:block;background:var(--bg-gray-darker);" onerror="this.style.background='var(--bg-gray-darker)'">
+        <div style="font-size:9px;color:var(--text-dark);text-align:center;line-height:1.2;margin-top:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${item.title}</div>
+        <button onclick="event.stopPropagation();removeTlItem('${item.id}')"
+            style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.7);color:white;border:none;border-radius:50%;width:16px;height:16px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;">✕</button>
+    </div>`;
+};
+
+window.tlDragStart = function(e, itemId, fromZone) { window.tlDragging = { itemId, fromZone }; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', itemId); };
+window.tlDragOver = function(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); };
+
+window.tlDrop = function(e, toZone) {
+    e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+    if (!window.tlDragging) return;
+    const { itemId, fromZone } = window.tlDragging; window.tlDragging = null;
+    if (fromZone === toZone) return;
+    const st = window.tierListState; let item = null;
+    if (fromZone === 'unranked') { const i = st.unranked.findIndex(x=>x.id===itemId); if(i!==-1) item=st.unranked.splice(i,1)[0]; }
+    else { const ti=parseInt(fromZone.replace('tier_','')); if(st.tiers[ti]){const i=st.tiers[ti].items.findIndex(x=>x.id===itemId);if(i!==-1)item=st.tiers[ti].items.splice(i,1)[0];} }
+    if (!item) return;
+    if (toZone==='unranked') { st.unranked.push(item); }
+    else { const ti=parseInt(toZone.replace('tier_','')); if(st.tiers[ti]) st.tiers[ti].items.push(item); }
+    window.renderTierEditor();
+};
+
+window.addTierRow = function() {
+    const st = window.tierListState;
+    const used = st.tiers.map(t=>t.label);
+    const label = ['S','A','B','C','D','E','F','G','H','?'].find(l=>!used.includes(l))||'?';
+    st.tiers.push({ label, color:TL_COLORS[st.tiers.length%TL_COLORS.length], items:[] });
+    window.renderTierEditor();
+};
+
+window.removeTierRow = function(index) {
+    const removed = window.tierListState.tiers.splice(index,1)[0];
+    window.tierListState.unranked.push(...removed.items);
+    window.renderTierEditor();
+};
+
+window.removeTlItem = function(itemId) {
+    const st = window.tierListState;
+    st.unranked = st.unranked.filter(x=>x.id!==itemId);
+    st.tiers.forEach(t => { t.items=t.items.filter(x=>x.id!==itemId); });
+    window.renderTierEditor();
+};
+
+window.searchTierPool = async function() {
+    const q = document.getElementById('tl-pool-search').value.trim();
+    const results = document.getElementById('tl-pool-results');
+    if (q.length < 2) { results.innerHTML=''; return; }
+    try {
+        const isChar = window.tierListState?.type === 'characters';
+        const url = isChar ? `https://api.jikan.moe/v4/characters?q=${encodeURIComponent(q)}&limit=8` : `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8`;
+        const res = await fetch(url); const { data } = await res.json();
+        results.innerHTML = (data||[]).map(item => {
+            const id = isChar ? `char_${item.mal_id}` : String(item.mal_id);
+            const title = isChar ? item.name : (item.title_english||item.title);
+            const image = isChar ? (item.images?.jpg?.image_url||'') : item.images.jpg.image_url;
+            const safe = title.replace(/'/g,"\\'"); const safeImg = image.replace(/'/g,"\\'");
+            return `<div onclick="addToTierPool({id:'${id}',title:'${safe}',image:'${safeImg}'})"
+                style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;margin-bottom:2px;"
+                onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='transparent'">
+                <img src="${image}" style="width:32px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.background='var(--bg-gray-darker)'">
+                <span style="font-size:13px;flex:1;">${title}</span>
+                <span class="material-symbols-outlined" style="color:var(--accent-yellow);font-size:20px;">add_circle</span>
+            </div>`;
+        }).join('');
+    } catch(e) {}
+};
+
+window.addToTierPool = function(item) {
+    const st = window.tierListState;
+    const all = [...st.unranked, ...st.tiers.flatMap(t=>t.items)];
+    if (all.some(x=>x.id===item.id)) return;
+    st.unranked.push(item);
+    document.getElementById('tl-pool-search').value='';
+    document.getElementById('tl-pool-results').innerHTML='';
+    window.renderTierEditor();
+};
+
+window.saveTierList = async function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    const st = window.tierListState;
+    const title = document.getElementById('tl-title-input').value.trim();
+    if (!title) return alert('Please give your tier list a title.');
+    const isPublic = document.getElementById('tl-public-toggle').checked;
+    const pd = await getDoc(doc(db,"profiles",auth.currentUser.uid)).catch(()=>null);
+    const displayName = pd?.data()?.displayName || auth.currentUser.displayName;
+    const myAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
+    const data = { uid:auth.currentUser.uid, authorName:displayName, authorAvatar:myAvatar, title, type:st.type, sourceAnimeId:st.sourceAnimeId||null, sourceAnimeTitle:st.sourceAnimeTitle||null, tiers:st.tiers, unranked:st.unranked, public:isPublic, updatedAt:new Date() };
+    try {
+        if (st.editingId) { await updateDoc(doc(db,"tier_lists",st.editingId), data); }
+        else { await addDoc(collection(db,"tier_lists"), { ...data, likes:[], timestamp:new Date() }); }
+        window.closeAllModals();
+        if (window.currentActiveViewId==='profile-view') window.loadTierListsTab(auth.currentUser.uid);
+    } catch(e) { alert('Failed to save.'); console.error(e); }
+};
+
+window.loadTierListsTab = async function(uid) {
+    const container = document.getElementById('tier-lists-container');
+    if (!container) return;
+    container.innerHTML = '<div class="loading">Loading tier lists...</div>';
+    const isMe = auth.currentUser && uid===auth.currentUser.uid;
+    try {
+        const snap = await getDocs(isMe
+            ? query(collection(db,"tier_lists"),where("uid","==",uid))
+            : query(collection(db,"tier_lists"),where("uid","==",uid),where("public","==",true)));
+        const sortedDocs = [...snap.docs].sort((a,b) => (b.data().timestamp?.toMillis?.() || 0) - (a.data().timestamp?.toMillis?.() || 0));
+        let html = isMe ? `<div style="margin-bottom:16px;"><button onclick="openTierListCreator()" class="action-btn"><span class="material-symbols-outlined">add</span> Create Tier List</button></div>` : '';
+        if (snap.empty) { html += `<p style="color:var(--text-muted);text-align:center;padding:30px;">${isMe?'No tier lists yet — create your first!':'No public tier lists yet.'}</p>`; container.innerHTML=html; return; }
+        html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;">';
+        sortedDocs.forEach(d => { html += renderTierListCard(d.id, d.data()); });
+        html += '</div>'; container.innerHTML=html;
+    } catch(e) { container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">Failed to load tier lists.</p>'; console.error(e); }
+};
+
+window.openTierListViewer = async function(id) {
+    const viewerEl=document.getElementById('tier-list-viewer');
+    const contentEl=document.getElementById('tier-list-viewer-content');
+    if (!viewerEl||!contentEl) return;
+    contentEl.innerHTML='<div class="loading">Loading...</div>';
+    window.closeAllModals(); viewerEl.style.display='flex';
+    try {
+        const d=await getDoc(doc(db,"tier_lists",id)); if(!d.exists()){contentEl.innerHTML='<p>Not found.</p>';return;}
+        const tl=d.data(); const isOwner=auth.currentUser&&tl.uid===auth.currentUser.uid;
+        const liked=auth.currentUser&&(tl.likes||[]).includes(auth.currentUser.uid);
+        let html=`<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+            <div>
+                <h2 style="margin:0 0 6px;">${tl.title}</h2>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <img src="${tl.authorAvatar}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">
+                    <span style="font-size:13px;color:var(--text-muted);">by <strong style="color:var(--text-dark);">${tl.authorName}</strong>${tl.type==='characters'&&tl.sourceAnimeTitle?` · Characters from <em>${tl.sourceAnimeTitle}</em>`:' · Anime'}</span>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-shrink:0;">
+                <button onclick="likeTierList('${id}',this)" class="action-btn" style="padding:6px 14px;${liked?'background:var(--accent-yellow);':'background:var(--bg-gray-darker);color:var(--text-dark);'}">
+                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">${liked?'favorite':'favorite_border'}</span> ${(tl.likes||[]).length}
+                </button>
+                <button onclick="shareTierList('${id}')" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);padding:6px 12px;" title="Copy share link">
+                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">share</span>
+                </button>
+                ${isOwner?`<button onclick="editTierList('${id}')" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);padding:6px 12px;"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">edit</span></button>`:''}
+                ${isOwner?`<button onclick="deleteTierList('${id}')" class="action-btn" style="background:#FF5252;color:white;padding:6px 12px;"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">delete</span></button>`:''}
+                <button onclick="closeAllModals()" class="cancel-btn">Close</button>
+            </div>
+        </div>`;
+        tl.tiers.forEach(tier => {
+            if (tier.items.length===0) return;
+            html+=`<div style="display:flex;min-height:80px;margin-bottom:3px;border-radius:8px;overflow:hidden;">
+                <div style="width:72px;flex-shrink:0;background:${tier.color};display:flex;align-items:center;justify-content:center;">
+                    <span style="font-size:24px;font-weight:900;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.4);">${tier.label}</span>
+                </div>
+                <div style="flex:1;background:${tier.color}22;display:flex;flex-wrap:wrap;gap:6px;padding:8px;border-left:2px solid ${tier.color}88;align-content:flex-start;">
+                    ${tier.items.map(item=>`<div style="width:65px;flex-shrink:0;" title="${item.title}">
+                        <img src="${item.image}" style="width:65px;height:88px;object-fit:cover;border-radius:6px;display:block;background:var(--bg-gray-darker);" onerror="this.style.background='var(--bg-gray-darker)'">
+                        <div style="font-size:9px;text-align:center;line-height:1.2;margin-top:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${item.title}</div>
+                    </div>`).join('')}
+                </div>
+            </div>`;
+        });
+        contentEl.innerHTML=html;
+    } catch(e) { contentEl.innerHTML='<p>Failed to load.</p>'; console.error(e); }
+};
+
+window.likeTierList = async function(id, btn) {
+    if (!auth.currentUser) return window.openAuthModal();
+    try {
+        const d=await getDoc(doc(db,"tier_lists",id)); if(!d.exists()) return;
+        const likes=d.data().likes||[]; const uid=auth.currentUser.uid;
+        const newLikes=likes.includes(uid)?likes.filter(x=>x!==uid):[...likes,uid];
+        await updateDoc(doc(db,"tier_lists",id),{likes:newLikes});
+        const liked=newLikes.includes(uid);
+        btn.style.background=liked?'var(--accent-yellow)':'var(--bg-gray-darker)'; btn.style.color=liked?'':'var(--text-dark)';
+        btn.innerHTML=`<span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">${liked?'favorite':'favorite_border'}</span> ${newLikes.length}`;
+    } catch(e) { console.error(e); }
+};
+
+window.shareTierList = function(id) {
+    const url = `${window.location.origin}/?tl=${id}`;
+    navigator.clipboard.writeText(url).then(() => {
+        alert('Link copied to clipboard!');
+    }).catch(() => {
+        prompt('Copy this link:', url);
+    });
+};
+
+window.fetchHomepageTierLists = async function() {
+    const section = document.getElementById('home-tierlists-section');
+    const feed = document.getElementById('home-tierlists-feed');
+    if (!section || !feed) return;
+    try {
+        const snap = await getDocs(query(collection(db, "tier_lists"), where("public", "==", true)));
+        const docs = snap.docs.sort((a,b) => (b.data().timestamp?.toMillis?.() || 0) - (a.data().timestamp?.toMillis?.() || 0)).slice(0, 8);
+        if (docs.length === 0) { section.style.display = 'none'; return; }
+        section.style.display = 'block';
+        feed.innerHTML = docs.map(d => renderTierListCard(d.id, d.data())).join('');
+    } catch(e) { console.error('fetchHomepageTierLists', e); section.style.display = 'none'; }
+};
+
+window.allCommunityTierLists = [];
+window.fetchCommunityTierLists = async function() {
+    const feed = document.getElementById('community-tierlists-feed');
+    if (!feed) return;
+    feed.innerHTML = '<div class="loading">Loading tier lists...</div>';
+    try {
+        const snap = await getDocs(query(collection(db, "tier_lists"), where("public", "==", true)));
+        window.allCommunityTierLists = snap.docs.sort((a,b) => (b.data().timestamp?.toMillis?.() || 0) - (a.data().timestamp?.toMillis?.() || 0));
+        window.filterCommunityTierLists();
+    } catch(e) { feed.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px;">Failed to load.</p>'; }
+};
+
+window.filterCommunityTierLists = function() {
+    const feed = document.getElementById('community-tierlists-feed');
+    const q = (document.getElementById('community-tl-search')?.value || '').toLowerCase();
+    const filtered = window.allCommunityTierLists.filter(d => {
+        if (!q) return true;
+        const tl = d.data();
+        return tl.title?.toLowerCase().includes(q) || tl.authorName?.toLowerCase().includes(q) || tl.sourceAnimeTitle?.toLowerCase().includes(q);
+    });
+    if (!feed) return;
+    if (filtered.length === 0) { feed.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px;">No tier lists found.</p>'; return; }
+    feed.innerHTML = filtered.map(d => renderTierListCard(d.id, d.data())).join('');
+};
+
+function renderTierListCard(id, tl) {
+    const preview = tl.tiers.map(t => `<span style="background:${t.color};color:#333;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;">${t.label}</span>`).join('');
+    const count = tl.tiers.reduce((a,t) => a+t.items.length, 0);
+    const date = tl.timestamp?.toDate ? new Date(tl.timestamp.toDate()).toLocaleDateString() : '';
+    return `<div onclick="openTierListViewer('${id}')" style="background:var(--bg-gray);border-radius:12px;padding:16px;cursor:pointer;border:1px solid var(--border-color);transition:transform 0.15s;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform=''">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <img src="${tl.authorAvatar||''}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">
+            <span style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${tl.authorName}</span>
+        </div>
+        <div style="font-weight:700;font-size:15px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${tl.title}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">${tl.type==='characters'&&tl.sourceAnimeTitle?`Characters · ${tl.sourceAnimeTitle}`:'Anime'} · ${date}</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">${preview}</div>
+        <div style="font-size:12px;color:var(--text-muted);">${count} item${count!==1?'s':''} ranked · ❤️ ${(tl.likes||[]).length}</div>
+    </div>`;
+}
+
+window.deleteTierList = async function(id) {
+    if (!auth.currentUser) return;
+    if (!confirm('Delete this tier list? This cannot be undone.')) return;
+    try {
+        await deleteDoc(doc(db, "tier_lists", id));
+        window.closeAllModals();
+        if (window.currentActiveViewId === 'profile-view') window.loadTierListsTab(auth.currentUser.uid);
+        if (window.currentActiveViewId === 'community-view') window.fetchCommunityTierLists();
+        window.fetchHomepageTierLists();
+    } catch(e) { alert('Failed to delete.'); console.error(e); }
+};
+
+window.editTierList = async function(id) {
+    const d=await getDoc(doc(db,"tier_lists",id)); if(!d.exists()) return;
+    const tl=d.data();
+    window.tierListState={ editingId:id, type:tl.type, sourceAnimeId:tl.sourceAnimeId, sourceAnimeTitle:tl.sourceAnimeTitle, tiers:tl.tiers, unranked:tl.unranked, isPublic:tl.public };
+    window.closeAllModals();
+    document.getElementById('tier-list-creator').style.display='flex';
+    window.showTierStep('editor');
+    document.getElementById('tl-title-input').value=tl.title;
+    document.getElementById('tl-public-toggle').checked=tl.public;
+    document.getElementById('tl-source-label').innerText=tl.type==='characters'?`Characters from: ${tl.sourceAnimeTitle}`:'Anime tier list';
+    window.renderTierEditor();
 };
 
 // --- PATCH NOTES ---
@@ -3237,7 +3610,8 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     window.currentActiveViewId = targetId;
     document.querySelector('.main-content').scrollTo(0,0);
     
-    if(targetId === 'home-view') fetchHomepageReviews();
+    if(targetId === 'home-view') { fetchHomepageReviews(); window.fetchHomepageTierLists(); }
+    if(targetId === 'community-view') window.fetchCommunityTierLists();
     if(targetId === 'news-view') {
         fetchGlobalNews();
         window.loadPatchNotes();
@@ -3383,7 +3757,7 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
                 </div>
                 ${fanServiceHTML}
             </div>
-            <button onclick="addCurrentAnimeToList()" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px;"><span class="material-symbols-outlined">add</span> Add to List</button>
+            <button id="add-to-list-btn" onclick="addCurrentAnimeToList()" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px; ${window.myAnimeList?.some(a => a.mal_id === mal_id) ? 'background:var(--bg-gray-darker); color:var(--text-muted);' : ''}"><span class="material-symbols-outlined">${window.myAnimeList?.some(a => a.mal_id === mal_id) ? 'check' : 'add'}</span> ${window.myAnimeList?.some(a => a.mal_id === mal_id) ? 'In My List' : 'Add to List'}</button>
             <button onclick="toggleFollow(${mal_id}, 'anime', this)" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px; background:var(--bg-gray-darker); color:var(--text-dark);">Follow Anime</button>
             <button onclick="openSuggestModal()" class="action-btn" style="width:100%; justify-content:center; background: transparent; color: var(--text-dark); border: 1px solid #E0E0E0;">
                 <span class="material-symbols-outlined">send</span> Suggest

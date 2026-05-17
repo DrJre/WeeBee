@@ -337,7 +337,10 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 .review-header { display: flex; align-items: center; gap: 15px; margin-bottom: 15px; position: relative; z-index: 2; }
 .review-header span { color: var(--text-muted); font-size: 14px; }
 .review-text { font-size: 14px; line-height: 1.6; margin-bottom: 15px; position: relative; z-index: 2; }
-.review-anime-thumb { position: absolute; top: 0; right: 0; height: 100%; width: 160px; object-fit: cover; opacity: 0.8; -webkit-mask-image: linear-gradient(to right, transparent 0%, black 100%); mask-image: linear-gradient(to right, transparent 0%, black 100%); z-index: 1; pointer-events: none; border-radius: 0 var(--border-radius) var(--border-radius) 0; transition: height 0.3s ease, border-radius 0.3s ease; }
+.review-anime-thumb { position: absolute; top: 0; right: 0; height: 100%; width: 160px; object-fit: cover; opacity: 0.85; -webkit-mask-image: linear-gradient(to right, transparent 15%, black 65%); mask-image: linear-gradient(to right, transparent 15%, black 65%); z-index: 3; cursor: pointer; border-radius: 0 var(--border-radius) var(--border-radius) 0; transition: height 0.3s ease, border-radius 0.3s ease, opacity 0.2s; }
+.review-anime-thumb:hover { opacity: 1; }
+.review-anime-hint { position: absolute; bottom: 10px; right: 10px; z-index: 4; background: rgba(0,0,0,0.75); color: white; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; }
+.review-card:hover .review-anime-hint { opacity: 1; }
 .review-card.expanded .review-anime-thumb { height: 215px; border-radius: 0 var(--border-radius) 0 0; }
 
 .source-badge { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 10px; vertical-align: middle; }
@@ -436,6 +439,7 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 .rating-badge.large { width: 90px; height: 90px; font-size: 28px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
 
 .news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 25px; margin-top: 20px; }
+.tl-drop-zone.drag-over { outline: 2px dashed var(--accent-yellow); background: rgba(255,193,7,0.08) !important; }
 .news-card { background: var(--bg-gray); border-radius: var(--border-radius); overflow: hidden; transition: transform 0.2s; border: 1px solid #E0E0E0; display: flex; flex-direction: column; min-width: 250px; }
 .news-card:hover { transform: translateY(-5px); box-shadow: 0 8px 15px rgba(0,0,0,0.05); }
 .news-card img { width: 100%; height: 180px; object-fit: cover; }
