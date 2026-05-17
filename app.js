@@ -1640,6 +1640,16 @@ window.submitSuggestion = async function() {
 };
 
 // --- Reactions & Toggles ---
+window.deleteReview = async function(reviewId, btn) {
+    if (!auth.currentUser) return;
+    if (!confirm('Delete this review? This cannot be undone.')) return;
+    try {
+        await deleteDoc(doc(db, "reviews", reviewId));
+        const card = btn.closest('.review-card');
+        if (card) card.remove();
+    } catch(e) { alert('Failed to delete review.'); console.error(e); }
+};
+
 window.toggleReaction = async function(event, reviewId, type, btn) {
     if(event) { event.preventDefault(); event.stopPropagation(); }
     if(!auth.currentUser) return window.openAuthModal();
@@ -1844,6 +1854,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                 <div class="action-stat"><button onclick="window.toggleComments(event, '${rev.id}')"><span class="material-symbols-outlined">chat_bubble</span></button><span class="action-label" id="comment-count-${rev.id}">${rev.commentCount || 0} Comments</span></div>
                 <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'like', this)" style="${auth.currentUser && rev.likes?.includes(auth.currentUser.uid) ? 'color:var(--accent-yellow);' : ''}"><span class="material-symbols-outlined">thumb_up</span></button><span class="action-label">${rev.likes?.length || 0} Likes</span></div>
                 <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'dislike', this)" style="${auth.currentUser && rev.dislikes?.includes(auth.currentUser.uid) ? 'color:red;' : ''}"><span class="material-symbols-outlined">thumb_down</span></button><span class="action-label">${rev.dislikes?.length || 0} Dislikes</span></div>
+                ${auth.currentUser && rev.uid === auth.currentUser.uid ? `<div class="action-stat" style="margin-left:auto;"><button onclick="event.stopPropagation(); deleteReview('${rev.id}', this)" style="color:#FF5252;"><span class="material-symbols-outlined">delete</span></button></div>` : ''}
             </div>
             ${rev.type === 'in-depth' ? '<div class="expand-hint-row"><span class="expand-hint"><span class="material-symbols-outlined" style="font-size:11px; vertical-align:middle;">expand_more</span> Click to expand</span></div>' : ''}
             <div id="comments-container-${rev.id}" class="inline-comments" style="display:none; margin-top: 15px; padding-top: 15px; position: relative; z-index: 2;" onclick="event.stopPropagation();">
