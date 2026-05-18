@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 
@@ -259,6 +259,52 @@ window.currentAnimeEpisodes = [];
 window.unreadNotifDocs = [];
 window.targetProfileUid = null; 
 
+// --- CONTENT MODERATION ---
+const BLOCKED_TERMS = [
+    'nigger', 'nigg3r','n1gger','chink','ch1nk','gook','g00k',
+    'spic','sp1c','spick','kike','k1ke','wetback','w3tback','beaner',
+    'faggot','f4ggot','fag','f4g','dyke','d1ke','tranny','tr4nny',
+    'retard','r3tard','retarded','towelhead','sandnigger','coon','c00n',
+    'zipperhead','honkey','honky','raghead','slope', 'cunt', 'porch monkey'
+];
+
+window.containsBlockedTerm = function(text) {
+    if (!text) return false;
+    const normalized = text.toLowerCase().replace(/[\s\-_.!@#$%^&*]/g, '');
+    return BLOCKED_TERMS.some(term => normalized.includes(term) || text.toLowerCase().includes(term));
+};
+
+window.checkTextContent = function(...fields) {
+    return fields.some(f => window.containsBlockedTerm(f));
+};
+
+// --- JIKAN CACHE ---
+const JIKAN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const JIKAN_CAROUSEL_TTL_MS = 24 * 60 * 60 * 1000;
+
+window.jikanFetch = async function(url, cacheKey, ttlMs = JIKAN_TTL_MS) {
+    let stalePayload = null;
+    try {
+        const cSnap = await getDoc(doc(db, "anime_cache", cacheKey));
+        if (cSnap.exists()) {
+            const cached = cSnap.data();
+            const age = Date.now() - (cached.fetchedAt?.toMillis?.() || 0);
+            if (age < ttlMs) return cached.payload;
+            stalePayload = cached.payload;
+        }
+    } catch(_) {}
+    try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Jikan ${res.status}`);
+        const json = await res.json();
+        setDoc(doc(db, "anime_cache", cacheKey), { payload: json, fetchedAt: new Date() }).catch(() => {});
+        return json;
+    } catch(e) {
+        if (stalePayload) return stalePayload;
+        throw e;
+    }
+};
+
 // --- CAROUSEL SCROLLING LOGIC ---
 window.scrollCarousel = function(containerId, direction) {
     const container = document.getElementById(containerId);
@@ -311,9 +357,14 @@ onAuthStateChanged(auth, (user) => {
             window.loadActiveSeasonalVote(),
             window.loadPatchNotes()
         ]).then(() => { window.renderSeasonalVoting(); window.fetchHomepageTierLists(); });
-        // Open shared tier list if URL param present
-        const _tlId = new URLSearchParams(window.location.search).get('tl');
+        // Handle shared URL params
+        const _urlParams = new URLSearchParams(window.location.search);
+        const _tlId = _urlParams.get('tl');
+        const _animeId = _urlParams.get('anime');
+        const _profileId = _urlParams.get('profile');
         if (_tlId) { history.replaceState({}, '', window.location.pathname); setTimeout(() => window.openTierListViewer(_tlId), 600); }
+        else if (_animeId) { history.replaceState({}, '', window.location.pathname); setTimeout(() => window.loadAnimeDetails(parseInt(_animeId), true), 300); }
+        else if (_profileId) { history.replaceState({}, '', window.location.pathname); setTimeout(() => window.viewUserProfile(_profileId), 300); }
         // Restore last view after login
         const savedView = sessionStorage.getItem('weebee-last-view');
         if (savedView) {
@@ -497,6 +548,7 @@ window.sendDM = async function() {
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
     if (!text) return;
+    if (window.checkTextContent(text)) return alert('Your message contains language that isn\'t allowed on WeeBee.');
     input.value = '';
     const uid = auth.currentUser.uid;
     const myName = auth.currentUser.displayName || 'Someone';
@@ -815,6 +867,8 @@ window.previewInDepthReview = function() {
 window.submitInDepthReview = async function() {
     if (!auth.currentUser) return window.openAuthModal();
     const { categories, overallScore, fanService } = window.pendingInDepthData;
+    const catTexts = (categories || []).map(c => c.text || '');
+    if (window.checkTextContent(...catTexts)) return alert('Your review contains language that isn\'t allowed on WeeBee.');
     try {
         if (window.existingReviewId) {
             await updateDoc(doc(db, "reviews", window.existingReviewId), {
@@ -852,7 +906,7 @@ window.submitInDepthReview = async function() {
         }
         window.pendingInDepthData = null;
         window.closeAllModals();
-        window.loadAnimeDetails(window.currentAnimeId);
+        await window.maybeTriggerSeriesPrompt();
     } catch(e) { alert('Failed to submit review.'); console.error(e); }
 };
 
@@ -860,6 +914,7 @@ window.submitQuickReview = async function() {
     if (!auth.currentUser) return window.openAuthModal();
     const score = parseFloat(document.getElementById('quick-score-value').value);
     const text = document.getElementById('quick-score-text').value.trim();
+    if (window.checkTextContent(text)) return alert('Your review contains language that isn\'t allowed on WeeBee.');
     const _qfsVal = document.getElementById('quick-fanservice-value').value;
     const fanService = _qfsVal !== '' ? parseFloat(_qfsVal) : null;
     if (!score || score < 1 || score > 10) return alert('Please enter a score between 1 and 10.');
@@ -896,9 +951,54 @@ window.submitQuickReview = async function() {
             window.sendReviewNotifications(_qTitle, window.currentAnimeId).catch(() => {});
         }
         window.closeAllModals();
-        window.loadAnimeDetails(window.currentAnimeId);
+        await window.maybeTriggerSeriesPrompt();
     } catch(e) { alert('Failed to submit review.'); console.error(e); }
 };
+
+window.maybeTriggerSeriesPrompt = async function() {
+    if (!auth.currentUser || !window.currentAnime) { window.loadAnimeDetails(window.currentAnimeId); return; }
+    const SERIES_RELATIONS = ['Sequel', 'Prequel', 'Parent story', 'Full story'];
+    const hasRelations = window.currentAnime.relations?.some(r => SERIES_RELATIONS.includes(r.relation));
+    if (!hasRelations) { window.loadAnimeDetails(window.currentAnimeId); return; }
+    // Check if user already has a series review anchored to this mal_id
+    try {
+        const existing = await getDocs(query(collection(db, "reviews"),
+            where("uid", "==", auth.currentUser.uid),
+            where("mal_id", "==", window.currentAnimeId),
+            where("type", "==", "series")));
+        if (!existing.empty) { window.loadAnimeDetails(window.currentAnimeId); return; }
+    } catch(_) {}
+    const title = window.currentAnime.title_english || window.currentAnime.title;
+    document.getElementById('series-review-subtitle').innerText =
+        `You just reviewed a season of ${title}. Want to also leave an overall series rating?`;
+    document.getElementById('series-score-value').value = '';
+    document.getElementById('series-score-text').value = '';
+    document.getElementById('series-review-modal').style.display = 'flex';
+};
+
+window.submitSeriesReview = async function() {
+    if (!auth.currentUser) return;
+    const score = parseFloat(document.getElementById('series-score-value').value);
+    const text = document.getElementById('series-score-text').value.trim();
+    if (window.checkTextContent(text)) return alert('Your review contains language that isn\'t allowed on WeeBee.');
+    if (!score || score < 1 || score > 10) return alert('Please enter a score between 1 and 10.');
+    try {
+        await addDoc(collection(db, "reviews"), {
+            mal_id: window.currentAnimeId,
+            animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
+            animeImage: window.currentAnime?.images?.jpg?.image_url,
+            type: 'series', score, text,
+            username: auth.currentUser.displayName,
+            avatar: auth.currentUser.photoURL,
+            uid: auth.currentUser.uid,
+            timestamp: new Date(),
+            likes: [], commentCount: 0
+        });
+        window.closeAllModals();
+        window.loadAnimeDetails(window.currentAnimeId);
+    } catch(e) { alert('Failed to submit series rating.'); console.error(e); }
+};
+
 window.toggleAuthMode = function() {
     window.isSignUpMode = !window.isSignUpMode;
     const title = document.getElementById('auth-title');
@@ -1344,6 +1444,12 @@ window.saveListEntry = async function(docId, mal_id, title, img, totalEps) {
         if(window.currentActiveViewId === 'profile-view') fetchUserProfile(window.targetProfileUid);
         const addBtn = document.getElementById('add-to-list-btn');
         if (addBtn) { addBtn.innerHTML = '<span class="material-symbols-outlined">check</span> In My List'; addBtn.style.background = 'var(--bg-gray-darker)'; addBtn.style.color = 'var(--text-muted)'; }
+        // Update any quick-add buttons in search results for this anime
+        document.querySelectorAll(`.search-quick-add[data-mal="${mal_id}"]`).forEach(btn => {
+            btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:15px;">check</span> In List';
+            btn.style.background = 'var(--bg-gray-darker)';
+            btn.style.color = 'var(--text-muted)';
+        });
     } catch(e) { alert("Failed to save entry"); console.error(e); }
 };
 
@@ -1661,8 +1767,25 @@ window.deleteReview = async function(reviewId, btn) {
         await deleteDoc(doc(db, "reviews", reviewId));
         const card = btn.closest('.review-card');
         if (card) card.remove();
+        const seriesSection = document.getElementById('detail-series-section');
+        const seriesList = document.getElementById('detail-series-reviews');
+        if (seriesSection && seriesList && seriesList.querySelectorAll('.review-card').length === 0) {
+            seriesSection.style.display = 'none';
+        }
     } catch(e) { alert('Failed to delete review.'); console.error(e); }
 };
+
+window.toggleReviewMenu = function(reviewId) {
+    const menu = document.getElementById(`review-menu-${reviewId}`);
+    if (!menu) return;
+    const isOpen = menu.style.display !== 'none';
+    document.querySelectorAll('[id^="review-menu-"]').forEach(m => m.style.display = 'none');
+    menu.style.display = isOpen ? 'none' : 'block';
+};
+
+document.addEventListener('click', () => {
+    document.querySelectorAll('[id^="review-menu-"]').forEach(m => m.style.display = 'none');
+});
 
 window.toggleReaction = async function(event, reviewId, type, btn) {
     if(event) { event.preventDefault(); event.stopPropagation(); }
@@ -1702,6 +1825,91 @@ window.toggleReaction = async function(event, reviewId, type, btn) {
             ).catch(() => {});
         }
     }
+};
+
+window.deleteInlineComment = async function(commentId, reviewId, isReply = false) {
+    if (!auth.currentUser) return;
+    if (!confirm('Delete this comment?')) return;
+    try {
+        await deleteDoc(doc(db, "comments", commentId));
+        const el = document.getElementById(`comment-doc-${commentId}`);
+        if (el) el.remove();
+        if (!isReply) {
+            updateDoc(doc(db, "reviews", reviewId), { commentCount: increment(-1) }).catch(() => {});
+            const countEl = document.getElementById(`comment-count-${reviewId}`);
+            if (countEl) {
+                const cur = Math.max(0, parseInt(countEl.innerText) - 1);
+                countEl.innerText = cur + (cur === 1 ? ' Comment' : ' Comments');
+            }
+        }
+    } catch(e) { alert('Failed to delete comment.'); }
+};
+
+window.editInlineComment = function(commentId) {
+    const p = document.getElementById(`comment-text-${commentId}`);
+    if (!p) return;
+    const original = p.innerText;
+    p.outerHTML = `
+        <div id="comment-edit-${commentId}">
+            <textarea id="comment-edit-input-${commentId}" style="width:100%; padding:6px; border-radius:6px; border:1px solid var(--border-color); font-size:12px; resize:vertical; background:var(--bg-gray); color:var(--text-dark); margin-top:4px;" rows="2">${original}</textarea>
+            <div style="display:flex; gap:8px; margin-top:4px;">
+                <button onclick="saveInlineComment('${commentId}')" class="action-btn" style="padding:3px 10px; font-size:11px;">Save</button>
+                <button onclick="cancelEditComment('${commentId}','${original.replace(/'/g,"\\'")}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:11px;">Cancel</button>
+            </div>
+        </div>`;
+};
+
+window.cancelEditComment = function(commentId, original) {
+    const wrap = document.getElementById(`comment-edit-${commentId}`);
+    if (wrap) wrap.outerHTML = `<p id="comment-text-${commentId}" style="font-size:12px; margin-top:2px;">${original}</p>`;
+};
+
+window.saveInlineComment = async function(commentId) {
+    const input = document.getElementById(`comment-edit-input-${commentId}`);
+    if (!input) return;
+    const newText = input.value.trim();
+    if (!newText) return;
+    if (window.checkTextContent(newText)) return alert('Your comment contains language that isn\'t allowed on WeeBee.');
+    try {
+        await updateDoc(doc(db, "comments", commentId), { text: newText, edited: true });
+        const wrap = document.getElementById(`comment-edit-${commentId}`);
+        if (wrap) wrap.outerHTML = `<p id="comment-text-${commentId}" style="font-size:12px; margin-top:2px; word-break:break-word;">${newText} <span style="font-size:10px; color:var(--text-muted); font-style:italic;">(edited)</span></p>`;
+    } catch(e) { alert('Failed to save edit.'); }
+};
+
+window.toggleReplyInput = function(commentId) {
+    const el = document.getElementById(`reply-input-${commentId}`);
+    if (!el) return;
+    const isOpen = el.style.display !== 'none';
+    el.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) document.getElementById(`reply-text-${commentId}`)?.focus();
+};
+
+window.submitReply = async function(parentCommentId, reviewId) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const input = document.getElementById(`reply-text-${parentCommentId}`);
+    const text = input?.value.trim();
+    if (!text) return;
+    if (window.checkTextContent(text)) return alert('Your reply contains language that isn\'t allowed on WeeBee.');
+    try {
+        const newRef = await addDoc(collection(db, "comments"), {
+            reviewId, parentCommentId, text,
+            username: auth.currentUser.displayName,
+            avatar: auth.currentUser.photoURL,
+            uid: auth.currentUser.uid,
+            timestamp: new Date(), likes: [], dislikes: []
+        });
+        input.value = '';
+        document.getElementById(`reply-input-${parentCommentId}`).style.display = 'none';
+        const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
+        if (repliesContainer) {
+            repliesContainer.insertAdjacentHTML('beforeend', window.buildCommentHTML({
+                id: newRef.id, text, username: auth.currentUser.displayName,
+                avatar: auth.currentUser.photoURL, uid: auth.currentUser.uid,
+                likes: [], dislikes: [], reviewId
+            }, reviewId, true));
+        }
+    } catch(e) { alert('Failed to post reply.'); }
 };
 
 window.toggleCommentReaction = async function(event, commentId, type, btnElement) {
@@ -1746,34 +1954,77 @@ window.toggleComments = function(event, reviewId) {
     else { container.style.display = 'none'; if(!card.querySelector('.full-review-content') || card.querySelector('.full-review-content').style.display === 'none') card.classList.remove('expanded'); }
 };
 
+window.buildCommentHTML = function(c, reviewId, isReply = false) {
+    const id = c.id;
+    const isOwner = auth.currentUser && c.uid === auth.currentUser.uid;
+    const likeStyle = auth.currentUser && c.likes?.includes(auth.currentUser.uid) ? 'color:var(--accent-yellow);' : 'color:var(--text-muted);';
+    const dislikeStyle = auth.currentUser && c.dislikes?.includes(auth.currentUser.uid) ? 'color:red;' : 'color:var(--text-muted);';
+    const size = isReply ? 24 : 30;
+    const ownerBtns = isOwner ? `
+        <button onclick="editInlineComment('${id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;display:flex;align-items:center;" title="Edit"><span class="material-symbols-outlined" style="font-size:13px;">edit</span></button>
+        <button onclick="deleteInlineComment('${id}','${reviewId}',${isReply})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;display:flex;align-items:center;" title="Delete"><span class="material-symbols-outlined" style="font-size:13px;">delete</span></button>` : '';
+    const replyBtn = !isReply && auth.currentUser ? `<button onclick="toggleReplyInput('${id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:11px;display:flex;align-items:center;gap:3px;"><span class="material-symbols-outlined" style="font-size:13px;">reply</span> Reply</button>` : '';
+    const replySection = !isReply ? `
+        <div id="replies-${id}" style="margin-top:6px;"></div>
+        <div id="reply-input-${id}" style="display:none; margin-top:6px;">
+            <div style="display:flex; gap:6px;">
+                <input type="text" id="reply-text-${id}" placeholder="Write a reply..." maxlength="500" style="flex:1; padding:6px 10px; border-radius:8px; border:1px solid var(--border-color); font-size:12px; background:var(--bg-gray); color:var(--text-dark);" onkeydown="if(event.key==='Enter') submitReply('${id}','${reviewId}')">
+                <button onclick="submitReply('${id}','${reviewId}')" class="action-btn" style="padding:4px 10px; font-size:11px;">Reply</button>
+                <button onclick="toggleReplyInput('${id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:11px;">Cancel</button>
+            </div>
+        </div>` : '';
+    return `
+        <div id="comment-doc-${id}" style="display:flex; gap:8px; margin-bottom:8px; background:var(--bg-white); padding:10px; border-radius:8px; border:1px solid var(--border-color);">
+            <img src="${c.avatar}" style="width:${size}px; height:${size}px; border-radius:50%; object-fit:cover; cursor:pointer; flex-shrink:0;" onclick="viewUserProfile('${c.uid}')">
+            <div style="flex:1; min-width:0;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+                    <strong style="font-size:12px; cursor:pointer;" onclick="viewUserProfile('${c.uid}')">${c.username}</strong>
+                    <div style="display:flex; gap:4px;">${ownerBtns}</div>
+                </div>
+                <p id="comment-text-${id}" style="font-size:12px; margin-top:2px; word-break:break-word;">${c.text}${c.edited ? ' <span style="font-size:10px; color:var(--text-muted); font-style:italic;">(edited)</span>' : ''}</p>
+                <div style="display:flex; gap:12px; margin-top:5px; font-size:11px; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:3px; cursor:pointer; ${likeStyle}" onclick="toggleCommentReaction(event,'${id}','like',this)"><span class="material-symbols-outlined" style="font-size:13px;">thumb_up</span><span class="c-like-count">${c.likes?.length || 0}</span></div>
+                    <div style="display:flex; align-items:center; gap:3px; cursor:pointer; ${dislikeStyle}" onclick="toggleCommentReaction(event,'${id}','dislike',this)"><span class="material-symbols-outlined" style="font-size:13px;">thumb_down</span><span class="c-dislike-count">${c.dislikes?.length || 0}</span></div>
+                    ${replyBtn}
+                </div>
+                ${replySection}
+            </div>
+        </div>`;
+};
+
 window.fetchInlineComments = async function(reviewId) {
     const list = document.getElementById(`comments-list-${reviewId}`);
     list.innerHTML = '<div class="loading" style="font-size:12px;">Loading...</div>';
-    const q = query(collection(db, "comments"), where("reviewId", "==", reviewId));
-    const snap = await getDocs(q);
-    let html = '';
-    
-    let commentsArray = [];
-    snap.forEach(doc => { let d = doc.data(); d.id = doc.id; commentsArray.push(d); });
-    commentsArray.sort((a, b) => a.timestamp - b.timestamp);
+    const snap = await getDocs(query(collection(db, "comments"), where("reviewId", "==", reviewId)));
+    let all = [];
+    snap.forEach(d => { all.push({ ...d.data(), id: d.id }); });
+    all.sort((a, b) => (a.timestamp?.toMillis?.() || 0) - (b.timestamp?.toMillis?.() || 0));
 
-    // Update the comment count display with the real count
-    const countEl = document.getElementById(`comment-count-${reviewId}`);
-    if (countEl) countEl.innerText = commentsArray.length + (commentsArray.length === 1 ? ' Comment' : ' Comments');
-
-    commentsArray.forEach(c => {
-        const id = c.id;
-        const likeStyle = auth.currentUser && c.likes?.includes(auth.currentUser.uid) ? 'color: var(--accent-yellow);' : 'color: var(--text-muted);';
-        const dislikeStyle = auth.currentUser && c.dislikes?.includes(auth.currentUser.uid) ? 'color: red;' : 'color: var(--text-muted);';
-        html += `<div style="display:flex; gap:10px; margin-bottom: 10px; background: var(--bg-white); padding: 10px; border-radius: 8px; border: 1px solid #E0E0E0;"><img src="${c.avatar}" style="width:30px; height:30px; border-radius:50%; object-fit:cover; cursor:pointer;" onclick="viewUserProfile('${c.uid}')"><div style="flex: 1;"><strong style="font-size:12px; cursor:pointer;" class="clickable-user" onclick="viewUserProfile('${c.uid}')">${c.username}</strong><p style="font-size:12px; margin-top:2px;">${c.text}</p><div style="display: flex; gap: 15px; margin-top: 6px; font-size: 11px;"><div style="display:flex; align-items:center; gap: 4px; cursor:pointer; ${likeStyle}" onclick="toggleCommentReaction(event, '${id}', 'like', this)"><span class="material-symbols-outlined" style="font-size: 14px;">thumb_up</span> <span class="c-like-count">${c.likes?.length || 0}</span></div><div style="display:flex; align-items:center; gap: 4px; cursor:pointer; ${dislikeStyle}" onclick="toggleCommentReaction(event, '${id}', 'dislike', this)"><span class="material-symbols-outlined" style="font-size: 14px;">thumb_down</span> <span class="c-dislike-count">${c.dislikes?.length || 0}</span></div></div></div></div>`;
+    const topLevel = all.filter(c => !c.parentCommentId);
+    const repliesMap = {};
+    all.filter(c => c.parentCommentId).forEach(c => {
+        if (!repliesMap[c.parentCommentId]) repliesMap[c.parentCommentId] = [];
+        repliesMap[c.parentCommentId].push(c);
     });
-    list.innerHTML = html || '<p style="text-align:center; font-size:12px;">No comments yet.</p>';
+
+    const countEl = document.getElementById(`comment-count-${reviewId}`);
+    if (countEl) countEl.innerText = topLevel.length + (topLevel.length === 1 ? ' Comment' : ' Comments');
+
+    if (topLevel.length === 0) { list.innerHTML = '<p style="text-align:center; font-size:12px; color:var(--text-muted);">No comments yet.</p>'; return; }
+
+    list.innerHTML = topLevel.map(c => {
+        const html = window.buildCommentHTML(c, reviewId, false);
+        const replies = (repliesMap[c.id] || []).map(r => window.buildCommentHTML(r, reviewId, true)).join('');
+        return html.replace(`<div id="replies-${c.id}" style="margin-top:6px;"></div>`,
+            `<div id="replies-${c.id}" style="margin-top:6px; padding-left:12px; border-left:2px solid var(--border-color);">${replies}</div>`);
+    }).join('');
 };
 
 window.submitInlineComment = async function(reviewId) {
     if(!auth.currentUser) return window.openAuthModal();
     const input = document.getElementById(`comment-input-${reviewId}`);
     if(!input.value.trim()) return;
+    if (window.checkTextContent(input.value)) return alert('Your comment contains language that isn\'t allowed on WeeBee.');
     await addDoc(collection(db, "comments"), { reviewId, text: input.value.trim(), username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL, uid: auth.currentUser.uid, timestamp: new Date(), likes: [], dislikes: [] });
     updateDoc(doc(db, "reviews", reviewId), { commentCount: increment(1) }).catch(() => {});
     const countEl = document.getElementById(`comment-count-${reviewId}`);
@@ -1852,7 +2103,10 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                 <div style="display:flex; gap: 15px;">
                     <img src="${rev.avatar}" class="avatar clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">
                     <div><strong><span class="clickable-user" style="color:var(--text-dark);" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> ${window.getFounderBadgeHTML(safeUid)} ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)}<br>
-                    <span style="font-size: 12px; color: var(--text-muted); display:flex; align-items:center; gap:6px; margin-top:3px; min-width:0;">${rev.animeImage ? `<img src="${rev.animeImage}" class="review-cover-mobile" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">` : ''}Reviewed: <strong class="review-anime-title" style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong></span></div>
+                    <span style="font-size: 12px; color: var(--text-muted); display:flex; align-items:center; gap:6px; margin-top:3px; min-width:0;">${rev.animeImage ? `<img src="${rev.animeImage}" class="review-cover-mobile" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">` : ''}${rev.type === 'series'
+                        ? `<span style="background:var(--accent-yellow); color:#111; font-size:10px; font-weight:800; padding:2px 7px; border-radius:4px; text-transform:uppercase; letter-spacing:0.5px;">Series Rating</span>`
+                        : `Season Review: <strong class="review-anime-title" style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong>`
+                    }</span></div>
                 </div>
                 ${window.getFollowBtnHTML(safeUid)}
             </div>
@@ -1861,14 +2115,25 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
         `;
     }
 
+    const isOwner = auth.currentUser && rev.uid === auth.currentUser.uid;
     return `
         <div class="review-card weebee-review interactive review-item" onclick="${rev.type === 'in-depth' ? 'toggleReviewExpand(this)' : ''}">
+            ${isOwner ? `
+            <div style="position:absolute; top:10px; right:10px; z-index:5;" onclick="event.stopPropagation();">
+                <button onclick="window.toggleReviewMenu('${rev.id}')" style="background:rgba(0,0,0,0.35); border:none; border-radius:50%; width:28px; height:28px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:white;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">more_vert</span>
+                </button>
+                <div id="review-menu-${rev.id}" style="display:none; position:absolute; top:32px; right:0; background:var(--bg-white); border:1px solid var(--border-color); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); min-width:130px; overflow:hidden; z-index:10;">
+                    <button onclick="event.stopPropagation(); deleteReview('${rev.id}', this)" style="width:100%; padding:10px 14px; background:none; border:none; text-align:left; cursor:pointer; color:#FF5252; font-size:13px; display:flex; align-items:center; gap:8px;">
+                        <span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete
+                    </button>
+                </div>
+            </div>` : ''}
             ${innerContent}
             <div class="review-actions">
                 <div class="action-stat"><button onclick="window.toggleComments(event, '${rev.id}')"><span class="material-symbols-outlined">chat_bubble</span></button><span class="action-label" id="comment-count-${rev.id}">${rev.commentCount || 0} Comments</span></div>
                 <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'like', this)" style="${auth.currentUser && rev.likes?.includes(auth.currentUser.uid) ? 'color:var(--accent-yellow);' : ''}"><span class="material-symbols-outlined">thumb_up</span></button><span class="action-label">${rev.likes?.length || 0} Likes</span></div>
                 <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'dislike', this)" style="${auth.currentUser && rev.dislikes?.includes(auth.currentUser.uid) ? 'color:red;' : ''}"><span class="material-symbols-outlined">thumb_down</span></button><span class="action-label">${rev.dislikes?.length || 0} Dislikes</span></div>
-                ${auth.currentUser && rev.uid === auth.currentUser.uid ? `<div class="action-stat" style="margin-left:auto;"><button onclick="event.stopPropagation(); deleteReview('${rev.id}', this)" style="color:#FF5252;"><span class="material-symbols-outlined">delete</span></button></div>` : ''}
             </div>
             ${rev.type === 'in-depth' ? '<div class="expand-hint-row"><span class="expand-hint"><span class="material-symbols-outlined" style="font-size:11px; vertical-align:middle;">expand_more</span> Click to expand</span></div>' : ''}
             <div id="comments-container-${rev.id}" class="inline-comments" style="display:none; margin-top: 15px; padding-top: 15px; position: relative; z-index: 2;" onclick="event.stopPropagation();">
@@ -1882,13 +2147,25 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
 };
 
 // --- DYNAMIC PROFILE HUB VIEW ---
-window.viewUserProfile = function(uid) {
+window.viewUserProfile = function(uid, skipUrlUpdate = false) {
     if(!uid) return;
     window.targetProfileUid = uid;
     switchView('profile-view');
+    if (!skipUrlUpdate) history.replaceState({}, '', `?profile=${uid}`);
 };
 
 const EDIT_GENRES = ['Action','Adventure','Comedy','Drama','Fantasy','Horror','Mystery','Romance','Sci-Fi','Slice of Life','Sports','Supernatural','Thriller','Mecha'];
+const BANNER_PRESETS = [
+    { label: 'Dark',     value: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)' },
+    { label: 'WeeBee',   value: 'linear-gradient(135deg, #1a1a1a 0%, #b8860b 100%)' },
+    { label: 'Midnight', value: 'linear-gradient(135deg, #0f0c29, #302b63)' },
+    { label: 'Sunset',   value: 'linear-gradient(135deg, #f12711, #f5af19)' },
+    { label: 'Forest',   value: 'linear-gradient(135deg, #134E5E, #71B280)' },
+    { label: 'Purple',   value: 'linear-gradient(135deg, #8E2DE2, #4A00E0)' },
+    { label: 'Ocean',    value: 'linear-gradient(135deg, #1CB5E0, #000046)' },
+    { label: 'Pink',     value: 'linear-gradient(135deg, #f953c6, #b91d73)' },
+    { label: 'Sakura',   value: 'linear-gradient(135deg, #ffb7c5, #d4548a)' },
+];
 
 window.toggleGenreChip = function(el) {
     const selected = document.querySelectorAll('#edit-genre-chips .genre-chip.active');
@@ -1953,7 +2230,27 @@ window.openEditProfileModal = async function() {
         `<button type="button" class="genre-chip ${currentGenres.includes(g) ? 'active' : ''}" onclick="toggleGenreChip(this)">${g}</button>`
     ).join('');
 
+    const currentBanner = pd.bannerUrl || '';
+    window.selectedBannerPreset = BANNER_PRESETS.some(p => p.value === currentBanner) ? currentBanner : '';
+    const bannerUrlInput = document.getElementById('edit-profile-banner');
+    if (bannerUrlInput) {
+        bannerUrlInput.value = currentBanner.startsWith('url(') ? currentBanner.slice(4, -1) : '';
+    }
+    const presetsEl = document.getElementById('banner-presets');
+    if (presetsEl) {
+        presetsEl.innerHTML = BANNER_PRESETS.map(p =>
+            `<div onclick="selectBannerPreset(this, '${p.value}')" title="${p.label}" style="width:56px; height:34px; border-radius:6px; cursor:pointer; background:${p.value}; border:3px solid ${currentBanner === p.value ? 'var(--accent-yellow)' : 'transparent'}; flex-shrink:0; transition:border-color 0.15s;"></div>`
+        ).join('');
+    }
+
     document.getElementById('edit-profile-modal').style.display = 'flex';
+};
+
+window.selectBannerPreset = function(el, value) {
+    window.selectedBannerPreset = value;
+    document.getElementById('edit-profile-banner').value = '';
+    document.querySelectorAll('#banner-presets div').forEach(d => d.style.borderColor = 'transparent');
+    el.style.borderColor = 'var(--accent-yellow)';
 };
 
 window.saveEditProfile = async function() {
@@ -1966,6 +2263,7 @@ window.saveEditProfile = async function() {
     const errEl = document.getElementById('edit-profile-error');
 
     if (!newName) return errEl.innerText = 'Display name cannot be empty.';
+    if (window.checkTextContent(newName, bio)) return errEl.innerText = 'Your profile contains language that isn\'t allowed on WeeBee.';
     if (newName.length < 2) return errEl.innerText = 'Display name must be at least 2 characters.';
 
     const uid = auth.currentUser.uid;
@@ -2001,7 +2299,9 @@ window.saveEditProfile = async function() {
             await updateProfile(auth.currentUser, { photoURL: avatar });
         }
 
-        await setDoc(doc(db, "profiles", uid), { displayName: newName, bio, avatar: avatar || auth.currentUser.photoURL, genres }, { merge: true });
+        const bannerInput = document.getElementById('edit-profile-banner')?.value.trim();
+        const bannerUrl = window.selectedBannerPreset || (bannerInput ? `url(${bannerInput})` : '');
+        await setDoc(doc(db, "profiles", uid), { displayName: newName, bio, avatar: avatar || auth.currentUser.photoURL, genres, bannerUrl }, { merge: true });
 
         window.closeAllModals();
         fetchUserProfile(uid);
@@ -2080,18 +2380,23 @@ window.fetchUserProfile = async function(targetUid = null) {
         ? `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;">${pGenres.map(g => `<span class="genre-chip active" style="pointer-events:none;">${g}</span>`).join('')}</div>`
         : '';
     const bioHTML = pBio ? `<p style="font-size:14px; color:var(--text-dark); line-height:1.6; margin-top:6px;">${pBio}</p>` : '';
+    const pBanner = profileData.bannerUrl || 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)';
+    const bannerStyle = pBanner.startsWith('url(') ? `background-image:${pBanner}` : `background:${pBanner}`;
 
     document.getElementById('profile-header-container').innerHTML = `
-        <div class="profile-header">
-            <img src="${pAvatar}" class="profile-avatar-large" style="flex-shrink:0;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(pName)}&backgroundColor=ffc107&fontColor=333333'">
-            <div style="flex:1; min-width:0;">
-                <h1 style="font-size: 28px; margin-bottom: 4px;">${pName} ${window.getFounderBadgeHTML(uidToFetch, 22)}</h1>
-                <p style="color: var(--text-muted); font-size: 13px;">WeeBee Member since ${pJoined}</p>
-                <div id="profile-follow-counts" style="display:flex; gap:12px; margin-top:4px; font-size:14px; font-weight:600;"></div>
-                ${bioHTML}
-                ${genreChipsHTML}
+        <div class="profile-header-wrap">
+            <div class="profile-banner" style="${bannerStyle};"></div>
+            <div class="profile-header">
+                <img src="${pAvatar}" class="profile-avatar-large" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(pName)}&backgroundColor=ffc107&fontColor=333333'">
+                <div style="flex:1; min-width:0; padding-top:14px;">
+                    <h1 style="font-size: 28px; margin-bottom: 4px;">${pName} ${window.getFounderBadgeHTML(uidToFetch, 22)}</h1>
+                    <p style="color: var(--text-muted); font-size: 13px;">WeeBee Member since ${pJoined}</p>
+                    <div id="profile-follow-counts" style="display:flex; gap:12px; margin-top:4px; font-size:14px; font-weight:600;"></div>
+                    ${bioHTML}
+                    ${genreChipsHTML}
+                </div>
+                ${editBtnHtml}
             </div>
-            ${editBtnHtml}
         </div>
     `;
 
@@ -2290,6 +2595,7 @@ window.submitProfileComment = async function() {
     if(!user) return window.openAuthModal();
     const input = document.getElementById('profile-comment-input');
     if(!input.value.trim()) return;
+    if (window.checkTextContent(input.value)) return alert('Your comment contains language that isn\'t allowed on WeeBee.');
     const targetUid = window.targetProfileUid || user.uid;
     await addDoc(collection(db, "profile_comments"), { profileOwnerId: targetUid, authorName: user.displayName, authorAvatar: user.photoURL, uid: user.uid, text: input.value.trim(), timestamp: new Date() });
     input.value = ''; fetchProfileComments(targetUid);
@@ -2382,17 +2688,29 @@ window.deleteProfileComment = async function(commentId, ownerId) {
 };
 
 // --- Home Feed & News from Follows ---
-window.fetchHomepageReviews = async function() {
+window._lastReviewDoc = null;
+window._feedLoading = false;
+window._feedExhausted = false;
+const HOME_FEED_PAGE_SIZE = 15;
+
+async function loadReviewBatch(append = false) {
+    if (window._feedLoading || window._feedExhausted) return;
+    window._feedLoading = true;
+    const feed = document.getElementById('review-feed');
     try {
-        const q = query(collection(db, "reviews"), orderBy("timestamp", "desc"), limit(20));
+        let q = query(collection(db, "reviews"), orderBy("timestamp", "desc"), limit(HOME_FEED_PAGE_SIZE));
+        if (append && window._lastReviewDoc) q = query(collection(db, "reviews"), orderBy("timestamp", "desc"), startAfter(window._lastReviewDoc), limit(HOME_FEED_PAGE_SIZE));
+
         const snap = await getDocs(q);
+        if (snap.empty || snap.docs.length < HOME_FEED_PAGE_SIZE) window._feedExhausted = true;
+        if (snap.empty) { window._feedLoading = false; return; }
+        window._lastReviewDoc = snap.docs[snap.docs.length - 1];
+
         const revDocs = [];
         snap.forEach(d => revDocs.push({ ...d.data(), id: d.id }));
-
         const uids = revDocs.map(r => r.uid).filter(Boolean);
         await window.prefetchRankCache(uids);
 
-        // Batch-fetch real comment counts in one query
         if (revDocs.length > 0) {
             const reviewIds = revDocs.map(r => r.id);
             const commSnap = await getDocs(query(collection(db, "comments"), where("reviewId", "in", reviewIds)));
@@ -2401,9 +2719,23 @@ window.fetchHomepageReviews = async function() {
             revDocs.forEach(r => { r.commentCount = countMap[r.id] || 0; });
         }
 
-        const feed = document.getElementById('review-feed'); feed.innerHTML = '';
+        if (!append) feed.innerHTML = '';
         revDocs.forEach(r => feed.innerHTML += window.generateReviewCardHTML(r));
+
+        // Show/hide the sentinel loader
+        const sentinel = document.getElementById('feed-scroll-sentinel');
+        if (sentinel) sentinel.style.display = window._feedExhausted ? 'none' : 'block';
     } catch(e) { console.error("Error loading home feed:", e); }
+    window._feedLoading = false;
+}
+
+window.fetchHomepageReviews = async function() {
+    window._lastReviewDoc = null;
+    window._feedExhausted = false;
+    window._feedLoading = false;
+    const feed = document.getElementById('review-feed');
+    feed.innerHTML = '<div class="loading">Fetching recent reviews...</div>';
+    await loadReviewBatch(false);
 
     if(auth.currentUser) {
         try {
@@ -2636,6 +2968,8 @@ window.renderSeasonalVoting = function() {
                         <div style="font-size:12px;font-weight:700;line-height:1.3;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.title}">${c.title}</div>
                         ${hasVoted ? `<div style="background:var(--bg-gray-darker);border-radius:4px;height:6px;margin-bottom:4px;overflow:hidden;"><div style="background:${isMyVote ? 'var(--accent-yellow)' : isWinner ? placeColors[winnerIdx] : 'var(--text-muted)'};height:100%;width:${pct}%;transition:width 0.4s;"></div></div><div style="font-size:11px;color:var(--text-muted);">${pct}% · ${votes} vote${votes !== 1 ? 's' : ''}</div>` : ''}
                         ${!hasVoted ? `<button onclick="event.stopPropagation(); submitSeasonalVote(${c.mal_id})" class="action-btn" style="width:100%;justify-content:center;padding:6px;font-size:12px;margin-top:4px;">Vote</button>` : ''}
+                        ${hasVoted && !vote.closed && !isMyVote && auth.currentUser ? `<button onclick="event.stopPropagation(); submitSeasonalVote(${c.mal_id})" class="action-btn" style="width:100%;justify-content:center;padding:6px;font-size:11px;margin-top:4px;background:transparent;color:var(--text-dark);border:1px solid var(--border-color);">Change Vote</button>` : ''}
+                        ${isMyVote && !vote.closed ? `<div style="font-size:11px;font-weight:700;color:var(--accent-yellow);margin-top:6px;text-align:center;">✓ Your Vote</div>` : ''}
                         ${vote.closed && placeLabel ? `<div style="font-size:11px;font-weight:700;color:${placeColors[winnerIdx]};margin-top:4px;">${placeLabel}</div>` : ''}
                     </div>
                 </div>`;
@@ -3048,8 +3382,17 @@ window.openPatchNoteModal = function(index) {
     const body = document.getElementById('article-reader-body');
     body.style.whiteSpace = 'pre-line';
     body.innerText = p.body;
-    const link = document.getElementById('article-reader-link');
-    link.style.display = 'none';
+    document.getElementById('article-reader-link').style.display = 'none';
+    window.currentArticleReactionId = p.id;
+    const uid = auth.currentUser?.uid;
+    const likes = p.likes || [];
+    const dislikes = p.dislikes || [];
+    const reactionsEl = document.getElementById('article-reader-reactions');
+    reactionsEl.style.display = 'flex';
+    document.getElementById('article-like-count').innerText = likes.length;
+    document.getElementById('article-dislike-count').innerText = dislikes.length;
+    document.getElementById('article-like-btn').style.color = uid && likes.includes(uid) ? 'var(--accent-yellow)' : 'var(--text-dark)';
+    document.getElementById('article-dislike-btn').style.color = uid && dislikes.includes(uid) ? '#FF5252' : 'var(--text-dark)';
     window.closeAllModals();
     document.getElementById('article-reader-modal').style.display = 'flex';
 };
@@ -3072,6 +3415,32 @@ window.submitPatchNote = async function() {
         await window.loadPatchNotes();
         alert('Patch notes posted!');
     } catch(e) { alert('Failed to post.'); console.error(e); }
+};
+
+window.toggleArticleReaction = async function(type) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const id = window.currentArticleReactionId;
+    if (!id) return;
+    const uid = auth.currentUser.uid;
+    const pRef = doc(db, "patch_notes", id);
+    const pSnap = await getDoc(pRef);
+    if (!pSnap.exists()) return;
+    let likes = [...(pSnap.data().likes || [])];
+    let dislikes = [...(pSnap.data().dislikes || [])];
+    if (type === 'like') {
+        likes = likes.includes(uid) ? likes.filter(u => u !== uid) : [...likes.filter(u => u !== uid), uid];
+        dislikes = dislikes.filter(u => u !== uid);
+    } else {
+        dislikes = dislikes.includes(uid) ? dislikes.filter(u => u !== uid) : [...dislikes.filter(u => u !== uid), uid];
+        likes = likes.filter(u => u !== uid);
+    }
+    await updateDoc(pRef, { likes, dislikes });
+    document.getElementById('article-like-count').innerText = likes.length;
+    document.getElementById('article-dislike-count').innerText = dislikes.length;
+    document.getElementById('article-like-btn').style.color = likes.includes(uid) ? 'var(--accent-yellow)' : 'var(--text-dark)';
+    document.getElementById('article-dislike-btn').style.color = dislikes.includes(uid) ? '#FF5252' : 'var(--text-dark)';
+    const cached = window.currentPatchNotes.find(p => p.id === id);
+    if (cached) { cached.likes = likes; cached.dislikes = dislikes; }
 };
 
 window.checkPatchNoteBadge = function() {
@@ -3100,6 +3469,8 @@ window.currentNewsArticles = [];
 window.openArticleModal = function(index) {
     const item = window.currentNewsArticles[index];
     if (!item) return;
+    window.currentArticleReactionId = null;
+    document.getElementById('article-reader-reactions').style.display = 'none';
     document.getElementById('article-reader-link').style.display = 'inline-flex';
     document.getElementById('article-reader-body').style.whiteSpace = 'normal';
     const img = document.getElementById('article-reader-img');
@@ -3461,9 +3832,11 @@ window.fetchDiscoverPage = async function() {
                 let suggestedMalIds = new Set(); let friendsSuggested = [];
                 recentRevs.forEach(d => {
                     const data = d.data();
-                    if(friendIds.includes(data.uid) && !suggestedMalIds.has(data.mal_id)) {
+                    const isSuggestion = data.type === 'suggestion';
+                    const meetsThreshold = isSuggestion || parseFloat(data.score) >= 8;
+                    if(friendIds.includes(data.uid) && !suggestedMalIds.has(data.mal_id) && meetsThreshold) {
                         suggestedMalIds.add(data.mal_id);
-                        friendsSuggested.push({ mal_id: data.mal_id, title: data.animeTitle, image: data.animeImage, friendName: data.username, action: data.type === 'suggestion' ? 'Suggested' : 'Reviewed' });
+                        friendsSuggested.push({ mal_id: data.mal_id, title: data.animeTitle, image: data.animeImage, friendName: data.username, action: isSuggestion ? 'Suggested' : 'Reviewed' });
                     }
                 });
                 friendsCarousel.innerHTML = '';
@@ -3526,9 +3899,8 @@ async function fetchAPI_CategoriesSequentially() {
 async function fetchAndRenderCarousel(url, containerId) {
     const container = document.getElementById(containerId); if(!container) return;
     try {
-        const res = await fetch(url);
-        if(!res.ok) { container.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); font-size:13px;">Couldn\'t load right now — try refreshing.</p>'; return; }
-        const { data } = await res.json(); container.innerHTML = '';
+        const { data } = await window.jikanFetch(url, `carousel_${containerId}`, JIKAN_CAROUSEL_TTL_MS);
+        container.innerHTML = '';
         if(!data || data.length === 0) { container.innerHTML = '<p class="empty-msg" style="color:var(--text-muted);">No anime found.</p>'; return; }
         const seen = new Set();
         data.forEach(anime => {
@@ -3601,14 +3973,27 @@ window.searchAnime = async function(queryStr) {
             html += `<h4 style="font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:12px;">Anime</h4>
                 <div class="top10-list-container">`;
             data.forEach(anime => {
+                const title = anime.title_english || anime.title;
+                const img = anime.images.jpg.image_url;
+                const eps = anime.episodes || 0;
+                const inList = window.myAnimeList?.some(a => a.mal_id === anime.mal_id);
+                const safeTitle = title.replace(/'/g, "\\'");
                 html += `
                     <div class="top10-list-item" onclick="loadAnimeDetails(${anime.mal_id})">
-                        <img src="${anime.images.jpg.image_url}">
+                        <img src="${img}">
                         <div style="flex:1; min-width:0;">
-                            <h3 style="margin-bottom:4px; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${anime.title_english || anime.title}</h3>
+                            <h3 style="margin-bottom:4px; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${title}</h3>
                             <p style="font-size:12px; color:var(--text-muted);">${anime.type || ''}, ${anime.year || 'N/A'}</p>
                         </div>
-                        <div class="rating-badge blue" style="width:40px; height:40px; font-size:14px; flex-shrink:0;">${anime.score || 'N/A'}</div>
+                        <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
+                            <div class="rating-badge blue" style="width:40px; height:40px; font-size:14px;">${anime.score || 'N/A'}</div>
+                            <button onclick="event.stopPropagation(); selectAnimeForList(${anime.mal_id}, '${safeTitle}', '${img}', ${eps})"
+                                class="action-btn search-quick-add" data-mal="${anime.mal_id}"
+                                style="padding:6px 12px; font-size:12px; ${inList ? 'background:var(--bg-gray-darker); color:var(--text-muted);' : ''}">
+                                <span class="material-symbols-outlined" style="font-size:15px;">${inList ? 'check' : 'add'}</span>
+                                ${inList ? 'In List' : 'Add'}
+                            </button>
+                        </div>
                     </div>`;
             });
             html += '</div>';
@@ -3629,6 +4014,10 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     if(targetId !== 'anime-detail-view') window.previousViewId = targetId;
     if(targetId !== 'profile-view') window.targetProfileUid = null;
     if (!skipHistory) {
+        // Clear ?anime= or ?profile= params when navigating to non-detail views
+        if (targetId !== 'anime-detail-view' && targetId !== 'profile-view') {
+            history.replaceState({}, '', window.location.pathname);
+        }
         history.pushState({ view: targetId, profileUid: window.targetProfileUid, animeId: window.currentAnimeId }, '', window.location.pathname);
     }
     // Save state for refresh restoration
@@ -3640,8 +4029,19 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     window.currentActiveViewId = targetId;
     document.querySelector('.main-content').scrollTo(0,0);
     
-    if(targetId === 'home-view') { fetchHomepageReviews(); window.fetchHomepageTierLists(); }
-    if(targetId === 'community-view') window.fetchCommunityTierLists();
+    if(targetId === 'home-view') { fetchHomepageReviews(); window.fetchHomepageTierLists(); window.fetchHomeWordleFeed(); }
+    if(targetId === 'community-view') {
+        window.fetchCommunityTierLists();
+        // Update thumbnail status without opening the game
+        const today = new Date().toISOString().split('T')[0];
+        const statusEl = document.getElementById('wordle-status-text');
+        if (statusEl && window.wordleState.date === today) {
+            const { solved, guesses } = window.wordleState;
+            statusEl.innerText = solved ? `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!` : guesses.length > 0 ? `${guesses.length} ${guesses.length===1?'guess':'guesses'} so far` : 'New puzzle available! 🗡️';
+        } else if (statusEl) {
+            statusEl.innerText = 'New puzzle available! 🗡️';
+        }
+    }
     if(targetId === 'news-view') {
         fetchGlobalNews();
         window.loadPatchNotes();
@@ -3681,9 +4081,11 @@ window.addEventListener('popstate', (e) => {
 
 // --- ANIME DETAIL SYSTEM ---
 window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
-    window.currentAnimeId = mal_id; switchView('anime-detail-view', false, skipHistory);
-    const res = await fetch(`https://api.jikan.moe/v4/anime/${mal_id}/full`);
-    const { data: anime } = await res.json(); window.currentAnime = anime;
+    window.currentAnimeId = mal_id;
+    switchView('anime-detail-view', false, skipHistory);
+    if (!skipHistory) history.replaceState({}, '', `?anime=${mal_id}`);
+    const { data: anime } = await window.jikanFetch(`https://api.jikan.moe/v4/anime/${mal_id}/full`, `full_${mal_id}`);
+    window.currentAnime = anime;
 
     let fanServiceScores = new Map(); 
     const revQ = query(collection(db, "reviews"), where("mal_id", "==", mal_id));
@@ -3805,6 +4207,9 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
             <button onclick="openSuggestModal()" class="action-btn" style="width:100%; justify-content:center; background: transparent; color: var(--text-dark); border: 1px solid #E0E0E0;">
                 <span class="material-symbols-outlined">send</span> Suggest
             </button>
+            <button onclick="navigator.clipboard.writeText(window.location.origin + '/?anime=' + window.currentAnimeId).then(() => { this.innerHTML='<span class=\\'material-symbols-outlined\\'>check</span> Copied!'; setTimeout(() => this.innerHTML='<span class=\\'material-symbols-outlined\\'>link</span> Copy Link', 2000); })" class="action-btn" style="width:100%; justify-content:center; background: transparent; color: var(--text-dark); border: 1px solid #E0E0E0;">
+                <span class="material-symbols-outlined">link</span> Copy Link
+            </button>
         </div>
         <div class="detail-main">
             <h1>${anime.title_english || anime.title}</h1>
@@ -3826,6 +4231,15 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
                 <div id="detail-eps-container"><div class="loading">Loading Episodes...</div></div>
             </div>
             <div id="tab-reviews" class="detail-tab-content" style="display:none;">
+                <div id="detail-series-section" style="display:none; margin-bottom:24px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                        <span class="material-symbols-outlined" style="color:var(--accent-yellow);">auto_stories</span>
+                        <h3 style="margin:0;">Series Ratings</h3>
+                        <span style="font-size:12px; color:var(--text-muted); margin-left:4px;">Overall franchise scores</span>
+                    </div>
+                    <div class="review-list" id="detail-series-reviews"></div>
+                    <div style="height:1px; background:var(--border-color); margin:20px 0;"></div>
+                </div>
                 <div class="review-header-container">
                     <h3>Reviews</h3>
                     <button class="action-btn" onclick="event.stopPropagation(); openReviewModal()">Write a Review</button>
@@ -3836,10 +4250,21 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
         </div>`;
 
     const revList = document.getElementById('detail-reviews'); revList.innerHTML = '';
-    revSnapshot.forEach(d => revList.innerHTML += window.generateReviewCardHTML({ ...d.data(), id: d.id }));
+    const seriesRevList = document.getElementById('detail-series-reviews');
+    let hasSeriesReviews = false;
+    revSnapshot.forEach(d => {
+        const rev = { ...d.data(), id: d.id };
+        if (rev.type === 'series') {
+            if (seriesRevList) { seriesRevList.innerHTML += window.generateReviewCardHTML(rev); hasSeriesReviews = true; }
+        } else {
+            revList.innerHTML += window.generateReviewCardHTML(rev);
+        }
+    });
+    const seriesSection = document.getElementById('detail-series-section');
+    if (seriesSection) seriesSection.style.display = hasSeriesReviews ? 'block' : 'none';
 
     // Async Fetchers
-    fetch(`https://api.jikan.moe/v4/anime/${mal_id}/characters`).then(r=>r.json()).then(d => {
+    window.jikanFetch(`https://api.jikan.moe/v4/anime/${mal_id}/characters`, `chars_${mal_id}`).then(d => {
         const cContainer = document.getElementById('detail-chars-container'); if(!cContainer) return;
         if(d.data && d.data.length > 0) {
             cContainer.innerHTML = `<h3>Characters & Voice Actors</h3><div class="character-grid">${d.data.slice(0, 6).map(c => `<div class="character-card"><img src="${c.character.images.jpg.image_url}"><div class="info"><span class="name" title="${c.character.name}">${c.character.name}</span><span class="role">${c.role}</span>${c.voice_actors && c.voice_actors.length > 0 ? `<span style="font-size:11px; margin-top:5px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">VA: ${c.voice_actors[0].person.name}</span>` : ''}</div></div>`).join('')}</div>`;
@@ -3848,14 +4273,14 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
 
     window.currentEpisodeList = [];
 
-    fetch(`https://api.jikan.moe/v4/anime/${mal_id}/recommendations`).then(r=>r.json()).then(d => {
+    window.jikanFetch(`https://api.jikan.moe/v4/anime/${mal_id}/recommendations`, `recs_${mal_id}`).then(d => {
         const rContainer = document.getElementById('detail-recs-container'); if(!rContainer) return;
         if(d.data && d.data.length > 0) {
             rContainer.innerHTML = `<h3>Similar Anime</h3><div class="carousel-container"><button class="carousel-arrow left" onclick="scrollCarousel('recs-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button><div class="carousel" id="recs-carousel" style="margin-bottom:0; padding-bottom:10px;">${d.data.slice(0, 10).map(rec => `<div class="anime-card" onclick="loadAnimeDetails(${rec.entry.mal_id})" style="min-width: 140px;"><img src="${rec.entry.images.jpg.image_url}" style="width:120px; height:170px;"><p style="max-width:120px; font-size:12px;">${rec.entry.title}</p></div>`).join('')}</div><button class="carousel-arrow right" onclick="scrollCarousel('recs-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button></div>`;
         } else { rContainer.style.display = 'none'; }
     }).catch(() => document.getElementById('detail-recs-container').style.display = 'none');
 
-    fetch(`https://api.jikan.moe/v4/anime/${mal_id}/news`).then(r=>r.json()).then(d => {
+    window.jikanFetch(`https://api.jikan.moe/v4/anime/${mal_id}/news`, `news_${mal_id}`, JIKAN_CAROUSEL_TTL_MS).then(d => {
         const nContainer = document.getElementById('detail-news-container'); if(!nContainer) return;
         if(d.data && d.data.length > 0) {
             nContainer.innerHTML = `<h3>Latest News</h3><div class="news-grid">${d.data.slice(0, 3).map(n => `<div class="news-card"><img src="${n.images?.jpg?.image_url || anime.images.jpg.image_url}"><div class="news-content"><h3>${n.title}</h3><p>${n.excerpt}</p><a href="${n.url}" target="_blank" class="news-link">Full Article</a></div></div>`).join('')}</div>`;
@@ -3902,17 +4327,52 @@ window.loadAnimeRelations = async function(mal_id) {
     const container = document.getElementById('tab-seasons');
     container.innerHTML = '<div class="loading">Loading related media...</div>';
     try {
-        const res = await fetch(`https://api.jikan.moe/v4/anime/${mal_id}/relations`);
-        const { data } = await res.json();
-        const entries = [];
-        (data || []).forEach(rel => rel.entry.forEach(e => { if (e.type === 'anime') entries.push({ ...e, relation: rel.relation }); }));
+        const allEntries = new Map(); // mal_id → entry object
+        const visited = new Set([parseInt(mal_id), mal_id]);
+        const chainQueue = []; // sequel/prequel ids to follow
+
+        // Fetch relations for a given id and collect entries
+        async function fetchAndCollect(id) {
+            const { data } = await window.jikanFetch(
+                `https://api.jikan.moe/v4/anime/${id}/relations`, `relations_${id}`
+            );
+            (data || []).forEach(rel => {
+                rel.entry.forEach(e => {
+                    if (e.type !== 'anime' || visited.has(e.mal_id)) return;
+                    visited.add(e.mal_id);
+                    allEntries.set(e.mal_id, { ...e, relation: rel.relation });
+                    if (['Sequel', 'Prequel'].includes(rel.relation)) {
+                        chainQueue.push(e.mal_id);
+                    }
+                });
+            });
+        }
+
+        // Step 1: get direct relations
+        await fetchAndCollect(mal_id);
+
+        // Step 2: follow sequel/prequel chain until exhausted (max 15 hops)
+        let hops = 0;
+        while (chainQueue.length > 0 && hops < 15) {
+            const nextId = chainQueue.shift();
+            hops++;
+            await new Promise(r => setTimeout(r, 420));
+            try { await fetchAndCollect(nextId); } catch(_) {}
+        }
+
+        const entries = [...allEntries.values()];
         if (entries.length === 0) {
             container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px; font-size:14px;">No related anime found.</p>';
             return;
         }
+
+        // Sort: sequels/prequels first, then other relations
+        const relOrder = { 'Prequel': 0, 'Sequel': 1, 'Parent story': 2, 'Full story': 3, 'Side story': 4, 'Other': 5 };
+        entries.sort((a, b) => (relOrder[a.relation] ?? 6) - (relOrder[b.relation] ?? 6));
+
         container.innerHTML = entries.map(e => `
             <div style="display:flex; align-items:center; gap:14px; padding:12px; border-radius:10px; background:var(--bg-gray); margin-bottom:8px; cursor:pointer;" onclick="loadAnimeDetails(${e.mal_id})">
-                <div id="rel-img-wrap-${e.mal_id}" style="width:50px; height:70px; border-radius:6px; background:var(--bg-gray-darker); flex-shrink:0; overflow:hidden;">
+                <div style="width:50px; height:70px; border-radius:6px; background:var(--bg-gray-darker); flex-shrink:0; overflow:hidden;">
                     <img id="rel-img-${e.mal_id}" src="" style="width:100%; height:100%; object-fit:cover; display:none;">
                 </div>
                 <div style="flex:1; min-width:0;">
@@ -3921,11 +4381,12 @@ window.loadAnimeRelations = async function(mal_id) {
                 </div>
                 <span class="material-symbols-outlined" style="color:var(--text-muted); flex-shrink:0;">chevron_right</span>
             </div>`).join('');
+
+        // Load cover images progressively
         for (const e of entries) {
             await new Promise(r => setTimeout(r, 420));
             try {
-                const r = await fetch(`https://api.jikan.moe/v4/anime/${e.mal_id}`);
-                const { data: d } = await r.json();
+                const { data: d } = await window.jikanFetch(`https://api.jikan.moe/v4/anime/${e.mal_id}`, `full_${e.mal_id}`);
                 const img = document.getElementById(`rel-img-${e.mal_id}`);
                 if (img && d?.images?.jpg?.image_url) { img.src = d.images.jpg.image_url; img.style.display = 'block'; }
             } catch(_) {}
@@ -3955,9 +4416,7 @@ async function fetchDetailEpisodes(mal_id, page = 1) {
         } catch(e) { console.error('Episode scores fetch error:', e); }
     }
     try {
-        const res = await fetch(`https://api.jikan.moe/v4/anime/${mal_id}/episodes?page=${page}`);
-        if (!res.ok) throw new Error(`Jikan ${res.status}`);
-        const json = await res.json();
+        const json = await window.jikanFetch(`https://api.jikan.moe/v4/anime/${mal_id}/episodes?page=${page}`, `eps_${mal_id}_p${page}`, JIKAN_CAROUSEL_TTL_MS);
         const episodes = json.data || [];
         const hasNext = json.pagination?.has_next_page;
         if (page === 1) window.currentEpisodeList = [];
@@ -4078,5 +4537,841 @@ window.onload = function() {
             });
         } catch(e) { console.error("Trending error:", e); }
     };
-    loadTrending(); fetchHomepageReviews();
+    loadTrending(); fetchHomepageReviews(); window.fetchHomeWordleFeed();
+};
+
+// =====================================================================
+// ONE PIECE WORDLE
+// =====================================================================
+
+const OP_ARC_ORDER = [
+    'Romance Dawn','Orange Town','Syrup Village','Baratie','Arlong Park',
+    'Loguetown','Reverse Mountain','Whisky Peak','Little Garden','Drum Island',
+    'Alabasta','Jaya','Skypiea','Long Ring Long Land','Water 7',
+    'Enies Lobby','Post-Enies Lobby','Thriller Bark','Sabaody Archipelago',
+    'Amazon Lily','Impel Down','Marineford','Post-War','Return to Sabaody',
+    'Fishman Island','Punk Hazard','Dressrosa','Zou','Whole Cake Island','Wano','Egghead'
+];
+
+const OP_WORDLE_CHARS = [
+    {id:'luffy',name:'Monkey D. Luffy',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:true,type:'Zoan',name:'Hito Hito no Mi, Nika Model'},haki:['Observation','Armament','Conquerors'],bounty:3000000000,height:174,firstArc:'Romance Dawn'},
+    {id:'zoro',name:'Roronoa Zoro',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:1111000000,height:181,firstArc:'Romance Dawn'},
+    {id:'nami',name:'Nami',gender:'Female',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:[],bounty:366000000,height:170,firstArc:'Orange Town'},
+    {id:'usopp',name:'Usopp',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation'],bounty:500000000,height:176,firstArc:'Syrup Village'},
+    {id:'sanji',name:'Sanji',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:1032000000,height:180,firstArc:'Baratie'},
+    {id:'chopper',name:'Tony Tony Chopper',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:true,type:'Zoan',name:'Hito Hito no Mi'},haki:[],bounty:1000,height:90,firstArc:'Drum Island'},
+    {id:'robin',name:'Nico Robin',gender:'Female',affiliation:'Straw Hat Pirates',df:{has:true,type:'Paramecia',name:'Hana Hana no Mi'},haki:['Observation','Armament'],bounty:930000000,height:188,firstArc:'Alabasta'},
+    {id:'franky',name:'Franky',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Armament'],bounty:394000000,height:225,firstArc:'Water 7'},
+    {id:'brook',name:'Brook',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:true,type:'Paramecia',name:'Yomi Yomi no Mi'},haki:[],bounty:383000000,height:277,firstArc:'Thriller Bark'},
+    {id:'jinbe',name:'Jinbe',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:1100000000,height:301,firstArc:'Impel Down'},
+    {id:'shanks',name:'Shanks',gender:'Male',affiliation:'Red Hair Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:4048900000,height:199,firstArc:'Romance Dawn'},
+    {id:'whitebeard',name:'Edward Newgate',gender:'Male',affiliation:'Whitebeard Pirates',df:{has:true,type:'Paramecia',name:'Gura Gura no Mi'},haki:['Observation','Armament','Conquerors'],bounty:5046000000,height:666,firstArc:'Jaya'},
+    {id:'kaido',name:'Kaido',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Uo Uo no Mi, Seiryu Model'},haki:['Observation','Armament','Conquerors'],bounty:4611100000,height:710,firstArc:'Dressrosa'},
+    {id:'bigmom',name:'Charlotte Linlin',gender:'Female',affiliation:'Big Mom Pirates',df:{has:true,type:'Paramecia',name:'Soru Soru no Mi'},haki:['Observation','Armament','Conquerors'],bounty:4388000000,height:880,firstArc:'Fishman Island'},
+    {id:'blackbeard',name:'Marshall D. Teach',gender:'Male',affiliation:'Blackbeard Pirates',df:{has:true,type:'Logia',name:'Yami Yami no Mi'},haki:['Armament'],bounty:3996000000,height:344,firstArc:'Jaya'},
+    {id:'akainu',name:'Sakazuki',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Magu Magu no Mi'},haki:['Observation','Armament','Conquerors'],bounty:0,height:306,firstArc:'Marineford'},
+    {id:'aokiji',name:'Kuzan',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Hie Hie no Mi'},haki:['Observation','Armament'],bounty:0,height:298,firstArc:'Long Ring Long Land'},
+    {id:'kizaru',name:'Borsalino',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Pika Pika no Mi'},haki:['Observation','Armament'],bounty:0,height:302,firstArc:'Sabaody Archipelago'},
+    {id:'garp',name:'Monkey D. Garp',gender:'Male',affiliation:'Marines',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:0,height:287,firstArc:'Post-Enies Lobby'},
+    {id:'smoker',name:'Smoker',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Moku Moku no Mi'},haki:['Armament'],bounty:0,height:209,firstArc:'Loguetown'},
+    {id:'tashigi',name:'Tashigi',gender:'Female',affiliation:'Marines',df:{has:false,type:null,name:null},haki:['Armament'],bounty:0,height:170,firstArc:'Loguetown'},
+    {id:'coby',name:'Coby',gender:'Male',affiliation:'Marines',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:0,height:183,firstArc:'Romance Dawn'},
+    {id:'mihawk',name:'Dracule Mihawk',gender:'Male',affiliation:'Cross Guild',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:3590000000,height:198,firstArc:'Baratie'},
+    {id:'hancock',name:'Boa Hancock',gender:'Female',affiliation:'Kuja Pirates',df:{has:true,type:'Paramecia',name:'Mero Mero no Mi'},haki:['Observation','Armament','Conquerors'],bounty:1659000000,height:191,firstArc:'Amazon Lily'},
+    {id:'doflamingo',name:'Donquixote Doflamingo',gender:'Male',affiliation:'Donquixote Pirates',df:{has:true,type:'Paramecia',name:'Ito Ito no Mi'},haki:['Observation','Armament','Conquerors'],bounty:340000000,height:305,firstArc:'Jaya'},
+    {id:'crocodile',name:'Crocodile',gender:'Male',affiliation:'Cross Guild',df:{has:true,type:'Logia',name:'Suna Suna no Mi'},haki:['Armament'],bounty:1965000000,height:253,firstArc:'Alabasta'},
+    {id:'law',name:'Trafalgar D. Water Law',gender:'Male',affiliation:'Heart Pirates',df:{has:true,type:'Paramecia',name:'Ope Ope no Mi'},haki:['Observation','Armament','Conquerors'],bounty:3000000000,height:191,firstArc:'Sabaody Archipelago'},
+    {id:'buggy',name:'Buggy',gender:'Male',affiliation:'Cross Guild',df:{has:true,type:'Paramecia',name:'Bara Bara no Mi'},haki:[],bounty:3189000000,height:182,firstArc:'Orange Town'},
+    {id:'sabo',name:'Sabo',gender:'Male',affiliation:'Revolutionary Army',df:{has:true,type:'Logia',name:'Mera Mera no Mi'},haki:['Observation','Armament','Conquerors'],bounty:602000000,height:187,firstArc:'Dressrosa'},
+    {id:'ace',name:'Portgas D. Ace',gender:'Male',affiliation:'Whitebeard Pirates',df:{has:true,type:'Logia',name:'Mera Mera no Mi'},haki:['Observation','Armament','Conquerors'],bounty:550000000,height:185,firstArc:'Alabasta'},
+    {id:'rayleigh',name:'Silvers Rayleigh',gender:'Male',affiliation:'Roger Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:0,height:188,firstArc:'Sabaody Archipelago'},
+    {id:'roger',name:'Gol D. Roger',gender:'Male',affiliation:'Roger Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:5564800000,height:274,firstArc:'Romance Dawn'},
+    {id:'kid',name:'Eustass Kid',gender:'Male',affiliation:'Kid Pirates',df:{has:true,type:'Paramecia',name:'Jiki Jiki no Mi'},haki:['Armament','Conquerors'],bounty:3000000000,height:205,firstArc:'Sabaody Archipelago'},
+    {id:'killer',name:'Killer',gender:'Male',affiliation:'Kid Pirates',df:{has:false,type:null,name:null},haki:['Armament'],bounty:200000000,height:195,firstArc:'Sabaody Archipelago'},
+    {id:'hawkins',name:'Basil Hawkins',gender:'Male',affiliation:'Hawkins Pirates',df:{has:true,type:'Paramecia',name:'Wara Wara no Mi'},haki:['Armament'],bounty:320000000,height:210,firstArc:'Sabaody Archipelago'},
+    {id:'drake',name:'X Drake',gender:'Male',affiliation:'SWORD',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Allosaurus Model'},haki:['Observation','Armament'],bounty:222000000,height:233,firstArc:'Sabaody Archipelago'},
+    {id:'bonney',name:'Jewelry Bonney',gender:'Female',affiliation:'Bonney Pirates',df:{has:true,type:'Paramecia',name:'Toshi Toshi no Mi'},haki:[],bounty:320000000,height:174,firstArc:'Sabaody Archipelago'},
+    {id:'bege',name:'Capone Bege',gender:'Male',affiliation:'Firetank Pirates',df:{has:true,type:'Paramecia',name:'Shiro Shiro no Mi'},haki:['Armament'],bounty:350000000,height:166,firstArc:'Sabaody Archipelago'},
+    {id:'lucci',name:'Rob Lucci',gender:'Male',affiliation:'CP0',df:{has:true,type:'Zoan',name:'Neko Neko no Mi, Leopard Model'},haki:['Observation','Armament','Conquerors'],bounty:0,height:212,firstArc:'Water 7'},
+    {id:'vivi',name:'Nefeltari Vivi',gender:'Female',affiliation:'Alabasta Kingdom',df:{has:false,type:null,name:null},haki:[],bounty:0,height:169,firstArc:'Whisky Peak'},
+    {id:'enel',name:'Enel',gender:'Male',affiliation:'Skypiea',df:{has:true,type:'Logia',name:'Goro Goro no Mi'},haki:[],bounty:0,height:266,firstArc:'Skypiea'},
+    {id:'arlong',name:'Arlong',gender:'Male',affiliation:'Arlong Pirates',df:{has:false,type:null,name:null},haki:[],bounty:20000000,height:263,firstArc:'Arlong Park'},
+    {id:'moria',name:'Gecko Moria',gender:'Male',affiliation:'Thriller Bark Pirates',df:{has:true,type:'Paramecia',name:'Kage Kage no Mi'},haki:[],bounty:320000000,height:692,firstArc:'Thriller Bark'},
+    {id:'perona',name:'Perona',gender:'Female',affiliation:'Thriller Bark Pirates',df:{has:true,type:'Paramecia',name:'Horo Horo no Mi'},haki:[],bounty:0,height:156,firstArc:'Thriller Bark'},
+    {id:'caesar',name:'Caesar Clown',gender:'Male',affiliation:'Punk Hazard',df:{has:true,type:'Logia',name:'Gasu Gasu no Mi'},haki:[],bounty:300000000,height:309,firstArc:'Punk Hazard'},
+    {id:'bartolomeo',name:'Bartolomeo',gender:'Male',affiliation:'Barto Club',df:{has:true,type:'Paramecia',name:'Bari Bari no Mi'},haki:['Armament'],bounty:200000000,height:220,firstArc:'Dressrosa'},
+    {id:'cavendish',name:'Cavendish',gender:'Male',affiliation:'Beautiful Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:330000000,height:200,firstArc:'Dressrosa'},
+    {id:'rebecca',name:'Rebecca',gender:'Female',affiliation:'Dressrosa',df:{has:false,type:null,name:null},haki:[],bounty:0,height:165,firstArc:'Dressrosa'},
+    {id:'katakuri',name:'Charlotte Katakuri',gender:'Male',affiliation:'Big Mom Pirates',df:{has:true,type:'Paramecia',name:'Mochi Mochi no Mi'},haki:['Observation','Armament','Conquerors'],bounty:1057000000,height:509,firstArc:'Whole Cake Island'},
+    {id:'carrot',name:'Carrot',gender:'Female',affiliation:'Mink Tribe',df:{has:false,type:null,name:null},haki:['Armament'],bounty:0,height:169,firstArc:'Zou'},
+    {id:'yamato',name:'Yamato',gender:'Female',affiliation:'Wano',df:{has:true,type:'Zoan',name:'Inu Inu no Mi, Okuchi-no-Makami Model'},haki:['Observation','Armament','Conquerors'],bounty:0,height:263,firstArc:'Wano'},
+    {id:'queen',name:'Queen',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Brachiosaurus Model'},haki:['Armament'],bounty:1320000000,height:612,firstArc:'Wano'},
+    {id:'king',name:'King',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Pteranodon Model'},haki:['Observation','Armament','Conquerors'],bounty:1390000000,height:613,firstArc:'Wano'},
+    {id:'jack',name:'Jack',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Zou Zou no Mi, Mammoth Model'},haki:['Armament'],bounty:1000000000,height:450,firstArc:'Zou'},
+    {id:'sengoku',name:'Sengoku',gender:'Male',affiliation:'Marines',df:{has:true,type:'Zoan',name:'Hito Hito no Mi, Daibutsu Model'},haki:['Observation','Armament','Conquerors'],bounty:0,height:278,firstArc:'Marineford'},
+];
+
+// --- Wordle Image System (One Piece anime characters from Jikan) ---
+window.wpImageMap = {};
+window.wpImgReady = false;
+
+window.wpLoadOpImages = async function() {
+    const cacheKey = 'wb_op_imgs_v5';
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+        try { window.wpImageMap = JSON.parse(cached); window.wpImgReady = true; return; } catch(e) {}
+    }
+    try {
+        const res = await fetch('https://api.jikan.moe/v4/anime/21/characters');
+        if (!res.ok) return;
+        const { data } = await res.json();
+        const map = {};
+        (data || []).forEach(entry => {
+            const char = entry.character;
+            if (!char?.images?.jpg?.image_url) return;
+            const img = char.images.jpg.image_url;
+            const raw = char.name; // Jikan uses "Last, First" for Japanese names
+            map[raw.toLowerCase()] = img;
+            if (raw.includes(',')) {
+                // "Luffy, Monkey D." → "Monkey D. Luffy"
+                const [last, ...rest] = raw.split(',');
+                const natural = `${rest.join(',').trim()} ${last.trim()}`;
+                map[natural.toLowerCase()] = img;
+                // Also index by first word of first name
+                const firstWord = rest.join(' ').trim().split(' ')[0].toLowerCase();
+                if (firstWord && !map[firstWord]) map[firstWord] = img;
+            } else {
+                // Index by last word (common surname/nickname)
+                const parts = raw.split(' ');
+                const last = parts[parts.length - 1].toLowerCase();
+                if (!map[last]) map[last] = img;
+            }
+        });
+        window.wpImageMap = map;
+        window.wpImgReady = true;
+        try { localStorage.setItem(cacheKey, JSON.stringify(map)); } catch(e) {}
+    } catch(e) {}
+};
+
+const WP_NAME_ALIASES = {
+    'kaido': 'kaidou',
+    'kaidou': 'kaido',
+    'charlotte linlin': 'big mom',
+    'big mom': 'charlotte linlin',
+    'marshall d. teach': 'blackbeard',
+    'gol d. roger': 'roger',
+};
+
+window.wpGetCharImage = function(name) {
+    const m = window.wpImageMap;
+    const n = name.toLowerCase();
+    if (m[n]) return m[n];
+    // Try alias
+    const alias = WP_NAME_ALIASES[n];
+    if (alias && m[alias]) return m[alias];
+    const parts = name.split(' ');
+    // Try last name
+    const last = parts[parts.length - 1].toLowerCase();
+    if (m[last]) return m[last];
+    // Try first name
+    const first = parts[0].toLowerCase();
+    if (m[first]) return m[first];
+    // Try alias of last name
+    const lastAlias = WP_NAME_ALIASES[last];
+    if (lastAlias && m[lastAlias]) return m[lastAlias];
+    return null;
+};
+
+window.wpApplyImages = function() {
+    document.querySelectorAll('[id^="wimg-"]').forEach(img => {
+        const charId = img.id.replace('wimg-', '');
+        const char = charId === 'answer'
+            ? window.wordleState.answer
+            : OP_WORDLE_CHARS.find(c => c.id === charId);
+        if (!char) return;
+        const url = window.wpGetCharImage(char.name);
+        if (url) {
+            img.src = url; img.style.display = 'block';
+            const fb = document.getElementById(`winitials-${charId}`);
+            if (fb) fb.style.display = 'none';
+        }
+    });
+};
+
+window.wpEnsureImages = async function() {
+    if (!window.wpImgReady) await window.wpLoadOpImages();
+    window.wpApplyImages();
+};
+
+window.wpEnterGuess = function() {
+    const firstItem = document.querySelector('#wordle-suggestions .wordle-suggestion-item');
+    if (firstItem) firstItem.click();
+};
+
+// --- Wordle Helpers ---
+function wpBounty(n) {
+    if (n === 0) return '฿ 0';
+    if (n >= 1000000000) return '฿ ' + (n/1000000000).toFixed(2).replace(/\.?0+$/,'') + 'B';
+    if (n >= 1000000) return '฿ ' + Math.round(n/1000000) + 'M';
+    return '฿ ' + n.toLocaleString();
+}
+function wpHeight(cm) {
+    return Math.floor(cm/100) + 'm' + (cm%100).toString().padStart(2,'0');
+}
+function wpHaki(h) {
+    if (!h || h.length === 0) return 'None';
+    return h.map(x => x === 'Observation' ? '👁️ Observation' : x === 'Armament' ? '🦾 Armament' : '👑 Conquerors').join('\n');
+}
+function wpDF(df) {
+    return df.has ? df.type : 'None';
+}
+
+function wpCalcColors(guess, answer) {
+    // Gender
+    const gender = guess.gender === answer.gender ? 'green' : 'red';
+    // Affiliation
+    const affiliation = guess.affiliation === answer.affiliation ? 'green' : 'red';
+    // Devil Fruit
+    let devilFruit;
+    if (!guess.df.has && !answer.df.has) devilFruit = 'green';
+    else if (guess.df.has !== answer.df.has) devilFruit = 'red';
+    else if (guess.df.type === answer.df.type) devilFruit = 'green';
+    else devilFruit = 'yellow';
+    // Haki
+    const gH = guess.haki, aH = answer.haki;
+    let haki;
+    if (gH.length === 0 && aH.length === 0) haki = 'green';
+    else if (gH.length === aH.length && gH.every(h => aH.includes(h))) haki = 'green';
+    else if (gH.some(h => aH.includes(h))) haki = 'yellow';
+    else haki = 'red';
+    // Bounty — exact or directional
+    let bounty = 'green', bountyDir = null;
+    if (guess.bounty !== answer.bounty) { bounty = 'red'; bountyDir = answer.bounty > guess.bounty ? 'up' : 'down'; }
+    // Height — exact or directional
+    let height = 'green', heightDir = null;
+    if (guess.height !== answer.height) { height = 'red'; heightDir = answer.height > guess.height ? 'up' : 'down'; }
+    // First Arc — exact or directional
+    const gIdx = OP_ARC_ORDER.indexOf(guess.firstArc);
+    const aIdx = OP_ARC_ORDER.indexOf(answer.firstArc);
+    let firstArc = 'green', arcDir = null;
+    if (gIdx !== aIdx) { firstArc = 'red'; arcDir = aIdx > gIdx ? 'up' : 'down'; }
+    return { gender, affiliation, devilFruit, haki, bounty, bountyDir, height, heightDir, firstArc, arcDir };
+}
+
+function wpGetToday() {
+    const msPerDay = 86400000;
+    const epoch = new Date('2025-01-01').getTime();
+    const idx = Math.floor((Date.now() - epoch) / msPerDay);
+    return OP_WORDLE_CHARS[idx % OP_WORDLE_CHARS.length];
+}
+
+function wpRenderRow(char, colors) {
+    function cell(val, color, dir) {
+        const bg = color === 'green' ? '#2e7d32' : color === 'yellow' ? '#e65100' : '#b71c1c';
+        const arrow = dir ? `<span class="material-symbols-outlined" style="font-size:24px; margin-top:3px;">${dir === 'up' ? 'arrow_upward' : 'arrow_downward'}</span>` : '';
+        const valHtml = val.includes('\n') ? val.split('\n').map(v=>`<span>${v}</span>`).join('<br>') : val;
+        return `<div class="wordle-cell ${color}" style="white-space:pre-line;">${valHtml}${arrow ? '<br>'+arrow : ''}</div>`;
+    }
+    const initials = char.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const avatarHtml = `
+        <img id="wimg-${char.id}" src="" style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:2px solid var(--accent-yellow);display:none;">
+        <div id="winitials-${char.id}" style="width:60px;height:60px;border-radius:50%;background:var(--accent-yellow);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;color:#111;">${initials}</div>`;
+    const displayName = char.name.split(' ').length > 2 ? char.name.split(' ').slice(-2).join(' ') : char.name;
+    return `<div class="wordle-row">
+        <div class="wordle-char-cell">
+            ${avatarHtml}
+            <div style="font-size:10px;font-weight:700;text-align:center;margin-top:4px;color:var(--text-dark);line-height:1.2;">${displayName}</div>
+        </div>
+        ${cell(char.gender, colors.gender)}
+        ${cell(char.affiliation, colors.affiliation)}
+        ${cell(wpDF(char.df), colors.devilFruit)}
+        ${cell(wpHaki(char.haki), colors.haki)}
+        ${cell(wpBounty(char.bounty), colors.bounty, colors.bountyDir)}
+        ${cell(wpHeight(char.height), colors.height, colors.heightDir)}
+        ${cell(char.firstArc, colors.firstArc, colors.arcDir)}
+    </div>`;
+}
+
+function wpShowResult() {
+    const { answer, guesses, solved } = window.wordleState;
+    const resultEl = document.getElementById('wordle-result');
+    const inputArea = document.getElementById('wordle-input-area');
+    if (!resultEl) return;
+    if (solved) {
+        const initials = answer.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        const answerImg = `
+            <img id="wimg-answer" src="" style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:3px solid #FFD700;display:none;">
+            <div id="winitials-answer" style="width:100px;height:100px;border-radius:50%;background:var(--accent-yellow);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;color:#111;">${initials}</div>`;
+        resultEl.style.display = 'block';
+        resultEl.style.background = '#1b5e20';
+        resultEl.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+            ${answerImg}
+            <div style="font-size:20px;font-weight:800;color:#FFD700;">${answer.name}</div>
+            <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
+            <div style="display:flex; gap:10px; margin-top:8px; flex-wrap:wrap; justify-content:center;">
+                <button onclick="window.wpShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);">
+                    <span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result
+                </button>
+                <button id="wordle-post-btn" onclick="window.wpPostToFeed(this)" class="action-btn" style="background:var(--accent-yellow);color:#111;font-size:13px;" ${!auth.currentUser ? 'style="display:none;"' : ''}>
+                    <span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed
+                </button>
+            </div>
+        </div>`;
+        if (inputArea) inputArea.style.display = 'none';
+        // Load answer image
+        window.wpEnsureImages();
+        // Update thumbnail status
+        const statusEl = document.getElementById('wordle-status-text');
+        if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
+    } else {
+        resultEl.style.display = 'none';
+        if (inputArea) inputArea.style.display = 'block';
+    }
+}
+
+function wpRender() {
+    const grid = document.getElementById('wordle-grid');
+    if (!grid) return;
+    const { answer, guesses } = window.wordleState;
+    grid.innerHTML = guesses.map(g => wpRenderRow(g, wpCalcColors(g, answer))).join('');
+    window.wpEnsureImages();
+    wpShowResult();
+}
+
+function wpAnimateNewRow(char, colors) {
+    const grid = document.getElementById('wordle-grid');
+    if (!grid) return;
+    grid.insertAdjacentHTML('beforeend', wpRenderRow(char, colors));
+    window.wpEnsureImages();
+    const newRow = grid.lastElementChild;
+    const cells = newRow.querySelectorAll('.wordle-cell');
+    cells.forEach((cell, i) => {
+        cell.style.transform = 'rotateX(-90deg)';
+        cell.style.opacity = '0';
+        setTimeout(() => {
+            cell.style.transition = 'transform 0.75s ease, opacity 0.55s ease';
+            cell.style.transform = '';
+            cell.style.opacity = '';
+        }, i * 500);
+    });
+}
+
+// --- Wordle State & Init ---
+window.wordleState = { answer: null, guesses: [], solved: false, selectedChar: null, date: null };
+
+window.openWordleModal = function() {
+    window.closeAllModals();
+    document.getElementById('wordle-modal').style.display = 'flex';
+    window.initWordleGame();
+    window.wpLoadOpImages(); // pre-warm cache in background
+};
+
+window.initWordleGame = async function() {
+    const today = new Date().toISOString().split('T')[0];
+    if (window.wordleState.answer && window.wordleState.date === today) {
+        // Already initialized for today — just re-render
+        document.getElementById('wordle-loading').style.display = 'none';
+        document.getElementById('wordle-content').style.display = 'block';
+        wpRender();
+        return;
+    }
+    window.wordleState = { answer: wpGetToday(), guesses: [], solved: false, selectedChar: null, date: today };
+    try {
+        if (auth.currentUser) {
+            const snap = await getDoc(doc(db, 'op_wordle_games', `${auth.currentUser.uid}_${today}`));
+            if (snap.exists()) {
+                const d = snap.data();
+                window.wordleState.guesses = (d.guesses||[]).map(id=>OP_WORDLE_CHARS.find(c=>c.id===id)).filter(Boolean);
+                window.wordleState.solved = d.solved || false;
+            }
+        } else {
+            const saved = localStorage.getItem(`wb_wordle_${today}`);
+            if (saved) { const d = JSON.parse(saved); window.wordleState.guesses=(d.guesses||[]).map(id=>OP_WORDLE_CHARS.find(c=>c.id===id)).filter(Boolean); window.wordleState.solved=d.solved||false; }
+        }
+    } catch(e) {}
+    document.getElementById('wordle-loading').style.display = 'none';
+    document.getElementById('wordle-content').style.display = 'block';
+    wpRender();
+    // Update thumbnail status text
+    const statusEl = document.getElementById('wordle-status-text');
+    if (statusEl) {
+        const { solved, guesses } = window.wordleState;
+        statusEl.innerText = solved ? `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!` : guesses.length > 0 ? `${guesses.length} ${guesses.length===1?'guess':'guesses'} so far — keep going!` : 'New puzzle available! 🗡️';
+    }
+};
+
+window.searchWordleChar = function() {
+    const q = document.getElementById('wordle-search')?.value.trim().toLowerCase();
+    const sugg = document.getElementById('wordle-suggestions');
+    if (!sugg) return;
+    if (!q) { sugg.style.display = 'none'; return; }
+    const guessedIds = new Set(window.wordleState.guesses.map(g => g.id));
+    const matches = OP_WORDLE_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
+    if (!matches.length) { sugg.style.display = 'none'; return; }
+    sugg.style.display = 'block';
+    sugg.innerHTML = matches.map(c => `<div class="wordle-suggestion-item" onclick="window.selectWordleChar('${c.id}')">${c.name}</div>`).join('');
+};
+
+window.selectWordleChar = function(id) {
+    const char = OP_WORDLE_CHARS.find(c => c.id === id);
+    if (!char) return;
+    window.wordleState.selectedChar = char;
+    const inp = document.getElementById('wordle-search');
+    if (inp) inp.value = '';
+    const sugg = document.getElementById('wordle-suggestions');
+    if (sugg) sugg.style.display = 'none';
+    window.submitWordleGuess();
+};
+
+window.submitWordleGuess = async function() {
+    const char = window.wordleState.selectedChar;
+    if (!char || window.wordleState.solved) return;
+    if (window.wordleState.guesses.some(g => g.id === char.id)) return;
+    const colors = wpCalcColors(char, window.wordleState.answer);
+    window.wordleState.guesses.push(char);
+    window.wordleState.selectedChar = null;
+    const isCorrect = char.id === window.wordleState.answer.id;
+    if (isCorrect) window.wordleState.solved = true;
+    // Animate the new row
+    wpAnimateNewRow(char, colors);
+    // Show result after animation completes
+    const totalCells = 7;
+    const delay = totalCells * 500 + 800;
+    setTimeout(() => wpShowResult(), delay);
+    // Save state
+    const today = new Date().toISOString().split('T')[0];
+    const saveData = { guesses: window.wordleState.guesses.map(g=>g.id), solved: window.wordleState.solved, date: today, guessCount: window.wordleState.guesses.length, displayName: auth.currentUser?.displayName || 'Player' };
+    if (auth.currentUser) {
+        setDoc(doc(db, 'op_wordle_games', `${auth.currentUser.uid}_${today}`), saveData).catch(() => {});
+        if (window.wordleState.solved) window.wpUpdateLeaderboard(window.wordleState.guesses.length);
+    } else {
+        localStorage.setItem(`wb_wordle_${today}`, JSON.stringify(saveData));
+    }
+};
+
+window.wpUpdateLeaderboard = async function(guessCount) {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const ref = doc(db, 'op_wordle_leaderboard', uid);
+    const snap = await getDoc(ref);
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+    if (snap.exists()) {
+        const d = snap.data();
+        const streak = d.lastWinDate === yesterday ? (d.currentStreak||0)+1 : 1;
+        await updateDoc(ref, { totalWins: increment(1), totalGuesses: increment(guessCount), currentStreak: streak, bestStreak: Math.max(d.bestStreak||0, streak), lastWinDate: today, displayName: auth.currentUser.displayName });
+    } else {
+        await setDoc(ref, { totalWins:1, totalGuesses:guessCount, currentStreak:1, bestStreak:1, lastWinDate:today, displayName: auth.currentUser.displayName });
+    }
+};
+
+window.wpShare = function() {
+    const { answer, guesses, solved } = window.wordleState;
+    const today = new Date().toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'});
+    const map = { green:'🟩', yellow:'🟨', red:'🟥' };
+    const rows = guesses.map(g => {
+        const c = wpCalcColors(g, answer);
+        return [c.gender,c.affiliation,c.devilFruit,c.haki,c.bounty,c.height,c.firstArc].map(x=>map[x]||'⬛').join('');
+    }).join('\n');
+    const text = `One Piece Wordle — ${today}\n${solved?`Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`:'Not solved'}\n\n${rows}\n\nPlay on weebee.buzz`;
+    navigator.clipboard.writeText(text).then(()=>alert('Copied to clipboard!')).catch(()=>alert('Could not copy'));
+};
+
+window.wpPostToFeed = async function(btn) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const { answer, guesses, solved } = window.wordleState;
+    if (!solved) return;
+    const today = new Date().toISOString().split('T')[0];
+    // Check if already posted today
+    const existingSnap = await getDocs(query(collection(db, 'wordle_posts'),
+        where('uid', '==', auth.currentUser.uid), where('date', '==', today)));
+    if (!existingSnap.empty) { btn.innerText = 'Already posted!'; btn.disabled = true; return; }
+    const map = { green:'🟩', yellow:'🟨', red:'🟥' };
+    const emojiGrid = guesses.map(g => {
+        const c = wpCalcColors(g, answer);
+        return [c.gender,c.affiliation,c.devilFruit,c.haki,c.bounty,c.height,c.firstArc].map(x=>map[x]||'⬛').join('');
+    }).join('\n');
+    try {
+        btn.disabled = true; btn.innerText = 'Posting...';
+        const av = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        await addDoc(collection(db, 'wordle_posts'), {
+            uid: auth.currentUser.uid,
+            displayName: auth.currentUser.displayName,
+            avatar: av,
+            guessCount: guesses.length,
+            emojiGrid,
+            date: today,
+            timestamp: new Date()
+        });
+        btn.innerText = '✓ Posted!';
+        window.fetchHomeWordleFeed();
+    } catch(e) { btn.disabled = false; btn.innerText = 'Post to Feed'; alert('Failed to post.'); }
+};
+
+window.fetchHomeWordleFeed = async function() {
+    const section = document.getElementById('home-wordle-section');
+    const feed = document.getElementById('home-wordle-feed');
+    if (!section || !feed) return;
+    const today = new Date().toISOString().split('T')[0];
+    try {
+        const snap = await getDocs(query(collection(db, 'wordle_posts'), where('date', '==', today)));
+        if (snap.empty) { section.style.display = 'none'; return; }
+        const posts = snap.docs.map(d => ({ ...d.data(), id: d.id }))
+            .sort((a, b) => (a.guessCount || 99) - (b.guessCount || 99));
+        section.style.display = 'block';
+        feed.innerHTML = posts.map(p => `
+            <div style="display:flex; gap:14px; align-items:flex-start; background:var(--bg-gray); border-radius:12px; padding:16px;">
+                <img src="${p.avatar}" class="avatar" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(p.displayName)}&backgroundColor=ffc107&fontColor=333333'">
+                <div style="flex:1;">
+                    <div style="font-weight:700; font-size:14px; margin-bottom:2px;">${p.displayName}</div>
+                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">Solved today's ⚓ One Piece Wordle in <strong style="color:var(--text-dark);">${p.guessCount} ${p.guessCount===1?'guess':'guesses'}</strong></div>
+                    <div style="font-family:monospace; font-size:16px; letter-spacing:2px; line-height:1.8;">${p.emojiGrid.split('\n').join('<br>')}</div>
+                </div>
+            </div>`).join('');
+    } catch(e) { section.style.display = 'none'; }
+};
+
+window.openWordleLeaderboard = function() {
+    window.closeAllModals();
+    document.getElementById('wordle-leaderboard-modal').style.display = 'flex';
+    window.showWordleLeaderboardTab('today');
+};
+
+window.showWordleLeaderboardTab = async function(tab) {
+    const todayBtn = document.getElementById('wlb-tab-today');
+    const alltimeBtn = document.getElementById('wlb-tab-alltime');
+    const content = document.getElementById('wordle-leaderboard-content');
+    if (!content) return;
+    todayBtn.style.background = tab==='today' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+    todayBtn.style.color = tab==='today' ? '#111' : 'var(--text-dark)';
+    alltimeBtn.style.background = tab==='alltime' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+    alltimeBtn.style.color = tab==='alltime' ? '#111' : 'var(--text-dark)';
+    content.innerHTML = '<div class="loading">Loading...</div>';
+    const today = new Date().toISOString().split('T')[0];
+    try {
+        if (tab === 'today') {
+            const snap = await getDocs(query(collection(db,'op_wordle_games'), where('date','==',today), where('solved','==',true)));
+            const sorted = snap.docs.sort((a,b)=>(a.data().guessCount||99)-(b.data().guessCount||99)).slice(0,10);
+            if (!sorted.length) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:30px;">No winners yet today — be the first!</p>'; return; }
+            content.innerHTML = sorted.map((d,i)=>{
+                const data=d.data();
+                const medal=['🥇','🥈','🥉'][i]||`${i+1}.`;
+                return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;background:var(--bg-gray);margin-bottom:8px;">
+                    <span style="font-size:20px;width:28px;">${medal}</span>
+                    <div style="flex:1;"><div style="font-weight:700;font-size:14px;">${data.displayName||'Player'}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${data.guessCount} ${data.guessCount===1?'guess':'guesses'}</div></div></div>`;
+            }).join('');
+        } else {
+            const snap = await getDocs(collection(db,'op_wordle_leaderboard'));
+            const sorted = snap.docs.sort((a,b)=>(b.data().totalWins||0)-(a.data().totalWins||0)).slice(0,10);
+            if (!sorted.length) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:30px;">No scores yet!</p>'; return; }
+            content.innerHTML = sorted.map((d,i)=>{
+                const data=d.data();
+                const avg = data.totalWins>0?(data.totalGuesses/data.totalWins).toFixed(1):'-';
+                const medal=['🥇','🥈','🥉'][i]||`${i+1}.`;
+                return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;background:var(--bg-gray);margin-bottom:8px;">
+                    <span style="font-size:20px;width:28px;">${medal}</span>
+                    <div style="flex:1;"><div style="font-weight:700;font-size:14px;">${data.displayName||'Player'}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${data.totalWins} wins · Avg ${avg} guesses · Best streak: ${data.bestStreak||1}</div></div></div>`;
+            }).join('');
+        }
+    } catch(e) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:20px;">Could not load leaderboard.</p>'; console.error(e); }
+};
+
+document.addEventListener('click', e => {
+    if (!e.target.closest('.wordle-search-wrap')) {
+        const s = document.getElementById('wordle-suggestions');
+        if (s) s.style.display = 'none';
+    }
+});
+
+// --- Infinite Scroll for Home Feed ---
+const _feedObserver = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && window.currentActiveViewId === 'home-view') {
+        loadReviewBatch(true);
+    }
+}, { rootMargin: '200px' });
+
+const _sentinel = document.getElementById('feed-scroll-sentinel');
+if (_sentinel) _feedObserver.observe(_sentinel);
+
+// --- ADVANCED ANIME SEARCH ---
+let _advPage = 1;
+let _advHasMore = false;
+let _advLastParams = null;
+
+window.openAdvancedSearch = function() {
+    document.getElementById('advanced-search-modal').style.display = 'flex';
+    document.getElementById('adv-search-main-view').style.display = 'flex';
+    document.getElementById('adv-archive-view').style.display = 'none';
+    document.getElementById('adv-search-input').focus();
+};
+
+window.closeAdvancedSearch = function() {
+    document.getElementById('advanced-search-modal').style.display = 'none';
+};
+
+// Genre chip toggle
+document.getElementById('adv-genre-chips')?.addEventListener('click', e => {
+    const chip = e.target.closest('.adv-genre-chip');
+    if (!chip) return;
+    chip.classList.toggle('selected');
+});
+
+window.runAdvancedSearch = async function(loadMore = false) {
+    const q = document.getElementById('adv-search-input').value.trim();
+    const type = document.getElementById('adv-type-filter').value;
+    const status = document.getElementById('adv-status-filter').value;
+    const minScore = document.getElementById('adv-score-filter').value;
+    const orderBy = document.getElementById('adv-sort-filter').value;
+    const selectedGenres = [...document.querySelectorAll('.adv-genre-chip.selected')].map(c => c.dataset.genreId);
+
+    if (!q && !selectedGenres.length && !type && !status && !minScore) {
+        document.getElementById('adv-search-results').innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px;grid-column:1/-1;">Enter a search term or select at least one filter.</div>`;
+        return;
+    }
+
+    const resultsEl = document.getElementById('adv-search-results');
+    const countEl = document.getElementById('adv-results-count');
+    const loadMoreBtn = document.getElementById('adv-load-more-btn');
+
+    if (!loadMore) {
+        _advPage = 1;
+        resultsEl.innerHTML = `<div style="text-align:center;padding:40px;grid-column:1/-1;" class="loading">Searching...</div>`;
+        countEl.textContent = '';
+        loadMoreBtn.style.display = 'none';
+        _advLastParams = { q, type, status, minScore, orderBy, selectedGenres };
+    } else {
+        _advPage++;
+    }
+
+    const params = loadMore ? _advLastParams : { q, type, status, minScore, orderBy, selectedGenres };
+
+    const urlParams = new URLSearchParams();
+    if (params.q) urlParams.set('q', params.q);
+    if (params.type) urlParams.set('type', params.type);
+    if (params.status) urlParams.set('status', params.status);
+    if (params.minScore) urlParams.set('min_score', params.minScore);
+    urlParams.set('order_by', params.orderBy || 'score');
+    urlParams.set('sort', 'desc');
+    if (params.selectedGenres.length) urlParams.set('genres', params.selectedGenres.join(','));
+    urlParams.set('limit', '24');
+    urlParams.set('page', _advPage);
+
+    const endpoint = `https://api.jikan.moe/v4/anime?${urlParams.toString()}&sfw=true`;
+
+    try {
+        const rawRes = await fetch(endpoint);
+        if (!rawRes.ok) throw new Error(`Jikan ${rawRes.status}`);
+        const res = await rawRes.json();
+        const items = res.data || [];
+        _advHasMore = res.pagination?.has_next_page || false;
+
+        if (!loadMore) {
+            if (!items.length) {
+                resultsEl.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px;grid-column:1/-1;">No anime found. Try different filters.</div>`;
+                countEl.textContent = '';
+                return;
+            }
+            resultsEl.innerHTML = '';
+        }
+
+        const myList = await _advGetMyList();
+        items.forEach(anime => {
+            const inList = myList.has(String(anime.mal_id));
+            const card = document.createElement('div');
+            card.className = 'adv-anime-card';
+            const score = anime.score ? `⭐ ${anime.score}` : '';
+            const epInfo = anime.type === 'Movie' ? 'Movie' : (anime.episodes ? `${anime.episodes} eps` : anime.type || '');
+            card.innerHTML = `
+                <div class="adv-anime-card-img">
+                    <img src="${anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url || ''}" alt="${anime.title}" loading="lazy" onerror="this.parentElement.style.background='var(--bg-gray-darker)';">
+                </div>
+                <div class="adv-anime-card-body">
+                    <div class="adv-anime-card-title">${anime.title}</div>
+                    <div class="adv-anime-card-meta">${epInfo}</div>
+                    ${score ? `<div class="adv-anime-card-score">${score}</div>` : ''}
+                    <button class="adv-quick-add-btn search-quick-add ${inList ? 'in-list' : ''}"
+                        data-mal="${anime.mal_id}"
+                        onclick="event.stopPropagation(); advQuickAdd(this, ${anime.mal_id}, '${anime.title.replace(/'/g,"\\'")}')">
+                        ${inList ? 'In List' : '+ Add'}
+                    </button>
+                </div>`;
+            card.querySelector('.adv-anime-card-img').addEventListener('click', () => loadAnimeDetails(anime.mal_id));
+            card.querySelector('.adv-anime-card-title').addEventListener('click', () => loadAnimeDetails(anime.mal_id));
+            resultsEl.appendChild(card);
+        });
+
+        const total = res.pagination?.items?.total;
+        if (!loadMore && total) countEl.textContent = `${total.toLocaleString()} results`;
+        loadMoreBtn.style.display = _advHasMore ? 'inline-flex' : 'none';
+
+    } catch(e) {
+        if (!loadMore) resultsEl.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px;grid-column:1/-1;">Search failed. Please try again.</div>`;
+        console.error('Advanced search error:', e);
+    }
+};
+
+// Cache my list IDs for quick-add checks
+let _advMyListCache = null;
+async function _advGetMyList() {
+    if (_advMyListCache) return _advMyListCache;
+    if (!auth.currentUser) return new Set();
+    try {
+        const snap = await getDocs(query(collection(db, 'anime_lists'), where('uid', '==', auth.currentUser.uid)));
+        _advMyListCache = new Set(snap.docs.map(d => String(d.data().mal_id)));
+        return _advMyListCache;
+    } catch(e) { return new Set(); }
+}
+
+auth.onAuthStateChanged(() => { _advMyListCache = null; });
+
+window.advQuickAdd = async function(btn, mal_id, title) {
+    if (!auth.currentUser) { alert('Sign in to add anime to your list.'); return; }
+    if (btn.classList.contains('in-list')) return;
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+        await addDoc(collection(db, 'anime_lists'), {
+            uid: auth.currentUser.uid,
+            mal_id: mal_id,
+            title: title,
+            status: 'plan_to_watch',
+            score: null,
+            addedAt: new Date()
+        });
+        btn.textContent = 'In List';
+        btn.classList.add('in-list');
+        _advMyListCache?.add(String(mal_id));
+        // Update any other quick-add buttons for same anime across the page
+        document.querySelectorAll(`.search-quick-add[data-mal="${mal_id}"]`).forEach(b => {
+            b.textContent = 'In List';
+            b.classList.add('in-list');
+        });
+    } catch(e) {
+        btn.textContent = '+ Add';
+        btn.disabled = false;
+        console.error(e);
+    }
+};
+
+// --- SEASONAL ARCHIVE ---
+let _archiveData = null;
+
+window.openSeasonalArchive = async function() {
+    document.getElementById('adv-search-main-view').style.display = 'none';
+    document.getElementById('adv-archive-view').style.display = 'flex';
+    document.getElementById('adv-archive-grid').style.display = 'block';
+    document.getElementById('adv-season-results').style.display = 'none';
+
+    const gridEl = document.getElementById('adv-archive-grid');
+    if (_archiveData) return; // already loaded
+
+    gridEl.innerHTML = '<div class="loading" style="padding:40px;">Loading archive...</div>';
+
+    try {
+        const res = await window.jikanFetch('https://api.jikan.moe/v4/seasons', 'archive_list', 24 * 60 * 60 * 1000);
+        const raw = res.data || [];
+
+        // Build year -> seasons map, sorted descending
+        const byYear = {};
+        raw.forEach(({ year, seasons }) => {
+            if (!year) return;
+            byYear[year] = seasons || [];
+        });
+        _archiveData = byYear;
+
+        const years = Object.keys(byYear).map(Number).sort((a, b) => b - a);
+        const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
+        const seasonLabels = { winter: 'Winter', spring: 'Spring', summer: 'Summer', fall: 'Fall' };
+
+        let html = `<table class="adv-archive-table">
+            <thead><tr>
+                <th>Year</th>
+                <th>Winter</th><th>Spring</th><th>Summer</th><th>Fall</th>
+            </tr></thead><tbody>`;
+
+        years.forEach(year => {
+            const available = byYear[year];
+            html += `<tr><td>${year}</td>`;
+            seasonOrder.forEach(s => {
+                if (available.includes(s)) {
+                    html += `<td><button class="adv-season-btn" onclick="loadSeasonAnime(${year},'${s}')">${seasonLabels[s]}</button></td>`;
+                } else {
+                    html += `<td style="color:var(--text-muted);text-align:center;font-size:12px;">—</td>`;
+                }
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        gridEl.innerHTML = html;
+
+    } catch(e) {
+        gridEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px;">Could not load archive. Try again later.</div>';
+        console.error(e);
+    }
+};
+
+window.closeSeasonalArchive = function() {
+    document.getElementById('adv-archive-view').style.display = 'none';
+    document.getElementById('adv-search-main-view').style.display = 'flex';
+};
+
+window.backToArchiveGrid = function() {
+    document.getElementById('adv-season-results').style.display = 'none';
+    document.getElementById('adv-archive-grid').style.display = 'block';
+};
+
+window.loadSeasonAnime = async function(year, season) {
+    document.getElementById('adv-archive-grid').style.display = 'none';
+    const seasonResultsEl = document.getElementById('adv-season-results');
+    const gridEl = document.getElementById('adv-season-results-grid');
+    const titleEl = document.getElementById('adv-season-title');
+    seasonResultsEl.style.display = 'block';
+
+    const label = season.charAt(0).toUpperCase() + season.slice(1);
+    titleEl.textContent = `${label} ${year}`;
+    gridEl.innerHTML = '<div class="loading" style="padding:40px;grid-column:1/-1;">Loading season...</div>';
+
+    try {
+        const cacheKey = `season_${year}_${season}`;
+        const res = await window.jikanFetch(`https://api.jikan.moe/v4/seasons/${year}/${season}?limit=25`, cacheKey, 12 * 60 * 60 * 1000);
+        const items = (res.data || []).filter(a => !a.explicit);
+
+        if (!items.length) {
+            gridEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px;grid-column:1/-1;">No anime found for this season.</div>';
+            return;
+        }
+
+        const myList = await _advGetMyList();
+        gridEl.innerHTML = '';
+        items.forEach(anime => {
+            const inList = myList.has(String(anime.mal_id));
+            const card = document.createElement('div');
+            card.className = 'adv-anime-card';
+            const score = anime.score ? `⭐ ${anime.score}` : '';
+            const epInfo = anime.type === 'Movie' ? 'Movie' : (anime.episodes ? `${anime.episodes} eps` : anime.type || '');
+            card.innerHTML = `
+                <div class="adv-anime-card-img">
+                    <img src="${anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url || ''}" alt="${anime.title}" loading="lazy" onerror="this.parentElement.style.background='var(--bg-gray-darker)';">
+                </div>
+                <div class="adv-anime-card-body">
+                    <div class="adv-anime-card-title">${anime.title}</div>
+                    <div class="adv-anime-card-meta">${epInfo}</div>
+                    ${score ? `<div class="adv-anime-card-score">${score}</div>` : ''}
+                    <button class="adv-quick-add-btn search-quick-add ${inList ? 'in-list' : ''}"
+                        data-mal="${anime.mal_id}"
+                        onclick="event.stopPropagation(); advQuickAdd(this, ${anime.mal_id}, '${anime.title.replace(/'/g,"\\'")}')">
+                        ${inList ? 'In List' : '+ Add'}
+                    </button>
+                </div>`;
+            card.querySelector('.adv-anime-card-img').addEventListener('click', () => { closeAdvancedSearch(); loadAnimeDetails(anime.mal_id); });
+            card.querySelector('.adv-anime-card-title').addEventListener('click', () => { closeAdvancedSearch(); loadAnimeDetails(anime.mal_id); });
+            gridEl.appendChild(card);
+        });
+
+    } catch(e) {
+        gridEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px;grid-column:1/-1;">Could not load season. Try again later.</div>';
+        console.error(e);
+    }
 };

@@ -148,8 +148,9 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     .profile-card { width: 100%; box-sizing: border-box; }
 
     /* Profile header */
-    .profile-header { flex-direction: column; text-align: center; padding: 25px 16px; gap: 15px; }
-    .profile-avatar-large { width: 90px; height: 90px; }
+    .profile-banner { height: 90px; }
+    .profile-header { flex-direction: column; text-align: center; padding: 0 16px 20px; gap: 10px; align-items: center; }
+    .profile-avatar-large { width: 90px; height: 90px; margin-top: -30px; }
 
     /* Review cards */
     .review-anime-thumb { display: none; }
@@ -490,8 +491,10 @@ h3 { font-size: 18px; margin-bottom: 15px; }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-.profile-header { background: var(--bg-gray); padding: 40px; border-radius: var(--border-radius); display: flex; align-items: center; gap: 30px; margin-bottom: 20px; }
-.profile-avatar-large { width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--accent-yellow); }
+.profile-header-wrap { border-radius: var(--border-radius); overflow: hidden; margin-bottom: 20px; background: var(--bg-gray); }
+.profile-banner { width: 100%; height: 130px; background-size: cover; background-position: center; border-radius: var(--border-radius) var(--border-radius) 0 0; }
+.profile-header { background: var(--bg-gray); padding: 0 40px 30px; border-radius: 0 0 var(--border-radius) var(--border-radius); display: flex; align-items: flex-start; gap: 30px; margin-bottom: 0; padding-top: 0; }
+.profile-avatar-large { width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--bg-gray); margin-top: -40px; flex-shrink: 0; }
 .profile-card { background: var(--bg-white); border: 1px solid #E0E0E0; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
 .profile-card h4 { font-size: 12px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 15px; letter-spacing: 1px; }
 .profile-stat-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
@@ -542,7 +545,7 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 
 .profile-layout-grid { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 36px; align-items: start; }
 .detail-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 40px; align-items: start; }
-.detail-sidebar { width: 100%; position: sticky; top: 30px; }
+.detail-sidebar { width: 100%; }
 .detail-sidebar img { width: 100%; height: auto; max-width: 250px; object-fit: cover; border-radius: var(--border-radius); display: block; margin-bottom: 15px; }
 
 details > summary { list-style: none; transition: background-color 0.2s; }
@@ -671,4 +674,175 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     transition: transform 0.25s;
 }
+
+/* --- ONE PIECE WORDLE --- */
+@keyframes wpFlip { 0% { transform:rotateX(-90deg); opacity:0; } 100% { transform:rotateX(0deg); opacity:1; } }
+.wordle-header-row { display:flex; gap:6px; margin-bottom:8px; }
+.wordle-col-header { flex:1; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); text-align:center; padding:4px 2px; }
+.wordle-char-header { width:100px; min-width:100px; flex:0 0 100px; }
+.wordle-row { display:flex; gap:6px; margin-bottom:6px; }
+.wordle-char-cell { width:100px; min-width:100px; flex:0 0 100px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:8px 4px; background:var(--bg-gray-darker); border-radius:10px; }
+.wordle-cell { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:8px 4px; border-radius:10px; font-size:15px; font-weight:700; color:white; min-height:82px; line-height:1.4; word-break:break-word; }
+.wordle-cell.green  { background:#2e7d32; }
+.wordle-cell.yellow { background:#c49a00; }
+.wordle-cell.red    { background:#b71c1c; }
+.wordle-search-wrap { position:relative; }
+.wordle-suggestions { display:none; position:absolute; bottom:100%; left:0; right:0; margin-bottom:4px; background:var(--bg-white); border:1px solid var(--border-color); border-radius:10px; z-index:50; max-height:240px; overflow-y:auto; box-shadow:0 -4px 16px rgba(0,0,0,0.12); }
+.wordle-suggestion-item { padding:11px 16px; cursor:pointer; font-size:14px; font-weight:600; color:var(--text-dark); border-bottom:1px solid var(--border-color); }
+.wordle-suggestion-item:last-child { border-bottom:none; }
+.wordle-suggestion-item:hover { background:var(--bg-gray); }
+
+/* --- ADVANCED ANIME SEARCH --- */
+.adv-search-trigger-btn { background:var(--accent-yellow); color:#1a1a1a; font-weight:700; }
+.adv-search-modal-content {
+    background: var(--bg-white);
+    border-radius: 16px;
+    width: 90vw;
+    max-width: 900px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+.adv-search-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+#adv-search-main-view, #adv-archive-view {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+}
+.adv-search-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.adv-search-input {
+    flex: 1;
+    background: var(--bg-gray);
+    border: none;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 15px;
+    color: var(--text-dark);
+    outline: none;
+}
+.adv-search-input:focus { box-shadow: 0 0 0 2px var(--accent-yellow); }
+.adv-filter-row {
+    display: flex;
+    gap: 12px;
+    padding: 12px 22px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+.adv-filter-group { display:flex; flex-direction:column; gap:4px; }
+.adv-filter-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); }
+.adv-select {
+    background: var(--bg-gray);
+    border: none;
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size:13px;
+    color: var(--text-dark);
+    cursor: pointer;
+    outline: none;
+}
+.adv-genre-section {
+    padding: 12px 22px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.adv-genre-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.adv-genre-chip {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1.5px solid var(--border-color);
+    background: transparent;
+    color: var(--text-dark);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.adv-genre-chip:hover { border-color: var(--accent-yellow); color: var(--accent-yellow); }
+.adv-genre-chip.selected { background: var(--accent-yellow); border-color: var(--accent-yellow); color: #1a1a1a; }
+.adv-results-scroll-wrap {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+.adv-results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 22px 6px;
+}
+.adv-results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+    gap: 16px;
+    padding: 10px 22px 20px;
+}
+.adv-anime-card {
+    background: var(--bg-gray);
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    display: flex;
+    flex-direction: column;
+}
+.adv-anime-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.2); }
+.adv-anime-card-img { width:100%; padding-top:145%; position:relative; overflow:hidden; border-radius:8px 8px 0 0; }
+.adv-anime-card-img img { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; display:block; }
+.adv-anime-card-body { padding:8px 8px 10px; flex:1; display:flex; flex-direction:column; justify-content:space-between; }
+.adv-anime-card-title { font-size:12px; font-weight:700; line-height:1.3; margin-bottom:6px; display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.adv-anime-card-meta { font-size:11px; color:var(--text-muted); margin-bottom:6px; }
+.adv-anime-card-score { font-size:12px; font-weight:700; color:var(--accent-yellow); margin-bottom:6px; }
+.adv-quick-add-btn {
+    width: 100%;
+    padding: 5px;
+    border-radius: 6px;
+    border: 1.5px solid var(--border-color);
+    background: transparent;
+    color: var(--text-dark);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.adv-quick-add-btn:hover { border-color: var(--accent-yellow); color: var(--accent-yellow); }
+.adv-quick-add-btn.in-list { background: var(--accent-yellow); border-color: var(--accent-yellow); color: #1a1a1a; }
+
+/* Seasonal Archive */
+.adv-archive-table { width:100%; border-collapse:collapse; font-size:13px; }
+.adv-archive-table th { padding:10px 14px; text-align:center; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); border-bottom:1px solid var(--border-color); }
+.adv-archive-table th:first-child { text-align:left; }
+.adv-archive-table td { padding:6px 14px; border-bottom:1px solid var(--border-color); }
+.adv-archive-table td:first-child { font-weight:700; color:var(--text-dark); }
+.adv-season-btn {
+    background: var(--bg-gray);
+    border: none;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dark);
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.15s;
+}
+.adv-season-btn:hover { background: var(--accent-yellow); color: #1a1a1a; }
+#adv-archive-content { flex:1; overflow-y:auto; padding:16px 22px; min-height:0; }
 .toggle-switch input:checked + .toggle-track .toggle-thumb { transform: translateX(22px); }
