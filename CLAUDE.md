@@ -2,7 +2,43 @@
 
 ## Pending Features
 - [ ] **Upload WeeBee logo/fonts** — branding assets to replace the plain text logo
-- [ ] **Unified activity feed** — replace sectioned home page with a single chronological feed (reviews, tier lists, patch notes); use an `activity` Firestore collection written to on each post; refactor home feed renderer to handle mixed content types
+- [ ] **BuzzWord: Dragon Ball Characters** — new BuzzWord game
+
+## Unpublished Patch Notes (v1.5 — post to News tab when admin panel is working)
+```
+🏠 Unified Activity Feed
+The home page now has a single merged feed showing reviews, tier lists, and BuzzWord results all in one chronological stream. Social posts (from people you follow or are friends with) appear first.
+
+🎨 Color-Coded Post Cards
+BuzzWord posts now have a green tint and green border. Tier list posts have a blue tint and blue border — making it easy to tell content types apart at a glance.
+
+📋 Tier Lists on the Feed
+Tier list posts now appear on the home feed and community feed as full cards with like, dislike, and comment support — same as review cards.
+
+🖱️ Tier List Drag to Reorder
+You can now drag entire tiers up and down to reorder them, and drag items within a tier to rearrange them — all while keeping contents intact.
+
+🏆 Top 10 Podium Fix
+The #3 spot on the All-Time Top 10 podium was not displaying correctly. Fixed — the top 3 now always reflect the highest-rated anime with at least 5 reviews.
+
+🎖️ 17 New Achievements
+New achievements added across BuzzWord (One Piece, Naruto, Bleach) and the Community tab — including tier list milestones, feed activity, and cross-game challenges.
+
+📌 Badge Showcase
+You can now pin up to 3 earned achievements to your profile banner. Select them from the Edit Profile screen.
+
+🖼️ Profile Banner Redesign
+The profile banner now fills the full card width. Your info (avatar, name, follow counts, genres) appears in a frosted glass card overlaid on the banner.
+
+🌄 Custom Banner Photos
+You can now upload your own banner photo from Edit Profile. Recommended size: 1400×400px.
+
+📰 Patch Notes Format
+The News tab now shows the 4 most recent patch notes side by side. Older updates collapse under a "Show more" button. The newest entry is tagged LATEST.
+
+⚔️ BuzzWord: Bleach Characters
+New BuzzWord game! Guess the daily Bleach character across 7 columns: Gender, Race, Affiliation, Rank, Zanpakuto Type, Bankai, and Debut Arc. 50 characters from all major factions.
+```
 
 ## Standards
 - **Comment sections** — every comment section must include: post comment, edit (with "(edited)" indicator), delete (with confirm), and Enter-to-submit. Use `renderBwComment()` as the template for new comment sections going forward.

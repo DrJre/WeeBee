@@ -434,7 +434,12 @@ onAuthStateChanged(auth, (user) => {
             getDoc(doc(db, "admins", auth.currentUser.uid)).then(d => { window.isAdmin = d.exists(); }).catch(() => {}),
             window.loadActiveSeasonalVote(),
             window.loadPatchNotes()
-        ]).then(() => { window.renderSeasonalVoting(); window.fetchHomepageTierLists(); });
+        ]).then(() => {
+            window.renderSeasonalVoting();
+            window.fetchHomepageTierLists();
+            const adminPanel = document.getElementById('patch-notes-admin');
+            if (adminPanel) adminPanel.style.display = window.isAdmin ? 'block' : 'none';
+        });
         // Handle shared URL params
         const _urlParams = new URLSearchParams(window.location.search);
         const _tlId = _urlParams.get('tl');
