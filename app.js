@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 
@@ -23,6 +23,7 @@ const googleProvider = new GoogleAuthProvider();
 // --- RANK SYSTEM ---
 window.myReviewCount = 0;
 window.userRankCache = {};
+window.userPinnedBadgesCache = {};
 
 window.getRankInfo = function(count) {
     if (count >= 100) return { name: 'Diamond',  icon: 'diamond',           color: '#00BCD4', next: null, min: 100 };
@@ -45,8 +46,19 @@ window.prefetchRankCache = async function(uids) {
         try {
             const d = await getDoc(doc(db, "profiles", uid));
             window.userRankCache[uid] = d.exists() ? (d.data().reviewCount || 0) : 0;
-        } catch(e) { window.userRankCache[uid] = 0; }
+            window.userPinnedBadgesCache[uid] = d.exists() ? (d.data().pinnedBadges || []) : [];
+        } catch(e) { window.userRankCache[uid] = 0; window.userPinnedBadgesCache[uid] = []; }
     }));
+};
+
+window.getPinnedBadgesHTML = function(uid, size = 17) {
+    const pins = window.userPinnedBadgesCache[uid] || [];
+    if (!pins.length) return '';
+    return pins.map(id => {
+        const ach = ACHIEVEMENTS.find(a => a.id === id);
+        if (!ach) return '';
+        return `<span class="material-symbols-outlined" title="${ach.name}: ${ach.desc}" style="font-size:${size}px;color:${ach.color};cursor:default;vertical-align:middle;line-height:1;">${ach.icon}</span>`;
+    }).join('')
 };
 
 window.updateTopbarRank = async function() {
@@ -119,6 +131,32 @@ const ACHIEVEMENTS = [
     { id: 'dropout',      name: "It's Not You, It's Me",  desc: 'Dropped 10 anime from your list',            icon: 'heart_broken',      cat: 'Special',   color: '#F44336' },
     { id: 'first_follow', name: 'Making Friends',         desc: 'Followed your first user on WeeBee',         icon: 'person_add',        cat: 'Special',   color: '#E91E63' },
     { id: 'suggestor_5',  name: 'The Recommender',        desc: 'Made 5 anime suggestions to the community',  icon: 'lightbulb',         cat: 'Special',   color: '#FF9800' },
+    // Community: BuzzWord — One Piece
+    { id: 'bwop_first',      name: "Devil's Luck",    desc: 'Solved your first One Piece BuzzWord puzzle',          icon: 'casino',                cat: 'Community', color: '#8B0000' },
+    { id: 'bwop_1guess',     name: 'First Mate',      desc: 'Solved the One Piece puzzle in just 1 guess',          icon: 'anchor',                cat: 'Community', color: '#8B0000' },
+    { id: 'bwop_streak_7',   name: 'Straw Hat',       desc: 'Solved the One Piece puzzle 7 days in a row',          icon: 'wb_sunny',              cat: 'Community', color: '#8B0000' },
+    { id: 'bwop_total_30',   name: 'Grand Line',      desc: 'Solved the One Piece puzzle 30 times total',           icon: 'explore',               cat: 'Community', color: '#8B0000' },
+    { id: 'bwop_streak_100', name: 'The One Piece',   desc: 'Solved the One Piece puzzle 100 days in a row',        icon: 'diamond',               cat: 'Community', color: '#FFD700' },
+    // Community: BuzzWord — Naruto
+    { id: 'bwnrt_first',     name: 'Genin',           desc: 'Solved your first Naruto BuzzWord puzzle',             icon: 'star',                  cat: 'Community', color: '#FF6B00' },
+    { id: 'bwnrt_1guess',    name: 'Dattebayo!',      desc: 'Solved the Naruto puzzle in just 1 guess',             icon: 'bolt',                  cat: 'Community', color: '#FF6B00' },
+    { id: 'bwnrt_streak_7',  name: 'Shinobi Way',     desc: 'Solved the Naruto puzzle 7 days in a row',             icon: 'local_fire_department', cat: 'Community', color: '#FF6B00' },
+    { id: 'bwnrt_total_30',  name: "Hokage's Path",   desc: 'Solved the Naruto puzzle 30 times total',              icon: 'military_tech',         cat: 'Community', color: '#FF6B00' },
+    // Community: BuzzWord — Bleach
+    { id: 'bwblc_first',     name: 'Soul Reaper',     desc: 'Solved your first Bleach BuzzWord puzzle',             icon: 'star',                  cat: 'Community', color: '#00BCD4' },
+    { id: 'bwblc_1guess',    name: 'Bankai!',         desc: 'Solved the Bleach puzzle in just 1 guess',             icon: 'bolt',                  cat: 'Community', color: '#00BCD4' },
+    { id: 'bwblc_streak_7',  name: 'Gotei 13',        desc: 'Solved the Bleach puzzle 7 days in a row',             icon: 'local_fire_department', cat: 'Community', color: '#00BCD4' },
+    { id: 'bwblc_total_30',  name: "Captain's Path",  desc: 'Solved the Bleach puzzle 30 times total',              icon: 'military_tech',         cat: 'Community', color: '#00BCD4' },
+    // Community: BuzzWord — General
+    { id: 'bw_double_agent', name: 'Double Agent',    desc: 'Solved both BuzzWord puzzles on the same day',         icon: 'join_inner',            cat: 'Community', color: '#6A1B9A' },
+    { id: 'bw_multiverse',   name: 'Multiverse',      desc: 'Solved a puzzle from every available BuzzWord game',   icon: 'public',                cat: 'Community', color: '#6A1B9A' },
+    // Community: Tier Lists
+    { id: 'tl_first',        name: 'Ranked Up',       desc: 'Created your first tier list',                         icon: 'format_list_numbered',  cat: 'Community', color: '#1565C0' },
+    { id: 'tl_10',           name: 'Tier Lord',        desc: 'Created 10 tier lists',                               icon: 'leaderboard',           cat: 'Community', color: '#1565C0' },
+    { id: 'tl_crowd_pleaser',name: 'Crowd Pleaser',   desc: 'Received 10 likes on a single tier list',              icon: 'favorite',              cat: 'Community', color: '#1565C0' },
+    // Community: Feed
+    { id: 'feed_showtime',   name: 'Showtime',        desc: 'Posted your first BuzzWord result to the feed',        icon: 'campaign',              cat: 'Community', color: '#2E7D32' },
+    { id: 'feed_trending',   name: 'Trending',        desc: 'Received 25 likes across all your BuzzWord posts',     icon: 'trending_up',           cat: 'Community', color: '#2E7D32' },
 ];
 
 window.awardAchievements = async function(ids) {
@@ -197,6 +235,46 @@ window.initUserAchievements = async function() {
             setDoc(doc(db, "achievements", uid), updates, { merge: true }).catch(() => {});
         }
     } catch(e) {}
+    // Check community achievements separately (Tier Lists, Feed)
+    window.checkCommunityAchievements().catch(() => {});
+};
+
+window.checkCommunityAchievements = async function() {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const ids = [];
+    try {
+        // Tier list achievements
+        const tlSnap = await getDocs(query(collection(db, 'tier_lists'), where('uid', '==', uid)));
+        const tlCount = tlSnap.size;
+        if (tlCount >= 1) ids.push('tl_first');
+        if (tlCount >= 10) ids.push('tl_10');
+        tlSnap.forEach(d => { if ((d.data().likes || []).length >= 10) ids.push('tl_crowd_pleaser'); });
+        // Feed trending: total likes across bw_posts
+        const bwSnap = await getDocs(query(collection(db, 'bw_posts'), where('uid', '==', uid)));
+        const totalLikes = bwSnap.docs.reduce((sum, d) => sum + (d.data().likes || []).length, 0);
+        if (totalLikes >= 25) ids.push('feed_trending');
+        // BuzzWord leaderboard-based (in case missed during solve)
+        const [opLb, nrtLb] = await Promise.all([
+            getDoc(doc(db, 'bw_op_leaderboard', uid)),
+            getDoc(doc(db, 'bw_nrt_leaderboard', uid))
+        ]);
+        if (opLb.exists()) {
+            const d = opLb.data();
+            if ((d.totalWins||0) >= 1)  ids.push('bwop_first');
+            if ((d.currentStreak||0) >= 7)  ids.push('bwop_streak_7');
+            if ((d.currentStreak||0) >= 100) ids.push('bwop_streak_100');
+            if ((d.totalWins||0) >= 30) ids.push('bwop_total_30');
+            if (nrtLb.exists() && (nrtLb.data().totalWins||0) >= 1) ids.push('bw_multiverse');
+        }
+        if (nrtLb.exists()) {
+            const d = nrtLb.data();
+            if ((d.totalWins||0) >= 1)  ids.push('bwnrt_first');
+            if ((d.currentStreak||0) >= 7)  ids.push('bwnrt_streak_7');
+            if ((d.totalWins||0) >= 30) ids.push('bwnrt_total_30');
+        }
+    } catch(e) {}
+    if (ids.length) window.awardAchievements(ids).catch(() => {});
 };
 
 window.loadProfileAchievements = async function(uid) {
@@ -206,7 +284,7 @@ window.loadProfileAchievements = async function(uid) {
     try {
         const achDoc = await getDoc(doc(db, "achievements", uid));
         const earned = achDoc.exists() ? achDoc.data() : {};
-        const cats = ['Critic', 'Social', 'Collector', 'Special'];
+        const cats = ['Critic', 'Social', 'Collector', 'Special', 'Community'];
         const fmtDate = ts => { try { const d = ts?.toDate ? ts.toDate() : new Date(ts); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch(e) { return null; }};
         let html = '';
         cats.forEach(cat => {
@@ -1491,9 +1569,16 @@ window.sortAnimeList = function(key) {
         window.currentListSort.desc = !window.currentListSort.desc;
     } else {
         window.currentListSort.key = key;
-        window.currentListSort.desc = key !== 'title'; 
+        window.currentListSort.desc = key !== 'title';
     }
     renderAnimeList();
+    ['rank', 'title', 'score'].forEach(k => {
+        const el = document.getElementById(`sort-icon-${k}`);
+        if (!el) return;
+        const isActive = window.currentListSort.key === k;
+        el.classList.toggle('active', isActive);
+        el.innerHTML = `<span class="material-symbols-outlined">${isActive ? (window.currentListSort.desc ? 'arrow_downward' : 'arrow_upward') : 'unfold_more'}</span>`;
+    });
 };
 
 window.renderAnimeList = function() {
@@ -1946,12 +2031,15 @@ window.toggleReviewExpand = function(el) {
     else if (full) { full.style.display = 'none'; if(comms && comms.style.display === 'none') el.classList.remove('expanded'); }
 };
 
-window.toggleComments = function(event, reviewId) {
+window.toggleComments = function(event, reviewId, btn) {
     event.stopPropagation();
-    const container = document.getElementById(`comments-container-${reviewId}`);
-    const card = container.closest('.review-card');
-    if (container.style.display === 'none') { container.style.display = 'block'; card.classList.add('expanded'); fetchInlineComments(reviewId); } 
-    else { container.style.display = 'none'; if(!card.querySelector('.full-review-content') || card.querySelector('.full-review-content').style.display === 'none') card.classList.remove('expanded'); }
+    // Use relative navigation from the button to avoid duplicate-ID issues across views
+    const card = btn ? btn.closest('.review-card') : null;
+    const container = card ? card.querySelector('.inline-comments') : document.getElementById(`comments-container-${reviewId}`);
+    if (!container) return;
+    const parentCard = container.closest('.review-card');
+    if (container.style.display === 'none') { container.style.display = 'block'; parentCard?.classList.add('expanded'); fetchInlineComments(reviewId, container); }
+    else { container.style.display = 'none'; if(!parentCard?.querySelector('.full-review-content') || parentCard?.querySelector('.full-review-content').style.display === 'none') parentCard?.classList.remove('expanded'); }
 };
 
 window.buildCommentHTML = function(c, reviewId, isReply = false) {
@@ -1992,8 +2080,8 @@ window.buildCommentHTML = function(c, reviewId, isReply = false) {
         </div>`;
 };
 
-window.fetchInlineComments = async function(reviewId) {
-    const list = document.getElementById(`comments-list-${reviewId}`);
+window.fetchInlineComments = async function(reviewId, container) {
+    const list = container ? container.querySelector(`#comments-list-${reviewId}`) : document.getElementById(`comments-list-${reviewId}`);
     list.innerHTML = '<div class="loading" style="font-size:12px;">Loading...</div>';
     const snap = await getDocs(query(collection(db, "comments"), where("reviewId", "==", reviewId)));
     let all = [];
@@ -2020,16 +2108,18 @@ window.fetchInlineComments = async function(reviewId) {
     }).join('');
 };
 
-window.submitInlineComment = async function(reviewId) {
+window.submitInlineComment = async function(reviewId, btn) {
     if(!auth.currentUser) return window.openAuthModal();
-    const input = document.getElementById(`comment-input-${reviewId}`);
+    const card = btn ? btn.closest('.review-card') : null;
+    const input = card ? card.querySelector('.review-inline-input') : document.getElementById(`comment-input-${reviewId}`);
     if(!input.value.trim()) return;
     if (window.checkTextContent(input.value)) return alert('Your comment contains language that isn\'t allowed on WeeBee.');
     await addDoc(collection(db, "comments"), { reviewId, text: input.value.trim(), username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL, uid: auth.currentUser.uid, timestamp: new Date(), likes: [], dislikes: [] });
     updateDoc(doc(db, "reviews", reviewId), { commentCount: increment(1) }).catch(() => {});
     const countEl = document.getElementById(`comment-count-${reviewId}`);
     if (countEl) countEl.innerText = (parseInt(countEl.innerText) + 1) + ' Comments';
-    input.value = ''; fetchInlineComments(reviewId);
+    const container = card ? card.querySelector('.inline-comments') : null;
+    input.value = ''; fetchInlineComments(reviewId, container);
 };
 
 window.generateReviewCardHTML = function(rev, isGlobal = false) {
@@ -2066,7 +2156,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
         let fullHTML = '';
 
         if(rev.type === 'in-depth' && rev.categories) {
-            badgesHTML = `<div class="review-badges-row" style="display:flex; gap: 15px; margin-top: 20px; flex-wrap: wrap; justify-content: flex-start; align-items: flex-end; padding-right: 170px; position: relative; z-index: 2;">
+            badgesHTML = `<div class="review-badges-row" style="display:flex; gap: 15px; margin-top: 20px; flex-wrap: nowrap; overflow-x: auto; align-items: flex-end; padding-right: 195px; position: relative; z-index: 2; padding-bottom: 4px;">
                 <div style="display:flex; flex-direction:column; align-items:center; width: 75px;">
                     <span style="font-size: 10px; font-weight: 800; color: var(--text-dark); text-transform: uppercase; margin-bottom: 8px; height: 24px; display: flex; align-items: flex-end;">Overall</span>
                     <div class="rating-badge ${overallTier}" style="width: 65px; height: 65px; font-size: 22px; filter: drop-shadow(0 3px 8px rgba(0,0,0,0.2)); outline: 3px solid rgba(255,255,255,0.3);">${overallScore}</div>
@@ -2102,7 +2192,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             <div class="review-header" style="justify-content: space-between; position: relative; z-index: 3;">
                 <div style="display:flex; gap: 15px;">
                     <img src="${rev.avatar}" class="avatar clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">
-                    <div><strong><span class="clickable-user" style="color:var(--text-dark);" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> ${window.getFounderBadgeHTML(safeUid)} ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)}<br>
+                    <div><strong><span class="clickable-user" style="color:var(--text-dark);" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</span></strong> ${window.getFounderBadgeHTML(safeUid)} ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)} ${window.getPinnedBadgesHTML(safeUid)}<br>
                     <span style="font-size: 12px; color: var(--text-muted); display:flex; align-items:center; gap:6px; margin-top:3px; min-width:0;">${rev.animeImage ? `<img src="${rev.animeImage}" class="review-cover-mobile" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">` : ''}${rev.type === 'series'
                         ? `<span style="background:var(--accent-yellow); color:#111; font-size:10px; font-weight:800; padding:2px 7px; border-radius:4px; text-transform:uppercase; letter-spacing:0.5px;">Series Rating</span>`
                         : `Season Review: <strong class="review-anime-title" style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong>`
@@ -2131,7 +2221,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             </div>` : ''}
             ${innerContent}
             <div class="review-actions">
-                <div class="action-stat"><button onclick="window.toggleComments(event, '${rev.id}')"><span class="material-symbols-outlined">chat_bubble</span></button><span class="action-label" id="comment-count-${rev.id}">${rev.commentCount || 0} Comments</span></div>
+                <div class="action-stat"><button onclick="window.toggleComments(event, '${rev.id}', this)"><span class="material-symbols-outlined">chat_bubble</span></button><span class="action-label" id="comment-count-${rev.id}">${rev.commentCount || 0} Comments</span></div>
                 <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'like', this)" style="${auth.currentUser && rev.likes?.includes(auth.currentUser.uid) ? 'color:var(--accent-yellow);' : ''}"><span class="material-symbols-outlined">thumb_up</span></button><span class="action-label">${rev.likes?.length || 0} Likes</span></div>
                 <div class="action-stat"><button onclick="window.toggleReaction(event, '${rev.id}', 'dislike', this)" style="${auth.currentUser && rev.dislikes?.includes(auth.currentUser.uid) ? 'color:red;' : ''}"><span class="material-symbols-outlined">thumb_down</span></button><span class="action-label">${rev.dislikes?.length || 0} Dislikes</span></div>
             </div>
@@ -2139,8 +2229,8 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             <div id="comments-container-${rev.id}" class="inline-comments" style="display:none; margin-top: 15px; padding-top: 15px; position: relative; z-index: 2;" onclick="event.stopPropagation();">
                 <div id="comments-list-${rev.id}"></div>
                 <div style="display:flex; gap:10px; margin-top:10px;">
-                    <input type="text" id="comment-input-${rev.id}" placeholder="Add a comment..." style="flex:1; padding: 10px; border-radius: 8px; border: 1px solid #E0E0E0;">
-                    <button class="action-btn" onclick="submitInlineComment('${rev.id}')">Send</button>
+                    <input type="text" class="review-inline-input" placeholder="Add a comment..." style="flex:1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
+                    <button class="action-btn" onclick="window.submitInlineComment('${rev.id}', this)">Send</button>
                 </div>
             </div>
         </div>`;
@@ -2194,6 +2284,46 @@ async function compressAvatar(file, size = 400, quality = 0.82) {
     });
 }
 
+async function compressBanner(file, maxWidth = 1400, quality = 0.85) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const scale = Math.min(1, maxWidth / img.width);
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * scale);
+                canvas.height = Math.round(img.height * scale);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob(resolve, 'image/jpeg', quality);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+window.previewBannerUpload = function(input) {
+    if (!input.files[0]) return;
+    if (input.files[0].size > 10 * 1024 * 1024) { alert('Please choose an image under 10MB.'); input.value = ''; return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const prev = document.getElementById('edit-banner-preview');
+        if (prev) { prev.style.backgroundImage = `url(${e.target.result})`; prev.style.backgroundColor = ''; }
+        document.getElementById('edit-profile-banner').value = '';
+        window.selectedBannerPreset = '';
+        document.querySelectorAll('#banner-presets div').forEach(d => d.style.borderColor = 'transparent');
+    };
+    reader.readAsDataURL(input.files[0]);
+};
+
+window.previewBannerFromUrl = function(url) {
+    const prev = document.getElementById('edit-banner-preview');
+    if (!prev) return;
+    if (url) { prev.style.backgroundImage = `url(${url})`; prev.style.backgroundColor = ''; }
+    else { prev.style.backgroundImage = ''; prev.style.backgroundColor = 'var(--bg-gray-darker)'; }
+};
+
 window.previewAvatarUpload = function(input) {
     if (!input.files[0]) return;
     if (input.files[0].size > 10 * 1024 * 1024) {
@@ -2217,6 +2347,7 @@ window.openEditProfileModal = async function() {
     const currentBio = pd.bio || '';
     const currentAvatar = pd.avatar || auth.currentUser.photoURL || '';
     const currentGenres = pd.genres || [];
+    const currentBanner = pd.bannerUrl || '';
 
     document.getElementById('edit-profile-name').value = currentName;
     document.getElementById('edit-profile-bio').value = currentBio;
@@ -2224,13 +2355,18 @@ window.openEditProfileModal = async function() {
     document.getElementById('edit-profile-error').innerText = '';
     document.getElementById('edit-avatar-preview').src = currentAvatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(currentName)}&backgroundColor=ffc107&fontColor=333333`;
     document.getElementById('avatar-file-input').value = '';
+    document.getElementById('banner-file-input').value = '';
+    const bannerPrev = document.getElementById('edit-banner-preview');
+    if (bannerPrev) {
+        if (currentBanner.startsWith('url(')) { bannerPrev.style.backgroundImage = currentBanner; bannerPrev.style.background = ''; }
+        else if (currentBanner) { bannerPrev.style.backgroundImage = ''; bannerPrev.style.background = currentBanner; }
+        else { bannerPrev.style.backgroundImage = ''; bannerPrev.style.backgroundColor = 'var(--bg-gray-darker)'; }
+    }
 
     const chipsContainer = document.getElementById('edit-genre-chips');
     chipsContainer.innerHTML = EDIT_GENRES.map(g =>
         `<button type="button" class="genre-chip ${currentGenres.includes(g) ? 'active' : ''}" onclick="toggleGenreChip(this)">${g}</button>`
     ).join('');
-
-    const currentBanner = pd.bannerUrl || '';
     window.selectedBannerPreset = BANNER_PRESETS.some(p => p.value === currentBanner) ? currentBanner : '';
     const bannerUrlInput = document.getElementById('edit-profile-banner');
     if (bannerUrlInput) {
@@ -2244,13 +2380,62 @@ window.openEditProfileModal = async function() {
     }
 
     document.getElementById('edit-profile-modal').style.display = 'flex';
+
+    // Load badge picker
+    const pickerEl = document.getElementById('edit-badge-picker');
+    if (pickerEl && auth.currentUser) {
+        try {
+            const achDoc = await getDoc(doc(db, 'achievements', auth.currentUser.uid));
+            const earned = achDoc.exists() ? achDoc.data() : {};
+            const currentPins = pd.pinnedBadges || [];
+            window._editPinnedBadges = [...currentPins];
+            const earnedAchs = ACHIEVEMENTS.filter(a => earned[a.id]);
+            if (!earnedAchs.length) {
+                pickerEl.innerHTML = '<span style="font-size:13px;color:var(--text-muted);">Earn achievements to showcase them here!</span>';
+            } else {
+                pickerEl.innerHTML = earnedAchs.map(a => {
+                    const isPinned = currentPins.includes(a.id);
+                    return `<div onclick="window.togglePinnedBadge('${a.id}',this)" id="badge-pick-${a.id}" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;border:2px solid ${isPinned ? a.color : 'var(--border-color)'};background:${isPinned ? 'rgba('+hexToRgb(a.color)+',0.1)' : 'var(--bg-gray)'};cursor:pointer;transition:all 0.15s;">
+                        <span class="material-symbols-outlined" style="font-size:16px;color:${a.color};">${a.icon}</span>
+                        <span style="font-size:12px;font-weight:600;color:var(--text-dark);">${a.name}</span>
+                    </div>`;
+                }).join('');
+            }
+        } catch(e) { pickerEl.innerHTML = '<span style="font-size:13px;color:var(--text-muted);">Could not load achievements.</span>'; }
+    }
+};
+
+function hexToRgb(hex) {
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return `${r},${g},${b}`;
+}
+
+window.togglePinnedBadge = function(id, el) {
+    const pins = window._editPinnedBadges || [];
+    const ach = ACHIEVEMENTS.find(a => a.id === id);
+    if (!ach) return;
+    const idx = pins.indexOf(id);
+    if (idx !== -1) {
+        pins.splice(idx, 1);
+        el.style.borderColor = 'var(--border-color)';
+        el.style.background = 'var(--bg-gray)';
+    } else {
+        if (pins.length >= 3) { alert('You can only pin 3 badges. Remove one first.'); return; }
+        pins.push(id);
+        el.style.borderColor = ach.color;
+        el.style.background = `rgba(${hexToRgb(ach.color)},0.1)`;
+    }
+    window._editPinnedBadges = pins;
 };
 
 window.selectBannerPreset = function(el, value) {
     window.selectedBannerPreset = value;
     document.getElementById('edit-profile-banner').value = '';
+    document.getElementById('banner-file-input').value = '';
     document.querySelectorAll('#banner-presets div').forEach(d => d.style.borderColor = 'transparent');
     el.style.borderColor = 'var(--accent-yellow)';
+    const prev = document.getElementById('edit-banner-preview');
+    if (prev) { prev.style.backgroundImage = ''; prev.style.background = value; }
 };
 
 window.saveEditProfile = async function() {
@@ -2274,13 +2459,24 @@ window.saveEditProfile = async function() {
     saveBtn.disabled = true; saveBtn.innerText = 'Saving...';
 
     try {
-        // Upload file if one was selected
+        // Upload avatar if one was selected
         if (fileInput.files[0]) {
-            saveBtn.innerText = 'Uploading...';
+            saveBtn.innerText = 'Uploading avatar...';
             const compressed = await compressAvatar(fileInput.files[0]);
             const sRef = storageRef(storage, `avatars/${uid}/profile.jpg`);
             await uploadBytes(sRef, compressed);
             avatar = await getDownloadURL(sRef);
+        }
+
+        // Upload banner if one was selected
+        const bannerFileInput = document.getElementById('banner-file-input');
+        let uploadedBannerUrl = null;
+        if (bannerFileInput?.files[0]) {
+            saveBtn.innerText = 'Uploading banner...';
+            const compressed = await compressBanner(bannerFileInput.files[0]);
+            const sRef = storageRef(storage, `banners/${uid}/banner.jpg`);
+            await uploadBytes(sRef, compressed);
+            uploadedBannerUrl = `url(${await getDownloadURL(sRef)})`;
         }
 
         if (newNorm !== oldNorm) {
@@ -2300,8 +2496,10 @@ window.saveEditProfile = async function() {
         }
 
         const bannerInput = document.getElementById('edit-profile-banner')?.value.trim();
-        const bannerUrl = window.selectedBannerPreset || (bannerInput ? `url(${bannerInput})` : '');
-        await setDoc(doc(db, "profiles", uid), { displayName: newName, bio, avatar: avatar || auth.currentUser.photoURL, genres, bannerUrl }, { merge: true });
+        const bannerUrl = uploadedBannerUrl || window.selectedBannerPreset || (bannerInput ? `url(${bannerInput})` : '');
+        const pinnedBadges = window._editPinnedBadges || [];
+        await setDoc(doc(db, "profiles", uid), { displayName: newName, bio, avatar: avatar || auth.currentUser.photoURL, genres, bannerUrl, pinnedBadges }, { merge: true });
+        window.userPinnedBadgesCache[uid] = pinnedBadges;
 
         window.closeAllModals();
         fetchUserProfile(uid);
@@ -2350,6 +2548,7 @@ window.fetchUserProfile = async function(targetUid = null) {
     }
     pBio = profileData.bio || '';
     pGenres = profileData.genres || [];
+    window.userPinnedBadgesCache[uidToFetch] = profileData.pinnedBadges || [];
 
     window.currentProfileName = pName;
     document.getElementById('top-anime-title').innerText = `${pName}'s Top Anime`;
@@ -2379,24 +2578,56 @@ window.fetchUserProfile = async function(targetUid = null) {
     const genreChipsHTML = pGenres.length
         ? `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;">${pGenres.map(g => `<span class="genre-chip active" style="pointer-events:none;">${g}</span>`).join('')}</div>`
         : '';
-    const bioHTML = pBio ? `<p style="font-size:14px; color:var(--text-dark); line-height:1.6; margin-top:6px;">${pBio}</p>` : '';
     const pBanner = profileData.bannerUrl || 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)';
     const bannerStyle = pBanner.startsWith('url(') ? `background-image:${pBanner}` : `background:${pBanner}`;
 
+    const pinnedBannerBadges = (() => {
+        const pins = profileData.pinnedBadges || [];
+        if (!pins.length) return '';
+        return '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">' + pins.map(id => {
+            const ach = ACHIEVEMENTS.find(a => a.id === id);
+            if (!ach) return '';
+            return `<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:3px 9px;">
+                <span class="material-symbols-outlined" style="font-size:13px;color:${ach.color};">${ach.icon}</span>
+                <span style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.9);">${ach.name}</span>
+            </div>`;
+        }).join('') + '</div>';
+    })();
+
+    const topBtns = isMe
+        ? `<button class="action-btn" onclick="openEditProfileModal()" style="position:absolute;top:14px;right:14px;z-index:5;background:rgba(0,0,0,0.45);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(6px);"><span class="material-symbols-outlined">edit</span> Edit Profile</button>`
+        : `<div style="position:absolute;top:14px;right:14px;z-index:5;display:flex;gap:8px;">
+               <button onclick="openDMConversation('${uidToFetch}','${pName.replace(/'/g,"\\'")}','${pAvatar}')" class="action-btn" style="padding:8px;min-width:unset;background:rgba(0,0,0,0.45);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(6px);" title="Message"><span class="material-symbols-outlined">chat_bubble</span></button>
+               ${friendBtnInner}
+           </div>`;
+
+    const bioSection = pBio
+        ? `<div style="padding:14px 24px;background:var(--bg-gray);border-radius:0 0 var(--border-radius) var(--border-radius);border-top:1px solid var(--border-color);">
+               <p style="font-size:14px;color:var(--text-dark);margin:0;line-height:1.5;">${pBio}</p>
+           </div>` : '';
+
     document.getElementById('profile-header-container').innerHTML = `
         <div class="profile-header-wrap">
-            <div class="profile-banner" style="${bannerStyle};"></div>
-            <div class="profile-header">
-                <img src="${pAvatar}" class="profile-avatar-large" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(pName)}&backgroundColor=ffc107&fontColor=333333'">
-                <div style="flex:1; min-width:0; padding-top:14px;">
-                    <h1 style="font-size: 28px; margin-bottom: 4px;">${pName} ${window.getFounderBadgeHTML(uidToFetch, 22)}</h1>
-                    <p style="color: var(--text-muted); font-size: 13px;">WeeBee Member since ${pJoined}</p>
-                    <div id="profile-follow-counts" style="display:flex; gap:12px; margin-top:4px; font-size:14px; font-weight:600;"></div>
-                    ${bioHTML}
-                    ${genreChipsHTML}
+            <div class="profile-banner" style="${bannerStyle};">
+                ${topBtns}
+                <div class="profile-banner-overlay">
+                    <div style="display:inline-flex;align-items:center;gap:16px;background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:12px 18px;">
+                        <img src="${pAvatar}" class="profile-avatar-large" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(pName)}&backgroundColor=ffc107&fontColor=333333'">
+                        <div style="min-width:0;">
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px;">
+                                <h1 style="font-size:20px;margin:0;color:white;font-weight:800;">${pName}</h1>
+                                ${window.getFounderBadgeHTML(uidToFetch, 18)}
+                                ${window.getRankBadgeHTML(window.userRankCache[uidToFetch] || 0, 18)}
+                            </div>
+                            <p style="color:rgba(255,255,255,0.65);font-size:12px;margin:0 0 6px;">WeeBee Member since ${pJoined}</p>
+                            <div id="profile-follow-counts" style="display:flex;gap:14px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.9);flex-wrap:wrap;"></div>
+                            ${pGenres.length ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;">${pGenres.map(g=>`<span style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.9);font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;">${g}</span>`).join('')}</div>` : ''}
+                            ${pinnedBannerBadges}
+                        </div>
+                    </div>
                 </div>
-                ${editBtnHtml}
             </div>
+            ${bioSection}
         </div>
     `;
 
@@ -2730,50 +2961,200 @@ async function loadReviewBatch(append = false) {
 }
 
 window.fetchHomepageReviews = async function() {
-    window._lastReviewDoc = null;
-    window._feedExhausted = false;
-    window._feedLoading = false;
-    const feed = document.getElementById('review-feed');
-    feed.innerHTML = '<div class="loading">Fetching recent reviews...</div>';
-    await loadReviewBatch(false);
+    // Launch activity feed — don't await, runs in background
+    window.fetchHomeActivityFeed();
 
-    if(auth.currentUser) {
+    // Load news from followed anime
+    if (auth.currentUser) {
         try {
             const fQ = query(collection(db, "follows"), where("followerUid", "==", auth.currentUser.uid), where("type", "==", "anime"));
             const fSnap = await getDocs(fQ);
             let followedMalIds = [];
             fSnap.forEach(d => followedMalIds.push(d.data().targetId));
-
             const newsSection = document.getElementById('home-news-section');
             const newsCarousel = document.getElementById('home-news-carousel');
-
-            if(followedMalIds.length > 0) {
+            if (followedMalIds.length > 0) {
                 newsSection.style.display = 'block';
                 newsCarousel.innerHTML = '';
-                
-                const limitAnimes = followedMalIds.slice(0, 2);
-                for(let animeId of limitAnimes) {
+                for (let animeId of followedMalIds.slice(0, 2)) {
                     try {
                         const r = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/news`);
                         const d = await r.json();
-                        if(d.data) {
-                            d.data.slice(0, 3).forEach(n => {
-                                newsCarousel.innerHTML += `
-                                    <div class="news-card" style="min-width: 300px; flex-shrink:0;">
-                                        <img src="${n.images?.jpg?.image_url || 'https://via.placeholder.com/300x150'}">
-                                        <div class="news-content" style="padding:10px;">
-                                            <h3 style="font-size:14px; margin-bottom:5px;">${n.title}</h3>
-                                            <a href="${n.url}" target="_blank" class="news-link" style="display:inline-block; margin-top:auto; font-size:10px;">Read Article</a>
-                                        </div>
-                                    </div>`;
-                            });
-                        }
-                    } catch(e){}
+                        if (d.data) d.data.slice(0, 3).forEach(n => {
+                            newsCarousel.innerHTML += `<div class="news-card" style="min-width:300px;flex-shrink:0;">
+                                <img src="${n.images?.jpg?.image_url || 'https://via.placeholder.com/300x150'}">
+                                <div class="news-content" style="padding:10px;">
+                                    <h3 style="font-size:14px;margin-bottom:5px;">${n.title}</h3>
+                                    <a href="${n.url}" target="_blank" class="news-link" style="display:inline-block;margin-top:auto;font-size:10px;">Read Article</a>
+                                </div>
+                            </div>`;
+                        });
+                    } catch(e) {}
                 }
-                if(newsCarousel.innerHTML === '') newsCarousel.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); padding:10px;">No recent news for your followed anime.</p>';
+                if (newsCarousel.innerHTML === '') newsCarousel.innerHTML = '<p class="empty-msg" style="color:var(--text-muted);padding:10px;">No recent news for your followed anime.</p>';
             } else { newsSection.style.display = 'none'; }
-        } catch(e){}
+        } catch(e) {}
     } else { document.getElementById('home-news-section').style.display = 'none'; }
+};
+
+// --- UNIFIED ACTIVITY FEED ---
+window._activityItems = [];
+window._activityIndex = 0;
+const ACTIVITY_PAGE_SIZE = 20;
+
+function formatTimeAgo(ts) {
+    const ms = ts?.toMillis?.() || (ts?.seconds ? ts.seconds * 1000 : (typeof ts === 'number' ? ts : 0));
+    if (!ms) return '';
+    const diff = Date.now() - ms;
+    if (diff < 60000) return 'just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+    return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function renderTierListFeedCard(id, tl) {
+    const itemCount = tl.tiers.reduce((a, t) => a + (t.items?.length || 0), 0);
+    const avatar = tl.authorAvatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(tl.authorName || 'U')}&backgroundColor=ffc107&fontColor=333333`;
+    const timeAgo = formatTimeAgo(tl._ts || tl.timestamp || tl.updatedAt);
+    const tierPreview = tl.tiers.slice(0, 5).map(t =>
+        `<span style="background:${t.color};color:#333;font-size:10px;font-weight:800;padding:3px 8px;border-radius:4px;white-space:nowrap;">${t.label}</span>`
+    ).join('');
+    const rankHTML = window.getRankBadgeHTML(window.userRankCache[tl.uid] || 0, 16);
+    const likes = tl.likes || [];
+    const dislikes = tl.dislikes || [];
+    const isLiked = auth.currentUser && likes.includes(auth.currentUser.uid);
+    const isDisliked = auth.currentUser && dislikes.includes(auth.currentUser.uid);
+    const coverImage = tl.coverImage || tl.tiers.flatMap(t => t.items || []).find(i => i.image)?.image || null;
+    const typeLabel = tl.type === 'characters' && tl.sourceAnimeTitle ? tl.sourceAnimeTitle : null;
+    const thumbHTML = coverImage ? `<img class="review-anime-thumb" src="${coverImage}" onclick="event.stopPropagation();window.openTierListViewer('${id}')" onerror="this.style.display='none'">` : '';
+    const padRight = coverImage ? 'padding-right:195px;' : '';
+    return `<div class="review-card tl-post-card feed-post-card">
+        ${thumbHTML}
+        <div class="review-header" style="margin-bottom:10px;position:relative;z-index:2;${padRight}">
+            <img src="${avatar}" class="avatar" onclick="event.stopPropagation();viewUserProfile('${tl.uid}')" style="cursor:pointer;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(tl.authorName||'U')}&backgroundColor=ffc107&fontColor=333333'">
+            <div style="min-width:0;">
+                <strong style="color:var(--text-dark);">${tl.authorName || 'WeeBee User'}</strong>
+                ${rankHTML}
+                ${window.getPinnedBadgesHTML(tl.uid)}
+                <span style="display:inline-block;background:#1565C0;color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">📊 Tier List</span><br>
+                <span style="font-size:12px;color:var(--text-muted);">${timeAgo}</span>
+                ${typeLabel ? `<span style="font-size:12px;color:var(--text-muted);"> · ${typeLabel}</span>` : ''}
+            </div>
+        </div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:var(--text-dark);cursor:pointer;position:relative;z-index:2;${padRight}" onclick="window.openTierListViewer('${id}')">${tl.title || 'Untitled Tier List'}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;position:relative;z-index:2;${padRight}">${tl.tiers.length} tiers · ${itemCount} item${itemCount !== 1 ? 's' : ''} ranked</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;cursor:pointer;position:relative;z-index:2;${padRight}" onclick="window.openTierListViewer('${id}')">${tierPreview}</div>
+        <div class="review-actions" style="position:relative;z-index:2;">
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${id}','tier_lists','like',this)" style="${isLiked ? 'color:var(--accent-yellow);' : ''}">
+                    <span class="material-symbols-outlined">thumb_up</span>
+                </button>
+                <span class="action-label" id="bw-likes-${id}">${likes.length} Likes</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${id}','tier_lists','dislike',this)" style="${isDisliked ? 'color:red;' : ''}">
+                    <span class="material-symbols-outlined">thumb_down</span>
+                </button>
+                <span class="action-label" id="bw-dislikes-${id}">${dislikes.length} Dislikes</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostComments(event,this,'${id}')">
+                    <span class="material-symbols-outlined">chat_bubble</span>
+                </button>
+                <span class="action-label bw-comment-count">${tl.commentCount || 0} Comments</span>
+            </div>
+        </div>
+        <div class="bw-post-comments" data-post-collection="tier_lists" style="display:none;margin-top:15px;padding-top:15px;border-top:1px solid var(--border-color);position:relative;z-index:2;" onclick="event.stopPropagation();">
+            <div class="bw-comments-list"></div>
+            <div style="display:flex;gap:10px;margin-top:10px;">
+                <input type="text" class="bw-comment-input" placeholder="Add a comment..." style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
+                <button class="action-btn" onclick="window.submitBwPostComment(event,this,'${id}','tier_lists')">Send</button>
+            </div>
+        </div>
+    </div>`;
+}
+
+function renderActivityBatch() {
+    const feed = document.getElementById('home-activity-feed');
+    const sentinel = document.getElementById('home-activity-sentinel');
+    if (!feed) return;
+    const items = window._activityItems || [];
+    const batch = items.slice(window._activityIndex, window._activityIndex + ACTIVITY_PAGE_SIZE);
+    if (!batch.length) {
+        if (window._activityIndex === 0) feed.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px;font-size:14px;">No activity yet — start by writing a review or creating a tier list!</div>';
+        if (sentinel) sentinel.style.display = 'none';
+        return;
+    }
+    batch.forEach(item => {
+        let html = '';
+        if (item._type === 'review') html = window.generateReviewCardHTML(item);
+        else if (item._type === 'tierlist') html = renderTierListFeedCard(item.id, item);
+        else if (item._type === 'bw') html = window.generateBwPostCardHTML(item);
+        if (html) feed.innerHTML += html;
+    });
+    window._activityIndex += batch.length;
+    if (sentinel) sentinel.style.display = window._activityIndex < items.length ? 'block' : 'none';
+}
+
+window.fetchHomeActivityFeed = async function() {
+    const feed = document.getElementById('home-activity-feed');
+    const sentinel = document.getElementById('home-activity-sentinel');
+    if (!feed) return;
+    feed.innerHTML = '<div class="loading">Loading your feed...</div>';
+    if (sentinel) sentinel.style.display = 'none';
+    window._activityItems = [];
+    window._activityIndex = 0;
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        const [reviewSnap, tlSnap, bwSnap] = await Promise.all([
+            getDocs(query(collection(db, 'reviews'), orderBy('timestamp', 'desc'), limit(60))),
+            getDocs(query(collection(db, 'tier_lists'), where('public', '==', true))),
+            getDocs(query(collection(db, 'bw_posts'), where('date', '==', today)))
+        ]);
+
+        // Build set of social UIDs (follows + friends)
+        const socialUids = new Set();
+        if (auth.currentUser) {
+            try {
+                const uid = auth.currentUser.uid;
+                const [followSnap, friendSnap] = await Promise.all([
+                    getDocs(query(collection(db, 'follows'), where('followerUid', '==', uid), where('type', '==', 'user'))),
+                    getDocs(query(collection(db, 'friends'), where('uids', 'array-contains', uid)))
+                ]);
+                followSnap.forEach(d => socialUids.add(d.data().targetId));
+                friendSnap.forEach(d => { const other = d.data().uids?.find(u => u !== uid); if (other) socialUids.add(other); });
+            } catch(e) {}
+        }
+
+        const items = [];
+        reviewSnap.forEach(d => {
+            const data = d.data();
+            items.push({ ...data, id: d.id, _type: 'review', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) });
+        });
+        tlSnap.forEach(d => {
+            const data = d.data();
+            const ts = data.timestamp?.toMillis?.() || data.updatedAt?.toMillis?.() || 0;
+            items.push({ ...data, id: d.id, _type: 'tierlist', _ts: ts, _social: socialUids.has(data.uid) });
+        });
+        bwSnap.forEach(d => {
+            const data = d.data();
+            items.push({ ...data, id: d.id, _type: 'bw', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid), _col: 'bw_posts' });
+        });
+
+        await window.prefetchRankCache([...new Set(items.map(i => i.uid).filter(Boolean))]);
+
+        const byTime = (a, b) => b._ts - a._ts;
+        window._activityItems = [
+            ...items.filter(i => i._social).sort(byTime),
+            ...items.filter(i => !i._social).sort(byTime)
+        ];
+        feed.innerHTML = '';
+        renderActivityBatch();
+    } catch(e) {
+        console.error('fetchHomeActivityFeed', e);
+        feed.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px;">Could not load feed.</div>';
+    }
 };
 
 // --- SEASONAL VOTING SYSTEM ---
@@ -3015,7 +3396,7 @@ window.searchTierSource = async function() {
         const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8&type=tv`);
         const { data } = await res.json();
         results.innerHTML = (data || []).map(a => `
-            <div onclick="selectTierSource(${a.mal_id},'${(a.title_english||a.title).replace(/'/g,"\\'")}')"
+            <div onclick="selectTierSource(${a.mal_id},'${(a.title_english||a.title).replace(/'/g,"\\'")}','${a.images.jpg.image_url}')"
                 style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--bg-gray);background:var(--bg-white);"
                 onmouseover="this.style.background='var(--bg-gray)'" onmouseout="this.style.background='var(--bg-white)'">
                 <img src="${a.images.jpg.image_url}" style="width:36px;height:50px;object-fit:cover;border-radius:4px;flex-shrink:0;">
@@ -3024,8 +3405,8 @@ window.searchTierSource = async function() {
     } catch(e) { results.innerHTML = '<div style="padding:12px;color:var(--text-muted);">Failed to search.</div>'; }
 };
 
-window.selectTierSource = async function(malId, title) {
-    window.tierListState.sourceAnimeId = malId; window.tierListState.sourceAnimeTitle = title;
+window.selectTierSource = async function(malId, title, imageUrl) {
+    window.tierListState.sourceAnimeId = malId; window.tierListState.sourceAnimeTitle = title; window.tierListState._sourceAnimeImage = imageUrl || null;
     window.showTierStep('editor');
     document.getElementById('tl-source-label').innerText = `Characters from: ${title}`;
     window.tierListState.unranked = [];
@@ -3049,8 +3430,15 @@ window.renderTierEditor = function() {
     if (!tc || !uz) return;
     const st = window.tierListState;
     tc.innerHTML = st.tiers.map((tier, i) => `
-        <div style="display:flex;min-height:80px;margin-bottom:3px;border-radius:8px;overflow:hidden;">
+        <div class="tl-tier-row" draggable="true"
+            ondragstart="window.tlTierDragStart(event,${i})"
+            ondragover="window.tlTierDragOver(event,${i})"
+            ondrop="window.tlTierDrop(event,${i})"
+            ondragleave="this.classList.remove('tl-tier-drag-over')"
+            ondragend="window.tlTierDragEnd()"
+            style="display:flex;min-height:80px;margin-bottom:3px;border-radius:8px;overflow:hidden;">
             <div style="width:72px;flex-shrink:0;background:${tier.color};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:4px;">
+                <div style="color:rgba(255,255,255,0.7);font-size:18px;cursor:grab;user-select:none;line-height:1;" title="Drag to reorder tier">⠿</div>
                 <input type="text" value="${tier.label}" maxlength="4" onclick="this.select()"
                     oninput="window.tierListState.tiers[${i}].label=this.value"
                     style="background:transparent;border:none;text-align:center;font-size:22px;font-weight:900;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.5);width:100%;outline:none;cursor:text;">
@@ -3070,7 +3458,11 @@ window.renderTierEditor = function() {
 
 window.renderTlItem = function(item, zone) {
     const safe = item.title.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-    return `<div draggable="true" ondragstart="tlDragStart(event,'${item.id}','${zone}')"
+    return `<div draggable="true"
+        ondragstart="tlDragStart(event,'${item.id}','${zone}')"
+        ondragover="tlItemDragOver(event,'${item.id}','${zone}')"
+        ondrop="tlDropOnItem(event,'${item.id}','${zone}')"
+        ondragleave="this.classList.remove('tl-item-drag-over')"
         style="width:65px;flex-shrink:0;cursor:grab;position:relative;user-select:none;" title="${safe}">
         <img src="${item.image}" style="width:65px;height:88px;object-fit:cover;border-radius:6px;display:block;background:var(--bg-gray-darker);" onerror="this.style.background='var(--bg-gray-darker)'">
         <div style="font-size:9px;color:var(--text-dark);text-align:center;line-height:1.2;margin-top:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${item.title}</div>
@@ -3079,14 +3471,27 @@ window.renderTlItem = function(item, zone) {
     </div>`;
 };
 
-window.tlDragStart = function(e, itemId, fromZone) { window.tlDragging = { itemId, fromZone }; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', itemId); };
-window.tlDragOver = function(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); };
+// Item drag — stopPropagation prevents the parent tier row from also firing tlTierDragStart
+window.tlDragStart = function(e, itemId, fromZone) {
+    e.stopPropagation();
+    window.tlDragging = { itemId, fromZone };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', itemId);
+};
 
+// Zone drag-over — skip if a tier row is being dragged
+window.tlDragOver = function(e) {
+    if (window.tlTierDragging !== null) return;
+    e.preventDefault();
+    e.currentTarget.classList.add('drag-over');
+};
+
+// Zone drop — append to end of zone (item-on-item drops are handled by tlDropOnItem)
 window.tlDrop = function(e, toZone) {
-    e.preventDefault(); e.currentTarget.classList.remove('drag-over');
-    if (!window.tlDragging) return;
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    if (window.tlTierDragging !== null || !window.tlDragging) return;
     const { itemId, fromZone } = window.tlDragging; window.tlDragging = null;
-    if (fromZone === toZone) return;
     const st = window.tierListState; let item = null;
     if (fromZone === 'unranked') { const i = st.unranked.findIndex(x=>x.id===itemId); if(i!==-1) item=st.unranked.splice(i,1)[0]; }
     else { const ti=parseInt(fromZone.replace('tier_','')); if(st.tiers[ti]){const i=st.tiers[ti].items.findIndex(x=>x.id===itemId);if(i!==-1)item=st.tiers[ti].items.splice(i,1)[0];} }
@@ -3094,6 +3499,63 @@ window.tlDrop = function(e, toZone) {
     if (toZone==='unranked') { st.unranked.push(item); }
     else { const ti=parseInt(toZone.replace('tier_','')); if(st.tiers[ti]) st.tiers[ti].items.push(item); }
     window.renderTierEditor();
+};
+
+// Item-on-item drag-over — highlights target, stops bubbling so zone doesn't also highlight
+window.tlItemDragOver = function(e, targetId, zone) {
+    if (window.tlTierDragging !== null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    document.querySelectorAll('.tl-item-drag-over').forEach(el => el.classList.remove('tl-item-drag-over'));
+    if (window.tlDragging?.itemId !== targetId) e.currentTarget.classList.add('tl-item-drag-over');
+};
+
+// Item-on-item drop — inserts before target item, works within same tier or across tiers
+window.tlDropOnItem = function(e, targetId, toZone) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('tl-item-drag-over');
+    if (!window.tlDragging) return;
+    const { itemId, fromZone } = window.tlDragging; window.tlDragging = null;
+    if (itemId === targetId) return;
+    const st = window.tierListState; let item = null;
+    if (fromZone === 'unranked') { const i = st.unranked.findIndex(x=>x.id===itemId); if(i!==-1) item=st.unranked.splice(i,1)[0]; }
+    else { const ti=parseInt(fromZone.replace('tier_','')); if(st.tiers[ti]){const i=st.tiers[ti].items.findIndex(x=>x.id===itemId);if(i!==-1)item=st.tiers[ti].items.splice(i,1)[0];} }
+    if (!item) return;
+    if (toZone==='unranked') { const idx=st.unranked.findIndex(x=>x.id===targetId); st.unranked.splice(idx<0?st.unranked.length:idx,0,item); }
+    else { const ti=parseInt(toZone.replace('tier_','')); if(st.tiers[ti]){const idx=st.tiers[ti].items.findIndex(x=>x.id===targetId); st.tiers[ti].items.splice(idx<0?st.tiers[ti].items.length:idx,0,item);} }
+    window.renderTierEditor();
+};
+
+// Tier row drag — moves entire tier (with all its contents) to a new position
+window.tlTierDragging = null;
+window.tlTierDragStart = function(e, tierIdx) {
+    window.tlTierDragging = tierIdx;
+    e.dataTransfer.effectAllowed = 'move';
+};
+window.tlTierDragOver = function(e, tierIdx) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.tlTierDragging === null || window.tlTierDragging === tierIdx) return;
+    document.querySelectorAll('.tl-tier-row').forEach(el => el.classList.remove('tl-tier-drag-over'));
+    e.currentTarget.classList.add('tl-tier-drag-over');
+};
+window.tlTierDrop = function(e, tierIdx) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('tl-tier-drag-over');
+    if (window.tlTierDragging === null || window.tlTierDragging === tierIdx) { window.tlTierDragging = null; return; }
+    const fromIdx = window.tlTierDragging; window.tlTierDragging = null;
+    const st = window.tierListState;
+    const [tier] = st.tiers.splice(fromIdx, 1);
+    st.tiers.splice(tierIdx, 0, tier);
+    window.renderTierEditor();
+};
+window.tlTierDragEnd = function() {
+    window.tlTierDragging = null;
+    document.querySelectorAll('.tl-tier-drag-over, .tl-item-drag-over').forEach(el => {
+        el.classList.remove('tl-tier-drag-over', 'tl-item-drag-over');
+    });
 };
 
 window.addTierRow = function() {
@@ -3160,10 +3622,12 @@ window.saveTierList = async function() {
     const pd = await getDoc(doc(db,"profiles",auth.currentUser.uid)).catch(()=>null);
     const displayName = pd?.data()?.displayName || auth.currentUser.displayName;
     const myAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
-    const data = { uid:auth.currentUser.uid, authorName:displayName, authorAvatar:myAvatar, title, type:st.type, sourceAnimeId:st.sourceAnimeId||null, sourceAnimeTitle:st.sourceAnimeTitle||null, tiers:st.tiers, unranked:st.unranked, public:isPublic, updatedAt:new Date() };
+    const _allItems = [...(st.tiers||[]).flatMap(t => t.items||[]), ...(st.unranked||[])];
+    const coverImage = st._sourceAnimeImage || _allItems.find(i => i.image)?.image || null;
+    const data = { uid:auth.currentUser.uid, authorName:displayName, authorAvatar:myAvatar, title, type:st.type, sourceAnimeId:st.sourceAnimeId||null, sourceAnimeTitle:st.sourceAnimeTitle||null, coverImage, tiers:st.tiers, unranked:st.unranked, public:isPublic, updatedAt:new Date() };
     try {
         if (st.editingId) { await updateDoc(doc(db,"tier_lists",st.editingId), data); }
-        else { await addDoc(collection(db,"tier_lists"), { ...data, likes:[], timestamp:new Date() }); }
+        else { await addDoc(collection(db,"tier_lists"), { ...data, likes:[], dislikes:[], commentCount:0, timestamp:new Date() }); }
         window.closeAllModals();
         if (window.currentActiveViewId==='profile-view') window.loadTierListsTab(auth.currentUser.uid);
     } catch(e) { alert('Failed to save.'); console.error(e); }
@@ -3257,17 +3721,8 @@ window.shareTierList = function(id) {
     });
 };
 
-window.fetchHomepageTierLists = async function() {
-    const section = document.getElementById('home-tierlists-section');
-    const feed = document.getElementById('home-tierlists-feed');
-    if (!section || !feed) return;
-    try {
-        const snap = await getDocs(query(collection(db, "tier_lists"), where("public", "==", true)));
-        const docs = snap.docs.sort((a,b) => (b.data().timestamp?.toMillis?.() || 0) - (a.data().timestamp?.toMillis?.() || 0)).slice(0, 8);
-        if (docs.length === 0) { section.style.display = 'none'; return; }
-        section.style.display = 'block';
-        feed.innerHTML = docs.map(d => renderTierListCard(d.id, d.data())).join('');
-    } catch(e) { console.error('fetchHomepageTierLists', e); section.style.display = 'none'; }
+window.fetchHomepageTierLists = function() {
+    if (window.currentActiveViewId === 'home-view') window.fetchHomeActivityFeed();
 };
 
 window.allCommunityTierLists = [];
@@ -3341,34 +3796,57 @@ window.currentPatchNotes = [];
 
 window.loadPatchNotes = async function() {
     try {
-        const snap = await getDocs(query(collection(db, "patch_notes"), orderBy("timestamp", "desc"), limit(10)));
+        const snap = await getDocs(query(collection(db, "patch_notes"), orderBy("timestamp", "desc"), limit(20)));
         window.currentPatchNotes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         const feed = document.getElementById('patch-notes-feed');
         const section = document.getElementById('patch-notes-section');
         if (!feed || !section) return;
         if (snap.empty) { section.style.display = 'none'; return; }
         section.style.display = 'block';
-        feed.innerHTML = window.currentPatchNotes.map((p, i) => `
-            <div class="news-card" onclick="openPatchNoteModal(${i})" style="cursor:pointer;">
-                <div style="background:var(--accent-yellow); height:8px; border-radius:10px 10px 0 0;"></div>
+        feed.style.gridTemplateColumns = 'repeat(auto-fill, minmax(220px, 1fr))';
+
+        const VISIBLE = 4;
+        const renderCard = (p, i) => `
+            <div class="news-card${i >= VISIBLE ? ' pn-hidden' : ''}" onclick="openPatchNoteModal(${i})" style="cursor:pointer; position:relative;${i >= VISIBLE ? 'display:none;' : ''}">
+                <div style="background:var(--accent-yellow); height:6px; border-radius:10px 10px 0 0;"></div>
                 <div class="news-content">
-                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                        <img src="${p.authorAvatar || ''}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;" onerror="this.style.display='none'">
+                    ${i === 0 ? '<div style="display:inline-block;background:var(--accent-yellow);color:#111;font-size:10px;font-weight:800;padding:2px 10px;border-radius:20px;letter-spacing:0.5px;margin-bottom:10px;">✦ LATEST</div>' : ''}
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                        <img src="${p.authorAvatar || ''}" style="width:28px; height:28px; border-radius:50%; object-fit:cover;" onerror="this.style.display='none'">
                         <div>
-                            <div style="font-size:12px; font-weight:700; color:var(--accent-yellow);">WeeBee Update</div>
-                            <div style="font-size:11px; color:var(--text-muted);">${p.authorName || 'WeeBee'}</div>
+                            <div style="font-size:11px; font-weight:700; color:var(--accent-yellow);">WeeBee Update</div>
+                            <div style="font-size:10px; color:var(--text-muted);">${p.authorName || 'WeeBee'}</div>
                         </div>
                     </div>
-                    <h3 style="font-size:14px; font-weight:700; margin-bottom:8px; line-height:1.4;">${p.title}</h3>
-                    <p style="font-size:13px; color:var(--text-muted); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">${p.body.replace(/\n/g, ' ')}</p>
+                    <h3 style="font-size:14px; font-weight:700; margin-bottom:6px; line-height:1.4;">${p.title}</h3>
+                    <p style="font-size:12px; color:var(--text-muted); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; line-height:1.5;">${p.body.replace(/\n/g, ' ')}</p>
                     <div class="news-footer" style="margin-top:10px;">
-                        <span style="font-size:12px; color:var(--text-muted);">${p.timestamp?.toDate ? new Date(p.timestamp.toDate()).toLocaleDateString() : ''}</span>
-                        <span class="news-link">Read More</span>
+                        <span style="font-size:11px; color:var(--text-muted);">${p.timestamp?.toDate ? new Date(p.timestamp.toDate()).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : ''}</span>
+                        <span class="news-link" style="font-size:12px;">Read More</span>
                     </div>
                 </div>
-            </div>`).join('');
+            </div>`;
+
+        feed.innerHTML = window.currentPatchNotes.map(renderCard).join('');
+
+        // Show more button spanning full grid width
+        if (window.currentPatchNotes.length > VISIBLE) {
+            const remaining = window.currentPatchNotes.length - VISIBLE;
+            feed.insertAdjacentHTML('beforeend', `
+                <div id="pn-show-more" style="grid-column:1/-1; text-align:center; padding-top:4px;">
+                    <button onclick="window.expandPatchNotes()" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);">
+                        <span class="material-symbols-outlined" style="font-size:16px;">expand_more</span> Show ${remaining} older update${remaining !== 1 ? 's' : ''}
+                    </button>
+                </div>`);
+        }
         window.checkPatchNoteBadge();
     } catch(e) { console.error('loadPatchNotes', e); }
+};
+
+window.expandPatchNotes = function() {
+    document.querySelectorAll('.pn-hidden').forEach(el => el.style.display = '');
+    const btn = document.getElementById('pn-show-more');
+    if (btn) btn.style.display = 'none';
 };
 
 window.openPatchNoteModal = function(index) {
@@ -3584,11 +4062,17 @@ window.fetchDiscoverPage = async function() {
         }
 
         const MIN_REVIEWS = 5;
-        let top10 = Object.values(animeStats).filter(a => a.title).map(a => ({ ...a, avgScore: (a.totalScore / a.count).toFixed(1) })).sort((a, b) => b.avgScore - a.avgScore).slice(0, 10);
-        // Podium: only anime with enough reviews to qualify; list gets everything else
-        const podium = top10.filter(a => a.count >= MIN_REVIEWS).slice(0, 3);
+        const allRanked = Object.values(animeStats)
+            .filter(a => a.title)
+            .map(a => ({ ...a, avgScore: (a.totalScore / a.count).toFixed(1) }))
+            .sort((a, b) => parseFloat(b.avgScore) - parseFloat(a.avgScore));
+        // Podium: top 3 from ALL qualifying anime — don't cap at 10 first
+        const podium = allRanked.filter(a => a.count >= MIN_REVIEWS).slice(0, 3);
         const podiumIds = new Set(podium.map(a => a.mal_id));
-        const listItems = top10.filter(a => !podiumIds.has(a.mal_id)).slice(0, 7);
+        // List: next 7 non-podium anime by avgScore (includes unqualified)
+        const listItems = allRanked.filter(a => !podiumIds.has(a.mal_id)).slice(0, 7);
+        // top10 used by rank snapshot below
+        const top10 = [...podium, ...listItems];
         
         if(top10.length === 0) {
             top10Container.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); text-align:center;">No reviews on WeeBee yet! Be the first!</p>';
@@ -4014,11 +4498,16 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     if(targetId !== 'anime-detail-view') window.previousViewId = targetId;
     if(targetId !== 'profile-view') window.targetProfileUid = null;
     if (!skipHistory) {
+        const _tabHashes = { 'home-view': '', 'discover-view': 'discover', 'my-list-view': 'mylist', 'news-view': 'news', 'community-view': 'community' };
+        const _tabHash = _tabHashes[targetId];
         // Clear ?anime= or ?profile= params when navigating to non-detail views
         if (targetId !== 'anime-detail-view' && targetId !== 'profile-view') {
             history.replaceState({}, '', window.location.pathname);
         }
-        history.pushState({ view: targetId, profileUid: window.targetProfileUid, animeId: window.currentAnimeId }, '', window.location.pathname);
+        const _newUrl = _tabHash !== undefined
+            ? (_tabHash ? `${window.location.pathname}#${_tabHash}` : window.location.pathname)
+            : window.location.pathname;
+        history.pushState({ view: targetId, profileUid: window.targetProfileUid, animeId: window.currentAnimeId }, '', _newUrl);
     }
     // Save state for refresh restoration
     sessionStorage.setItem('weebee-last-view', JSON.stringify({ view: targetId, profileUid: window.targetProfileUid, animeId: window.currentAnimeId }));
@@ -4029,17 +4518,25 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     window.currentActiveViewId = targetId;
     document.querySelector('.main-content').scrollTo(0,0);
     
-    if(targetId === 'home-view') { fetchHomepageReviews(); window.fetchHomepageTierLists(); window.fetchHomeWordleFeed(); }
+    if(targetId === 'home-view') { fetchHomepageReviews(); }
     if(targetId === 'community-view') {
         window.fetchCommunityTierLists();
-        // Update thumbnail status without opening the game
+        window.fetchBwCommunityFeed();
+        // Update game thumbnail status texts
         const today = new Date().toISOString().split('T')[0];
-        const statusEl = document.getElementById('wordle-status-text');
-        if (statusEl && window.wordleState.date === today) {
-            const { solved, guesses } = window.wordleState;
-            statusEl.innerText = solved ? `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!` : guesses.length > 0 ? `${guesses.length} ${guesses.length===1?'guess':'guesses'} so far` : 'New puzzle available! 🗡️';
-        } else if (statusEl) {
-            statusEl.innerText = 'New puzzle available! 🗡️';
+        const opStatusEl = document.getElementById('bwop-status-text');
+        if (opStatusEl && window.bwOpState.date === today) {
+            const { solved, guesses } = window.bwOpState;
+            opStatusEl.innerText = solved ? `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!` : guesses.length > 0 ? `${guesses.length} ${guesses.length===1?'guess':'guesses'} so far` : 'New puzzle available! 🗡️';
+        } else if (opStatusEl) {
+            opStatusEl.innerText = 'New puzzle available! 🗡️';
+        }
+        const nrtStatusEl = document.getElementById('bwnrt-status-text');
+        if (nrtStatusEl && window.bwNrtState.date === today) {
+            const { solved, guesses } = window.bwNrtState;
+            nrtStatusEl.innerText = solved ? `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!` : guesses.length > 0 ? `${guesses.length} ${guesses.length===1?'guess':'guesses'} so far` : 'New puzzle available! 🍃';
+        } else if (nrtStatusEl) {
+            nrtStatusEl.innerText = 'New puzzle available! 🍃';
         }
     }
     if(targetId === 'news-view') {
@@ -4521,6 +5018,7 @@ function updateEpisodeRowDOM(mal_id, ep_number) {
 }
 
 window.onload = function() {
+    const _initHash = window.location.hash.replace('#', '');
     history.replaceState({ view: 'home-view', profileUid: null, animeId: null }, '', window.location.pathname);
     const saved = localStorage.getItem('weebee-theme') || 'dark';
     document.body.setAttribute('data-theme', saved);
@@ -4537,12 +5035,705 @@ window.onload = function() {
             });
         } catch(e) { console.error("Trending error:", e); }
     };
-    loadTrending(); fetchHomepageReviews(); window.fetchHomeWordleFeed();
+    loadTrending(); fetchHomepageReviews();
+
+    const _hashToView = { 'discover': 'discover-view', 'mylist': 'my-list-view', 'news': 'news-view', 'community': 'community-view' };
+    if (_initHash && _hashToView[_initHash]) {
+        switchView(_hashToView[_initHash]);
+    }
 };
 
 // =====================================================================
-// ONE PIECE WORDLE
+// BUZZWORD GAMES
 // =====================================================================
+
+const BW_GAMES = {
+    op: {
+        label: 'BuzzWord: One Piece Characters',
+        badge: '⚓ One Piece',
+        badgeBg: '#8B0000',
+        badgeColor: '#FFD700',
+        cover: 'https://cdn.myanimelist.net/images/anime/6/73245.jpg',
+        playFn: 'window.openBwOpModal()'
+    },
+    naruto: {
+        label: 'BuzzWord: Naruto Characters',
+        badge: '🍃 Naruto',
+        badgeBg: '#7a3300',
+        badgeColor: '#FF8C00',
+        cover: 'https://cdn.myanimelist.net/images/anime/1565/111305.jpg',
+        playFn: 'window.openBwNrtModal()'
+    },
+    bleach: {
+        label: 'BuzzWord: Bleach Characters',
+        badge: '⚔️ Bleach',
+        badgeBg: '#0d1b2a',
+        badgeColor: '#00BCD4',
+        cover: 'https://cdn.myanimelist.net/images/anime/3/40451.jpg',
+        playFn: 'window.openBwBlcModal()'
+    }
+};
+
+// =====================================================================
+// BUZZWORD: NARUTO CHARACTERS
+// =====================================================================
+
+const NRT_ARC_ORDER = [
+    'Introduction','Land of Waves','Chunin Exams','Konoha Crush',
+    'Search for Tsunade','Sasuke Recovery Mission',
+    'Kazekage Rescue','Tenchi Bridge Reconnaissance','Akatsuki Suppression',
+    'Itachi Pursuit','Fated Battle Between Brothers',"Pain's Assault",
+    'Five Kage Summit','Fourth Shinobi World War','Kaguya Strikes'
+];
+
+const BW_NRT_CHARS = [
+    // ── Leaf ──
+    {id:'naruto',name:'Naruto Uzumaki',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Senjutsu','Fuinjutsu'],nature:['Wind','Fire','Earth','Water','Lightning'],attribute:['Jinchuriki','Sage'],debutArc:'Introduction'},
+    {id:'sasuke',name:'Sasuke Uchiha',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu'],nature:['Lightning','Fire','Wind','Earth','Water'],attribute:['Kekkei Genkai','Missing-nin'],debutArc:'Introduction'},
+    {id:'sakura',name:'Sakura Haruno',gender:'Female',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Genjutsu'],nature:['Earth','Water','Fire'],attribute:['Sage'],debutArc:'Introduction'},
+    {id:'kakashi',name:'Kakashi Hatake',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu'],nature:['Lightning','Earth','Water','Fire','Wind'],attribute:['Kekkei Genkai','Anbu'],debutArc:'Introduction'},
+    {id:'iruka',name:'Iruka Umino',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu'],nature:['Water','Earth'],attribute:[],debutArc:'Introduction'},
+    {id:'gai',name:'Might Guy',gender:'Male',village:'Konoha',jutsuType:['Taijutsu','Ninjutsu'],nature:['Lightning'],attribute:[],debutArc:'Introduction'},
+    {id:'rock-lee',name:'Rock Lee',gender:'Male',village:'Konoha',jutsuType:['Taijutsu'],nature:[],attribute:[],debutArc:'Chunin Exams'},
+    {id:'neji',name:'Neji Hyuga',gender:'Male',village:'Konoha',jutsuType:['Taijutsu','Ninjutsu'],nature:['Fire'],attribute:['Kekkei Genkai'],debutArc:'Chunin Exams'},
+    {id:'tenten',name:'Tenten',gender:'Female',village:'Konoha',jutsuType:['Kenjutsu','Ninjutsu','Taijutsu'],nature:[],attribute:[],debutArc:'Chunin Exams'},
+    {id:'shikamaru',name:'Shikamaru Nara',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu'],nature:['Fire','Earth'],attribute:[],debutArc:'Chunin Exams'},
+    {id:'ino',name:'Ino Yamanaka',gender:'Female',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Genjutsu'],nature:['Fire','Earth','Water'],attribute:['Sensor'],debutArc:'Chunin Exams'},
+    {id:'choji',name:'Choji Akimichi',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu'],nature:['Fire','Earth'],attribute:[],debutArc:'Chunin Exams'},
+    {id:'kiba',name:'Kiba Inuzuka',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu'],nature:['Earth'],attribute:[],debutArc:'Chunin Exams'},
+    {id:'hinata',name:'Hinata Hyuga',gender:'Female',village:'Konoha',jutsuType:['Taijutsu','Ninjutsu','Medical Ninjutsu'],nature:['Fire','Earth'],attribute:['Kekkei Genkai'],debutArc:'Chunin Exams'},
+    {id:'shino',name:'Shino Aburame',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu'],nature:['Earth','Fire'],attribute:[],debutArc:'Chunin Exams'},
+    {id:'kurenai',name:'Kurenai Yuhi',gender:'Female',village:'Konoha',jutsuType:['Ninjutsu','Genjutsu','Taijutsu'],nature:['Fire'],attribute:[],debutArc:'Introduction'},
+    {id:'asuma',name:'Asuma Sarutobi',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],nature:['Fire','Wind'],attribute:[],debutArc:'Introduction'},
+    {id:'hiruzen',name:'Hiruzen Sarutobi',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Senjutsu'],nature:['Fire','Earth','Wind','Water','Lightning'],attribute:['Kage'],debutArc:'Introduction'},
+    {id:'minato',name:'Minato Namikaze',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Senjutsu'],nature:['Fire','Wind','Lightning'],attribute:['Kage'],debutArc:'Sasuke Recovery Mission'},
+    {id:'tsunade',name:'Tsunade',gender:'Female',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu','Genjutsu'],nature:['Earth','Fire','Water'],attribute:['Sannin','Kage','Sage'],debutArc:'Search for Tsunade'},
+    {id:'jiraiya',name:'Jiraiya',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Senjutsu','Genjutsu'],nature:['Fire','Earth','Wind','Water'],attribute:['Sannin','Sage'],debutArc:'Search for Tsunade'},
+    {id:'sai',name:'Sai',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],nature:['Fire'],attribute:['Anbu'],debutArc:'Tenchi Bridge Reconnaissance'},
+    {id:'yamato',name:'Yamato',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],nature:['Earth','Fire','Water','Wood'],attribute:['Anbu','Kekkei Genkai'],debutArc:'Tenchi Bridge Reconnaissance'},
+    {id:'hashirama',name:'Hashirama Senju',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu','Genjutsu','Senjutsu'],nature:['Earth','Fire','Water','Wind','Wood'],attribute:['Kage','Sage','Kekkei Genkai'],debutArc:'Fourth Shinobi World War'},
+    {id:'tobirama',name:'Tobirama Senju',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu','Kinjutsu'],nature:['Water','Earth','Fire','Wind'],attribute:['Kage'],debutArc:'Fourth Shinobi World War'},
+    // ── Sound ──
+    {id:'orochimaru',name:'Orochimaru',gender:'Male',village:'Oto',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Kenjutsu','Medical Ninjutsu'],nature:['Fire','Earth','Wind','Lightning','Water'],attribute:['Sannin','Kekkei Genkai','Missing-nin'],debutArc:'Chunin Exams'},
+    {id:'kabuto',name:'Kabuto Yakushi',gender:'Male',village:'Oto',jutsuType:['Ninjutsu','Medical Ninjutsu','Taijutsu','Senjutsu','Genjutsu'],nature:['Earth','Water','Fire','Wind','Lightning'],attribute:['Sage','Missing-nin'],debutArc:'Chunin Exams'},
+    {id:'kimimaro',name:'Kimimaro',gender:'Male',village:'Oto',jutsuType:['Taijutsu','Ninjutsu','Kenjutsu'],nature:['Earth'],attribute:['Kekkei Genkai'],debutArc:'Sasuke Recovery Mission'},
+    // ── Sand ──
+    {id:'gaara',name:'Gaara',gender:'Male',village:'Suna',jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],nature:['Earth','Lightning','Wind'],attribute:['Jinchuriki','Kage'],debutArc:'Chunin Exams'},
+    {id:'temari',name:'Temari',gender:'Female',village:'Suna',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu'],nature:['Wind'],attribute:[],debutArc:'Chunin Exams'},
+    {id:'kankuro',name:'Kankuro',gender:'Male',village:'Suna',jutsuType:['Ninjutsu','Kinjutsu'],nature:['Earth'],attribute:[],debutArc:'Chunin Exams'},
+    {id:'chiyo',name:'Chiyo',gender:'Female',village:'Suna',jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu'],nature:['Earth','Fire','Wind'],attribute:[],debutArc:'Kazekage Rescue'},
+    // ── Mist ──
+    {id:'zabuza',name:'Zabuza Momochi',gender:'Male',village:'Kiri',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Genjutsu'],nature:['Water','Wind','Earth'],attribute:['Missing-nin'],debutArc:'Land of Waves'},
+    {id:'haku',name:'Haku',gender:'Male',village:'Kiri',jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu'],nature:['Wind','Water'],attribute:['Kekkei Genkai'],debutArc:'Land of Waves'},
+    {id:'kisame',name:'Kisame Hoshigaki',gender:'Male',village:'Kiri',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],nature:['Water','Earth','Fire'],attribute:['Missing-nin'],debutArc:'Itachi Pursuit'},
+    // ── Cloud ──
+    {id:'killerbee',name:'Killer Bee',gender:'Male',village:'Kumo',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Senjutsu','Fuinjutsu'],nature:['Lightning','Fire','Water','Earth','Wind'],attribute:['Jinchuriki','Sage'],debutArc:'Akatsuki Suppression'},
+    {id:'raikage',name:'A (Fourth Raikage)',gender:'Male',village:'Kumo',jutsuType:['Ninjutsu','Taijutsu'],nature:['Lightning','Fire'],attribute:['Kage'],debutArc:'Five Kage Summit'},
+    // ── Akatsuki ──
+    {id:'itachi',name:'Itachi Uchiha',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu'],nature:['Fire','Water','Wind'],attribute:['Kekkei Genkai','Missing-nin','Anbu'],debutArc:'Chunin Exams'},
+    {id:'nagato',name:'Nagato (Pain)',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Genjutsu'],nature:['Wind','Lightning','Earth','Water','Fire'],attribute:['Kekkei Genkai'],debutArc:"Pain's Assault"},
+    {id:'konan',name:'Konan',gender:'Female',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],nature:['Water','Fire','Earth'],attribute:[],debutArc:"Pain's Assault"},
+    {id:'deidara',name:'Deidara',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Kinjutsu'],nature:['Earth','Lightning','Wind'],attribute:['Missing-nin','Kekkei Genkai'],debutArc:'Kazekage Rescue'},
+    {id:'sasori',name:'Sasori',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Kinjutsu'],nature:['Fire','Earth','Wind'],attribute:['Missing-nin'],debutArc:'Kazekage Rescue'},
+    {id:'hidan',name:'Hidan',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Kinjutsu'],nature:['Fire'],attribute:['Missing-nin'],debutArc:'Akatsuki Suppression'},
+    {id:'kakuzu',name:'Kakuzu',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Kinjutsu','Fuinjutsu'],nature:['Fire','Wind','Lightning','Earth','Water'],attribute:['Missing-nin'],debutArc:'Akatsuki Suppression'},
+    {id:'zetsu',name:'Zetsu',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Fuinjutsu'],nature:['Earth','Water','Wood'],attribute:['Kekkei Genkai'],debutArc:'Kazekage Rescue'},
+    {id:'obito',name:'Obito Uchiha',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu','Senjutsu'],nature:['Fire','Earth','Wind','Water','Lightning','Wood'],attribute:['Kekkei Genkai','Jinchuriki','Missing-nin'],debutArc:'Itachi Pursuit'},
+    {id:'madara',name:'Madara Uchiha',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu','Senjutsu'],nature:['Fire','Earth','Wind','Water','Lightning','Wood'],attribute:['Kekkei Genkai','Jinchuriki','Sage'],debutArc:'Fourth Shinobi World War'},
+    {id:'kaguya',name:'Kaguya Otsutsuki',gender:'Female',village:'None',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Kinjutsu'],nature:['Fire','Wind','Earth','Water','Lightning'],attribute:['Jinchuriki','Kekkei Genkai'],debutArc:'Kaguya Strikes'},
+];
+
+// --- BuzzWord: Naruto — Image System ---
+window.bwNrtImageMap = {};
+window.bwNrtImgReady = false;
+
+window.bwNrtLoadImages = async function() {
+    const cacheKey = 'wb_nrt_imgs_v1';
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) { try { window.bwNrtImageMap = JSON.parse(cached); window.bwNrtImgReady = true; return; } catch(e) {} }
+    const addToMap = (data, map) => {
+        (data || []).forEach(entry => {
+            const char = entry.character;
+            if (!char?.images?.jpg?.image_url) return;
+            const img = char.images.jpg.image_url;
+            const raw = char.name;
+            map[raw.toLowerCase()] = img;
+            if (raw.includes(',')) {
+                const [last, ...rest] = raw.split(',');
+                const natural = `${rest.join(',').trim()} ${last.trim()}`;
+                map[natural.toLowerCase()] = img;
+                const firstWord = rest.join(' ').trim().split(' ')[0].toLowerCase();
+                if (firstWord && !map[firstWord]) map[firstWord] = img;
+            } else {
+                const parts = raw.split(' ');
+                const lastName = parts[parts.length - 1].toLowerCase();
+                if (!map[lastName]) map[lastName] = img;
+            }
+        });
+    };
+    try {
+        const map = {};
+        // Fetch Naruto (20) and Naruto Shippuden (1735) characters
+        const res1 = await fetch('https://api.jikan.moe/v4/anime/20/characters');
+        if (res1.ok) { const d = await res1.json(); addToMap(d.data, map); }
+        await new Promise(r => setTimeout(r, 450)); // respect rate limit
+        const res2 = await fetch('https://api.jikan.moe/v4/anime/1735/characters');
+        if (res2.ok) { const d = await res2.json(); addToMap(d.data, map); }
+        window.bwNrtImageMap = map;
+        window.bwNrtImgReady = true;
+        try { localStorage.setItem(cacheKey, JSON.stringify(map)); } catch(e) {}
+    } catch(e) {}
+};
+
+const NRT_NAME_ALIASES = {
+    'nagato': 'pain', 'pain': 'nagato',
+    'tobi': 'obito', 'obito': 'tobi',
+    'a': 'raikage',
+};
+
+window.bwNrtGetCharImage = function(name) {
+    const m = window.bwNrtImageMap;
+    const n = name.toLowerCase();
+    if (m[n]) return m[n];
+    const alias = NRT_NAME_ALIASES[n];
+    if (alias && m[alias]) return m[alias];
+    const parts = name.split(' ');
+    const last = parts[parts.length - 1].toLowerCase();
+    if (m[last]) return m[last];
+    const first = parts[0].toLowerCase();
+    if (m[first]) return m[first];
+    return null;
+};
+
+window.bwNrtApplyImages = function() {
+    document.querySelectorAll('[id^="nimg-"]').forEach(img => {
+        const charId = img.id.replace('nimg-', '');
+        const char = charId === 'answer' ? window.bwNrtState.answer : BW_NRT_CHARS.find(c => c.id === charId);
+        if (!char) return;
+        const url = window.bwNrtGetCharImage(char.name);
+        if (url) {
+            img.src = url; img.style.display = 'block';
+            const fb = document.getElementById(`ninitials-${charId}`);
+            if (fb) fb.style.display = 'none';
+        }
+    });
+};
+
+window.bwNrtEnsureImages = async function() {
+    if (!window.bwNrtImgReady) await window.bwNrtLoadImages();
+    window.bwNrtApplyImages();
+};
+
+// --- BuzzWord: Naruto — Helpers ---
+function bwNrtJutsu(j) {
+    if (!j || j.length === 0) return 'None';
+    const icons = {Ninjutsu:'✦',Taijutsu:'👊',Genjutsu:'👁️',Kenjutsu:'⚔️',Fuinjutsu:'📜',Medical:'💊','Medical Ninjutsu':'💊',Senjutsu:'🐸',Kinjutsu:'☠️'};
+    return j.map(x => `${icons[x]||'•'} ${x}`).join('\n');
+}
+function bwNrtNature(n) {
+    if (!n || n.length === 0) return 'None';
+    const icons = {Fire:'🔥',Wind:'💨',Lightning:'⚡',Earth:'🪨',Water:'💧',Wood:'🌿',Ice:'❄️'};
+    return n.map(x => `${icons[x]||'•'} ${x}`).join('\n');
+}
+function bwNrtAttr(a) {
+    if (!a || a.length === 0) return 'None';
+    return a.join('\n');
+}
+
+function bwNrtCalcColors(guess, answer) {
+    const gender = guess.gender === answer.gender ? 'green' : 'red';
+    const village = guess.village === answer.village ? 'green' : 'red';
+    // Array comparisons (jutsu, nature, attribute)
+    const arrColor = (g, a) => {
+        if (g.length === 0 && a.length === 0) return 'green';
+        if (g.length === 0 || a.length === 0) return 'red';
+        if (g.length === a.length && g.every(x => a.includes(x))) return 'green';
+        if (g.some(x => a.includes(x))) return 'yellow';
+        return 'red';
+    };
+    const jutsuType = arrColor(guess.jutsuType, answer.jutsuType);
+    const nature = arrColor(guess.nature, answer.nature);
+    const attribute = arrColor(guess.attribute, answer.attribute);
+    // Debut arc — directional
+    const gIdx = NRT_ARC_ORDER.indexOf(guess.debutArc);
+    const aIdx = NRT_ARC_ORDER.indexOf(answer.debutArc);
+    const debutArc = gIdx === aIdx ? 'green' : (gIdx < aIdx ? 'yellow_up' : 'yellow_down');
+    return { gender, village, jutsuType, nature, attribute, debutArc };
+}
+
+function bwNrtCell(val, color) {
+    const arrow = color === 'yellow_up' ? '↑ After' : color === 'yellow_down' ? '↓ Before' : '';
+    const c = color.startsWith('yellow') ? 'yellow' : color;
+    return `<div class="wordle-cell ${c}" style="white-space:pre-line; font-size:12px;">${val}${arrow ? '\n'+arrow : ''}</div>`;
+}
+
+function bwNrtBuildRow(char, colors) {
+    const initials = char.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    return `<div class="wordle-row">
+        <div class="wordle-char-cell">
+            <img id="nimg-${char.id}" src="" style="width:50px;height:50px;border-radius:50%;object-fit:cover;display:none;" onerror="this.style.display='none'; var d=document.getElementById('ninitials-${char.id}'); if(d) d.style.display='flex';">
+            <div id="ninitials-${char.id}" style="width:50px;height:50px;border-radius:50%;background:var(--accent-yellow);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#111;">${initials}</div>
+            <div style="font-size:10px;font-weight:700;margin-top:4px;text-align:center;word-break:break-word;line-height:1.2;">${char.name}</div>
+        </div>
+        ${bwNrtCell(char.gender, colors.gender)}
+        ${bwNrtCell(char.village, colors.village)}
+        ${bwNrtCell(bwNrtJutsu(char.jutsuType), colors.jutsuType)}
+        ${bwNrtCell(bwNrtNature(char.nature), colors.nature)}
+        ${bwNrtCell(bwNrtAttr(char.attribute), colors.attribute)}
+        ${bwNrtCell(char.debutArc, colors.debutArc)}
+    </div>`;
+}
+
+function bwNrtShowResult() {
+    const { answer, guesses, solved } = window.bwNrtState;
+    const resultEl = document.getElementById('bwnrt-result');
+    const inputArea = document.getElementById('bwnrt-input-area');
+    if (!resultEl) return;
+    if (solved) {
+        const initials = answer.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        resultEl.style.display = 'block';
+        resultEl.style.background = '#1b5e20';
+        resultEl.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <img id="nimg-answer" src="" style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:3px solid #FF8C00;display:none;">
+            <div id="ninitials-answer" style="width:100px;height:100px;border-radius:50%;background:var(--accent-yellow);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;color:#111;">${initials}</div>
+            <div style="font-size:20px;font-weight:800;color:#FF8C00;">${answer.name}</div>
+            <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
+            <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
+                <button onclick="window.bwNrtShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);"><span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result</button>
+                <button id="bwnrt-post-btn" onclick="window.bwNrtPostToFeed(this)" class="action-btn" style="background:#FF8C00;color:#111;font-size:13px;"><span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed</button>
+            </div>
+        </div>`;
+        if (inputArea) inputArea.style.display = 'none';
+        window.bwNrtEnsureImages();
+        const statusEl = document.getElementById('bwnrt-status-text');
+        if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
+    } else {
+        resultEl.style.display = 'none';
+        if (inputArea) inputArea.style.display = 'block';
+    }
+}
+
+function bwNrtRender() {
+    const grid = document.getElementById('bwnrt-grid');
+    if (!grid) return;
+    const { answer, guesses } = window.bwNrtState;
+    grid.innerHTML = guesses.map(g => bwNrtBuildRow(g, bwNrtCalcColors(g, answer))).join('');
+    window.bwNrtEnsureImages();
+    bwNrtShowResult();
+}
+
+function bwNrtAnimateNewRow(char, colors) {
+    const grid = document.getElementById('bwnrt-grid');
+    if (!grid) return;
+    grid.insertAdjacentHTML('beforeend', bwNrtBuildRow(char, colors));
+    window.bwNrtEnsureImages();
+    const newRow = grid.lastElementChild;
+    const cells = newRow.querySelectorAll('.wordle-cell');
+    cells.forEach((cell, i) => {
+        cell.style.transform = 'rotateX(-90deg)';
+        cell.style.opacity = '0';
+        setTimeout(() => {
+            cell.style.transition = 'transform 0.75s ease, opacity 0.55s ease';
+            cell.style.transform = '';
+            cell.style.opacity = '';
+        }, i * 500);
+    });
+}
+
+function bwNrtGetToday() {
+    const today = new Date().toISOString().split('T')[0];
+    const seed = today.split('-').reduce((a,b) => a + parseInt(b), 0);
+    return BW_NRT_CHARS[seed % BW_NRT_CHARS.length];
+}
+
+// --- BuzzWord: Naruto — State & Init ---
+window.bwNrtState = { answer: null, guesses: [], solved: false, selectedChar: null, date: null };
+
+window.openBwNrtModal = function() {
+    window.closeAllModals();
+    document.getElementById('bwnrt-modal').style.display = 'flex';
+    window.initBwNrtGame();
+};
+
+window.initBwNrtGame = async function() {
+    const today = new Date().toISOString().split('T')[0];
+    if (window.bwNrtState.answer && window.bwNrtState.date === today) {
+        document.getElementById('bwnrt-loading').style.display = 'none';
+        document.getElementById('bwnrt-content').style.display = 'block';
+        bwNrtRender(); return;
+    }
+    window.bwNrtState = { answer: bwNrtGetToday(), guesses: [], solved: false, selectedChar: null, date: today };
+    try {
+        if (auth.currentUser) {
+            const snap = await getDoc(doc(db, 'bw_nrt_games', `${auth.currentUser.uid}_${today}`));
+            if (snap.exists()) {
+                const d = snap.data();
+                window.bwNrtState.guesses = (d.guesses||[]).map(id => BW_NRT_CHARS.find(c => c.id === id)).filter(Boolean);
+                window.bwNrtState.solved = d.solved || false;
+            }
+        } else {
+            const saved = localStorage.getItem(`wb_bwnrt_${today}`);
+            if (saved) { const d = JSON.parse(saved); window.bwNrtState.guesses=(d.guesses||[]).map(id=>BW_NRT_CHARS.find(c=>c.id===id)).filter(Boolean); window.bwNrtState.solved=d.solved||false; }
+        }
+    } catch(e) {}
+    document.getElementById('bwnrt-loading').style.display = 'none';
+    document.getElementById('bwnrt-content').style.display = 'block';
+    bwNrtRender();
+    window.bwNrtLoadImages();
+};
+
+window.bwNrtEnterGuess = function() {
+    if (window.bwNrtState.selectedChar) { window.submitBwNrtGuess(); return; }
+    const first = document.getElementById('bwnrt-suggestions')?.querySelector('.wordle-suggestion-item');
+    if (first) first.click();
+};
+
+window.searchBwNrtChar = function() {
+    window.bwNrtState.selectedChar = null;
+    const q = document.getElementById('bwnrt-search')?.value.trim().toLowerCase();
+    const sugg = document.getElementById('bwnrt-suggestions');
+    if (!sugg) return;
+    if (!q) { sugg.style.display = 'none'; return; }
+    const guessedIds = new Set(window.bwNrtState.guesses.map(g => g.id));
+    const matches = BW_NRT_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
+    sugg.style.display = matches.length ? 'block' : 'none';
+    sugg.innerHTML = matches.map(c => `<div class="wordle-suggestion-item" onclick="window.selectBwNrtChar('${c.id}')">${c.name}</div>`).join('');
+};
+
+window.selectBwNrtChar = function(id) {
+    const char = BW_NRT_CHARS.find(c => c.id === id);
+    if (!char) return;
+    window.bwNrtState.selectedChar = char;
+    const inp = document.getElementById('bwnrt-search');
+    if (inp) inp.value = char.name;
+    const sugg = document.getElementById('bwnrt-suggestions');
+    if (sugg) sugg.style.display = 'none';
+    window.submitBwNrtGuess();
+};
+
+window.submitBwNrtGuess = async function() {
+    const char = window.bwNrtState.selectedChar;
+    if (!char || window.bwNrtState.solved) return;
+    if (window.bwNrtState.guesses.some(g => g.id === char.id)) return;
+    const colors = bwNrtCalcColors(char, window.bwNrtState.answer);
+    window.bwNrtState.guesses.push(char);
+    window.bwNrtState.selectedChar = null;
+    const inp = document.getElementById('bwnrt-search');
+    if (inp) inp.value = '';
+    const isCorrect = char.id === window.bwNrtState.answer.id;
+    if (isCorrect) window.bwNrtState.solved = true;
+    bwNrtAnimateNewRow(char, colors);
+    const totalCells = 6;
+    const delay = totalCells * 500 + 800;
+    setTimeout(() => bwNrtShowResult(), delay);
+    const today = new Date().toISOString().split('T')[0];
+    const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
+    const emojiRow = [colors.gender,colors.village,colors.jutsuType,colors.nature,colors.attribute,colors.debutArc].map(x=>map[x]||'⬛').join('');
+    const saveData = { guesses: window.bwNrtState.guesses.map(g=>g.id), solved: window.bwNrtState.solved, date: today, guessCount: window.bwNrtState.guesses.length, displayName: auth.currentUser?.displayName||'Player' };
+    if (auth.currentUser) {
+        setDoc(doc(db, 'bw_nrt_games', `${auth.currentUser.uid}_${today}`), saveData).catch(()=>{});
+        if (window.bwNrtState.solved) window.bwNrtUpdateLeaderboard(window.bwNrtState.guesses.length);
+    } else {
+        localStorage.setItem(`wb_bwnrt_${today}`, JSON.stringify(saveData));
+    }
+};
+
+window.bwNrtUpdateLeaderboard = async function(guessCount) {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const ref = doc(db, 'bw_nrt_leaderboard', uid);
+    const snap = await getDoc(ref);
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+    let streak, totalWins;
+    if (snap.exists()) {
+        const d = snap.data();
+        streak = d.lastWinDate === yesterday ? (d.currentStreak||0)+1 : 1;
+        totalWins = (d.totalWins || 0) + 1;
+        await updateDoc(ref, { totalWins: increment(1), totalGuesses: increment(guessCount), currentStreak: streak, bestStreak: Math.max(d.bestStreak||0,streak), lastWinDate: today, displayName: auth.currentUser.displayName });
+    } else {
+        streak = 1; totalWins = 1;
+        await setDoc(ref, { totalWins:1, totalGuesses:guessCount, currentStreak:1, bestStreak:1, lastWinDate:today, displayName: auth.currentUser.displayName });
+    }
+    window.checkBwNrtAchievements(guessCount, streak, totalWins).catch(() => {});
+};
+
+window.checkBwNrtAchievements = async function(guessCount, streak, totalWins) {
+    if (!auth.currentUser) return;
+    const ids = [];
+    if (totalWins === 1) ids.push('bwnrt_first');
+    if (guessCount === 1) ids.push('bwnrt_1guess');
+    if (streak >= 7) ids.push('bwnrt_streak_7');
+    if (totalWins >= 30) ids.push('bwnrt_total_30');
+    const today = new Date().toISOString().split('T')[0];
+    const uid = auth.currentUser.uid;
+    try {
+        const opSnap = await getDoc(doc(db, 'bw_op_games', `${uid}_${today}`));
+        if (opSnap.exists() && opSnap.data().solved) ids.push('bw_double_agent');
+        const opLb = await getDoc(doc(db, 'bw_op_leaderboard', uid));
+        if (opLb.exists() && (opLb.data().totalWins || 0) >= 1) ids.push('bw_multiverse');
+    } catch(e) {}
+    if (ids.length) window.awardAchievements(ids).catch(() => {});
+};
+
+window.bwNrtShare = function() {
+    const { answer, guesses, solved } = window.bwNrtState;
+    const today = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
+    const rows = guesses.map(g => {
+        const c = bwNrtCalcColors(g, answer);
+        return [c.gender,c.village,c.jutsuType,c.nature,c.attribute,c.debutArc].map(x=>map[x]||'⬛').join('');
+    }).join('\n');
+    const text = `BuzzWord: Naruto Characters — ${today}\n${solved?`Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`:'Not solved'}\n\n${rows}\n\nhttps://weebee.buzz/#community`;
+    navigator.clipboard.writeText(text).then(()=>alert('Copied to clipboard!')).catch(()=>alert('Could not copy'));
+};
+
+window.bwNrtPostToFeed = async function(btn) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const { answer, guesses, solved } = window.bwNrtState;
+    if (!solved) return;
+    const today = new Date().toISOString().split('T')[0];
+    const existing = await getDocs(query(collection(db,'bw_posts'), where('uid','==',auth.currentUser.uid), where('date','==',today), where('game','==','naruto')));
+    if (!existing.empty) { btn.innerText='Already posted!'; btn.disabled=true; return; }
+    const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
+    const emojiGrid = guesses.map(g => {
+        const c = bwNrtCalcColors(g, answer);
+        return [c.gender,c.village,c.jutsuType,c.nature,c.attribute,c.debutArc].map(x=>map[x]||'⬛').join('');
+    }).join('\n');
+    try {
+        btn.disabled=true; btn.innerText='Posting...';
+        const av = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        await addDoc(collection(db,'bw_posts'),{
+            uid:auth.currentUser.uid, displayName:auth.currentUser.displayName, avatar:av,
+            game:'naruto', guessCount:guesses.length, emojiGrid, date:today, timestamp:new Date(), likes:[], dislikes:[], commentCount:0
+        });
+        btn.innerText='✓ Posted!';
+        window.awardAchievements(['feed_showtime']).catch(() => {});
+        window.fetchBwCommunityFeed();
+        window.fetchHomeBwFeed();
+    } catch(e) { btn.disabled=false; btn.innerText='Post to Feed'; alert('Failed to post.'); }
+};
+
+// --- BuzzWord Post Cards ---
+window.generateBwPostCardHTML = function(post) {
+    const game = BW_GAMES[post.game] || BW_GAMES.op;
+    const safeId = post.id;
+    const col = post._col || 'bw_posts';
+    const likes = post.likes || [];
+    const dislikes = post.dislikes || [];
+    const isLiked = auth.currentUser && likes.includes(auth.currentUser.uid);
+    const isDisliked = auth.currentUser && dislikes.includes(auth.currentUser.uid);
+    return `
+        <div class="review-card bw-post-card feed-post-card">
+            <div class="bw-thumb-wrapper">
+                <img src="${game.cover}" class="bw-thumb-img" alt="${game.badge}">
+                <div class="bw-play-overlay">
+                    <span class="bw-play-btn" onclick="event.stopPropagation(); ${game.playFn}">▶ Play</span>
+                </div>
+            </div>
+            <div class="review-header" style="position:relative; z-index:3; padding-right:195px;">
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <img src="${post.avatar}" class="avatar" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.displayName)}&backgroundColor=ffc107&fontColor=333333'">
+                    <div>
+                        <strong style="color:var(--text-dark); font-size:14px;">${post.displayName}</strong>
+                        <span class="bw-game-badge" style="background:${game.badgeBg}; color:${game.badgeColor};">${game.badge}</span>
+                        ${window.getPinnedBadgesHTML(post.uid)}<br>
+                        <span style="font-size:12px; color:var(--text-muted);">Solved in <strong style="color:var(--text-dark);">${post.guessCount} ${post.guessCount===1?'guess':'guesses'}</strong></span>
+                    </div>
+                </div>
+            </div>
+            <div style="font-family:monospace; font-size:17px; letter-spacing:3px; line-height:2.2; margin:14px 0 4px; position:relative; z-index:2; padding-right:195px;">${post.emojiGrid.split('\n').join('<br>')}</div>
+            <div class="review-actions">
+                <div class="action-stat">
+                    <button onclick="window.toggleBwPostReaction(event,'${safeId}','${col}','like',this)" style="${isLiked?'color:var(--accent-yellow);':''}">
+                        <span class="material-symbols-outlined">thumb_up</span>
+                    </button>
+                    <span class="action-label" id="bw-likes-${safeId}">${likes.length} Likes</span>
+                </div>
+                <div class="action-stat">
+                    <button onclick="window.toggleBwPostReaction(event,'${safeId}','${col}','dislike',this)" style="${isDisliked?'color:red;':''}">
+                        <span class="material-symbols-outlined">thumb_down</span>
+                    </button>
+                    <span class="action-label" id="bw-dislikes-${safeId}">${dislikes.length} Dislikes</span>
+                </div>
+                <div class="action-stat">
+                    <button onclick="window.toggleBwPostComments(event,this,'${safeId}')">
+                        <span class="material-symbols-outlined">chat_bubble</span>
+                    </button>
+                    <span class="action-label bw-comment-count">${post.commentCount || 0} Comments</span>
+                </div>
+            </div>
+            <div class="bw-post-comments" data-post-collection="${col}" style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid var(--border-color); position:relative; z-index:2;" onclick="event.stopPropagation();">
+                <div class="bw-comments-list"></div>
+                <div style="display:flex; gap:10px; margin-top:10px;">
+                    <input type="text" class="bw-comment-input" placeholder="Add a comment..." style="flex:1; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
+                    <button class="action-btn" onclick="window.submitBwPostComment(event,this,'${safeId}','${col}')">Send</button>
+                </div>
+            </div>
+        </div>`;
+};
+
+window.toggleBwPostReaction = async function(event, postId, postCollection, type, btn) {
+    event.stopPropagation();
+    if (!auth.currentUser) return window.openAuthModal();
+    const uid = auth.currentUser.uid;
+    const ref = doc(db, postCollection, postId);
+    const field = type === 'like' ? 'likes' : 'dislikes';
+    const opposite = type === 'like' ? 'dislikes' : 'likes';
+    try {
+        const snap = await getDoc(ref);
+        const current = (snap.exists() ? snap.data()[field] : null) || [];
+        const oppCurrent = (snap.exists() ? snap.data()[opposite] : null) || [];
+        const hasReacted = current.includes(uid);
+        const hadOpposite = oppCurrent.includes(uid);
+
+        // Optimistic UI — match review card behavior (color on icon, not background)
+        const actionsDiv = btn.closest('.review-actions');
+        const likeBtn = actionsDiv?.children[0]?.querySelector('button');
+        const dislikeBtn = actionsDiv?.children[1]?.querySelector('button');
+        const likesEl = document.getElementById(`bw-likes-${postId}`);
+        const dislikesEl = document.getElementById(`bw-dislikes-${postId}`);
+        let newLikeCount = (snap.exists() ? (snap.data().likes||[]).length : 0);
+        let newDislikeCount = (snap.exists() ? (snap.data().dislikes||[]).length : 0);
+
+        if (type === 'like') {
+            if (likeBtn) likeBtn.style.color = hasReacted ? '' : 'var(--accent-yellow)';
+            if (dislikeBtn && hadOpposite) { dislikeBtn.style.color = ''; newDislikeCount -= 1; }
+            newLikeCount += hasReacted ? -1 : 1;
+        } else {
+            if (dislikeBtn) dislikeBtn.style.color = hasReacted ? '' : 'red';
+            if (likeBtn && hadOpposite) { likeBtn.style.color = ''; newLikeCount -= 1; }
+            newDislikeCount += hasReacted ? -1 : 1;
+        }
+        if (likesEl) likesEl.textContent = `${Math.max(0, newLikeCount)} Likes`;
+        if (dislikesEl) dislikesEl.textContent = `${Math.max(0, newDislikeCount)} Dislikes`;
+
+        // Write to Firestore
+        if (snap.exists()) {
+            await updateDoc(ref, {
+                [field]: hasReacted ? arrayRemove(uid) : arrayUnion(uid),
+                [opposite]: arrayRemove(uid)
+            });
+        } else {
+            await setDoc(ref, { [field]: [uid], [opposite]: [], commentCount: 0 }, { merge: true });
+        }
+    } catch(e) { console.error('Reaction failed', e); }
+};
+
+function renderBwComment(commentId, c, postId, postCollection) {
+    const isOwner = auth.currentUser && c.uid === auth.currentUser.uid;
+    const ownerBtns = isOwner ? `
+        <button onclick="window.editBwPostComment('${commentId}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;display:flex;align-items:center;" title="Edit"><span class="material-symbols-outlined" style="font-size:14px;">edit</span></button>
+        <button onclick="window.deleteBwPostComment('${commentId}','${postId}','${postCollection}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;display:flex;align-items:center;" title="Delete"><span class="material-symbols-outlined" style="font-size:14px;">delete</span></button>` : '';
+    return `<div id="bw-comment-doc-${commentId}" style="display:flex; gap:10px; margin-bottom:10px; align-items:flex-start; background:var(--bg-white); padding:10px; border-radius:8px; border:1px solid var(--border-color);">
+        <img src="${c.avatar}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(c.displayName)}&backgroundColor=ffc107&fontColor=333333'">
+        <div style="flex:1; min-width:0;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+                <strong style="font-size:13px; color:var(--text-dark);">${c.displayName}</strong>
+                <div style="display:flex; gap:4px;">${ownerBtns}</div>
+            </div>
+            <p id="bw-comment-text-${commentId}" style="font-size:13px; margin:2px 0 0; color:var(--text-dark); word-break:break-word;">${c.text}${c.edited ? ' <span style="font-size:10px;color:var(--text-muted);font-style:italic;">(edited)</span>' : ''}</p>
+        </div>
+    </div>`;
+}
+
+window.editBwPostComment = function(commentId) {
+    const p = document.getElementById(`bw-comment-text-${commentId}`);
+    if (!p) return;
+    const original = p.innerText.replace(/ \(edited\)$/, '').trim();
+    p.outerHTML = `<div id="bw-comment-edit-${commentId}" data-original="${original.replace(/"/g,'&quot;')}">
+        <textarea id="bw-comment-edit-input-${commentId}" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border-color);font-size:12px;resize:vertical;background:var(--bg-gray);color:var(--text-dark);margin-top:4px;" rows="2">${original}</textarea>
+        <div style="display:flex;gap:8px;margin-top:4px;">
+            <button onclick="window.saveBwPostComment('${commentId}')" class="action-btn" style="padding:3px 10px;font-size:11px;">Save</button>
+            <button onclick="window.cancelBwPostComment('${commentId}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:11px;">Cancel</button>
+        </div>
+    </div>`;
+};
+
+window.cancelBwPostComment = function(commentId) {
+    const wrap = document.getElementById(`bw-comment-edit-${commentId}`);
+    if (!wrap) return;
+    const original = wrap.dataset.original;
+    wrap.outerHTML = `<p id="bw-comment-text-${commentId}" style="font-size:13px;margin:2px 0 0;color:var(--text-dark);word-break:break-word;">${original}</p>`;
+};
+
+window.saveBwPostComment = async function(commentId) {
+    const input = document.getElementById(`bw-comment-edit-input-${commentId}`);
+    if (!input) return;
+    const newText = input.value.trim();
+    if (!newText) return;
+    try {
+        await updateDoc(doc(db, 'bw_post_comments', commentId), { text: newText, edited: true });
+        const wrap = document.getElementById(`bw-comment-edit-${commentId}`);
+        if (wrap) wrap.outerHTML = `<p id="bw-comment-text-${commentId}" style="font-size:13px;margin:2px 0 0;color:var(--text-dark);word-break:break-word;">${newText} <span style="font-size:10px;color:var(--text-muted);font-style:italic;">(edited)</span></p>`;
+    } catch(e) { alert('Failed to save edit.'); }
+};
+
+window.deleteBwPostComment = async function(commentId, postId, postCollection) {
+    if (!auth.currentUser || !confirm('Delete this comment?')) return;
+    try {
+        await deleteDoc(doc(db, 'bw_post_comments', commentId));
+        const el = document.getElementById(`bw-comment-doc-${commentId}`);
+        if (el) {
+            const card = el.closest('.feed-post-card');
+            const countEl = card?.querySelector('.bw-comment-count');
+            if (countEl) countEl.textContent = `${Math.max(0, (parseInt(countEl.textContent) || 1) - 1)} Comments`;
+            el.remove();
+        }
+        updateDoc(doc(db, postCollection, postId), { commentCount: increment(-1) }).catch(() => {});
+    } catch(e) { alert('Failed to delete comment.'); }
+};
+
+window.toggleBwPostComments = async function(event, btn, postId) {
+    event.stopPropagation();
+    const card = btn.closest('.feed-post-card');
+    if (!card) return;
+    const container = card.querySelector('.bw-post-comments');
+    if (!container) return;
+    const isOpen = container.style.display !== 'none';
+    container.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) {
+        const listEl = card.querySelector('.bw-comments-list');
+        const postCollection = container.dataset.postCollection || 'bw_posts';
+        if (listEl) {
+            listEl.innerHTML = '<div class="loading" style="padding:10px;">Loading...</div>';
+            try {
+                const snap = await getDocs(query(collection(db, 'bw_post_comments'), where('postId', '==', postId)));
+                const comments = snap.docs
+                    .map(d => ({ ...d.data(), _id: d.id }))
+                    .sort((a, b) => (a.timestamp?.toMillis?.() || 0) - (b.timestamp?.toMillis?.() || 0));
+                listEl.innerHTML = comments.length
+                    ? comments.map(c => renderBwComment(c._id, c, postId, postCollection)).join('')
+                    : '<p style="font-size:13px;color:var(--text-muted);padding:4px 0;">No comments yet.</p>';
+            } catch(e) { console.error(e); listEl.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Could not load comments.</p>'; }
+        }
+    }
+};
+
+window.submitBwPostComment = async function(event, btn, postId, postCollection) {
+    event.stopPropagation();
+    if (!auth.currentUser) return window.openAuthModal();
+    const card = btn.closest('.feed-post-card');
+    if (!card) return;
+    postCollection = postCollection || card.querySelector('.bw-post-comments')?.dataset.postCollection || 'bw_posts';
+    const input = card.querySelector('.bw-comment-input');
+    const text = input?.value.trim();
+    if (!text) return;
+    input.value = '';
+    const av = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+    const commentData = { postId, uid: auth.currentUser.uid, displayName: auth.currentUser.displayName, avatar: av, text, timestamp: new Date() };
+    try {
+        const ref = await addDoc(collection(db, 'bw_post_comments'), commentData);
+        const listEl = card.querySelector('.bw-comments-list');
+        if (listEl) {
+            listEl.querySelector('p')?.remove();
+            listEl.innerHTML += renderBwComment(ref.id, commentData, postId, postCollection);
+        }
+        const countEl = card.querySelector('.bw-comment-count');
+        if (countEl) countEl.textContent = `${(parseInt(countEl.textContent) || 0) + 1} Comments`;
+        updateDoc(doc(db, postCollection, postId), { commentCount: increment(1) }).catch(() => {});
+    } catch(e) { console.error('Comment failed', e); alert('Failed to post comment.'); }
+};
 
 const OP_ARC_ORDER = [
     'Romance Dawn','Orange Town','Syrup Village','Baratie','Arlong Park',
@@ -4553,15 +5744,15 @@ const OP_ARC_ORDER = [
     'Fishman Island','Punk Hazard','Dressrosa','Zou','Whole Cake Island','Wano','Egghead'
 ];
 
-const OP_WORDLE_CHARS = [
+const BW_OP_CHARS = [
     {id:'luffy',name:'Monkey D. Luffy',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:true,type:'Zoan',name:'Hito Hito no Mi, Nika Model'},haki:['Observation','Armament','Conquerors'],bounty:3000000000,height:174,firstArc:'Romance Dawn'},
     {id:'zoro',name:'Roronoa Zoro',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:1111000000,height:181,firstArc:'Romance Dawn'},
     {id:'nami',name:'Nami',gender:'Female',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:[],bounty:366000000,height:170,firstArc:'Orange Town'},
     {id:'usopp',name:'Usopp',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation'],bounty:500000000,height:176,firstArc:'Syrup Village'},
-    {id:'sanji',name:'Sanji',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:1032000000,height:180,firstArc:'Baratie'},
+    {id:'sanji',name:'Sanji',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:1032000000,height:180,firstArc:'Baratie'},
     {id:'chopper',name:'Tony Tony Chopper',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:true,type:'Zoan',name:'Hito Hito no Mi'},haki:[],bounty:1000,height:90,firstArc:'Drum Island'},
     {id:'robin',name:'Nico Robin',gender:'Female',affiliation:'Straw Hat Pirates',df:{has:true,type:'Paramecia',name:'Hana Hana no Mi'},haki:['Observation','Armament'],bounty:930000000,height:188,firstArc:'Alabasta'},
-    {id:'franky',name:'Franky',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Armament'],bounty:394000000,height:225,firstArc:'Water 7'},
+    {id:'franky',name:'Franky',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:[],bounty:394000000,height:225,firstArc:'Water 7'},
     {id:'brook',name:'Brook',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:true,type:'Paramecia',name:'Yomi Yomi no Mi'},haki:[],bounty:383000000,height:277,firstArc:'Thriller Bark'},
     {id:'jinbe',name:'Jinbe',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:1100000000,height:301,firstArc:'Impel Down'},
     {id:'shanks',name:'Shanks',gender:'Male',affiliation:'Red Hair Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:4048900000,height:199,firstArc:'Romance Dawn'},
@@ -4569,7 +5760,7 @@ const OP_WORDLE_CHARS = [
     {id:'kaido',name:'Kaido',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Uo Uo no Mi, Seiryu Model'},haki:['Observation','Armament','Conquerors'],bounty:4611100000,height:710,firstArc:'Dressrosa'},
     {id:'bigmom',name:'Charlotte Linlin',gender:'Female',affiliation:'Big Mom Pirates',df:{has:true,type:'Paramecia',name:'Soru Soru no Mi'},haki:['Observation','Armament','Conquerors'],bounty:4388000000,height:880,firstArc:'Fishman Island'},
     {id:'blackbeard',name:'Marshall D. Teach',gender:'Male',affiliation:'Blackbeard Pirates',df:{has:true,type:'Logia',name:'Yami Yami no Mi'},haki:['Armament'],bounty:3996000000,height:344,firstArc:'Jaya'},
-    {id:'akainu',name:'Sakazuki',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Magu Magu no Mi'},haki:['Observation','Armament','Conquerors'],bounty:0,height:306,firstArc:'Marineford'},
+    {id:'akainu',name:'Sakazuki',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Magu Magu no Mi'},haki:['Observation','Armament'],bounty:0,height:306,firstArc:'Marineford'},
     {id:'aokiji',name:'Kuzan',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Hie Hie no Mi'},haki:['Observation','Armament'],bounty:0,height:298,firstArc:'Long Ring Long Land'},
     {id:'kizaru',name:'Borsalino',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Pika Pika no Mi'},haki:['Observation','Armament'],bounty:0,height:302,firstArc:'Sabaody Archipelago'},
     {id:'garp',name:'Monkey D. Garp',gender:'Male',affiliation:'Marines',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:0,height:287,firstArc:'Post-Enies Lobby'},
@@ -4592,15 +5783,15 @@ const OP_WORDLE_CHARS = [
     {id:'drake',name:'X Drake',gender:'Male',affiliation:'SWORD',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Allosaurus Model'},haki:['Observation','Armament'],bounty:222000000,height:233,firstArc:'Sabaody Archipelago'},
     {id:'bonney',name:'Jewelry Bonney',gender:'Female',affiliation:'Bonney Pirates',df:{has:true,type:'Paramecia',name:'Toshi Toshi no Mi'},haki:[],bounty:320000000,height:174,firstArc:'Sabaody Archipelago'},
     {id:'bege',name:'Capone Bege',gender:'Male',affiliation:'Firetank Pirates',df:{has:true,type:'Paramecia',name:'Shiro Shiro no Mi'},haki:['Armament'],bounty:350000000,height:166,firstArc:'Sabaody Archipelago'},
-    {id:'lucci',name:'Rob Lucci',gender:'Male',affiliation:'CP0',df:{has:true,type:'Zoan',name:'Neko Neko no Mi, Leopard Model'},haki:['Observation','Armament','Conquerors'],bounty:0,height:212,firstArc:'Water 7'},
+    {id:'lucci',name:'Rob Lucci',gender:'Male',affiliation:'CP0',df:{has:true,type:'Zoan',name:'Neko Neko no Mi, Leopard Model'},haki:['Observation','Armament'],bounty:0,height:212,firstArc:'Water 7'},
     {id:'vivi',name:'Nefeltari Vivi',gender:'Female',affiliation:'Alabasta Kingdom',df:{has:false,type:null,name:null},haki:[],bounty:0,height:169,firstArc:'Whisky Peak'},
-    {id:'enel',name:'Enel',gender:'Male',affiliation:'Skypiea',df:{has:true,type:'Logia',name:'Goro Goro no Mi'},haki:[],bounty:0,height:266,firstArc:'Skypiea'},
+    {id:'enel',name:'Enel',gender:'Male',affiliation:'Skypiea',df:{has:true,type:'Logia',name:'Goro Goro no Mi'},haki:['Observation'],bounty:0,height:266,firstArc:'Skypiea'},
     {id:'arlong',name:'Arlong',gender:'Male',affiliation:'Arlong Pirates',df:{has:false,type:null,name:null},haki:[],bounty:20000000,height:263,firstArc:'Arlong Park'},
     {id:'moria',name:'Gecko Moria',gender:'Male',affiliation:'Thriller Bark Pirates',df:{has:true,type:'Paramecia',name:'Kage Kage no Mi'},haki:[],bounty:320000000,height:692,firstArc:'Thriller Bark'},
     {id:'perona',name:'Perona',gender:'Female',affiliation:'Thriller Bark Pirates',df:{has:true,type:'Paramecia',name:'Horo Horo no Mi'},haki:[],bounty:0,height:156,firstArc:'Thriller Bark'},
     {id:'caesar',name:'Caesar Clown',gender:'Male',affiliation:'Punk Hazard',df:{has:true,type:'Logia',name:'Gasu Gasu no Mi'},haki:[],bounty:300000000,height:309,firstArc:'Punk Hazard'},
     {id:'bartolomeo',name:'Bartolomeo',gender:'Male',affiliation:'Barto Club',df:{has:true,type:'Paramecia',name:'Bari Bari no Mi'},haki:['Armament'],bounty:200000000,height:220,firstArc:'Dressrosa'},
-    {id:'cavendish',name:'Cavendish',gender:'Male',affiliation:'Beautiful Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:330000000,height:200,firstArc:'Dressrosa'},
+    {id:'cavendish',name:'Cavendish',gender:'Male',affiliation:'Beautiful Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:330000000,height:200,firstArc:'Dressrosa'},
     {id:'rebecca',name:'Rebecca',gender:'Female',affiliation:'Dressrosa',df:{has:false,type:null,name:null},haki:[],bounty:0,height:165,firstArc:'Dressrosa'},
     {id:'katakuri',name:'Charlotte Katakuri',gender:'Male',affiliation:'Big Mom Pirates',df:{has:true,type:'Paramecia',name:'Mochi Mochi no Mi'},haki:['Observation','Armament','Conquerors'],bounty:1057000000,height:509,firstArc:'Whole Cake Island'},
     {id:'carrot',name:'Carrot',gender:'Female',affiliation:'Mink Tribe',df:{has:false,type:null,name:null},haki:['Armament'],bounty:0,height:169,firstArc:'Zou'},
@@ -4611,15 +5802,15 @@ const OP_WORDLE_CHARS = [
     {id:'sengoku',name:'Sengoku',gender:'Male',affiliation:'Marines',df:{has:true,type:'Zoan',name:'Hito Hito no Mi, Daibutsu Model'},haki:['Observation','Armament','Conquerors'],bounty:0,height:278,firstArc:'Marineford'},
 ];
 
-// --- Wordle Image System (One Piece anime characters from Jikan) ---
-window.wpImageMap = {};
-window.wpImgReady = false;
+// --- BuzzWord: One Piece — Image System ---
+window.bwOpImageMap = {};
+window.bwOpImgReady = false;
 
-window.wpLoadOpImages = async function() {
+window.bwOpLoadImages = async function() {
     const cacheKey = 'wb_op_imgs_v5';
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
-        try { window.wpImageMap = JSON.parse(cached); window.wpImgReady = true; return; } catch(e) {}
+        try { window.bwOpImageMap = JSON.parse(cached); window.bwOpImgReady = true; return; } catch(e) {}
     }
     try {
         const res = await fetch('https://api.jikan.moe/v4/anime/21/characters');
@@ -4647,8 +5838,8 @@ window.wpLoadOpImages = async function() {
                 if (!map[last]) map[last] = img;
             }
         });
-        window.wpImageMap = map;
-        window.wpImgReady = true;
+        window.bwOpImageMap = map;
+        window.bwOpImgReady = true;
         try { localStorage.setItem(cacheKey, JSON.stringify(map)); } catch(e) {}
     } catch(e) {}
 };
@@ -4662,8 +5853,8 @@ const WP_NAME_ALIASES = {
     'gol d. roger': 'roger',
 };
 
-window.wpGetCharImage = function(name) {
-    const m = window.wpImageMap;
+window.bwOpGetCharImage = function(name) {
+    const m = window.bwOpImageMap;
     const n = name.toLowerCase();
     if (m[n]) return m[n];
     // Try alias
@@ -4682,14 +5873,14 @@ window.wpGetCharImage = function(name) {
     return null;
 };
 
-window.wpApplyImages = function() {
+window.bwOpApplyImages = function() {
     document.querySelectorAll('[id^="wimg-"]').forEach(img => {
         const charId = img.id.replace('wimg-', '');
         const char = charId === 'answer'
-            ? window.wordleState.answer
-            : OP_WORDLE_CHARS.find(c => c.id === charId);
+            ? window.bwOpState.answer
+            : BW_OP_CHARS.find(c => c.id === charId);
         if (!char) return;
-        const url = window.wpGetCharImage(char.name);
+        const url = window.bwOpGetCharImage(char.name);
         if (url) {
             img.src = url; img.style.display = 'block';
             const fb = document.getElementById(`winitials-${charId}`);
@@ -4698,35 +5889,35 @@ window.wpApplyImages = function() {
     });
 };
 
-window.wpEnsureImages = async function() {
-    if (!window.wpImgReady) await window.wpLoadOpImages();
-    window.wpApplyImages();
+window.bwOpEnsureImages = async function() {
+    if (!window.bwOpImgReady) await window.bwOpLoadImages();
+    window.bwOpApplyImages();
 };
 
-window.wpEnterGuess = function() {
-    const firstItem = document.querySelector('#wordle-suggestions .wordle-suggestion-item');
+window.bwOpEnterGuess = function() {
+    const firstItem = document.querySelector('#bwop-suggestions .wordle-suggestion-item');
     if (firstItem) firstItem.click();
 };
 
-// --- Wordle Helpers ---
-function wpBounty(n) {
+// --- BuzzWord: One Piece — Helpers ---
+function bwOpBounty(n) {
     if (n === 0) return '฿ 0';
     if (n >= 1000000000) return '฿ ' + (n/1000000000).toFixed(2).replace(/\.?0+$/,'') + 'B';
     if (n >= 1000000) return '฿ ' + Math.round(n/1000000) + 'M';
     return '฿ ' + n.toLocaleString();
 }
-function wpHeight(cm) {
+function bwOpHeight(cm) {
     return Math.floor(cm/100) + 'm' + (cm%100).toString().padStart(2,'0');
 }
-function wpHaki(h) {
+function bwOpHaki(h) {
     if (!h || h.length === 0) return 'None';
     return h.map(x => x === 'Observation' ? '👁️ Observation' : x === 'Armament' ? '🦾 Armament' : '👑 Conquerors').join('\n');
 }
-function wpDF(df) {
+function bwOpDF(df) {
     return df.has ? df.type : 'None';
 }
 
-function wpCalcColors(guess, answer) {
+function bwOpCalcColors(guess, answer) {
     // Gender
     const gender = guess.gender === answer.gender ? 'green' : 'red';
     // Affiliation
@@ -4758,14 +5949,14 @@ function wpCalcColors(guess, answer) {
     return { gender, affiliation, devilFruit, haki, bounty, bountyDir, height, heightDir, firstArc, arcDir };
 }
 
-function wpGetToday() {
+function bwOpGetToday() {
     const msPerDay = 86400000;
     const epoch = new Date('2025-01-01').getTime();
     const idx = Math.floor((Date.now() - epoch) / msPerDay);
-    return OP_WORDLE_CHARS[idx % OP_WORDLE_CHARS.length];
+    return BW_OP_CHARS[idx % BW_OP_CHARS.length];
 }
 
-function wpRenderRow(char, colors) {
+function bwOpRenderRow(char, colors) {
     function cell(val, color, dir) {
         const bg = color === 'green' ? '#2e7d32' : color === 'yellow' ? '#e65100' : '#b71c1c';
         const arrow = dir ? `<span class="material-symbols-outlined" style="font-size:24px; margin-top:3px;">${dir === 'up' ? 'arrow_upward' : 'arrow_downward'}</span>` : '';
@@ -4784,18 +5975,18 @@ function wpRenderRow(char, colors) {
         </div>
         ${cell(char.gender, colors.gender)}
         ${cell(char.affiliation, colors.affiliation)}
-        ${cell(wpDF(char.df), colors.devilFruit)}
-        ${cell(wpHaki(char.haki), colors.haki)}
-        ${cell(wpBounty(char.bounty), colors.bounty, colors.bountyDir)}
-        ${cell(wpHeight(char.height), colors.height, colors.heightDir)}
+        ${cell(bwOpDF(char.df), colors.devilFruit)}
+        ${cell(bwOpHaki(char.haki), colors.haki)}
+        ${cell(bwOpBounty(char.bounty), colors.bounty, colors.bountyDir)}
+        ${cell(bwOpHeight(char.height), colors.height, colors.heightDir)}
         ${cell(char.firstArc, colors.firstArc, colors.arcDir)}
     </div>`;
 }
 
-function wpShowResult() {
-    const { answer, guesses, solved } = window.wordleState;
-    const resultEl = document.getElementById('wordle-result');
-    const inputArea = document.getElementById('wordle-input-area');
+function bwOpShowResult() {
+    const { answer, guesses, solved } = window.bwOpState;
+    const resultEl = document.getElementById('bwop-result');
+    const inputArea = document.getElementById('bwop-input-area');
     if (!resultEl) return;
     if (solved) {
         const initials = answer.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
@@ -4809,19 +6000,19 @@ function wpShowResult() {
             <div style="font-size:20px;font-weight:800;color:#FFD700;">${answer.name}</div>
             <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
             <div style="display:flex; gap:10px; margin-top:8px; flex-wrap:wrap; justify-content:center;">
-                <button onclick="window.wpShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);">
+                <button onclick="window.bwOpShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);">
                     <span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result
                 </button>
-                <button id="wordle-post-btn" onclick="window.wpPostToFeed(this)" class="action-btn" style="background:var(--accent-yellow);color:#111;font-size:13px;" ${!auth.currentUser ? 'style="display:none;"' : ''}>
+                <button id="bwop-post-btn" onclick="window.bwOpPostToFeed(this)" class="action-btn" style="background:var(--accent-yellow);color:#111;font-size:13px;" ${!auth.currentUser ? 'style="display:none;"' : ''}>
                     <span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed
                 </button>
             </div>
         </div>`;
         if (inputArea) inputArea.style.display = 'none';
         // Load answer image
-        window.wpEnsureImages();
+        window.bwOpEnsureImages();
         // Update thumbnail status
-        const statusEl = document.getElementById('wordle-status-text');
+        const statusEl = document.getElementById('bwop-status-text');
         if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
     } else {
         resultEl.style.display = 'none';
@@ -4829,20 +6020,20 @@ function wpShowResult() {
     }
 }
 
-function wpRender() {
-    const grid = document.getElementById('wordle-grid');
+function bwOpRender() {
+    const grid = document.getElementById('bwop-grid');
     if (!grid) return;
-    const { answer, guesses } = window.wordleState;
-    grid.innerHTML = guesses.map(g => wpRenderRow(g, wpCalcColors(g, answer))).join('');
-    window.wpEnsureImages();
-    wpShowResult();
+    const { answer, guesses } = window.bwOpState;
+    grid.innerHTML = guesses.map(g => bwOpRenderRow(g, bwOpCalcColors(g, answer))).join('');
+    window.bwOpEnsureImages();
+    bwOpShowResult();
 }
 
-function wpAnimateNewRow(char, colors) {
-    const grid = document.getElementById('wordle-grid');
+function bwOpAnimateNewRow(char, colors) {
+    const grid = document.getElementById('bwop-grid');
     if (!grid) return;
-    grid.insertAdjacentHTML('beforeend', wpRenderRow(char, colors));
-    window.wpEnsureImages();
+    grid.insertAdjacentHTML('beforeend', bwOpRenderRow(char, colors));
+    window.bwOpEnsureImages();
     const newRow = grid.lastElementChild;
     const cells = newRow.querySelectorAll('.wordle-cell');
     cells.forEach((cell, i) => {
@@ -4856,191 +6047,240 @@ function wpAnimateNewRow(char, colors) {
     });
 }
 
-// --- Wordle State & Init ---
-window.wordleState = { answer: null, guesses: [], solved: false, selectedChar: null, date: null };
+// --- BuzzWord: One Piece — State & Init ---
+window.bwOpState = { answer: null, guesses: [], solved: false, selectedChar: null, date: null };
 
-window.openWordleModal = function() {
+window.openBwOpModal = function() {
     window.closeAllModals();
-    document.getElementById('wordle-modal').style.display = 'flex';
-    window.initWordleGame();
-    window.wpLoadOpImages(); // pre-warm cache in background
+    document.getElementById('bwop-modal').style.display = 'flex';
+    window.initBwOpGame();
+    window.bwOpLoadImages(); // pre-warm cache in background
 };
 
-window.initWordleGame = async function() {
+window.initBwOpGame = async function() {
     const today = new Date().toISOString().split('T')[0];
-    if (window.wordleState.answer && window.wordleState.date === today) {
+    if (window.bwOpState.answer && window.bwOpState.date === today) {
         // Already initialized for today — just re-render
-        document.getElementById('wordle-loading').style.display = 'none';
-        document.getElementById('wordle-content').style.display = 'block';
-        wpRender();
+        document.getElementById('bwop-loading').style.display = 'none';
+        document.getElementById('bwop-content').style.display = 'block';
+        bwOpRender();
         return;
     }
-    window.wordleState = { answer: wpGetToday(), guesses: [], solved: false, selectedChar: null, date: today };
+    window.bwOpState = { answer: bwOpGetToday(), guesses: [], solved: false, selectedChar: null, date: today };
     try {
         if (auth.currentUser) {
-            const snap = await getDoc(doc(db, 'op_wordle_games', `${auth.currentUser.uid}_${today}`));
+            const snap = await getDoc(doc(db, 'bw_op_games', `${auth.currentUser.uid}_${today}`));
             if (snap.exists()) {
                 const d = snap.data();
-                window.wordleState.guesses = (d.guesses||[]).map(id=>OP_WORDLE_CHARS.find(c=>c.id===id)).filter(Boolean);
-                window.wordleState.solved = d.solved || false;
+                window.bwOpState.guesses = (d.guesses||[]).map(id=>BW_OP_CHARS.find(c=>c.id===id)).filter(Boolean);
+                window.bwOpState.solved = d.solved || false;
             }
         } else {
-            const saved = localStorage.getItem(`wb_wordle_${today}`);
-            if (saved) { const d = JSON.parse(saved); window.wordleState.guesses=(d.guesses||[]).map(id=>OP_WORDLE_CHARS.find(c=>c.id===id)).filter(Boolean); window.wordleState.solved=d.solved||false; }
+            const saved = localStorage.getItem(`wb_bwop_${today}`);
+            if (saved) { const d = JSON.parse(saved); window.bwOpState.guesses=(d.guesses||[]).map(id=>BW_OP_CHARS.find(c=>c.id===id)).filter(Boolean); window.bwOpState.solved=d.solved||false; }
         }
     } catch(e) {}
-    document.getElementById('wordle-loading').style.display = 'none';
-    document.getElementById('wordle-content').style.display = 'block';
-    wpRender();
+    document.getElementById('bwop-loading').style.display = 'none';
+    document.getElementById('bwop-content').style.display = 'block';
+    bwOpRender();
     // Update thumbnail status text
-    const statusEl = document.getElementById('wordle-status-text');
+    const statusEl = document.getElementById('bwop-status-text');
     if (statusEl) {
-        const { solved, guesses } = window.wordleState;
+        const { solved, guesses } = window.bwOpState;
         statusEl.innerText = solved ? `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!` : guesses.length > 0 ? `${guesses.length} ${guesses.length===1?'guess':'guesses'} so far — keep going!` : 'New puzzle available! 🗡️';
     }
 };
 
-window.searchWordleChar = function() {
-    const q = document.getElementById('wordle-search')?.value.trim().toLowerCase();
-    const sugg = document.getElementById('wordle-suggestions');
+window.wpEnterGuess = function() {
+    if (window.bwOpState.selectedChar) { window.submitBwOpGuess(); return; }
+    const first = document.getElementById('bwop-suggestions')?.querySelector('.wordle-suggestion-item');
+    if (first) first.click();
+};
+
+window.searchBwOpChar = function() {
+    window.bwOpState.selectedChar = null;
+    const q = document.getElementById('bwop-search')?.value.trim().toLowerCase();
+    const sugg = document.getElementById('bwop-suggestions');
     if (!sugg) return;
     if (!q) { sugg.style.display = 'none'; return; }
-    const guessedIds = new Set(window.wordleState.guesses.map(g => g.id));
-    const matches = OP_WORDLE_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
+    const guessedIds = new Set(window.bwOpState.guesses.map(g => g.id));
+    const matches = BW_OP_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
     if (!matches.length) { sugg.style.display = 'none'; return; }
     sugg.style.display = 'block';
-    sugg.innerHTML = matches.map(c => `<div class="wordle-suggestion-item" onclick="window.selectWordleChar('${c.id}')">${c.name}</div>`).join('');
+    sugg.innerHTML = matches.map(c => `<div class="wordle-suggestion-item" onclick="window.selectBwOpChar('${c.id}')">${c.name}</div>`).join('');
 };
 
-window.selectWordleChar = function(id) {
-    const char = OP_WORDLE_CHARS.find(c => c.id === id);
+window.selectBwOpChar = function(id) {
+    const char = BW_OP_CHARS.find(c => c.id === id);
     if (!char) return;
-    window.wordleState.selectedChar = char;
-    const inp = document.getElementById('wordle-search');
+    window.bwOpState.selectedChar = char;
+    const inp = document.getElementById('bwop-search');
     if (inp) inp.value = '';
-    const sugg = document.getElementById('wordle-suggestions');
+    const sugg = document.getElementById('bwop-suggestions');
     if (sugg) sugg.style.display = 'none';
-    window.submitWordleGuess();
+    window.submitBwOpGuess();
 };
 
-window.submitWordleGuess = async function() {
-    const char = window.wordleState.selectedChar;
-    if (!char || window.wordleState.solved) return;
-    if (window.wordleState.guesses.some(g => g.id === char.id)) return;
-    const colors = wpCalcColors(char, window.wordleState.answer);
-    window.wordleState.guesses.push(char);
-    window.wordleState.selectedChar = null;
-    const isCorrect = char.id === window.wordleState.answer.id;
-    if (isCorrect) window.wordleState.solved = true;
+window.submitBwOpGuess = async function() {
+    const char = window.bwOpState.selectedChar;
+    if (!char || window.bwOpState.solved) return;
+    if (window.bwOpState.guesses.some(g => g.id === char.id)) return;
+    const colors = bwOpCalcColors(char, window.bwOpState.answer);
+    window.bwOpState.guesses.push(char);
+    window.bwOpState.selectedChar = null;
+    const isCorrect = char.id === window.bwOpState.answer.id;
+    if (isCorrect) window.bwOpState.solved = true;
     // Animate the new row
-    wpAnimateNewRow(char, colors);
+    bwOpAnimateNewRow(char, colors);
     // Show result after animation completes
     const totalCells = 7;
     const delay = totalCells * 500 + 800;
-    setTimeout(() => wpShowResult(), delay);
+    setTimeout(() => bwOpShowResult(), delay);
     // Save state
     const today = new Date().toISOString().split('T')[0];
-    const saveData = { guesses: window.wordleState.guesses.map(g=>g.id), solved: window.wordleState.solved, date: today, guessCount: window.wordleState.guesses.length, displayName: auth.currentUser?.displayName || 'Player' };
+    const saveData = { guesses: window.bwOpState.guesses.map(g=>g.id), solved: window.bwOpState.solved, date: today, guessCount: window.bwOpState.guesses.length, displayName: auth.currentUser?.displayName || 'Player' };
     if (auth.currentUser) {
-        setDoc(doc(db, 'op_wordle_games', `${auth.currentUser.uid}_${today}`), saveData).catch(() => {});
-        if (window.wordleState.solved) window.wpUpdateLeaderboard(window.wordleState.guesses.length);
+        setDoc(doc(db, 'bw_op_games', `${auth.currentUser.uid}_${today}`), saveData).catch(() => {});
+        if (window.bwOpState.solved) window.bwOpUpdateLeaderboard(window.bwOpState.guesses.length);
     } else {
-        localStorage.setItem(`wb_wordle_${today}`, JSON.stringify(saveData));
+        localStorage.setItem(`wb_bwop_${today}`, JSON.stringify(saveData));
     }
 };
 
-window.wpUpdateLeaderboard = async function(guessCount) {
+window.bwOpUpdateLeaderboard = async function(guessCount) {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
-    const ref = doc(db, 'op_wordle_leaderboard', uid);
+    const ref = doc(db, 'bw_op_leaderboard', uid);
     const snap = await getDoc(ref);
     const today = new Date().toISOString().split('T')[0];
     const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+    let streak, totalWins;
     if (snap.exists()) {
         const d = snap.data();
-        const streak = d.lastWinDate === yesterday ? (d.currentStreak||0)+1 : 1;
+        streak = d.lastWinDate === yesterday ? (d.currentStreak||0)+1 : 1;
+        totalWins = (d.totalWins || 0) + 1;
         await updateDoc(ref, { totalWins: increment(1), totalGuesses: increment(guessCount), currentStreak: streak, bestStreak: Math.max(d.bestStreak||0, streak), lastWinDate: today, displayName: auth.currentUser.displayName });
     } else {
+        streak = 1; totalWins = 1;
         await setDoc(ref, { totalWins:1, totalGuesses:guessCount, currentStreak:1, bestStreak:1, lastWinDate:today, displayName: auth.currentUser.displayName });
     }
+    window.checkBwOpAchievements(guessCount, streak, totalWins).catch(() => {});
 };
 
-window.wpShare = function() {
-    const { answer, guesses, solved } = window.wordleState;
+window.checkBwOpAchievements = async function(guessCount, streak, totalWins) {
+    if (!auth.currentUser) return;
+    const ids = [];
+    if (totalWins === 1) ids.push('bwop_first');
+    if (guessCount === 1) ids.push('bwop_1guess');
+    if (streak >= 7) ids.push('bwop_streak_7');
+    if (streak >= 100) ids.push('bwop_streak_100');
+    if (totalWins >= 30) ids.push('bwop_total_30');
+    const today = new Date().toISOString().split('T')[0];
+    const uid = auth.currentUser.uid;
+    try {
+        const nrtSnap = await getDoc(doc(db, 'bw_nrt_games', `${uid}_${today}`));
+        if (nrtSnap.exists() && nrtSnap.data().solved) ids.push('bw_double_agent');
+        const nrtLb = await getDoc(doc(db, 'bw_nrt_leaderboard', uid));
+        if (nrtLb.exists() && (nrtLb.data().totalWins || 0) >= 1) ids.push('bw_multiverse');
+    } catch(e) {}
+    if (ids.length) window.awardAchievements(ids).catch(() => {});
+};
+
+window.bwOpShare = function() {
+    const { answer, guesses, solved } = window.bwOpState;
     const today = new Date().toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'});
     const map = { green:'🟩', yellow:'🟨', red:'🟥' };
     const rows = guesses.map(g => {
-        const c = wpCalcColors(g, answer);
+        const c = bwOpCalcColors(g, answer);
         return [c.gender,c.affiliation,c.devilFruit,c.haki,c.bounty,c.height,c.firstArc].map(x=>map[x]||'⬛').join('');
     }).join('\n');
-    const text = `One Piece Wordle — ${today}\n${solved?`Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`:'Not solved'}\n\n${rows}\n\nPlay on weebee.buzz`;
+    const text = `BuzzWord: One Piece Characters — ${today}\n${solved?`Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`:'Not solved'}\n\n${rows}\n\nhttps://weebee.buzz/#community`;
     navigator.clipboard.writeText(text).then(()=>alert('Copied to clipboard!')).catch(()=>alert('Could not copy'));
 };
 
-window.wpPostToFeed = async function(btn) {
+window.bwOpPostToFeed = async function(btn) {
     if (!auth.currentUser) return window.openAuthModal();
-    const { answer, guesses, solved } = window.wordleState;
+    const { answer, guesses, solved } = window.bwOpState;
     if (!solved) return;
     const today = new Date().toISOString().split('T')[0];
-    // Check if already posted today
-    const existingSnap = await getDocs(query(collection(db, 'wordle_posts'),
-        where('uid', '==', auth.currentUser.uid), where('date', '==', today)));
-    if (!existingSnap.empty) { btn.innerText = 'Already posted!'; btn.disabled = true; return; }
+    // Check if already posted today (check both new and old collections)
+    const [existingNew, existingOld] = await Promise.all([
+        getDocs(query(collection(db, 'bw_posts'), where('uid', '==', auth.currentUser.uid), where('date', '==', today), where('game', '==', 'op'))),
+        getDocs(query(collection(db, 'bw_op_posts'), where('uid', '==', auth.currentUser.uid), where('date', '==', today))),
+    ]);
+    if (!existingNew.empty || !existingOld.empty) { btn.innerText = 'Already posted!'; btn.disabled = true; return; }
     const map = { green:'🟩', yellow:'🟨', red:'🟥' };
     const emojiGrid = guesses.map(g => {
-        const c = wpCalcColors(g, answer);
+        const c = bwOpCalcColors(g, answer);
         return [c.gender,c.affiliation,c.devilFruit,c.haki,c.bounty,c.height,c.firstArc].map(x=>map[x]||'⬛').join('');
     }).join('\n');
     try {
         btn.disabled = true; btn.innerText = 'Posting...';
         const av = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
-        await addDoc(collection(db, 'wordle_posts'), {
+        await addDoc(collection(db, 'bw_posts'), {
             uid: auth.currentUser.uid,
             displayName: auth.currentUser.displayName,
             avatar: av,
+            game: 'op',
             guessCount: guesses.length,
             emojiGrid,
             date: today,
-            timestamp: new Date()
+            timestamp: new Date(),
+            likes: [],
+            dislikes: [],
+            commentCount: 0
         });
         btn.innerText = '✓ Posted!';
-        window.fetchHomeWordleFeed();
+        window.awardAchievements(['feed_showtime']).catch(() => {});
+        window.fetchHomeBwFeed();
+        window.fetchBwCommunityFeed();
     } catch(e) { btn.disabled = false; btn.innerText = 'Post to Feed'; alert('Failed to post.'); }
 };
 
-window.fetchHomeWordleFeed = async function() {
-    const section = document.getElementById('home-wordle-section');
-    const feed = document.getElementById('home-wordle-feed');
-    if (!section || !feed) return;
+window.fetchBwCommunityFeed = async function() {
+    const feed = document.getElementById('bw-community-feed');
+    if (!feed) return;
     const today = new Date().toISOString().split('T')[0];
+    feed.innerHTML = '<div class="loading">Loading results...</div>';
     try {
-        const snap = await getDocs(query(collection(db, 'wordle_posts'), where('date', '==', today)));
-        if (snap.empty) { section.style.display = 'none'; return; }
-        const posts = snap.docs.map(d => ({ ...d.data(), id: d.id }))
-            .sort((a, b) => (a.guessCount || 99) - (b.guessCount || 99));
-        section.style.display = 'block';
-        feed.innerHTML = posts.map(p => `
-            <div style="display:flex; gap:14px; align-items:flex-start; background:var(--bg-gray); border-radius:12px; padding:16px;">
-                <img src="${p.avatar}" class="avatar" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(p.displayName)}&backgroundColor=ffc107&fontColor=333333'">
-                <div style="flex:1;">
-                    <div style="font-weight:700; font-size:14px; margin-bottom:2px;">${p.displayName}</div>
-                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">Solved today's ⚓ One Piece Wordle in <strong style="color:var(--text-dark);">${p.guessCount} ${p.guessCount===1?'guess':'guesses'}</strong></div>
-                    <div style="font-family:monospace; font-size:16px; letter-spacing:2px; line-height:1.8;">${p.emojiGrid.split('\n').join('<br>')}</div>
-                </div>
-            </div>`).join('');
-    } catch(e) { section.style.display = 'none'; }
+        const [snapAll, snapOp, snapOld] = await Promise.all([
+            getDocs(query(collection(db, 'bw_posts'), where('date', '==', today))),
+            getDocs(query(collection(db, 'bw_op_posts'), where('date', '==', today))),
+            getDocs(query(collection(db, 'wordle_posts'), where('date', '==', today)))
+        ]);
+        const seen = new Set();
+        const posts = [
+            ...snapAll.docs.map(d => ({...d.data(), id: d.id, game: d.data().game || 'op', _col: 'bw_posts'})),
+            ...snapOp.docs.map(d => ({...d.data(), id: d.id, game: 'op', _col: 'bw_op_posts'})),
+            ...snapOld.docs.map(d => ({...d.data(), id: d.id, game: 'op', _col: 'wordle_posts'}))
+        ].filter(p => {
+            const key = `${p.uid}_${p.game || 'op'}`;
+            if (seen.has(key)) return false; seen.add(key); return true;
+        }).sort((a, b) => (a.guessCount || 99) - (b.guessCount || 99));
+        if (!posts.length) {
+            feed.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding:24px; background:var(--bg-gray); border-radius:12px; font-size:14px;">No results yet today — be the first to play and post! 🎮</div>`;
+            return;
+        }
+        feed.innerHTML = posts.map(p => window.generateBwPostCardHTML(p)).join('');
+    } catch(e) {
+        feed.innerHTML = '<div style="text-align:center; color:var(--text-muted); padding:20px;">Could not load results.</div>';
+    }
 };
 
-window.openWordleLeaderboard = function() {
+window.fetchHomeBwFeed = function() {
+    if (window.currentActiveViewId === 'home-view') window.fetchHomeActivityFeed();
+};
+
+window.openBwOpLeaderboard = function() {
     window.closeAllModals();
-    document.getElementById('wordle-leaderboard-modal').style.display = 'flex';
-    window.showWordleLeaderboardTab('today');
+    document.getElementById('bwop-leaderboard-modal').style.display = 'flex';
+    window.showBwOpLeaderboardTab('today');
 };
 
-window.showWordleLeaderboardTab = async function(tab) {
-    const todayBtn = document.getElementById('wlb-tab-today');
-    const alltimeBtn = document.getElementById('wlb-tab-alltime');
-    const content = document.getElementById('wordle-leaderboard-content');
+window.showBwOpLeaderboardTab = async function(tab) {
+    const todayBtn = document.getElementById('bwop-tab-today');
+    const alltimeBtn = document.getElementById('bwop-tab-alltime');
+    const content = document.getElementById('bwop-leaderboard-content');
     if (!content) return;
     todayBtn.style.background = tab==='today' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
     todayBtn.style.color = tab==='today' ? '#111' : 'var(--text-dark)';
@@ -5050,7 +6290,7 @@ window.showWordleLeaderboardTab = async function(tab) {
     const today = new Date().toISOString().split('T')[0];
     try {
         if (tab === 'today') {
-            const snap = await getDocs(query(collection(db,'op_wordle_games'), where('date','==',today), where('solved','==',true)));
+            const snap = await getDocs(query(collection(db,'bw_op_games'), where('date','==',today), where('solved','==',true)));
             const sorted = snap.docs.sort((a,b)=>(a.data().guessCount||99)-(b.data().guessCount||99)).slice(0,10);
             if (!sorted.length) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:30px;">No winners yet today — be the first!</p>'; return; }
             content.innerHTML = sorted.map((d,i)=>{
@@ -5062,7 +6302,7 @@ window.showWordleLeaderboardTab = async function(tab) {
                     <div style="font-size:12px;color:var(--text-muted);">${data.guessCount} ${data.guessCount===1?'guess':'guesses'}</div></div></div>`;
             }).join('');
         } else {
-            const snap = await getDocs(collection(db,'op_wordle_leaderboard'));
+            const snap = await getDocs(collection(db,'bw_op_leaderboard'));
             const sorted = snap.docs.sort((a,b)=>(b.data().totalWins||0)-(a.data().totalWins||0)).slice(0,10);
             if (!sorted.length) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:30px;">No scores yet!</p>'; return; }
             content.innerHTML = sorted.map((d,i)=>{
@@ -5078,21 +6318,528 @@ window.showWordleLeaderboardTab = async function(tab) {
     } catch(e) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:20px;">Could not load leaderboard.</p>'; console.error(e); }
 };
 
+window.openBwNrtLeaderboard = function() {
+    window.closeAllModals();
+    document.getElementById('bwnrt-leaderboard-modal').style.display = 'flex';
+    window.showBwNrtLeaderboardTab('today');
+};
+
+window.showBwNrtLeaderboardTab = async function(tab) {
+    const todayBtn = document.getElementById('bwnrt-tab-today');
+    const alltimeBtn = document.getElementById('bwnrt-tab-alltime');
+    const content = document.getElementById('bwnrt-leaderboard-content');
+    if (!content) return;
+    todayBtn.style.background = tab==='today' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+    todayBtn.style.color = tab==='today' ? '#111' : 'var(--text-dark)';
+    alltimeBtn.style.background = tab==='alltime' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+    alltimeBtn.style.color = tab==='alltime' ? '#111' : 'var(--text-dark)';
+    content.innerHTML = '<div class="loading">Loading...</div>';
+    const today = new Date().toISOString().split('T')[0];
+    try {
+        if (tab === 'today') {
+            const snap = await getDocs(query(collection(db,'bw_nrt_games'), where('date','==',today), where('solved','==',true)));
+            const sorted = snap.docs.sort((a,b)=>(a.data().guessCount||99)-(b.data().guessCount||99)).slice(0,10);
+            if (!sorted.length) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:30px;">No winners yet today — be the first!</p>'; return; }
+            content.innerHTML = sorted.map((d,i)=>{
+                const data=d.data();
+                const medal=['🥇','🥈','🥉'][i]||`${i+1}.`;
+                return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;background:var(--bg-gray);margin-bottom:8px;">
+                    <span style="font-size:20px;width:28px;">${medal}</span>
+                    <div style="flex:1;"><div style="font-weight:700;font-size:14px;">${data.displayName||'Player'}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${data.guessCount} ${data.guessCount===1?'guess':'guesses'}</div></div></div>`;
+            }).join('');
+        } else {
+            const snap = await getDocs(collection(db,'bw_nrt_leaderboard'));
+            const sorted = snap.docs.sort((a,b)=>(b.data().totalWins||0)-(a.data().totalWins||0)).slice(0,10);
+            if (!sorted.length) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:30px;">No scores yet!</p>'; return; }
+            content.innerHTML = sorted.map((d,i)=>{
+                const data=d.data();
+                const avg = data.totalWins>0?(data.totalGuesses/data.totalWins).toFixed(1):'-';
+                const medal=['🥇','🥈','🥉'][i]||`${i+1}.`;
+                return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;background:var(--bg-gray);margin-bottom:8px;">
+                    <span style="font-size:20px;width:28px;">${medal}</span>
+                    <div style="flex:1;"><div style="font-weight:700;font-size:14px;">${data.displayName||'Player'}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${data.totalWins} wins · Avg ${avg} guesses · Best streak: ${data.bestStreak||1}</div></div></div>`;
+            }).join('');
+        }
+    } catch(e) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:20px;">Could not load leaderboard.</p>'; }
+};
+
+// =====================================================================
+// BUZZWORD: BLEACH CHARACTERS
+// =====================================================================
+
+const BLC_ARC_ORDER = [
+    'Agent of the Shinigami',
+    'Soul Society',
+    'Arrancar',
+    'Hueco Mundo',
+    'Fake Karakura Town',
+    'Lost Agent',
+    'Thousand-Year Blood War'
+];
+
+const BW_BLC_CHARS = [
+    // Main Cast
+    {id:'ichigo',    name:'Ichigo Kurosaki',         gender:'Male',   race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Agent of the Shinigami'},
+    {id:'rukia',     name:'Rukia Kuchiki',            gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Elemental',hasBankai:true,  debutArc:'Agent of the Shinigami'},
+    {id:'orihime',   name:'Orihime Inoue',            gender:'Female', race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
+    {id:'chad',      name:'Yasutora Sado',            gender:'Male',   race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
+    {id:'ishida',    name:'Uryū Ishida',              gender:'Male',   race:'Quincy',    affiliation:'Neutral',      rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
+    // Gotei 13
+    {id:'renji',     name:'Renji Abarai',             gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'byakuya',   name:'Byakuya Kuchiki',          gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Other',    hasBankai:true,  debutArc:'Agent of the Shinigami'},
+    {id:'hitsugaya', name:'Tōshirō Hitsugaya',        gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Elemental',hasBankai:true,  debutArc:'Soul Society'},
+    {id:'rangiku',   name:'Rangiku Matsumoto',         gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Elemental',hasBankai:false, debutArc:'Soul Society'},
+    {id:'kenpachi',  name:'Kenpachi Zaraki',           gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'yachiru',   name:'Yachiru Kusajishi',         gender:'Female', race:'Other',     affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Other',    hasBankai:false, debutArc:'Soul Society'},
+    {id:'mayuri',    name:'Mayuri Kurotsuchi',         gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Other',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'nemu',      name:'Nemu Kurotsuchi',           gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'N/A',      hasBankai:false, debutArc:'Soul Society'},
+    {id:'unohana',   name:'Retsu Unohana',             gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Healing',  hasBankai:true,  debutArc:'Soul Society'},
+    {id:'shunsui',   name:'Shunsui Kyōraku',          gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Illusion', hasBankai:true,  debutArc:'Soul Society'},
+    {id:'ukitake',   name:'Jūshirō Ukitake',          gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Other',    hasBankai:false, debutArc:'Soul Society'},
+    {id:'komamura',  name:'Sajin Komamura',            gender:'Male',   race:'Other',     affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'hinamori',  name:'Momo Hinamori',             gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Elemental',hasBankai:false, debutArc:'Soul Society'},
+    {id:'kira',      name:'Izuru Kira',                gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Other',    hasBankai:false, debutArc:'Soul Society'},
+    {id:'hisagi',    name:'Shūhei Hisagi',             gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'nanao',     name:'Nanao Ise',                 gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Other',    hasBankai:false, debutArc:'Soul Society'},
+    {id:'isane',     name:'Isane Kotetsu',             gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Melee',    hasBankai:false, debutArc:'Soul Society'},
+    // Traitors
+    {id:'aizen',     name:'Sōsuke Aizen',              gender:'Male',   race:'Shinigami', affiliation:'Hueco Mundo',  rank:'Captain',     zanpakutoType:'Illusion', hasBankai:false, debutArc:'Soul Society'},
+    {id:'gin',       name:'Gin Ichimaru',              gender:'Male',   race:'Shinigami', affiliation:'Hueco Mundo',  rank:'Captain',     zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'tosen',     name:'Kaname Tōsen',              gender:'Male',   race:'Shinigami', affiliation:'Hueco Mundo',  rank:'Captain',     zanpakutoType:'Illusion', hasBankai:true,  debutArc:'Soul Society'},
+    // Neutral / Exiled
+    {id:'urahara',   name:'Kisuke Urahara',            gender:'Male',   race:'Shinigami', affiliation:'Neutral',      rank:'Captain',     zanpakutoType:'Other',    hasBankai:true,  debutArc:'Agent of the Shinigami'},
+    {id:'yoruichi',  name:'Yoruichi Shihōin',          gender:'Female', race:'Shinigami', affiliation:'Neutral',      rank:'Captain',     zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
+    {id:'isshin',    name:'Isshin Kurosaki',           gender:'Male',   race:'Shinigami', affiliation:'Neutral',      rank:'Captain',     zanpakutoType:'Elemental',hasBankai:false, debutArc:'Agent of the Shinigami'},
+    // Vizards
+    {id:'shinji',    name:'Shinji Hirako',             gender:'Male',   race:'Vizard',    affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Illusion', hasBankai:true,  debutArc:'Arrancar'},
+    {id:'hiyori',    name:'Hiyori Sarugaki',           gender:'Female', race:'Vizard',    affiliation:'Neutral',      rank:'Lieutenant',  zanpakutoType:'Melee',    hasBankai:false, debutArc:'Arrancar'},
+    {id:'kensei',    name:'Kensei Muguruma',           gender:'Male',   race:'Vizard',    affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Elemental',hasBankai:true,  debutArc:'Arrancar'},
+    {id:'rose',      name:'Rōjūrō Ōtoribashi',        gender:'Male',   race:'Vizard',    affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Illusion', hasBankai:true,  debutArc:'Arrancar'},
+    // Espada
+    {id:'grimmjow',  name:'Grimmjow Jaegerjaquez',     gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Melee',    hasBankai:false, debutArc:'Arrancar'},
+    {id:'ulquiorra', name:'Ulquiorra Cifer',           gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Arrancar'},
+    {id:'nnoitra',   name:'Nnoitra Gilga',             gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Melee',    hasBankai:false, debutArc:'Hueco Mundo'},
+    {id:'starrk',    name:'Coyote Starrk',             gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Fake Karakura Town'},
+    {id:'baraggan',  name:'Baraggan Louisenbairn',     gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Fake Karakura Town'},
+    {id:'harribel',  name:'Tier Harribel',             gender:'Female', race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Elemental',hasBankai:false, debutArc:'Fake Karakura Town'},
+    {id:'szayel',    name:'Szayelaporro Granz',        gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Hueco Mundo'},
+    {id:'nelliel',   name:'Nelliel Tu Odelschwanck',  gender:'Female', race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Hueco Mundo'},
+    {id:'yammy',     name:'Yammy Llargo',              gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Melee',    hasBankai:false, debutArc:'Arrancar'},
+    // Wandenreich
+    {id:'yhwach',    name:'Yhwach',                    gender:'Male',   race:'Quincy',    affiliation:'Wandenreich',  rank:'Other',       zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
+    {id:'haschwalth',name:'Jugram Haschwalth',         gender:'Male',   race:'Quincy',    affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
+    {id:'bambietta', name:'Bambietta Basterbine',      gender:'Female', race:'Quincy',    affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
+    {id:'asnodt',    name:'As Nodt',                   gender:'Male',   race:'Quincy',    affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
+    {id:'giselle',   name:'Giselle Gewelle',           gender:'Female', race:'Quincy',    affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
+    {id:'liltotto',  name:'Liltotto Lamperd',          gender:'Female', race:'Quincy',    affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
+    {id:'mask',      name:'Mask De Masculine',         gender:'Male',   race:'Quincy',    affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
+    {id:'pernida',   name:'Pernida Parnkgjas',         gender:'Other',  race:'Other',     affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
+    {id:'gerard',    name:'Gerard Valkyrie',           gender:'Male',   race:'Other',     affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
+];
+
+// --- BuzzWord: Bleach — Image System ---
+window.bwBlcImageMap = {};
+window.bwBlcImgReady = false;
+
+window.bwBlcLoadImages = async function() {
+    const cacheKey = 'wb_blc_imgs_v1';
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) { try { window.bwBlcImageMap = JSON.parse(cached); window.bwBlcImgReady = true; return; } catch(e) {} }
+    const addToMap = (data, map) => {
+        (data || []).forEach(entry => {
+            const char = entry.character;
+            if (!char?.images?.jpg?.image_url) return;
+            const img = char.images.jpg.image_url;
+            const raw = char.name;
+            map[raw.toLowerCase()] = img;
+            if (raw.includes(',')) {
+                const [last, ...rest] = raw.split(',');
+                const natural = `${rest.join(',').trim()} ${last.trim()}`;
+                map[natural.toLowerCase()] = img;
+                const firstWord = rest.join(' ').trim().split(' ')[0].toLowerCase();
+                if (firstWord && !map[firstWord]) map[firstWord] = img;
+            } else {
+                const parts = raw.split(' ');
+                const lastName = parts[parts.length - 1].toLowerCase();
+                if (!map[lastName]) map[lastName] = img;
+            }
+        });
+    };
+    try {
+        const map = {};
+        const res1 = await fetch('https://api.jikan.moe/v4/anime/269/characters');
+        if (res1.ok) { const d = await res1.json(); addToMap(d.data, map); }
+        await new Promise(r => setTimeout(r, 450));
+        const res2 = await fetch('https://api.jikan.moe/v4/anime/41467/characters');
+        if (res2.ok) { const d = await res2.json(); addToMap(d.data, map); }
+        window.bwBlcImageMap = map;
+        window.bwBlcImgReady = true;
+        try { localStorage.setItem(cacheKey, JSON.stringify(map)); } catch(e) {}
+    } catch(e) {}
+};
+
+const BLC_NAME_ALIASES = {
+    'ichigo': 'kurosaki ichigo', 'rukia': 'kuchiki rukia', 'renji': 'abarai renji',
+    'byakuya': 'kuchiki byakuya', 'hitsugaya': 'hitsugaya toushirou', 'kenpachi': 'zaraki kenpachi',
+    'mayuri': 'kurotsuchi mayuri', 'aizen': 'aizen sousuke', 'gin': 'ichimaru gin',
+    'urahara': 'urahara kisuke', 'yoruichi': 'shihouin yoruichi', 'grimmjow': 'jaegerjaquez grimmjow',
+    'ulquiorra': 'cifer ulquiorra', 'yhwach': 'juha bach', 'orihime': 'inoue orihime',
+};
+
+window.bwBlcGetCharImage = function(name) {
+    const m = window.bwBlcImageMap;
+    const n = name.toLowerCase();
+    if (m[n]) return m[n];
+    const alias = BLC_NAME_ALIASES[n];
+    if (alias && m[alias]) return m[alias];
+    const parts = name.split(' ');
+    const last = parts[parts.length - 1].toLowerCase();
+    if (m[last]) return m[last];
+    const first = parts[0].toLowerCase();
+    if (m[first]) return m[first];
+    return null;
+};
+
+window.bwBlcApplyImages = function() {
+    document.querySelectorAll('[id^="blcimg-"]').forEach(img => {
+        const charId = img.id.replace('blcimg-', '');
+        const char = charId === 'answer' ? window.bwBlcState.answer : BW_BLC_CHARS.find(c => c.id === charId);
+        if (!char) return;
+        const url = window.bwBlcGetCharImage(char.name);
+        if (url) {
+            img.src = url; img.style.display = 'block';
+            const fb = document.getElementById(`blcinitials-${charId}`);
+            if (fb) fb.style.display = 'none';
+        }
+    });
+};
+
+window.bwBlcEnsureImages = async function() {
+    if (!window.bwBlcImgReady) await window.bwBlcLoadImages();
+    window.bwBlcApplyImages();
+};
+
+// --- BuzzWord: Bleach — Helpers ---
+function bwBlcCalcColors(guess, answer) {
+    const gender        = guess.gender        === answer.gender        ? 'green' : 'red';
+    const race          = guess.race          === answer.race          ? 'green' : 'red';
+    const affiliation   = guess.affiliation   === answer.affiliation   ? 'green' : 'red';
+    const rank          = guess.rank          === answer.rank          ? 'green' : 'red';
+    const zanpakutoType = guess.zanpakutoType === answer.zanpakutoType ? 'green' : 'red';
+    const hasBankai     = guess.hasBankai     === answer.hasBankai     ? 'green' : 'red';
+    const gIdx = BLC_ARC_ORDER.indexOf(guess.debutArc);
+    const aIdx = BLC_ARC_ORDER.indexOf(answer.debutArc);
+    const debutArc = gIdx === aIdx ? 'green' : (gIdx < aIdx ? 'yellow_up' : 'yellow_down');
+    return { gender, race, affiliation, rank, zanpakutoType, hasBankai, debutArc };
+}
+
+function bwBlcCell(val, color) {
+    const arrow = color === 'yellow_up' ? '↑ After' : color === 'yellow_down' ? '↓ Before' : '';
+    const c = color.startsWith('yellow') ? 'yellow' : color;
+    return `<div class="wordle-cell ${c}" style="white-space:pre-line; font-size:12px;">${val}${arrow ? '\n'+arrow : ''}</div>`;
+}
+
+function bwBlcBuildRow(char, colors) {
+    const initials = char.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    return `<div class="wordle-row">
+        <div class="wordle-char-cell">
+            <img id="blcimg-${char.id}" src="" style="width:50px;height:50px;border-radius:50%;object-fit:cover;display:none;" onerror="this.style.display='none'; var d=document.getElementById('blcinitials-${char.id}'); if(d) d.style.display='flex';">
+            <div id="blcinitials-${char.id}" style="width:50px;height:50px;border-radius:50%;background:var(--accent-yellow);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#111;">${initials}</div>
+            <div style="font-size:10px;font-weight:700;margin-top:4px;text-align:center;word-break:break-word;line-height:1.2;">${char.name}</div>
+        </div>
+        ${bwBlcCell(char.gender, colors.gender)}
+        ${bwBlcCell(char.race, colors.race)}
+        ${bwBlcCell(char.affiliation, colors.affiliation)}
+        ${bwBlcCell(char.rank, colors.rank)}
+        ${bwBlcCell(char.zanpakutoType, colors.zanpakutoType)}
+        ${bwBlcCell(char.hasBankai ? 'Yes' : 'No', colors.hasBankai)}
+        ${bwBlcCell(char.debutArc, colors.debutArc)}
+    </div>`;
+}
+
+function bwBlcShowResult() {
+    const { answer, guesses, solved } = window.bwBlcState;
+    const resultEl = document.getElementById('bwblc-result');
+    const inputArea = document.getElementById('bwblc-input-area');
+    if (!resultEl) return;
+    if (solved) {
+        const initials = answer.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        resultEl.style.display = 'block';
+        resultEl.style.background = '#1b5e20';
+        resultEl.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <img id="blcimg-answer" src="" style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:3px solid #00BCD4;display:none;">
+            <div id="blcinitials-answer" style="width:100px;height:100px;border-radius:50%;background:var(--accent-yellow);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;color:#111;">${initials}</div>
+            <div style="font-size:20px;font-weight:800;color:#00BCD4;">${answer.name}</div>
+            <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
+            <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
+                <button onclick="window.bwBlcShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);"><span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result</button>
+                <button id="bwblc-post-btn" onclick="window.bwBlcPostToFeed(this)" class="action-btn" style="background:#00BCD4;color:#111;font-size:13px;"><span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed</button>
+            </div>
+        </div>`;
+        if (inputArea) inputArea.style.display = 'none';
+        window.bwBlcEnsureImages();
+        const statusEl = document.getElementById('bwblc-status-text');
+        if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
+    } else {
+        resultEl.style.display = 'none';
+        if (inputArea) inputArea.style.display = 'block';
+    }
+}
+
+function bwBlcRender() {
+    const grid = document.getElementById('bwblc-grid');
+    if (!grid) return;
+    const { answer, guesses } = window.bwBlcState;
+    grid.innerHTML = guesses.map(g => bwBlcBuildRow(g, bwBlcCalcColors(g, answer))).join('');
+    window.bwBlcEnsureImages();
+    bwBlcShowResult();
+}
+
+function bwBlcAnimateNewRow(char, colors) {
+    const grid = document.getElementById('bwblc-grid');
+    if (!grid) return;
+    grid.insertAdjacentHTML('beforeend', bwBlcBuildRow(char, colors));
+    window.bwBlcEnsureImages();
+    const newRow = grid.lastElementChild;
+    const cells = newRow.querySelectorAll('.wordle-cell');
+    cells.forEach((cell, i) => {
+        cell.style.transform = 'rotateX(-90deg)';
+        cell.style.opacity = '0';
+        setTimeout(() => {
+            cell.style.transition = 'transform 0.75s ease, opacity 0.55s ease';
+            cell.style.transform = '';
+            cell.style.opacity = '';
+        }, i * 500);
+    });
+}
+
+function bwBlcGetToday() {
+    const today = new Date().toISOString().split('T')[0];
+    const seed = today.split('-').reduce((a,b) => a + parseInt(b), 0) + 7;
+    return BW_BLC_CHARS[seed % BW_BLC_CHARS.length];
+}
+
+window.bwBlcState = { answer: null, guesses: [], solved: false, selectedChar: null, date: null };
+
+window.openBwBlcModal = function() {
+    window.closeAllModals();
+    document.getElementById('bwblc-modal').style.display = 'flex';
+    window.initBwBlcGame();
+};
+
+window.initBwBlcGame = async function() {
+    const today = new Date().toISOString().split('T')[0];
+    if (window.bwBlcState.answer && window.bwBlcState.date === today) {
+        document.getElementById('bwblc-loading').style.display = 'none';
+        document.getElementById('bwblc-content').style.display = 'block';
+        bwBlcRender(); return;
+    }
+    window.bwBlcState = { answer: bwBlcGetToday(), guesses: [], solved: false, selectedChar: null, date: today };
+    try {
+        if (auth.currentUser) {
+            const snap = await getDoc(doc(db, 'bw_blc_games', `${auth.currentUser.uid}_${today}`));
+            if (snap.exists()) {
+                const d = snap.data();
+                window.bwBlcState.guesses = (d.guesses||[]).map(id => BW_BLC_CHARS.find(c => c.id === id)).filter(Boolean);
+                window.bwBlcState.solved = d.solved || false;
+            }
+        } else {
+            const saved = localStorage.getItem(`wb_bwblc_${today}`);
+            if (saved) { const d = JSON.parse(saved); window.bwBlcState.guesses=(d.guesses||[]).map(id=>BW_BLC_CHARS.find(c=>c.id===id)).filter(Boolean); window.bwBlcState.solved=d.solved||false; }
+        }
+    } catch(e) {}
+    document.getElementById('bwblc-loading').style.display = 'none';
+    document.getElementById('bwblc-content').style.display = 'block';
+    bwBlcRender();
+    window.bwBlcLoadImages();
+};
+
+window.bwBlcEnterGuess = function() {
+    if (window.bwBlcState.selectedChar) { window.submitBwBlcGuess(); return; }
+    const first = document.getElementById('bwblc-suggestions')?.querySelector('.wordle-suggestion-item');
+    if (first) first.click();
+};
+
+window.searchBwBlcChar = function() {
+    window.bwBlcState.selectedChar = null;
+    const q = document.getElementById('bwblc-search')?.value.trim().toLowerCase();
+    const sugg = document.getElementById('bwblc-suggestions');
+    if (!sugg) return;
+    if (!q) { sugg.style.display = 'none'; return; }
+    const guessedIds = new Set(window.bwBlcState.guesses.map(g => g.id));
+    const matches = BW_BLC_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
+    sugg.style.display = matches.length ? 'block' : 'none';
+    sugg.innerHTML = matches.map(c => `<div class="wordle-suggestion-item" onclick="window.selectBwBlcChar('${c.id}')">${c.name}</div>`).join('');
+};
+
+window.selectBwBlcChar = function(id) {
+    const char = BW_BLC_CHARS.find(c => c.id === id);
+    if (!char) return;
+    window.bwBlcState.selectedChar = char;
+    const inp = document.getElementById('bwblc-search');
+    if (inp) inp.value = char.name;
+    const sugg = document.getElementById('bwblc-suggestions');
+    if (sugg) sugg.style.display = 'none';
+    window.submitBwBlcGuess();
+};
+
+window.submitBwBlcGuess = async function() {
+    const char = window.bwBlcState.selectedChar;
+    if (!char || window.bwBlcState.solved) return;
+    if (window.bwBlcState.guesses.some(g => g.id === char.id)) return;
+    const colors = bwBlcCalcColors(char, window.bwBlcState.answer);
+    window.bwBlcState.guesses.push(char);
+    window.bwBlcState.selectedChar = null;
+    const inp = document.getElementById('bwblc-search');
+    if (inp) inp.value = '';
+    const isCorrect = char.id === window.bwBlcState.answer.id;
+    if (isCorrect) window.bwBlcState.solved = true;
+    bwBlcAnimateNewRow(char, colors);
+    setTimeout(() => bwBlcShowResult(), 7 * 500 + 800);
+    const today = new Date().toISOString().split('T')[0];
+    const saveData = { guesses: window.bwBlcState.guesses.map(g=>g.id), solved: window.bwBlcState.solved, date: today, guessCount: window.bwBlcState.guesses.length, displayName: auth.currentUser?.displayName||'Player' };
+    if (auth.currentUser) {
+        setDoc(doc(db, 'bw_blc_games', `${auth.currentUser.uid}_${today}`), saveData).catch(()=>{});
+        if (window.bwBlcState.solved) window.bwBlcUpdateLeaderboard(window.bwBlcState.guesses.length);
+    } else {
+        localStorage.setItem(`wb_bwblc_${today}`, JSON.stringify(saveData));
+    }
+};
+
+window.bwBlcUpdateLeaderboard = async function(guessCount) {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const ref = doc(db, 'bw_blc_leaderboard', uid);
+    const snap = await getDoc(ref);
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+    let streak, totalWins;
+    if (snap.exists()) {
+        const d = snap.data();
+        streak = d.lastWinDate === yesterday ? (d.currentStreak||0)+1 : 1;
+        totalWins = (d.totalWins || 0) + 1;
+        await updateDoc(ref, { totalWins: increment(1), totalGuesses: increment(guessCount), currentStreak: streak, bestStreak: Math.max(d.bestStreak||0,streak), lastWinDate: today, displayName: auth.currentUser.displayName });
+    } else {
+        streak = 1; totalWins = 1;
+        await setDoc(ref, { totalWins:1, totalGuesses:guessCount, currentStreak:1, bestStreak:1, lastWinDate:today, displayName: auth.currentUser.displayName });
+    }
+    window.checkBwBlcAchievements(guessCount, streak, totalWins).catch(() => {});
+};
+
+window.checkBwBlcAchievements = async function(guessCount, streak, totalWins) {
+    if (!auth.currentUser) return;
+    const ids = [];
+    if (totalWins === 1) ids.push('bwblc_first');
+    if (guessCount === 1) ids.push('bwblc_1guess');
+    if (streak >= 7) ids.push('bwblc_streak_7');
+    if (totalWins >= 30) ids.push('bwblc_total_30');
+    if (ids.length) window.awardAchievements(ids).catch(() => {});
+};
+
+window.bwBlcShare = function() {
+    const { answer, guesses, solved } = window.bwBlcState;
+    const today = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
+    const rows = guesses.map(g => {
+        const c = bwBlcCalcColors(g, answer);
+        return [c.gender,c.race,c.affiliation,c.rank,c.zanpakutoType,c.hasBankai,c.debutArc].map(x=>map[x]||'⬛').join('');
+    }).join('\n');
+    const text = `BuzzWord: Bleach Characters — ${today}\n${solved?`Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`:'Not solved'}\n\n${rows}\n\nhttps://weebee.buzz/#community`;
+    navigator.clipboard.writeText(text).then(()=>alert('Copied to clipboard!')).catch(()=>alert('Could not copy'));
+};
+
+window.bwBlcPostToFeed = async function(btn) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const { answer, guesses, solved } = window.bwBlcState;
+    if (!solved) return;
+    const today = new Date().toISOString().split('T')[0];
+    const existing = await getDocs(query(collection(db,'bw_posts'), where('uid','==',auth.currentUser.uid), where('date','==',today), where('game','==','bleach')));
+    if (!existing.empty) { btn.innerText='Already posted!'; btn.disabled=true; return; }
+    const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
+    const emojiGrid = guesses.map(g => {
+        const c = bwBlcCalcColors(g, answer);
+        return [c.gender,c.race,c.affiliation,c.rank,c.zanpakutoType,c.hasBankai,c.debutArc].map(x=>map[x]||'⬛').join('');
+    }).join('\n');
+    try {
+        btn.disabled=true; btn.innerText='Posting...';
+        const av = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        await addDoc(collection(db,'bw_posts'),{
+            uid:auth.currentUser.uid, displayName:auth.currentUser.displayName, avatar:av,
+            game:'bleach', guessCount:guesses.length, emojiGrid, date:today, timestamp:new Date(), likes:[], dislikes:[], commentCount:0
+        });
+        btn.innerText='✓ Posted!';
+        window.awardAchievements(['feed_showtime']).catch(() => {});
+        window.fetchBwCommunityFeed();
+        window.fetchHomeBwFeed();
+    } catch(e) { btn.disabled=false; btn.innerText='Post to Feed'; alert('Failed to post.'); }
+};
+
+window.openBwBlcLeaderboard = function() {
+    window.closeAllModals();
+    document.getElementById('bwblc-leaderboard-modal').style.display = 'flex';
+    window.showBwBlcLeaderboardTab('today');
+};
+
+window.showBwBlcLeaderboardTab = async function(tab) {
+    const todayBtn = document.getElementById('bwblc-tab-today');
+    const alltimeBtn = document.getElementById('bwblc-tab-alltime');
+    const content = document.getElementById('bwblc-leaderboard-content');
+    if (!content) return;
+    todayBtn.style.background = tab==='today' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+    todayBtn.style.color = tab==='today' ? '#111' : 'var(--text-dark)';
+    alltimeBtn.style.background = tab==='alltime' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+    alltimeBtn.style.color = tab==='alltime' ? '#111' : 'var(--text-dark)';
+    content.innerHTML = '<div class="loading">Loading...</div>';
+    const today = new Date().toISOString().split('T')[0];
+    try {
+        if (tab === 'today') {
+            const snap = await getDocs(query(collection(db,'bw_blc_games'), where('date','==',today), where('solved','==',true)));
+            const sorted = snap.docs.sort((a,b)=>(a.data().guessCount||99)-(b.data().guessCount||99)).slice(0,10);
+            if (!sorted.length) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:30px;">No winners yet today — be the first!</p>'; return; }
+            content.innerHTML = sorted.map((d,i)=>{
+                const data=d.data(); const medal=['🥇','🥈','🥉'][i]||`${i+1}.`;
+                return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;background:var(--bg-gray);margin-bottom:8px;">
+                    <span style="font-size:20px;width:28px;">${medal}</span>
+                    <div style="flex:1;"><div style="font-weight:700;font-size:14px;">${data.displayName||'Player'}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${data.guessCount} ${data.guessCount===1?'guess':'guesses'}</div></div></div>`;
+            }).join('');
+        } else {
+            const snap = await getDocs(collection(db,'bw_blc_leaderboard'));
+            const sorted = snap.docs.sort((a,b)=>(b.data().totalWins||0)-(a.data().totalWins||0)).slice(0,10);
+            if (!sorted.length) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:30px;">No scores yet!</p>'; return; }
+            content.innerHTML = sorted.map((d,i)=>{
+                const data=d.data(); const avg=data.totalWins>0?(data.totalGuesses/data.totalWins).toFixed(1):'-';
+                const medal=['🥇','🥈','🥉'][i]||`${i+1}.`;
+                return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;background:var(--bg-gray);margin-bottom:8px;">
+                    <span style="font-size:20px;width:28px;">${medal}</span>
+                    <div style="flex:1;"><div style="font-weight:700;font-size:14px;">${data.displayName||'Player'}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${data.totalWins} wins · Avg ${avg} guesses · Best streak: ${data.bestStreak||1}</div></div></div>`;
+            }).join('');
+        }
+    } catch(e) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:20px;">Could not load leaderboard.</p>'; }
+};
+
 document.addEventListener('click', e => {
-    if (!e.target.closest('.wordle-search-wrap')) {
-        const s = document.getElementById('wordle-suggestions');
+    if (!e.target.closest('.bwop-search-wrap')) {
+        const s = document.getElementById('bwop-suggestions');
         if (s) s.style.display = 'none';
+        const sn = document.getElementById('bwnrt-suggestions');
+        if (sn) sn.style.display = 'none';
+        const sb = document.getElementById('bwblc-suggestions');
+        if (sb) sb.style.display = 'none';
     }
 });
 
 // --- Infinite Scroll for Home Feed ---
 const _feedObserver = new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting && window.currentActiveViewId === 'home-view') {
-        loadReviewBatch(true);
+        renderActivityBatch();
     }
 }, { rootMargin: '200px' });
 
-const _sentinel = document.getElementById('feed-scroll-sentinel');
+const _sentinel = document.getElementById('home-activity-sentinel');
 if (_sentinel) _feedObserver.observe(_sentinel);
 
 // --- ADVANCED ANIME SEARCH ---

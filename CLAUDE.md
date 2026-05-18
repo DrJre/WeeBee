@@ -4,6 +4,9 @@
 - [ ] **Upload WeeBee logo/fonts** — branding assets to replace the plain text logo
 - [ ] **Unified activity feed** — replace sectioned home page with a single chronological feed (reviews, tier lists, patch notes); use an `activity` Firestore collection written to on each post; refactor home feed renderer to handle mixed content types
 
+## Standards
+- **Comment sections** — every comment section must include: post comment, edit (with "(edited)" indicator), delete (with confirm), and Enter-to-submit. Use `renderBwComment()` as the template for new comment sections going forward.
+
 ## Tech Stack
 - **Frontend:** Vanilla JS (ES modules), HTML, CSS
 - **Backend:** Firebase Firestore + Firebase Auth (Google + email/password)

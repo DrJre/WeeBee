@@ -148,15 +148,16 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     .profile-card { width: 100%; box-sizing: border-box; }
 
     /* Profile header */
-    .profile-banner { height: 90px; }
-    .profile-header { flex-direction: column; text-align: center; padding: 0 16px 20px; gap: 10px; align-items: center; }
-    .profile-avatar-large { width: 90px; height: 90px; margin-top: -30px; }
+    .profile-banner { min-height: 200px; }
+    .profile-banner-overlay { padding: 14px 14px 16px; }
+    .profile-avatar-large { width: 60px; height: 60px; }
 
     /* Review cards */
     .review-anime-thumb { display: none; }
     .review-cover-mobile { display: block !important; }
     .review-card { overflow: visible; }
     .review-card [style*="padding-right: 170px"] { padding-right: 0 !important; }
+    .review-card [style*="padding-right: 195px"] { padding-right: 0 !important; }
 
     /* Review badges — horizontal scroll instead of wrapping */
     .review-badges-row { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; gap: 8px !important; padding-bottom: 6px; }
@@ -332,6 +333,10 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 /* Review Cards */
 .review-card { position: relative; overflow: hidden; background-color: var(--bg-gray); padding: 20px; border-radius: var(--border-radius); margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.03); border: 1px solid transparent; }
 .review-card.weebee-review { background-color: var(--accent-yellow-light); border: 1px solid var(--accent-yellow); }
+.review-card.bw-post-card { background-color: rgba(76,175,80,0.05); border: 1px solid rgba(76,175,80,0.55); }
+.review-card.tl-post-card { background-color: rgba(33,150,243,0.05); border: 1px solid rgba(33,150,243,0.55); }
+[data-theme="dark"] .review-card.bw-post-card { background-color: rgba(76,175,80,0.09); }
+[data-theme="dark"] .review-card.tl-post-card { background-color: rgba(33,150,243,0.09); }
 .review-card.interactive { cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
 .review-card.interactive:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.08); }
 
@@ -347,6 +352,12 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 .source-badge { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 10px; vertical-align: middle; }
 .badge-weebee { background-color: var(--accent-yellow); color: var(--text-dark); }
 .badge-global { background-color: var(--bg-gray-darker); color: var(--text-muted); }
+.bw-game-badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; margin-left: 8px; vertical-align: middle; }
+.bw-thumb-wrapper { position: absolute; top: 0; right: 0; width: 185px; height: 100%; z-index: 4; border-radius: 0 var(--border-radius) var(--border-radius) 0; overflow: hidden; }
+.bw-thumb-img { width: 100%; height: 100%; object-fit: cover; opacity: 0.55; -webkit-mask-image: linear-gradient(to right, transparent 0%, black 100%); mask-image: linear-gradient(to right, transparent 0%, black 100%); display: block; }
+.bw-play-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.bw-thumb-wrapper:hover .bw-play-btn { background: var(--accent-yellow); color: #111; border-color: var(--accent-yellow); }
+.bw-play-btn { background: rgba(0,0,0,0.6); color: white; border: 1.5px solid rgba(255,255,255,0.7); border-radius: 20px; padding: 7px 16px; font-weight: 800; font-size: 13px; letter-spacing: 0.5px; transition: all 0.2s; pointer-events: auto; cursor: pointer; }
 
 .rating-badge { width: 45px; height: 45px; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; color: white; font-size: 14px; clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); box-shadow: inset 0 0 10px rgba(0,0,0,0.2); text-shadow: 1px 1px 2px rgba(0,0,0,0.4); }
 .tier-royal { background: linear-gradient(135deg, #FFD700, #9C27B0); }
@@ -441,6 +452,9 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 
 .news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 25px; margin-top: 20px; }
 .tl-drop-zone.drag-over { outline: 2px dashed var(--accent-yellow); background: rgba(255,193,7,0.08) !important; }
+.tl-tier-row { border: 2px solid transparent; transition: border-color 0.15s; }
+.tl-tier-row.tl-tier-drag-over { border-color: var(--accent-yellow) !important; }
+.tl-item-drag-over { outline: 2px solid var(--accent-yellow) !important; border-radius: 6px; opacity: 0.7; }
 .news-card { background: var(--bg-gray); border-radius: var(--border-radius); overflow: hidden; transition: transform 0.2s; border: 1px solid #E0E0E0; display: flex; flex-direction: column; min-width: 250px; }
 .news-card:hover { transform: translateY(-5px); box-shadow: 0 8px 15px rgba(0,0,0,0.05); }
 .news-card img { width: 100%; height: 180px; object-fit: cover; }
@@ -491,10 +505,10 @@ h3 { font-size: 18px; margin-bottom: 15px; }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-.profile-header-wrap { border-radius: var(--border-radius); overflow: hidden; margin-bottom: 20px; background: var(--bg-gray); }
-.profile-banner { width: 100%; height: 130px; background-size: cover; background-position: center; border-radius: var(--border-radius) var(--border-radius) 0 0; }
-.profile-header { background: var(--bg-gray); padding: 0 40px 30px; border-radius: 0 0 var(--border-radius) var(--border-radius); display: flex; align-items: flex-start; gap: 30px; margin-bottom: 0; padding-top: 0; }
-.profile-avatar-large { width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--bg-gray); margin-top: -40px; flex-shrink: 0; }
+.profile-header-wrap { position: relative; border-radius: var(--border-radius); margin-bottom: 20px; }
+.profile-banner { width: 100%; min-height: 260px; background-size: cover; background-position: center; border-radius: var(--border-radius); position: relative; display: flex; flex-direction: column; justify-content: flex-end; background-color: var(--bg-gray); }
+.profile-banner-overlay { background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 100%); padding: 20px 24px 22px; border-radius: 0 0 var(--border-radius) var(--border-radius); }
+.profile-avatar-large { width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.55); flex-shrink: 0; object-fit: cover; }
 .profile-card { background: var(--bg-white); border: 1px solid #E0E0E0; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
 .profile-card h4 { font-size: 12px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 15px; letter-spacing: 1px; }
 .profile-stat-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
@@ -533,6 +547,11 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 .anime-list-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .anime-list-table th { background-color: var(--bg-gray); padding: 15px; text-align: left; font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; user-select: none; }
 .anime-list-table th:hover { color: var(--text-dark); }
+.sortable-col { cursor: pointer; white-space: nowrap; }
+.sort-icon { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 2px; opacity: 0.4; transition: opacity 0.2s; }
+.sort-icon .material-symbols-outlined { font-size: 15px; }
+.sortable-col:hover .sort-icon { opacity: 1; }
+.sort-icon.active { opacity: 1; color: var(--accent-yellow); }
 .anime-list-table td { padding: 15px; border-bottom: 1px solid #F0F0F0; vertical-align: middle; }
 .anime-list-table tr:last-child td { border-bottom: none; }
 .anime-list-table tr:hover { background-color: var(--bg-gray); }
@@ -675,7 +694,7 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     transition: transform 0.25s;
 }
 
-/* --- ONE PIECE WORDLE --- */
+/* --- BUZZWORD GAMES --- */
 @keyframes wpFlip { 0% { transform:rotateX(-90deg); opacity:0; } 100% { transform:rotateX(0deg); opacity:1; } }
 .wordle-header-row { display:flex; gap:6px; margin-bottom:8px; }
 .wordle-col-header { flex:1; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); text-align:center; padding:4px 2px; }
