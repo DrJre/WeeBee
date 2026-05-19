@@ -4,41 +4,42 @@
 - [ ] **Upload WeeBee logo/fonts** — branding assets to replace the plain text logo
 - [ ] **BuzzWord: Dragon Ball Characters** — new BuzzWord game
 
-## Unpublished Patch Notes (v1.5 — post to News tab when admin panel is working)
-```
-🏠 Unified Activity Feed
-The home page now has a single merged feed showing reviews, tier lists, and BuzzWord results all in one chronological stream. Social posts (from people you follow or are friends with) appear first.
+## Next Patch Notes
+<!-- Add entries here as features are completed. Claude will append to this after each task. -->
 
-🎨 Color-Coded Post Cards
-BuzzWord posts now have a green tint and green border. Tier list posts have a blue tint and blue border — making it easy to tell content types apart at a glance.
+🗨️ Tier List Comments
+- You can now comment on tier list posts directly from the home feed
+- Fixed Send button being hidden behind the anime thumbnail on cards with cover art
 
-📋 Tier Lists on the Feed
-Tier list posts now appear on the home feed and community feed as full cards with like, dislike, and comment support — same as review cards.
+🎮 BuzzWord Community Feed & Leaderboards
+- Fixed Today's Results on the Community tab not loading
+- Fixed BuzzWord leaderboards (One Piece, Naruto, Bleach) not loading
 
-🖱️ Tier List Drag to Reorder
-You can now drag entire tiers up and down to reorder them, and drag items within a tier to rearrange them — all while keeping contents intact.
+🎨 BuzzWord Community Page Redesign
+- Added a BuzzWord hero banner at the top of the Community page
+- Added character art (Luffy, Naruto, Ichigo) to each game banner
+- Added character profile pictures to the search suggestion dropdowns in all BuzzWord games
+- Fixed profile picture on BuzzWord posts not being clickable to view that user's profile
 
-🏆 Top 10 Podium Fix
-The #3 spot on the All-Time Top 10 podium was not displaying correctly. Fixed — the top 3 now always reflect the highest-rated anime with at least 5 reviews.
+✏️ Edit Reviews
+- Added an Edit Review option to the three-dot menu on review cards
+- Opens directly into the correct Quick Score or In-Depth edit modal pre-filled with your existing scores and text
 
-🎖️ 17 New Achievements
-New achievements added across BuzzWord (One Piece, Naruto, Bleach) and the Community tab — including tier list milestones, feed activity, and cross-game challenges.
+📱 Mobile Improvements
+- Anime pages: cover image is now centered and larger, with stats and buttons stacking below it
+- BuzzWord feed posts: emoji grid is compact and no longer overflows; game thumbnail hidden on mobile so header text is no longer cut off
+- BuzzWord games: modals open as full-screen bottom sheets with a horizontally scrollable guess grid
+- My List: table fits the screen without side-scrolling; episodes column hidden on mobile
+- Discover: Seasonal vote displays as a 2-column grid instead of 5 columns
+- Pinch zoom disabled for a more app-like feel
 
-📌 Badge Showcase
-You can now pin up to 3 earned achievements to your profile banner. Select them from the Edit Profile screen.
+🔍 User Search Improvements
+- User search is now case-insensitive — searching "jbob" finds "JBob" and vice versa
+- Existing users get the fix automatically on their next sign-in
 
-🖼️ Profile Banner Redesign
-The profile banner now fills the full card width. Your info (avatar, name, follow counts, genres) appears in a frosted glass card overlaid on the banner.
-
-🌄 Custom Banner Photos
-You can now upload your own banner photo from Edit Profile. Recommended size: 1400×400px.
-
-📰 Patch Notes Format
-The News tab now shows the 4 most recent patch notes side by side. Older updates collapse under a "Show more" button. The newest entry is tagged LATEST.
-
-⚔️ BuzzWord: Bleach Characters
-New BuzzWord game! Guess the daily Bleach character across 7 columns: Gender, Race, Affiliation, Rank, Zanpakuto Type, Bankai, and Debut Arc. 50 characters from all major factions.
-```
+📋 My List Score Fix
+- Score column now pulls from your review score instead of the list entry score
+- Shows "—" if no review has been written for that anime
 
 ## Standards
 - **Comment sections** — every comment section must include: post comment, edit (with "(edited)" indicator), delete (with confirm), and Enter-to-submit. Use `renderBwComment()` as the template for new comment sections going forward.

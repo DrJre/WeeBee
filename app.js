@@ -430,8 +430,18 @@ onAuthStateChanged(auth, (user) => {
         fetchMyFollows();
         window.fetchFriendData();
         window.updateTopbarRank();
+        // Backfill displayNameLower for case-insensitive search
+        if (user.displayName) {
+            setDoc(doc(db, "profiles", user.uid), { displayNameLower: user.displayName.toLowerCase() }, { merge: true }).catch(() => {});
+        }
+        const ADMIN_UIDS = ['XUD3ym2NcdWtrUiPLlFFaO5ufMh1'];
         Promise.all([
-            getDoc(doc(db, "admins", auth.currentUser.uid)).then(d => { window.isAdmin = d.exists(); }).catch(() => {}),
+            getDoc(doc(db, "admins", user.uid)).then(d => {
+                window.isAdmin = d.exists() || ADMIN_UIDS.includes(user.uid);
+            }).catch(e => {
+                console.warn('Admin check via Firestore failed, falling back to UID list:', e);
+                window.isAdmin = ADMIN_UIDS.includes(user.uid);
+            }),
             window.loadActiveSeasonalVote(),
             window.loadPatchNotes()
         ]).then(() => {
@@ -1556,7 +1566,14 @@ window.fetchMyList = async function(targetUid = null) {
     window.myAnimeList = [];
     snap.forEach(d => window.myAnimeList.push({ ...d.data(), id: d.id }));
     window.myReviewedMalIds = new Set();
-    revSnap.forEach(d => { if(d.data().type !== 'suggestion') window.myReviewedMalIds.add(d.data().mal_id); });
+    window.myReviewScoreMap = {};
+    revSnap.forEach(d => {
+        const data = d.data();
+        if (data.type !== 'suggestion') {
+            window.myReviewedMalIds.add(data.mal_id);
+            if (data.score != null) window.myReviewScoreMap[data.mal_id] = data.score;
+        }
+    });
     if(window.currentActiveViewId === 'my-list-view') renderAnimeList();
 };
 
@@ -1592,16 +1609,17 @@ window.renderAnimeList = function() {
         filteredList = window.myAnimeList.filter(a => a.status === window.currentListTab);
     }
 
-    let rankedList = [...filteredList].sort((a, b) => (b.score || 0) - (a.score || 0));
+    const scoreFor = a => window.myReviewScoreMap?.[a.mal_id] ?? 0;
+    let rankedList = [...filteredList].sort((a, b) => scoreFor(b) - scoreFor(a));
     rankedList.forEach((item, index) => item._absoluteRank = index + 1);
 
     const { key, desc } = window.currentListSort;
-    
+
     rankedList.sort((a, b) => {
         if(key === 'title') {
             return desc ? b.title.localeCompare(a.title) : a.title.localeCompare(b.title);
         } else if (key === 'score') {
-            return desc ? (b.score || 0) - (a.score || 0) : (a.score || 0) - (b.score || 0);
+            return desc ? scoreFor(b) - scoreFor(a) : scoreFor(a) - scoreFor(b);
         } else if (key === 'rank') {
             return desc ? b._absoluteRank - a._absoluteRank : a._absoluteRank - b._absoluteRank;
         }
@@ -1642,7 +1660,7 @@ window.renderAnimeList = function() {
                 <td style="text-align:center; font-weight:bold; font-size:16px; color:var(--text-muted);">${anime._absoluteRank}</td>
                 <td><img src="${anime.image}" style="width:50px; height:70px; border-radius:4px; object-fit:cover; cursor:pointer;" onclick="loadAnimeDetails(${anime.mal_id})"></td>
                 <td style="font-weight:600; cursor:pointer;" onclick="loadAnimeDetails(${anime.mal_id})">${anime.title}</td>
-                <td style="text-align:center; font-weight:800; font-size:16px;">${window.myReviewedMalIds?.has(anime.mal_id) && anime.score ? anime.score.toFixed(1) : '-'}</td>
+                <td style="text-align:center; font-weight:800; font-size:16px;">${window.myReviewScoreMap?.[anime.mal_id] != null ? Number(window.myReviewScoreMap[anime.mal_id]).toFixed(1) : '-'}</td>
                 <td style="text-align:center; color:var(--text-muted);">
                     <strong style="color:var(--text-dark);">${anime.watchedEpisodes}</strong> / ${anime.totalEpisodes > 0 ? anime.totalEpisodes : '?'}
                 </td>
@@ -1850,6 +1868,37 @@ window.submitSuggestion = async function() {
 };
 
 // --- Reactions & Toggles ---
+window.openEditReviewFromCard = async function(reviewId, malId) {
+    if (!auth.currentUser) return;
+    document.querySelectorAll('[id^="review-menu-"]').forEach(m => m.style.display = 'none');
+    try {
+        const d = await getDoc(doc(db, 'reviews', reviewId));
+        if (!d.exists()) return;
+        const data = d.data();
+        // Set all globals the submit functions depend on
+        window.currentAnimeId = malId;
+        window.existingReviewId = reviewId;
+        window.existingReviewData = data;
+        window.currentAnime = {
+            mal_id: malId,
+            title: data.animeTitle || data.title || 'Anime',
+            title_english: data.animeTitle || data.title || 'Anime',
+            images: { jpg: { image_url: data.animeImage || data.image || '' } }
+        };
+        window.closeAllModals();
+        if (data.type === 'in-depth' || data.categories) {
+            window.pendingInDepthData = {
+                categories: data.categories || {},
+                overallScore: data.score,
+                fanService: data.fanService || null
+            };
+            window.openInDepthModal();
+        } else {
+            window.openQuickScoreModal();
+        }
+    } catch(e) { console.error(e); alert('Could not load review: ' + e.message); }
+};
+
 window.deleteReview = async function(reviewId, btn) {
     if (!auth.currentUser) return;
     if (!confirm('Delete this review? This cannot be undone.')) return;
@@ -2218,7 +2267,11 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                 <button onclick="window.toggleReviewMenu('${rev.id}')" style="background:rgba(0,0,0,0.35); border:none; border-radius:50%; width:28px; height:28px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:white;">
                     <span class="material-symbols-outlined" style="font-size:16px;">more_vert</span>
                 </button>
-                <div id="review-menu-${rev.id}" style="display:none; position:absolute; top:32px; right:0; background:var(--bg-white); border:1px solid var(--border-color); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); min-width:130px; overflow:hidden; z-index:10;">
+                <div id="review-menu-${rev.id}" style="display:none; position:absolute; top:32px; right:0; background:var(--bg-white); border:1px solid var(--border-color); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); min-width:140px; overflow:hidden; z-index:10;">
+                    <button onclick="event.stopPropagation(); window.openEditReviewFromCard('${rev.id}', ${rev.mal_id})" style="width:100%; padding:10px 14px; background:none; border:none; text-align:left; cursor:pointer; color:var(--text-dark); font-size:13px; display:flex; align-items:center; gap:8px;">
+                        <span class="material-symbols-outlined" style="font-size:16px;">edit</span> Edit Review
+                    </button>
+                    <div style="height:1px; background:var(--border-color);"></div>
                     <button onclick="event.stopPropagation(); deleteReview('${rev.id}', this)" style="width:100%; padding:10px 14px; background:none; border:none; text-align:left; cursor:pointer; color:#FF5252; font-size:13px; display:flex; align-items:center; gap:8px;">
                         <span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete
                     </button>
@@ -2503,7 +2556,7 @@ window.saveEditProfile = async function() {
         const bannerInput = document.getElementById('edit-profile-banner')?.value.trim();
         const bannerUrl = uploadedBannerUrl || window.selectedBannerPreset || (bannerInput ? `url(${bannerInput})` : '');
         const pinnedBadges = window._editPinnedBadges || [];
-        await setDoc(doc(db, "profiles", uid), { displayName: newName, bio, avatar: avatar || auth.currentUser.photoURL, genres, bannerUrl, pinnedBadges }, { merge: true });
+        await setDoc(doc(db, "profiles", uid), { displayName: newName, displayNameLower: newName.toLowerCase(), bio, avatar: avatar || auth.currentUser.photoURL, genres, bannerUrl, pinnedBadges }, { merge: true });
         window.userPinnedBadgesCache[uid] = pinnedBadges;
 
         window.closeAllModals();
@@ -3052,6 +3105,12 @@ function renderTierListFeedCard(id, tl) {
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;cursor:pointer;position:relative;z-index:2;${padRight}" onclick="window.openTierListViewer('${id}')">${tierPreview}</div>
         <div class="review-actions" style="position:relative;z-index:2;">
             <div class="action-stat">
+                <button onclick="window.toggleBwPostComments(event,this,'${id}')">
+                    <span class="material-symbols-outlined">chat_bubble</span>
+                </button>
+                <span class="action-label bw-comment-count">${tl.commentCount || 0} Comments</span>
+            </div>
+            <div class="action-stat">
                 <button onclick="window.toggleBwPostReaction(event,'${id}','tier_lists','like',this)" style="${isLiked ? 'color:var(--accent-yellow);' : ''}">
                     <span class="material-symbols-outlined">thumb_up</span>
                 </button>
@@ -3063,14 +3122,8 @@ function renderTierListFeedCard(id, tl) {
                 </button>
                 <span class="action-label" id="bw-dislikes-${id}">${dislikes.length} Dislikes</span>
             </div>
-            <div class="action-stat">
-                <button onclick="window.toggleBwPostComments(event,this,'${id}')">
-                    <span class="material-symbols-outlined">chat_bubble</span>
-                </button>
-                <span class="action-label bw-comment-count">${tl.commentCount || 0} Comments</span>
-            </div>
         </div>
-        <div class="bw-post-comments" data-post-collection="tier_lists" style="display:none;margin-top:15px;padding-top:15px;border-top:1px solid var(--border-color);position:relative;z-index:2;" onclick="event.stopPropagation();">
+        <div class="bw-post-comments" data-post-collection="tier_lists" style="display:none;margin-top:15px;padding-top:15px;border-top:1px solid var(--border-color);position:relative;z-index:2;${padRight}" onclick="event.stopPropagation();">
             <div class="bw-comments-list"></div>
             <div style="display:flex;gap:10px;margin-top:10px;">
                 <input type="text" class="bw-comment-input" placeholder="Add a comment..." style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
@@ -3111,7 +3164,7 @@ window.fetchHomeActivityFeed = async function() {
     window._activityItems = [];
     window._activityIndex = 0;
     try {
-        const today = new Date().toISOString().split('T')[0];
+        const today = bwGetDate();
         const [reviewSnap, tlSnap, bwSnap] = await Promise.all([
             getDocs(query(collection(db, 'reviews'), orderBy('timestamp', 'desc'), limit(60))),
             getDocs(query(collection(db, 'tier_lists'), where('public', '==', true))),
@@ -3338,7 +3391,7 @@ window.renderSeasonalVoting = function() {
         const sortedCandidates = hasVoted
             ? [...vote.candidates].sort((a, b) => (vote.voteCounts?.[b.mal_id] || 0) - (vote.voteCounts?.[a.mal_id] || 0))
             : vote.candidates;
-        content.innerHTML = `<div style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px;">` +
+        content.innerHTML = `<div class="seasonal-vote-grid" style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px;">` +
             sortedCandidates.map(c => {
                 const votes = vote.voteCounts?.[c.mal_id] || 0;
                 const pct = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
@@ -4422,7 +4475,7 @@ window.searchAnime = async function(queryStr) {
         const normalized = queryStr.toLowerCase();
         const [animeRes, userSnap] = await Promise.all([
             fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(queryStr)}&limit=10`),
-            getDocs(query(collection(db, "profiles"), where("displayName", ">=", queryStr), where("displayName", "<=", queryStr + ''), limit(5)))
+            getDocs(query(collection(db, "profiles"), where("displayNameLower", ">=", normalized), where("displayNameLower", "<=", normalized + ''), limit(8)))
                 .catch(() => ({ empty: true, docs: [] }))
         ]);
 
@@ -4527,8 +4580,9 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     if(targetId === 'community-view') {
         window.fetchCommunityTierLists();
         window.fetchBwCommunityFeed();
+        window.loadBwBannerImages();
         // Update game thumbnail status texts
-        const today = new Date().toISOString().split('T')[0];
+        const today = bwGetDate();
         const opStatusEl = document.getElementById('bwop-status-text');
         if (opStatusEl && window.bwOpState.date === today) {
             const { solved, guesses } = window.bwOpState;
@@ -4548,8 +4602,17 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
         fetchGlobalNews();
         window.loadPatchNotes();
         window.clearPatchNoteBadge();
-        const adminPanel = document.getElementById('patch-notes-admin');
-        if (adminPanel) adminPanel.style.display = window.isAdmin ? 'block' : 'none';
+        if (auth.currentUser) {
+            const ADMIN_UIDS = ['XUD3ym2NcdWtrUiPLlFFaO5ufMh1'];
+            getDoc(doc(db, "admins", auth.currentUser.uid)).then(d => {
+                window.isAdmin = d.exists() || ADMIN_UIDS.includes(auth.currentUser.uid);
+            }).catch(() => {
+                window.isAdmin = ADMIN_UIDS.includes(auth.currentUser.uid);
+            }).finally(() => {
+                const adminPanel = document.getElementById('patch-notes-admin');
+                if (adminPanel) adminPanel.style.display = window.isAdmin ? 'block' : 'none';
+            });
+        }
     }
     if(targetId === 'profile-view') fetchUserProfile(window.targetProfileUid);
     if(targetId === 'my-list-view') fetchMyList(); 
@@ -5346,7 +5409,7 @@ function bwNrtAnimateNewRow(char, colors) {
 }
 
 function bwNrtGetToday() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const seed = today.split('-').reduce((a,b) => a + parseInt(b), 0);
     return BW_NRT_CHARS[seed % BW_NRT_CHARS.length];
 }
@@ -5361,7 +5424,7 @@ window.openBwNrtModal = function() {
 };
 
 window.initBwNrtGame = async function() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     if (window.bwNrtState.answer && window.bwNrtState.date === today) {
         document.getElementById('bwnrt-loading').style.display = 'none';
         document.getElementById('bwnrt-content').style.display = 'block';
@@ -5370,11 +5433,17 @@ window.initBwNrtGame = async function() {
     window.bwNrtState = { answer: bwNrtGetToday(), guesses: [], solved: false, selectedChar: null, date: today };
     try {
         if (auth.currentUser) {
-            const snap = await getDoc(doc(db, 'bw_nrt_games', `${auth.currentUser.uid}_${today}`));
-            if (snap.exists()) {
-                const d = snap.data();
-                window.bwNrtState.guesses = (d.guesses||[]).map(id => BW_NRT_CHARS.find(c => c.id === id)).filter(Boolean);
-                window.bwNrtState.solved = d.solved || false;
+            try {
+                const snap = await getDoc(doc(db, 'bw_nrt_games', `${auth.currentUser.uid}_${today}`));
+                if (snap.exists()) {
+                    const d = snap.data();
+                    window.bwNrtState.guesses = (d.guesses||[]).map(id => BW_NRT_CHARS.find(c => c.id === id)).filter(Boolean);
+                    window.bwNrtState.solved = d.solved || false;
+                }
+            } catch(e) {
+                console.warn('NRT Firestore read failed, using localStorage:', e.message);
+                const saved = localStorage.getItem(`wb_bwnrt_${today}`);
+                if (saved) { const d = JSON.parse(saved); window.bwNrtState.guesses=(d.guesses||[]).map(id=>BW_NRT_CHARS.find(c=>c.id===id)).filter(Boolean); window.bwNrtState.solved=d.solved||false; }
             }
         } else {
             const saved = localStorage.getItem(`wb_bwnrt_${today}`);
@@ -5402,7 +5471,11 @@ window.searchBwNrtChar = function() {
     const guessedIds = new Set(window.bwNrtState.guesses.map(g => g.id));
     const matches = BW_NRT_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
     sugg.style.display = matches.length ? 'block' : 'none';
-    sugg.innerHTML = matches.map(c => `<div class="wordle-suggestion-item" onclick="window.selectBwNrtChar('${c.id}')">${c.name}</div>`).join('');
+    sugg.innerHTML = matches.map(c => {
+        const imgUrl = window.bwNrtGetCharImage(c.name);
+        const pic = imgUrl ? `<img src="${imgUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--bg-gray-darker);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${c.name[0]}</div>`;
+        return `<div class="wordle-suggestion-item" style="display:flex;align-items:center;gap:10px;" onclick="window.selectBwNrtChar('${c.id}')">${pic}<span>${c.name}</span></div>`;
+    }).join('');
 };
 
 window.selectBwNrtChar = function(id) {
@@ -5431,15 +5504,14 @@ window.submitBwNrtGuess = async function() {
     const totalCells = 6;
     const delay = totalCells * 500 + 800;
     setTimeout(() => bwNrtShowResult(), delay);
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
     const emojiRow = [colors.gender,colors.village,colors.jutsuType,colors.nature,colors.attribute,colors.debutArc].map(x=>map[x]||'⬛').join('');
     const saveData = { guesses: window.bwNrtState.guesses.map(g=>g.id), solved: window.bwNrtState.solved, date: today, guessCount: window.bwNrtState.guesses.length, displayName: auth.currentUser?.displayName||'Player' };
+    localStorage.setItem(`wb_bwnrt_${today}`, JSON.stringify(saveData));
     if (auth.currentUser) {
-        setDoc(doc(db, 'bw_nrt_games', `${auth.currentUser.uid}_${today}`), saveData).catch(()=>{});
+        setDoc(doc(db, 'bw_nrt_games', `${auth.currentUser.uid}_${today}`), saveData).catch(e => console.warn('NRT save failed:', e.message));
         if (window.bwNrtState.solved) window.bwNrtUpdateLeaderboard(window.bwNrtState.guesses.length);
-    } else {
-        localStorage.setItem(`wb_bwnrt_${today}`, JSON.stringify(saveData));
     }
 };
 
@@ -5448,8 +5520,8 @@ window.bwNrtUpdateLeaderboard = async function(guessCount) {
     const uid = auth.currentUser.uid;
     const ref = doc(db, 'bw_nrt_leaderboard', uid);
     const snap = await getDoc(ref);
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+    const today = bwGetDate();
+    const yesterday = new Date(Date.now()-86400000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
     let streak, totalWins;
     if (snap.exists()) {
         const d = snap.data();
@@ -5470,7 +5542,7 @@ window.checkBwNrtAchievements = async function(guessCount, streak, totalWins) {
     if (guessCount === 1) ids.push('bwnrt_1guess');
     if (streak >= 7) ids.push('bwnrt_streak_7');
     if (totalWins >= 30) ids.push('bwnrt_total_30');
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const uid = auth.currentUser.uid;
     try {
         const opSnap = await getDoc(doc(db, 'bw_op_games', `${uid}_${today}`));
@@ -5497,7 +5569,7 @@ window.bwNrtPostToFeed = async function(btn) {
     if (!auth.currentUser) return window.openAuthModal();
     const { answer, guesses, solved } = window.bwNrtState;
     if (!solved) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const existing = await getDocs(query(collection(db,'bw_posts'), where('uid','==',auth.currentUser.uid), where('date','==',today), where('game','==','naruto')));
     if (!existing.empty) { btn.innerText='Already posted!'; btn.disabled=true; return; }
     const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
@@ -5538,7 +5610,7 @@ window.generateBwPostCardHTML = function(post) {
             </div>
             <div class="review-header" style="position:relative; z-index:3; padding-right:195px;">
                 <div style="display:flex; gap:12px; align-items:center;">
-                    <img src="${post.avatar}" class="avatar" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.displayName)}&backgroundColor=ffc107&fontColor=333333'">
+                    <img src="${post.avatar}" class="avatar" style="cursor:pointer;" onclick="event.stopPropagation(); viewUserProfile('${post.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.displayName)}&backgroundColor=ffc107&fontColor=333333'">
                     <div>
                         <strong style="color:var(--text-dark); font-size:14px;">${post.displayName}</strong>
                         <span class="bw-game-badge" style="background:${game.badgeBg}; color:${game.badgeColor};">${game.badge}</span>
@@ -5547,8 +5619,14 @@ window.generateBwPostCardHTML = function(post) {
                     </div>
                 </div>
             </div>
-            <div style="font-family:monospace; font-size:17px; letter-spacing:3px; line-height:2.2; margin:14px 0 4px; position:relative; z-index:2; padding-right:195px;">${post.emojiGrid.split('\n').join('<br>')}</div>
+            <div class="bw-emoji-grid" style="font-family:monospace; font-size:17px; letter-spacing:3px; line-height:2.2; margin:14px 0 4px; position:relative; z-index:2; padding-right:195px;">${post.emojiGrid.split('\n').join('<br>')}</div>
             <div class="review-actions">
+                <div class="action-stat">
+                    <button onclick="window.toggleBwPostComments(event,this,'${safeId}')">
+                        <span class="material-symbols-outlined">chat_bubble</span>
+                    </button>
+                    <span class="action-label bw-comment-count">${post.commentCount || 0} Comments</span>
+                </div>
                 <div class="action-stat">
                     <button onclick="window.toggleBwPostReaction(event,'${safeId}','${col}','like',this)" style="${isLiked?'color:var(--accent-yellow);':''}">
                         <span class="material-symbols-outlined">thumb_up</span>
@@ -5560,12 +5638,6 @@ window.generateBwPostCardHTML = function(post) {
                         <span class="material-symbols-outlined">thumb_down</span>
                     </button>
                     <span class="action-label" id="bw-dislikes-${safeId}">${dislikes.length} Dislikes</span>
-                </div>
-                <div class="action-stat">
-                    <button onclick="window.toggleBwPostComments(event,this,'${safeId}')">
-                        <span class="material-symbols-outlined">chat_bubble</span>
-                    </button>
-                    <span class="action-label bw-comment-count">${post.commentCount || 0} Comments</span>
                 </div>
             </div>
             <div class="bw-post-comments" data-post-collection="${col}" style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid var(--border-color); position:relative; z-index:2;" onclick="event.stopPropagation();">
@@ -5737,7 +5809,7 @@ window.submitBwPostComment = async function(event, btn, postId, postCollection) 
         const countEl = card.querySelector('.bw-comment-count');
         if (countEl) countEl.textContent = `${(parseInt(countEl.textContent) || 0) + 1} Comments`;
         updateDoc(doc(db, postCollection, postId), { commentCount: increment(1) }).catch(() => {});
-    } catch(e) { console.error('Comment failed', e); alert('Failed to post comment.'); }
+    } catch(e) { console.error('Comment failed', e); alert('Failed to post comment: ' + (e?.message || e)); }
 };
 
 const OP_ARC_ORDER = [
@@ -6063,7 +6135,7 @@ window.openBwOpModal = function() {
 };
 
 window.initBwOpGame = async function() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     if (window.bwOpState.answer && window.bwOpState.date === today) {
         // Already initialized for today — just re-render
         document.getElementById('bwop-loading').style.display = 'none';
@@ -6074,11 +6146,17 @@ window.initBwOpGame = async function() {
     window.bwOpState = { answer: bwOpGetToday(), guesses: [], solved: false, selectedChar: null, date: today };
     try {
         if (auth.currentUser) {
-            const snap = await getDoc(doc(db, 'bw_op_games', `${auth.currentUser.uid}_${today}`));
-            if (snap.exists()) {
-                const d = snap.data();
-                window.bwOpState.guesses = (d.guesses||[]).map(id=>BW_OP_CHARS.find(c=>c.id===id)).filter(Boolean);
-                window.bwOpState.solved = d.solved || false;
+            try {
+                const snap = await getDoc(doc(db, 'bw_op_games', `${auth.currentUser.uid}_${today}`));
+                if (snap.exists()) {
+                    const d = snap.data();
+                    window.bwOpState.guesses = (d.guesses||[]).map(id=>BW_OP_CHARS.find(c=>c.id===id)).filter(Boolean);
+                    window.bwOpState.solved = d.solved || false;
+                }
+            } catch(e) {
+                console.warn('OP Firestore read failed, using localStorage:', e.message);
+                const saved = localStorage.getItem(`wb_bwop_${today}`);
+                if (saved) { const d = JSON.parse(saved); window.bwOpState.guesses=(d.guesses||[]).map(id=>BW_OP_CHARS.find(c=>c.id===id)).filter(Boolean); window.bwOpState.solved=d.solved||false; }
             }
         } else {
             const saved = localStorage.getItem(`wb_bwop_${today}`);
@@ -6112,7 +6190,11 @@ window.searchBwOpChar = function() {
     const matches = BW_OP_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
     if (!matches.length) { sugg.style.display = 'none'; return; }
     sugg.style.display = 'block';
-    sugg.innerHTML = matches.map(c => `<div class="wordle-suggestion-item" onclick="window.selectBwOpChar('${c.id}')">${c.name}</div>`).join('');
+    sugg.innerHTML = matches.map(c => {
+        const imgUrl = window.bwOpGetCharImage ? window.bwOpGetCharImage(c.name) : null;
+        const pic = imgUrl ? `<img src="${imgUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--bg-gray-darker);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${c.name[0]}</div>`;
+        return `<div class="wordle-suggestion-item" style="display:flex;align-items:center;gap:10px;" onclick="window.selectBwOpChar('${c.id}')">${pic}<span>${c.name}</span></div>`;
+    }).join('');
 };
 
 window.selectBwOpChar = function(id) {
@@ -6142,13 +6224,12 @@ window.submitBwOpGuess = async function() {
     const delay = totalCells * 500 + 800;
     setTimeout(() => bwOpShowResult(), delay);
     // Save state
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const saveData = { guesses: window.bwOpState.guesses.map(g=>g.id), solved: window.bwOpState.solved, date: today, guessCount: window.bwOpState.guesses.length, displayName: auth.currentUser?.displayName || 'Player' };
+    localStorage.setItem(`wb_bwop_${today}`, JSON.stringify(saveData));
     if (auth.currentUser) {
-        setDoc(doc(db, 'bw_op_games', `${auth.currentUser.uid}_${today}`), saveData).catch(() => {});
+        setDoc(doc(db, 'bw_op_games', `${auth.currentUser.uid}_${today}`), saveData).catch(e => console.warn('OP save failed:', e.message));
         if (window.bwOpState.solved) window.bwOpUpdateLeaderboard(window.bwOpState.guesses.length);
-    } else {
-        localStorage.setItem(`wb_bwop_${today}`, JSON.stringify(saveData));
     }
 };
 
@@ -6157,8 +6238,8 @@ window.bwOpUpdateLeaderboard = async function(guessCount) {
     const uid = auth.currentUser.uid;
     const ref = doc(db, 'bw_op_leaderboard', uid);
     const snap = await getDoc(ref);
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+    const today = bwGetDate();
+    const yesterday = new Date(Date.now()-86400000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
     let streak, totalWins;
     if (snap.exists()) {
         const d = snap.data();
@@ -6180,7 +6261,7 @@ window.checkBwOpAchievements = async function(guessCount, streak, totalWins) {
     if (streak >= 7) ids.push('bwop_streak_7');
     if (streak >= 100) ids.push('bwop_streak_100');
     if (totalWins >= 30) ids.push('bwop_total_30');
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const uid = auth.currentUser.uid;
     try {
         const nrtSnap = await getDoc(doc(db, 'bw_nrt_games', `${uid}_${today}`));
@@ -6207,7 +6288,7 @@ window.bwOpPostToFeed = async function(btn) {
     if (!auth.currentUser) return window.openAuthModal();
     const { answer, guesses, solved } = window.bwOpState;
     if (!solved) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     // Check if already posted today (check both new and old collections)
     const [existingNew, existingOld] = await Promise.all([
         getDocs(query(collection(db, 'bw_posts'), where('uid', '==', auth.currentUser.uid), where('date', '==', today), where('game', '==', 'op'))),
@@ -6242,22 +6323,45 @@ window.bwOpPostToFeed = async function(btn) {
     } catch(e) { btn.disabled = false; btn.innerText = 'Post to Feed'; alert('Failed to post.'); }
 };
 
+// Jikan character IDs: Luffy=40, Naruto Uzumaki=17, Ichigo=5
+window.loadBwBannerImages = async function() {
+    const banners = [
+        { charId: 40,  elId: 'bwop-banner-img'  },
+        { charId: 17,  elId: 'bwnrt-banner-img' },
+        { charId: 5,   elId: 'bwblc-banner-img' },
+    ];
+    for (const { charId, elId } of banners) {
+        const el = document.getElementById(elId);
+        if (!el || el.getAttribute('src')) continue;
+        try {
+            const data = await window.jikanFetch(`https://api.jikan.moe/v4/characters/${charId}`, `bw_banner_char_${charId}`, 30 * 24 * 60 * 60 * 1000);
+            const url = data?.data?.images?.jpg?.image_url;
+            if (url) { el.src = url; el.style.display = 'block'; }
+        } catch(e) {}
+        await new Promise(r => setTimeout(r, 400));
+    }
+};
+
 window.fetchBwCommunityFeed = async function() {
     const feed = document.getElementById('bw-community-feed');
     if (!feed) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     feed.innerHTML = '<div class="loading">Loading results...</div>';
     try {
-        const [snapAll, snapOp, snapOld] = await Promise.all([
+        const [resAll, resOp, resOld] = await Promise.allSettled([
             getDocs(query(collection(db, 'bw_posts'), where('date', '==', today))),
             getDocs(query(collection(db, 'bw_op_posts'), where('date', '==', today))),
             getDocs(query(collection(db, 'wordle_posts'), where('date', '==', today)))
         ]);
+        const snapAll = resAll.status === 'fulfilled' ? resAll.value : null;
+        const snapOp  = resOp.status  === 'fulfilled' ? resOp.value  : null;
+        const snapOld = resOld.status === 'fulfilled' ? resOld.value : null;
+        if (!snapAll && !snapOp && !snapOld) throw new Error('All feed queries failed — check Firestore rules for bw_posts, bw_op_posts, wordle_posts');
         const seen = new Set();
         const posts = [
-            ...snapAll.docs.map(d => ({...d.data(), id: d.id, game: d.data().game || 'op', _col: 'bw_posts'})),
-            ...snapOp.docs.map(d => ({...d.data(), id: d.id, game: 'op', _col: 'bw_op_posts'})),
-            ...snapOld.docs.map(d => ({...d.data(), id: d.id, game: 'op', _col: 'wordle_posts'}))
+            ...(snapAll?.docs || []).map(d => ({...d.data(), id: d.id, game: d.data().game || 'op', _col: 'bw_posts'})),
+            ...(snapOp?.docs  || []).map(d => ({...d.data(), id: d.id, game: 'op', _col: 'bw_op_posts'})),
+            ...(snapOld?.docs || []).map(d => ({...d.data(), id: d.id, game: 'op', _col: 'wordle_posts'}))
         ].filter(p => {
             const key = `${p.uid}_${p.game || 'op'}`;
             if (seen.has(key)) return false; seen.add(key); return true;
@@ -6268,7 +6372,8 @@ window.fetchBwCommunityFeed = async function() {
         }
         feed.innerHTML = posts.map(p => window.generateBwPostCardHTML(p)).join('');
     } catch(e) {
-        feed.innerHTML = '<div style="text-align:center; color:var(--text-muted); padding:20px;">Could not load results.</div>';
+        console.error('fetchBwCommunityFeed error:', e);
+        feed.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding:20px;">Could not load results: ${e?.message || e}</div>`;
     }
 };
 
@@ -6292,7 +6397,7 @@ window.showBwOpLeaderboardTab = async function(tab) {
     alltimeBtn.style.background = tab==='alltime' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
     alltimeBtn.style.color = tab==='alltime' ? '#111' : 'var(--text-dark)';
     content.innerHTML = '<div class="loading">Loading...</div>';
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     try {
         if (tab === 'today') {
             const snap = await getDocs(query(collection(db,'bw_op_games'), where('date','==',today), where('solved','==',true)));
@@ -6339,7 +6444,7 @@ window.showBwNrtLeaderboardTab = async function(tab) {
     alltimeBtn.style.background = tab==='alltime' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
     alltimeBtn.style.color = tab==='alltime' ? '#111' : 'var(--text-dark)';
     content.innerHTML = '<div class="loading">Loading...</div>';
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     try {
         if (tab === 'today') {
             const snap = await getDocs(query(collection(db,'bw_nrt_games'), where('date','==',today), where('solved','==',true)));
@@ -6621,7 +6726,7 @@ function bwBlcAnimateNewRow(char, colors) {
 }
 
 function bwBlcGetToday() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const seed = today.split('-').reduce((a,b) => a + parseInt(b), 0) + 7;
     return BW_BLC_CHARS[seed % BW_BLC_CHARS.length];
 }
@@ -6635,7 +6740,7 @@ window.openBwBlcModal = function() {
 };
 
 window.initBwBlcGame = async function() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     if (window.bwBlcState.answer && window.bwBlcState.date === today) {
         document.getElementById('bwblc-loading').style.display = 'none';
         document.getElementById('bwblc-content').style.display = 'block';
@@ -6644,11 +6749,17 @@ window.initBwBlcGame = async function() {
     window.bwBlcState = { answer: bwBlcGetToday(), guesses: [], solved: false, selectedChar: null, date: today };
     try {
         if (auth.currentUser) {
-            const snap = await getDoc(doc(db, 'bw_blc_games', `${auth.currentUser.uid}_${today}`));
-            if (snap.exists()) {
-                const d = snap.data();
-                window.bwBlcState.guesses = (d.guesses||[]).map(id => BW_BLC_CHARS.find(c => c.id === id)).filter(Boolean);
-                window.bwBlcState.solved = d.solved || false;
+            try {
+                const snap = await getDoc(doc(db, 'bw_blc_games', `${auth.currentUser.uid}_${today}`));
+                if (snap.exists()) {
+                    const d = snap.data();
+                    window.bwBlcState.guesses = (d.guesses||[]).map(id => BW_BLC_CHARS.find(c => c.id === id)).filter(Boolean);
+                    window.bwBlcState.solved = d.solved || false;
+                }
+            } catch(e) {
+                console.warn('BLC Firestore read failed, using localStorage:', e.message);
+                const saved = localStorage.getItem(`wb_bwblc_${today}`);
+                if (saved) { const d = JSON.parse(saved); window.bwBlcState.guesses=(d.guesses||[]).map(id=>BW_BLC_CHARS.find(c=>c.id===id)).filter(Boolean); window.bwBlcState.solved=d.solved||false; }
             }
         } else {
             const saved = localStorage.getItem(`wb_bwblc_${today}`);
@@ -6676,7 +6787,11 @@ window.searchBwBlcChar = function() {
     const guessedIds = new Set(window.bwBlcState.guesses.map(g => g.id));
     const matches = BW_BLC_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
     sugg.style.display = matches.length ? 'block' : 'none';
-    sugg.innerHTML = matches.map(c => `<div class="wordle-suggestion-item" onclick="window.selectBwBlcChar('${c.id}')">${c.name}</div>`).join('');
+    sugg.innerHTML = matches.map(c => {
+        const imgUrl = window.bwBlcGetCharImage ? window.bwBlcGetCharImage(c.name) : null;
+        const pic = imgUrl ? `<img src="${imgUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--bg-gray-darker);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${c.name[0]}</div>`;
+        return `<div class="wordle-suggestion-item" style="display:flex;align-items:center;gap:10px;" onclick="window.selectBwBlcChar('${c.id}')">${pic}<span>${c.name}</span></div>`;
+    }).join('');
 };
 
 window.selectBwBlcChar = function(id) {
@@ -6703,13 +6818,12 @@ window.submitBwBlcGuess = async function() {
     if (isCorrect) window.bwBlcState.solved = true;
     bwBlcAnimateNewRow(char, colors);
     setTimeout(() => bwBlcShowResult(), 7 * 500 + 800);
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const saveData = { guesses: window.bwBlcState.guesses.map(g=>g.id), solved: window.bwBlcState.solved, date: today, guessCount: window.bwBlcState.guesses.length, displayName: auth.currentUser?.displayName||'Player' };
+    localStorage.setItem(`wb_bwblc_${today}`, JSON.stringify(saveData));
     if (auth.currentUser) {
-        setDoc(doc(db, 'bw_blc_games', `${auth.currentUser.uid}_${today}`), saveData).catch(()=>{});
+        setDoc(doc(db, 'bw_blc_games', `${auth.currentUser.uid}_${today}`), saveData).catch(e => console.warn('BLC save failed:', e.message));
         if (window.bwBlcState.solved) window.bwBlcUpdateLeaderboard(window.bwBlcState.guesses.length);
-    } else {
-        localStorage.setItem(`wb_bwblc_${today}`, JSON.stringify(saveData));
     }
 };
 
@@ -6718,8 +6832,8 @@ window.bwBlcUpdateLeaderboard = async function(guessCount) {
     const uid = auth.currentUser.uid;
     const ref = doc(db, 'bw_blc_leaderboard', uid);
     const snap = await getDoc(ref);
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+    const today = bwGetDate();
+    const yesterday = new Date(Date.now()-86400000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
     let streak, totalWins;
     if (snap.exists()) {
         const d = snap.data();
@@ -6759,7 +6873,7 @@ window.bwBlcPostToFeed = async function(btn) {
     if (!auth.currentUser) return window.openAuthModal();
     const { answer, guesses, solved } = window.bwBlcState;
     if (!solved) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const existing = await getDocs(query(collection(db,'bw_posts'), where('uid','==',auth.currentUser.uid), where('date','==',today), where('game','==','bleach')));
     if (!existing.empty) { btn.innerText='Already posted!'; btn.disabled=true; return; }
     const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
@@ -6797,7 +6911,7 @@ window.showBwBlcLeaderboardTab = async function(tab) {
     alltimeBtn.style.background = tab==='alltime' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
     alltimeBtn.style.color = tab==='alltime' ? '#111' : 'var(--text-dark)';
     content.innerHTML = '<div class="loading">Loading...</div>';
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     try {
         if (tab === 'today') {
             const snap = await getDocs(query(collection(db,'bw_blc_games'), where('date','==',today), where('solved','==',true)));
@@ -6846,6 +6960,11 @@ const _feedObserver = new IntersectionObserver((entries) => {
 
 const _sentinel = document.getElementById('home-activity-sentinel');
 if (_sentinel) _feedObserver.observe(_sentinel);
+
+// Returns today's date in America/New_York (resets at midnight EST/EDT)
+function bwGetDate() {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
 
 // --- ADVANCED ANIME SEARCH ---
 let _advPage = 1;
