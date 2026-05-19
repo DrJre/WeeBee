@@ -147,6 +147,11 @@ const ACHIEVEMENTS = [
     { id: 'bwblc_1guess',    name: 'Bankai!',         desc: 'Solved the Bleach puzzle in just 1 guess',             icon: 'bolt',                  cat: 'Community', color: '#00BCD4' },
     { id: 'bwblc_streak_7',  name: 'Gotei 13',        desc: 'Solved the Bleach puzzle 7 days in a row',             icon: 'local_fire_department', cat: 'Community', color: '#00BCD4' },
     { id: 'bwblc_total_30',  name: "Captain's Path",  desc: 'Solved the Bleach puzzle 30 times total',              icon: 'military_tech',         cat: 'Community', color: '#00BCD4' },
+    // Community: BuzzWord — Dragon Ball
+    { id: 'bwdb_first',      name: 'Power Level',     desc: 'Solved your first Dragon Ball BuzzWord puzzle',         icon: 'star',                  cat: 'Community', color: '#FF6F00' },
+    { id: 'bwdb_1guess',     name: 'Over 9000!',      desc: 'Solved the Dragon Ball puzzle in just 1 guess',         icon: 'bolt',                  cat: 'Community', color: '#FF6F00' },
+    { id: 'bwdb_streak_7',   name: 'Super Saiyan',    desc: 'Solved the Dragon Ball puzzle 7 days in a row',         icon: 'local_fire_department', cat: 'Community', color: '#FF6F00' },
+    { id: 'bwdb_total_30',   name: "Limit Breaker",   desc: 'Solved the Dragon Ball puzzle 30 times total',          icon: 'military_tech',         cat: 'Community', color: '#FF6F00' },
     // Community: BuzzWord — General
     { id: 'bw_double_agent', name: 'Double Agent',    desc: 'Solved both BuzzWord puzzles on the same day',         icon: 'join_inner',            cat: 'Community', color: '#6A1B9A' },
     { id: 'bw_multiverse',   name: 'Multiverse',      desc: 'Solved a puzzle from every available BuzzWord game',   icon: 'public',                cat: 'Community', color: '#6A1B9A' },
@@ -2656,7 +2661,7 @@ window.fetchUserProfile = async function(targetUid = null) {
         ? `<button class="action-btn" onclick="openEditProfileModal()" style="position:absolute;top:14px;right:14px;z-index:5;background:rgba(0,0,0,0.45);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(6px);"><span class="material-symbols-outlined">edit</span> Edit Profile</button>`
         : `<div style="position:absolute;top:14px;right:14px;z-index:5;display:flex;gap:8px;">
                <button onclick="openDMConversation('${uidToFetch}','${pName.replace(/'/g,"\\'")}','${pAvatar}')" class="action-btn" style="padding:8px;min-width:unset;background:rgba(0,0,0,0.45);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(6px);" title="Message"><span class="material-symbols-outlined">chat_bubble</span></button>
-               ${friendBtnInner}
+               <span id="profile-friend-btns">${friendBtnInner}</span>
            </div>`;
 
     const bioSection = pBio
@@ -5139,6 +5144,14 @@ const BW_GAMES = {
         badgeColor: '#00BCD4',
         cover: 'https://cdn.myanimelist.net/images/anime/3/40451.jpg',
         playFn: 'window.openBwBlcModal()'
+    },
+    dragonball: {
+        label: 'BuzzWord: Dragon Ball Characters',
+        badge: '🐉 Dragon Ball',
+        badgeBg: '#1a0a00',
+        badgeColor: '#FF6F00',
+        cover: 'https://cdn.myanimelist.net/images/anime/1277/142022.jpg',
+        playFn: 'window.openBwDbModal()'
     }
 };
 
@@ -5147,7 +5160,7 @@ const BW_GAMES = {
 // =====================================================================
 
 const NRT_ARC_ORDER = [
-    'Introduction','Land of Waves','Chunin Exams','Konoha Crush',
+    'Introduction','Chunin Exams','Konoha Crush',
     'Search for Tsunade','Sasuke Recovery Mission',
     'Kazekage Rescue','Tenchi Bridge Reconnaissance','Akatsuki Suppression',
     'Itachi Pursuit','Fated Battle Between Brothers',"Pain's Assault",
@@ -5156,59 +5169,59 @@ const NRT_ARC_ORDER = [
 
 const BW_NRT_CHARS = [
     // ── Leaf ──
-    {id:'naruto',name:'Naruto Uzumaki',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Senjutsu','Fuinjutsu'],nature:['Wind','Fire','Earth','Water','Lightning'],attribute:['Jinchuriki','Sage'],debutArc:'Introduction'},
-    {id:'sasuke',name:'Sasuke Uchiha',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu'],nature:['Lightning','Fire','Wind','Earth','Water'],attribute:['Kekkei Genkai','Missing-nin'],debutArc:'Introduction'},
-    {id:'sakura',name:'Sakura Haruno',gender:'Female',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Genjutsu'],nature:['Earth','Water','Fire'],attribute:['Sage'],debutArc:'Introduction'},
-    {id:'kakashi',name:'Kakashi Hatake',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu'],nature:['Lightning','Earth','Water','Fire','Wind'],attribute:['Kekkei Genkai','Anbu'],debutArc:'Introduction'},
-    {id:'iruka',name:'Iruka Umino',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu'],nature:['Water','Earth'],attribute:[],debutArc:'Introduction'},
-    {id:'gai',name:'Might Guy',gender:'Male',village:'Konoha',jutsuType:['Taijutsu','Ninjutsu'],nature:['Lightning'],attribute:[],debutArc:'Introduction'},
-    {id:'rock-lee',name:'Rock Lee',gender:'Male',village:'Konoha',jutsuType:['Taijutsu'],nature:[],attribute:[],debutArc:'Chunin Exams'},
-    {id:'neji',name:'Neji Hyuga',gender:'Male',village:'Konoha',jutsuType:['Taijutsu','Ninjutsu'],nature:['Fire'],attribute:['Kekkei Genkai'],debutArc:'Chunin Exams'},
-    {id:'tenten',name:'Tenten',gender:'Female',village:'Konoha',jutsuType:['Kenjutsu','Ninjutsu','Taijutsu'],nature:[],attribute:[],debutArc:'Chunin Exams'},
-    {id:'shikamaru',name:'Shikamaru Nara',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu'],nature:['Fire','Earth'],attribute:[],debutArc:'Chunin Exams'},
-    {id:'ino',name:'Ino Yamanaka',gender:'Female',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Genjutsu'],nature:['Fire','Earth','Water'],attribute:['Sensor'],debutArc:'Chunin Exams'},
-    {id:'choji',name:'Choji Akimichi',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu'],nature:['Fire','Earth'],attribute:[],debutArc:'Chunin Exams'},
-    {id:'kiba',name:'Kiba Inuzuka',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu'],nature:['Earth'],attribute:[],debutArc:'Chunin Exams'},
-    {id:'hinata',name:'Hinata Hyuga',gender:'Female',village:'Konoha',jutsuType:['Taijutsu','Ninjutsu','Medical Ninjutsu'],nature:['Fire','Earth'],attribute:['Kekkei Genkai'],debutArc:'Chunin Exams'},
-    {id:'shino',name:'Shino Aburame',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu'],nature:['Earth','Fire'],attribute:[],debutArc:'Chunin Exams'},
-    {id:'kurenai',name:'Kurenai Yuhi',gender:'Female',village:'Konoha',jutsuType:['Ninjutsu','Genjutsu','Taijutsu'],nature:['Fire'],attribute:[],debutArc:'Introduction'},
-    {id:'asuma',name:'Asuma Sarutobi',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],nature:['Fire','Wind'],attribute:[],debutArc:'Introduction'},
-    {id:'hiruzen',name:'Hiruzen Sarutobi',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Senjutsu'],nature:['Fire','Earth','Wind','Water','Lightning'],attribute:['Kage'],debutArc:'Introduction'},
-    {id:'minato',name:'Minato Namikaze',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Senjutsu'],nature:['Fire','Wind','Lightning'],attribute:['Kage'],debutArc:'Sasuke Recovery Mission'},
-    {id:'tsunade',name:'Tsunade',gender:'Female',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu','Genjutsu'],nature:['Earth','Fire','Water'],attribute:['Sannin','Kage','Sage'],debutArc:'Search for Tsunade'},
-    {id:'jiraiya',name:'Jiraiya',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Senjutsu','Genjutsu'],nature:['Fire','Earth','Wind','Water'],attribute:['Sannin','Sage'],debutArc:'Search for Tsunade'},
-    {id:'sai',name:'Sai',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],nature:['Fire'],attribute:['Anbu'],debutArc:'Tenchi Bridge Reconnaissance'},
-    {id:'yamato',name:'Yamato',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],nature:['Earth','Fire','Water','Wood'],attribute:['Anbu','Kekkei Genkai'],debutArc:'Tenchi Bridge Reconnaissance'},
-    {id:'hashirama',name:'Hashirama Senju',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu','Genjutsu','Senjutsu'],nature:['Earth','Fire','Water','Wind','Wood'],attribute:['Kage','Sage','Kekkei Genkai'],debutArc:'Fourth Shinobi World War'},
-    {id:'tobirama',name:'Tobirama Senju',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu','Kinjutsu'],nature:['Water','Earth','Fire','Wind'],attribute:['Kage'],debutArc:'Fourth Shinobi World War'},
+    {id:'naruto',    name:'Naruto Uzumaki',     gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Senjutsu','Fuinjutsu'],                                nature:['Wind','Fire','Earth','Water','Lightning'],       kekkeiGenkai:false, attribute:['Jinchuriki','Sage'],  debutArc:'Introduction'},
+    {id:'sasuke',    name:'Sasuke Uchiha',       gender:'Male',   affiliation:['Leaf','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu'],                                 nature:['Lightning','Fire','Wind','Earth','Water'],       kekkeiGenkai:true,  attribute:[],                    debutArc:'Introduction'},
+    {id:'sakura',    name:'Sakura Haruno',       gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Genjutsu'],                          nature:['Earth','Water','Fire'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'kakashi',   name:'Kakashi Hatake',      gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu'],                      nature:['Lightning','Earth','Water','Fire','Wind'],       kekkeiGenkai:false, attribute:['Anbu'],              debutArc:'Introduction'},
+    {id:'iruka',     name:'Iruka Umino',         gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Water','Earth'],                                kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'gai',       name:'Might Guy',           gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Taijutsu','Ninjutsu'],                                                        nature:['Lightning'],                                    kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'rock-lee',  name:'Rock Lee',            gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Taijutsu'],                                                                   nature:[],                                               kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'neji',      name:'Neji Hyuga',          gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Taijutsu','Ninjutsu'],                                                        nature:['Fire'],                                         kekkeiGenkai:true,  attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'tenten',    name:'Tenten',              gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Kenjutsu','Ninjutsu','Taijutsu'],                                             nature:[],                                               kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'shikamaru', name:'Shikamaru Nara',      gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Fire','Earth'],                                 kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'ino',       name:'Ino Yamanaka',        gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Genjutsu'],                          nature:['Fire','Earth','Water'],                          kekkeiGenkai:false, attribute:['Sensor'],            debutArc:'Chunin Exams'},
+    {id:'choji',     name:'Choji Akimichi',      gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Fire','Earth'],                                 kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'kiba',      name:'Kiba Inuzuka',        gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Earth'],                                        kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'hinata',    name:'Hinata Hyuga',        gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Taijutsu','Ninjutsu','Medical Ninjutsu'],                                     nature:['Fire','Earth'],                                 kekkeiGenkai:true,  attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'shino',     name:'Shino Aburame',       gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Earth','Fire'],                                 kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'kurenai',   name:'Kurenai Yuhi',        gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Genjutsu','Taijutsu'],                                             nature:['Fire'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'asuma',     name:'Asuma Sarutobi',      gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],                                 nature:['Fire','Wind'],                                  kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'hiruzen',   name:'Hiruzen Sarutobi',    gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Senjutsu'],                      nature:['Fire','Earth','Wind','Water','Lightning'],       kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Introduction'},
+    {id:'minato',    name:'Minato Namikaze',     gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Senjutsu'],                                 nature:['Fire','Wind','Lightning'],                       kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Sasuke Recovery Mission'},
+    {id:'tsunade',   name:'Tsunade',             gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu','Genjutsu'],               nature:['Earth','Fire','Water'],                          kekkeiGenkai:false, attribute:['Sannin','Kage'],     debutArc:'Search for Tsunade'},
+    {id:'jiraiya',   name:'Jiraiya',             gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Senjutsu','Genjutsu'],                      nature:['Fire','Earth','Wind','Water'],                   kekkeiGenkai:false, attribute:['Sannin','Sage'],     debutArc:'Search for Tsunade'},
+    {id:'sai',       name:'Sai',                gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],                                 nature:['Fire'],                                         kekkeiGenkai:false, attribute:['Anbu'],              debutArc:'Tenchi Bridge Reconnaissance'},
+    {id:'yamato',    name:'Yamato',             gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Earth','Fire','Water'],                          kekkeiGenkai:true,  attribute:['Anbu'],              debutArc:'Tenchi Bridge Reconnaissance'},
+    {id:'hashirama', name:'Hashirama Senju',    gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu','Genjutsu','Senjutsu'],    nature:['Earth','Fire','Water','Wind'],                   kekkeiGenkai:true,  attribute:['Kage','Sage'],       debutArc:'Fourth Shinobi World War'},
+    {id:'tobirama',  name:'Tobirama Senju',     gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu','Kinjutsu'],                      nature:['Water','Earth','Fire','Wind'],                   kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Fourth Shinobi World War'},
     // ── Sound ──
-    {id:'orochimaru',name:'Orochimaru',gender:'Male',village:'Oto',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Kenjutsu','Medical Ninjutsu'],nature:['Fire','Earth','Wind','Lightning','Water'],attribute:['Sannin','Kekkei Genkai','Missing-nin'],debutArc:'Chunin Exams'},
-    {id:'kabuto',name:'Kabuto Yakushi',gender:'Male',village:'Oto',jutsuType:['Ninjutsu','Medical Ninjutsu','Taijutsu','Senjutsu','Genjutsu'],nature:['Earth','Water','Fire','Wind','Lightning'],attribute:['Sage','Missing-nin'],debutArc:'Chunin Exams'},
-    {id:'kimimaro',name:'Kimimaro',gender:'Male',village:'Oto',jutsuType:['Taijutsu','Ninjutsu','Kenjutsu'],nature:['Earth'],attribute:['Kekkei Genkai'],debutArc:'Sasuke Recovery Mission'},
+    {id:'orochimaru',name:'Orochimaru',          gender:'Male',   affiliation:['Leaf','Missing-nin','Akatsuki','Sound'],  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Kenjutsu','Medical Ninjutsu'],  nature:['Fire','Earth','Wind','Lightning','Water'],       kekkeiGenkai:false, attribute:['Sannin'],            debutArc:'Chunin Exams'},
+    {id:'kabuto',    name:'Kabuto Yakushi',      gender:'Male',   affiliation:['Sound','Missing-nin'],                   jutsuType:['Ninjutsu','Medical Ninjutsu','Taijutsu','Senjutsu','Genjutsu'],                nature:['Earth','Water','Fire','Wind','Lightning'],       kekkeiGenkai:false, attribute:['Sage'],              debutArc:'Chunin Exams'},
+    {id:'kimimaro',  name:'Kimimaro',            gender:'Male',   affiliation:['Sound'],                                 jutsuType:['Taijutsu','Ninjutsu','Kenjutsu'],                                             nature:['Earth'],                                        kekkeiGenkai:true,  attribute:[],                    debutArc:'Sasuke Recovery Mission'},
     // ── Sand ──
-    {id:'gaara',name:'Gaara',gender:'Male',village:'Suna',jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],nature:['Earth','Lightning','Wind'],attribute:['Jinchuriki','Kage'],debutArc:'Chunin Exams'},
-    {id:'temari',name:'Temari',gender:'Female',village:'Suna',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu'],nature:['Wind'],attribute:[],debutArc:'Chunin Exams'},
-    {id:'kankuro',name:'Kankuro',gender:'Male',village:'Suna',jutsuType:['Ninjutsu','Kinjutsu'],nature:['Earth'],attribute:[],debutArc:'Chunin Exams'},
-    {id:'chiyo',name:'Chiyo',gender:'Female',village:'Suna',jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu'],nature:['Earth','Fire','Wind'],attribute:[],debutArc:'Kazekage Rescue'},
+    {id:'gaara',     name:'Gaara',              gender:'Male',   affiliation:['Sand'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Earth','Lightning','Wind'],                      kekkeiGenkai:false, attribute:['Jinchuriki','Kage'], debutArc:'Chunin Exams'},
+    {id:'temari',    name:'Temari',             gender:'Female', affiliation:['Sand'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu'],                                             nature:['Wind'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'kankuro',   name:'Kankuro',            gender:'Male',   affiliation:['Sand'],                                  jutsuType:['Ninjutsu','Kinjutsu'],                                                        nature:['Earth'],                                        kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'chiyo',     name:'Chiyo',              gender:'Female', affiliation:['Sand'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu'],                          nature:['Earth','Fire','Wind'],                           kekkeiGenkai:false, attribute:[],                    debutArc:'Kazekage Rescue'},
     // ── Mist ──
-    {id:'zabuza',name:'Zabuza Momochi',gender:'Male',village:'Kiri',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Genjutsu'],nature:['Water','Wind','Earth'],attribute:['Missing-nin'],debutArc:'Land of Waves'},
-    {id:'haku',name:'Haku',gender:'Male',village:'Kiri',jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu'],nature:['Wind','Water'],attribute:['Kekkei Genkai'],debutArc:'Land of Waves'},
-    {id:'kisame',name:'Kisame Hoshigaki',gender:'Male',village:'Kiri',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],nature:['Water','Earth','Fire'],attribute:['Missing-nin'],debutArc:'Itachi Pursuit'},
+    {id:'zabuza',    name:'Zabuza Momochi',     gender:'Male',   affiliation:['Mist','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Genjutsu'],                                  nature:['Water','Wind','Earth'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'haku',      name:'Haku',               gender:'Male',   affiliation:['Mist','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu'],                                     nature:['Wind','Water'],                                 kekkeiGenkai:true,  attribute:[],                    debutArc:'Introduction'},
+    {id:'kisame',    name:'Kisame Hoshigaki',   gender:'Male',   affiliation:['Mist','Missing-nin','Akatsuki'],         jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],                                 nature:['Water','Earth','Fire'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Itachi Pursuit'},
     // ── Cloud ──
-    {id:'killerbee',name:'Killer Bee',gender:'Male',village:'Kumo',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Senjutsu','Fuinjutsu'],nature:['Lightning','Fire','Water','Earth','Wind'],attribute:['Jinchuriki','Sage'],debutArc:'Akatsuki Suppression'},
-    {id:'raikage',name:'A (Fourth Raikage)',gender:'Male',village:'Kumo',jutsuType:['Ninjutsu','Taijutsu'],nature:['Lightning','Fire'],attribute:['Kage'],debutArc:'Five Kage Summit'},
+    {id:'killerbee', name:'Killer Bee',         gender:'Male',   affiliation:['Cloud'],                                 jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Senjutsu','Fuinjutsu'],                      nature:['Lightning','Fire','Water','Earth','Wind'],       kekkeiGenkai:false, attribute:['Jinchuriki','Sage'], debutArc:'Akatsuki Suppression'},
+    {id:'raikage',   name:'A (Fourth Raikage)', gender:'Male',   affiliation:['Cloud'],                                 jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Lightning','Fire'],                              kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Five Kage Summit'},
     // ── Akatsuki ──
-    {id:'itachi',name:'Itachi Uchiha',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu'],nature:['Fire','Water','Wind'],attribute:['Kekkei Genkai','Missing-nin','Anbu'],debutArc:'Chunin Exams'},
-    {id:'nagato',name:'Nagato (Pain)',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Genjutsu'],nature:['Wind','Lightning','Earth','Water','Fire'],attribute:['Kekkei Genkai'],debutArc:"Pain's Assault"},
-    {id:'konan',name:'Konan',gender:'Female',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],nature:['Water','Fire','Earth'],attribute:[],debutArc:"Pain's Assault"},
-    {id:'deidara',name:'Deidara',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Kinjutsu'],nature:['Earth','Lightning','Wind'],attribute:['Missing-nin','Kekkei Genkai'],debutArc:'Kazekage Rescue'},
-    {id:'sasori',name:'Sasori',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Kinjutsu'],nature:['Fire','Earth','Wind'],attribute:['Missing-nin'],debutArc:'Kazekage Rescue'},
-    {id:'hidan',name:'Hidan',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Kinjutsu'],nature:['Fire'],attribute:['Missing-nin'],debutArc:'Akatsuki Suppression'},
-    {id:'kakuzu',name:'Kakuzu',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Kinjutsu','Fuinjutsu'],nature:['Fire','Wind','Lightning','Earth','Water'],attribute:['Missing-nin'],debutArc:'Akatsuki Suppression'},
-    {id:'zetsu',name:'Zetsu',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Fuinjutsu'],nature:['Earth','Water','Wood'],attribute:['Kekkei Genkai'],debutArc:'Kazekage Rescue'},
-    {id:'obito',name:'Obito Uchiha',gender:'Male',village:'Akatsuki',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu','Senjutsu'],nature:['Fire','Earth','Wind','Water','Lightning','Wood'],attribute:['Kekkei Genkai','Jinchuriki','Missing-nin'],debutArc:'Itachi Pursuit'},
-    {id:'madara',name:'Madara Uchiha',gender:'Male',village:'Konoha',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu','Senjutsu'],nature:['Fire','Earth','Wind','Water','Lightning','Wood'],attribute:['Kekkei Genkai','Jinchuriki','Sage'],debutArc:'Fourth Shinobi World War'},
-    {id:'kaguya',name:'Kaguya Otsutsuki',gender:'Female',village:'None',jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Kinjutsu'],nature:['Fire','Wind','Earth','Water','Lightning'],attribute:['Jinchuriki','Kekkei Genkai'],debutArc:'Kaguya Strikes'},
+    {id:'itachi',    name:'Itachi Uchiha',      gender:'Male',   affiliation:['Leaf','Missing-nin','Akatsuki'],         jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu'],                      nature:['Fire','Water','Wind'],                           kekkeiGenkai:true,  attribute:['Anbu'],              debutArc:'Chunin Exams'},
+    {id:'nagato',    name:'Nagato (Pain)',       gender:'Male',   affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Genjutsu'],                                 nature:['Wind','Lightning','Earth','Water','Fire'],       kekkeiGenkai:true,  attribute:[],                    debutArc:"Pain's Assault"},
+    {id:'konan',     name:'Konan',              gender:'Female', affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Water','Fire','Earth'],                          kekkeiGenkai:false, attribute:[],                    debutArc:"Pain's Assault"},
+    {id:'deidara',   name:'Deidara',            gender:'Male',   affiliation:['Stone','Missing-nin','Akatsuki'],        jutsuType:['Ninjutsu','Taijutsu','Kinjutsu'],                                             nature:['Earth','Lightning','Wind'],                      kekkeiGenkai:true,  attribute:[],                    debutArc:'Kazekage Rescue'},
+    {id:'sasori',    name:'Sasori',             gender:'Male',   affiliation:['Sand','Missing-nin','Akatsuki'],         jutsuType:['Ninjutsu','Taijutsu','Kinjutsu'],                                             nature:['Fire','Earth','Wind'],                           kekkeiGenkai:false, attribute:[],                    debutArc:'Kazekage Rescue'},
+    {id:'hidan',     name:'Hidan',              gender:'Male',   affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Kinjutsu'],                                  nature:['Fire'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Akatsuki Suppression'},
+    {id:'kakuzu',    name:'Kakuzu',             gender:'Male',   affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu','Kinjutsu','Fuinjutsu'],                                 nature:['Fire','Wind','Lightning','Earth','Water'],       kekkeiGenkai:false, attribute:[],                    debutArc:'Akatsuki Suppression'},
+    {id:'zetsu',     name:'Zetsu',              gender:'Male',   affiliation:['Akatsuki'],                              jutsuType:['Ninjutsu','Fuinjutsu'],                                                        nature:['Earth','Water'],                                 kekkeiGenkai:true,  attribute:[],                    debutArc:'Kazekage Rescue'},
+    {id:'obito',     name:'Obito Uchiha',       gender:'Male',   affiliation:['Leaf','Missing-nin','Akatsuki'],         jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu','Senjutsu'],            nature:['Fire','Earth','Wind','Water','Lightning'],        kekkeiGenkai:true,  attribute:['Jinchuriki'],        debutArc:'Itachi Pursuit'},
+    {id:'madara',    name:'Madara Uchiha',      gender:'Male',   affiliation:['Leaf','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu','Senjutsu'],            nature:['Fire','Earth','Wind','Water','Lightning'],        kekkeiGenkai:true,  attribute:['Jinchuriki','Sage'], debutArc:'Fourth Shinobi World War'},
+    {id:'kaguya',    name:'Kaguya Otsutsuki',   gender:'Female', affiliation:['None'],                                  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Kinjutsu'],                      nature:['Fire','Wind','Earth','Water','Lightning'],       kekkeiGenkai:true,  attribute:['Jinchuriki'],        debutArc:'Kaguya Strikes'},
 ];
 
 // --- BuzzWord: Naruto — Image System ---
@@ -5216,7 +5229,7 @@ window.bwNrtImageMap = {};
 window.bwNrtImgReady = false;
 
 window.bwNrtLoadImages = async function() {
-    const cacheKey = 'wb_nrt_imgs_v1';
+    const cacheKey = 'wb_nrt_imgs_v2';
     const cached = localStorage.getItem(cacheKey);
     if (cached) { try { window.bwNrtImageMap = JSON.parse(cached); window.bwNrtImgReady = true; return; } catch(e) {} }
     const addToMap = (data, map) => {
@@ -5257,6 +5270,20 @@ const NRT_NAME_ALIASES = {
     'nagato': 'pain', 'pain': 'nagato',
     'tobi': 'obito', 'obito': 'tobi',
     'a': 'raikage',
+    'might guy': 'maito gai', 'maito gai': 'might guy', 'guy': 'maito gai',
+    'rock lee': 'lee, rock', 'lee': 'lee, rock',
+    'killer bee': 'killer bee', 'kirabi': 'killer bee',
+    'minato': 'namikaze minato', 'namikaze': 'namikaze minato',
+    'hashirama': 'senju hashirama', 'senju': 'senju hashirama',
+    'tobirama': 'senju tobirama',
+    'kaguya': 'otsutsuki kaguya', 'otsutsuki': 'otsutsuki kaguya',
+    'zabuza': 'momochi zabuza', 'momochi': 'momochi zabuza',
+    'haku': 'haku',
+    'chiyo': 'chiyo',
+    'yamato': 'yamato', 'tenzou': 'yamato',
+    'sai': 'sai',
+    'kimimaro': 'kimimaro',
+    'kisame': 'hoshigaki kisame', 'hoshigaki': 'hoshigaki kisame',
 };
 
 window.bwNrtGetCharImage = function(name) {
@@ -5300,8 +5327,13 @@ function bwNrtJutsu(j) {
 }
 function bwNrtNature(n) {
     if (!n || n.length === 0) return 'None';
-    const icons = {Fire:'🔥',Wind:'💨',Lightning:'⚡',Earth:'🪨',Water:'💧',Wood:'🌿',Ice:'❄️'};
+    const icons = {Fire:'🔥',Wind:'💨',Lightning:'⚡',Earth:'🪨',Water:'💧'};
     return n.map(x => `${icons[x]||'•'} ${x}`).join('\n');
+}
+function bwNrtAffil(a) {
+    if (!a || a.length === 0) return 'None';
+    const icons = {Leaf:'🍃',Sand:'🏜️',Mist:'🌊',Cloud:'⚡',Stone:'🪨',Sound:'🎵',Akatsuki:'🔴','Missing-nin':'💀',None:'—'};
+    return a.map(x => `${icons[x]||'•'} ${x}`).join('\n');
 }
 function bwNrtAttr(a) {
     if (!a || a.length === 0) return 'None';
@@ -5310,8 +5342,7 @@ function bwNrtAttr(a) {
 
 function bwNrtCalcColors(guess, answer) {
     const gender = guess.gender === answer.gender ? 'green' : 'red';
-    const village = guess.village === answer.village ? 'green' : 'red';
-    // Array comparisons (jutsu, nature, attribute)
+    const kekkeiGenkai = guess.kekkeiGenkai === answer.kekkeiGenkai ? 'green' : 'red';
     const arrColor = (g, a) => {
         if (g.length === 0 && a.length === 0) return 'green';
         if (g.length === 0 || a.length === 0) return 'red';
@@ -5319,14 +5350,14 @@ function bwNrtCalcColors(guess, answer) {
         if (g.some(x => a.includes(x))) return 'yellow';
         return 'red';
     };
+    const affiliation = arrColor(guess.affiliation, answer.affiliation);
     const jutsuType = arrColor(guess.jutsuType, answer.jutsuType);
     const nature = arrColor(guess.nature, answer.nature);
     const attribute = arrColor(guess.attribute, answer.attribute);
-    // Debut arc — directional
     const gIdx = NRT_ARC_ORDER.indexOf(guess.debutArc);
     const aIdx = NRT_ARC_ORDER.indexOf(answer.debutArc);
     const debutArc = gIdx === aIdx ? 'green' : (gIdx < aIdx ? 'yellow_up' : 'yellow_down');
-    return { gender, village, jutsuType, nature, attribute, debutArc };
+    return { gender, affiliation, jutsuType, nature, attribute, kekkeiGenkai, debutArc };
 }
 
 function bwNrtCell(val, color) {
@@ -5344,10 +5375,11 @@ function bwNrtBuildRow(char, colors) {
             <div style="font-size:10px;font-weight:700;margin-top:4px;text-align:center;word-break:break-word;line-height:1.2;">${char.name}</div>
         </div>
         ${bwNrtCell(char.gender, colors.gender)}
-        ${bwNrtCell(char.village, colors.village)}
+        ${bwNrtCell(bwNrtAffil(char.affiliation), colors.affiliation)}
         ${bwNrtCell(bwNrtJutsu(char.jutsuType), colors.jutsuType)}
         ${bwNrtCell(bwNrtNature(char.nature), colors.nature)}
         ${bwNrtCell(bwNrtAttr(char.attribute), colors.attribute)}
+        ${bwNrtCell(char.kekkeiGenkai ? 'Yes' : 'No', colors.kekkeiGenkai)}
         ${bwNrtCell(char.debutArc, colors.debutArc)}
     </div>`;
 }
@@ -5506,7 +5538,7 @@ window.submitBwNrtGuess = async function() {
     setTimeout(() => bwNrtShowResult(), delay);
     const today = bwGetDate();
     const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
-    const emojiRow = [colors.gender,colors.village,colors.jutsuType,colors.nature,colors.attribute,colors.debutArc].map(x=>map[x]||'⬛').join('');
+    const emojiRow = [colors.gender,colors.affiliation,colors.jutsuType,colors.nature,colors.attribute,colors.kekkeiGenkai,colors.debutArc].map(x=>map[x]||'⬛').join('');
     const saveData = { guesses: window.bwNrtState.guesses.map(g=>g.id), solved: window.bwNrtState.solved, date: today, guessCount: window.bwNrtState.guesses.length, displayName: auth.currentUser?.displayName||'Player' };
     localStorage.setItem(`wb_bwnrt_${today}`, JSON.stringify(saveData));
     if (auth.currentUser) {
@@ -5559,7 +5591,7 @@ window.bwNrtShare = function() {
     const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
     const rows = guesses.map(g => {
         const c = bwNrtCalcColors(g, answer);
-        return [c.gender,c.village,c.jutsuType,c.nature,c.attribute,c.debutArc].map(x=>map[x]||'⬛').join('');
+        return [c.gender,c.affiliation,c.jutsuType,c.nature,c.attribute,c.kekkeiGenkai,c.debutArc].map(x=>map[x]||'⬛').join('');
     }).join('\n');
     const text = `BuzzWord: Naruto Characters — ${today}\n${solved?`Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`:'Not solved'}\n\n${rows}\n\nhttps://weebee.buzz/#community`;
     navigator.clipboard.writeText(text).then(()=>alert('Copied to clipboard!')).catch(()=>alert('Could not copy'));
@@ -5575,7 +5607,7 @@ window.bwNrtPostToFeed = async function(btn) {
     const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
     const emojiGrid = guesses.map(g => {
         const c = bwNrtCalcColors(g, answer);
-        return [c.gender,c.village,c.jutsuType,c.nature,c.attribute,c.debutArc].map(x=>map[x]||'⬛').join('');
+        return [c.gender,c.affiliation,c.jutsuType,c.nature,c.attribute,c.kekkeiGenkai,c.debutArc].map(x=>map[x]||'⬛').join('');
     }).join('\n');
     try {
         btn.disabled=true; btn.innerText='Posting...';
@@ -6329,6 +6361,7 @@ window.loadBwBannerImages = async function() {
         { charId: 40,  elId: 'bwop-banner-img'  },
         { charId: 17,  elId: 'bwnrt-banner-img' },
         { charId: 5,   elId: 'bwblc-banner-img' },
+        { charId: 246, elId: 'bwdb-banner-img'  },
     ];
     for (const { charId, elId } of banners) {
         const el = document.getElementById(elId);
@@ -6940,6 +6973,489 @@ window.showBwBlcLeaderboardTab = async function(tab) {
     } catch(e) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:20px;">Could not load leaderboard.</p>'; }
 };
 
+// =====================================================================
+// BUZZWORD: DRAGON BALL CHARACTERS
+// =====================================================================
+
+const DB_ARC_ORDER = [
+    'Emperor Pilaf','Red Ribbon Army','King Piccolo',
+    'Saiyan','Namek','Android / Cell','Buu',
+    'Battle of Gods','Resurrection F','Universe 6',
+    'Future Trunks','Universe Survival','Galactic Patrol'
+];
+
+const BW_DB_CHARS = [
+    // ── Main Cast ──
+    {id:'goku',        name:'Goku',           gender:'Male',   race:'Saiyan',      origin:'Planet Vegeta', affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'vegeta',      name:'Vegeta',         gender:'Male',   race:'Saiyan',      origin:'Planet Vegeta', affiliation:['Frieza Force','Villain','Z Fighters'],   transformation:true,  debutSeries:'DBZ', debutArc:'Saiyan'},
+    {id:'gohan',       name:'Gohan',          gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Saiyan'},
+    {id:'piccolo',     name:'Piccolo',        gender:'Male',   race:'Namekian',    origin:'Earth',         affiliation:['Villain','Z Fighters'],                 transformation:true,  debutSeries:'DB',  debutArc:'King Piccolo'},
+    {id:'bulma',       name:'Bulma',          gender:'Female', race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'krillin',     name:'Krillin',        gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'future-trunks',name:'Future Trunks', gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'goten',       name:'Goten',          gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'android18',   name:'Android 18',     gender:'Female', race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Z Fighters'],         transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'android17',   name:'Android 17',     gender:'Male',   race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Z Fighters'],         transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'yamcha',      name:'Yamcha',         gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'tien',        name:'Tien Shinhan',   gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DB',  debutArc:'King Piccolo'},
+    {id:'chiaotzu',    name:'Chiaotzu',       gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DB',  debutArc:'King Piccolo'},
+    {id:'roshi',       name:'Master Roshi',   gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'chichi',      name:'Chi-Chi',        gender:'Female', race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'videl',       name:'Videl',          gender:'Female', race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'gotenks',     name:'Gotenks',        gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'kid-trunks',  name:'Kid Trunks',     gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'mr-satan',    name:'Mr. Satan',      gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
+    // ── Villains ──
+    {id:'frieza',      name:'Frieza',         gender:'Male',   race:'Frieza Race', origin:'Unknown',       affiliation:['Frieza Force','Villain'],               transformation:true,  debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'cell',        name:'Cell',           gender:'Male',   race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Villain'],            transformation:true,  debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'majin-buu',   name:'Majin Buu',      gender:'Male',   race:'Majin',       origin:'Unknown',       affiliation:['Villain','Z Fighters'],                 transformation:true,  debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'raditz',      name:'Raditz',         gender:'Male',   race:'Saiyan',      origin:'Planet Vegeta', affiliation:['Frieza Force','Villain'],               transformation:false, debutSeries:'DBZ', debutArc:'Saiyan'},
+    {id:'nappa',       name:'Nappa',          gender:'Male',   race:'Saiyan',      origin:'Planet Vegeta', affiliation:['Frieza Force','Villain'],               transformation:false, debutSeries:'DBZ', debutArc:'Saiyan'},
+    {id:'zarbon',      name:'Zarbon',         gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Villain'],               transformation:true,  debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'dodoria',     name:'Dodoria',        gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Villain'],               transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'ginyu',       name:'Captain Ginyu',  gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'jeice',       name:'Jeice',          gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'burter',      name:'Burter',         gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'recoome',     name:'Recoome',        gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'guldo',       name:'Guldo',          gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'android16',   name:'Android 16',     gender:'Male',   race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Z Fighters'],         transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'android19',   name:'Android 19',     gender:'Male',   race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Villain'],            transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'dr-gero',     name:'Dr. Gero',       gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Red Ribbon Army','Villain'],            transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'king-piccolo',name:'King Piccolo',   gender:'Male',   race:'Namekian',    origin:'Namek',         affiliation:['Villain'],                              transformation:false, debutSeries:'DB',  debutArc:'King Piccolo'},
+    {id:'babidi',      name:'Babidi',         gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Villain'],                              transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'dabura',      name:'Dabura',         gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Villain'],                              transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'goku-black',  name:'Goku Black',     gender:'Male',   race:'Kai',         origin:'Sacred World',  affiliation:['Villain'],                              transformation:true,  debutSeries:'DBS', debutArc:'Future Trunks'},
+    // ── Divine / DBS ──
+    {id:'beerus',      name:'Beerus',         gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Gods of Destruction'],                  transformation:false, debutSeries:'DBS', debutArc:'Battle of Gods'},
+    {id:'whis',        name:'Whis',           gender:'Male',   race:'Angel',       origin:'Unknown',       affiliation:['Angels','Gods of Destruction'],         transformation:false, debutSeries:'DBS', debutArc:'Battle of Gods'},
+    {id:'champa',      name:'Champa',         gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Gods of Destruction'],                  transformation:false, debutSeries:'DBS', debutArc:'Universe 6'},
+    {id:'vados',       name:'Vados',          gender:'Female', race:'Angel',       origin:'Unknown',       affiliation:['Angels','Gods of Destruction'],         transformation:false, debutSeries:'DBS', debutArc:'Universe 6'},
+    {id:'kami',        name:'Kami',           gender:'Male',   race:'Namekian',    origin:'Namek',         affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DB',  debutArc:'King Piccolo'},
+    {id:'king-kai',    name:'King Kai',       gender:'Male',   race:'Kai',         origin:'Sacred World',  affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DBZ', debutArc:'Saiyan'},
+    {id:'supreme-kai', name:'Supreme Kai',    gender:'Male',   race:'Kai',         origin:'Sacred World',  affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
+    // ── Universe 6 / DBS ──
+    {id:'hit',         name:'Hit',            gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Other','Villain'],                      transformation:false, debutSeries:'DBS', debutArc:'Universe 6'},
+    {id:'cabba',       name:'Cabba',          gender:'Male',   race:'Saiyan',      origin:'Planet Sadala', affiliation:['Other','Z Fighters'],                   transformation:true,  debutSeries:'DBS', debutArc:'Universe 6'},
+    {id:'kale',        name:'Kale',           gender:'Female', race:'Saiyan',      origin:'Planet Sadala', affiliation:['Other','Z Fighters'],                   transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
+    {id:'caulifla',    name:'Caulifla',       gender:'Female', race:'Saiyan',      origin:'Planet Sadala', affiliation:['Other','Z Fighters'],                   transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
+    {id:'jiren',       name:'Jiren',          gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Other','Villain'],                      transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
+    {id:'toppo',       name:'Toppo',          gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Other','Villain'],                      transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
+];
+
+// --- BuzzWord: Dragon Ball — Image System ---
+window.bwDbImageMap = {};
+window.bwDbImgReady = false;
+
+window.bwDbLoadImages = async function() {
+    const cacheKey = 'wb_db_imgs_v1';
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) { try { window.bwDbImageMap = JSON.parse(cached); window.bwDbImgReady = true; return; } catch(e) {} }
+    const addToMap = (data, map) => {
+        (data || []).forEach(entry => {
+            const char = entry.character;
+            if (!char?.images?.jpg?.image_url) return;
+            const img = char.images.jpg.image_url;
+            const raw = char.name;
+            map[raw.toLowerCase()] = img;
+            if (raw.includes(',')) {
+                const [last, ...rest] = raw.split(',');
+                const natural = `${rest.join(',').trim()} ${last.trim()}`;
+                map[natural.toLowerCase()] = img;
+                const firstWord = rest.join(' ').trim().split(' ')[0].toLowerCase();
+                if (firstWord && !map[firstWord]) map[firstWord] = img;
+            } else {
+                const parts = raw.split(' ');
+                const lastName = parts[parts.length - 1].toLowerCase();
+                if (!map[lastName]) map[lastName] = img;
+            }
+        });
+    };
+    try {
+        const map = {};
+        // Dragon Ball (430), Dragon Ball Z (813), Dragon Ball Super (39165)
+        const res1 = await fetch('https://api.jikan.moe/v4/anime/430/characters');
+        if (res1.ok) { const d = await res1.json(); addToMap(d.data, map); }
+        await new Promise(r => setTimeout(r, 450));
+        const res2 = await fetch('https://api.jikan.moe/v4/anime/813/characters');
+        if (res2.ok) { const d = await res2.json(); addToMap(d.data, map); }
+        await new Promise(r => setTimeout(r, 450));
+        const res3 = await fetch('https://api.jikan.moe/v4/anime/30694/characters');
+        if (res3.ok) { const d = await res3.json(); addToMap(d.data, map); }
+        window.bwDbImageMap = map;
+        window.bwDbImgReady = true;
+        try { localStorage.setItem(cacheKey, JSON.stringify(map)); } catch(e) {}
+    } catch(e) {}
+};
+
+const DB_NAME_ALIASES = {
+    'goku': 'son goku', 'son goku': 'goku',
+    'gohan': 'son gohan', 'son gohan': 'gohan',
+    'goten': 'son goten', 'son goten': 'goten',
+    'piccolo': 'piccolo jr.',
+    'krillin': 'kuririn', 'kuririn': 'krillin',
+    'roshi': 'muten roshi', 'muten roshi': 'roshi', 'master roshi': 'muten roshi',
+    'tien': 'tenshinhan', 'tenshinhan': 'tien shinhan', 'tien shinhan': 'tenshinhan',
+    'chiaotzu': 'chaozu', 'chaozu': 'chiaotzu',
+    'yamcha': 'yamcha',
+    'future trunks': 'trunks', 'kid trunks': 'trunks',
+    'android 18': 'lazuli', 'lazuli': 'android 18',
+    'android 17': 'lapis', 'lapis': 'android 17',
+    'frieza': 'freeza', 'freeza': 'frieza',
+    'cell': 'cell',
+    'beerus': 'bills', 'bills': 'beerus',
+    'mr. satan': 'hercule', 'hercule': 'mr. satan', 'satan': 'hercule',
+    'king piccolo': 'piccolo daimao',
+    'supreme kai': 'shin', 'shin': 'supreme kai',
+    'king kai': 'kaiou', 'kaiou': 'king kai',
+    'kami': 'kami',
+    'goku black': 'zamasu', 'zamasu': 'goku black',
+};
+
+window.bwDbGetCharImage = function(name) {
+    const m = window.bwDbImageMap;
+    const n = name.toLowerCase();
+    if (m[n]) return m[n];
+    const alias = DB_NAME_ALIASES[n];
+    if (alias && m[alias]) return m[alias];
+    const parts = name.split(' ');
+    const last = parts[parts.length - 1].toLowerCase();
+    if (m[last]) return m[last];
+    const first = parts[0].toLowerCase();
+    if (m[first]) return m[first];
+    return null;
+};
+
+window.bwDbApplyImages = function() {
+    document.querySelectorAll('[id^="dbimg-"]').forEach(img => {
+        const charId = img.id.replace('dbimg-', '');
+        const char = charId === 'answer' ? window.bwDbState.answer : BW_DB_CHARS.find(c => c.id === charId);
+        if (!char) return;
+        const url = window.bwDbGetCharImage(char.name);
+        if (url) {
+            img.src = url; img.style.display = 'block';
+            const fb = document.getElementById(`dbinitials-${charId}`);
+            if (fb) fb.style.display = 'none';
+        }
+    });
+};
+
+window.bwDbEnsureImages = async function() {
+    if (!window.bwDbImgReady) await window.bwDbLoadImages();
+    window.bwDbApplyImages();
+};
+
+// --- BuzzWord: Dragon Ball — Helpers ---
+function bwDbAffil(a) {
+    if (!a || a.length === 0) return 'None';
+    const icons = {'Z Fighters':'💪','Frieza Force':'👽','Ginyu Force':'🤜','Red Ribbon Army':'🤖','Galactic Patrol':'🚔','Gods of Destruction':'💥','Angels':'👼','Villain':'😈','Other':'•'};
+    return a.map(x => `${icons[x]||'•'} ${x}`).join('\n');
+}
+
+function bwDbCalcColors(guess, answer) {
+    const gender      = guess.gender      === answer.gender      ? 'green' : 'red';
+    const race        = guess.race        === answer.race        ? 'green' : 'red';
+    const origin      = guess.origin      === answer.origin      ? 'green' : 'red';
+    const transformation = guess.transformation === answer.transformation ? 'green' : 'red';
+    const debutSeries = guess.debutSeries === answer.debutSeries ? 'green' : 'red';
+    const arrColor = (g, a) => {
+        if (g.length === 0 && a.length === 0) return 'green';
+        if (g.length === 0 || a.length === 0) return 'red';
+        if (g.length === a.length && g.every(x => a.includes(x))) return 'green';
+        if (g.some(x => a.includes(x))) return 'yellow';
+        return 'red';
+    };
+    const affiliation = arrColor(guess.affiliation, answer.affiliation);
+    const gIdx = DB_ARC_ORDER.indexOf(guess.debutArc);
+    const aIdx = DB_ARC_ORDER.indexOf(answer.debutArc);
+    const debutArc = gIdx === aIdx ? 'green' : (gIdx < aIdx ? 'yellow_up' : 'yellow_down');
+    return { gender, race, origin, affiliation, transformation, debutSeries, debutArc };
+}
+
+function bwDbCell(val, color) {
+    const arrow = color === 'yellow_up' ? '↑ After' : color === 'yellow_down' ? '↓ Before' : '';
+    const c = color.startsWith('yellow') ? 'yellow' : color;
+    return `<div class="wordle-cell ${c}" style="white-space:pre-line; font-size:12px;">${val}${arrow ? '\n'+arrow : ''}</div>`;
+}
+
+function bwDbBuildRow(char, colors) {
+    const initials = char.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    return `<div class="wordle-row">
+        <div class="wordle-char-cell">
+            <img id="dbimg-${char.id}" src="" style="width:50px;height:50px;border-radius:50%;object-fit:cover;display:none;" onerror="this.style.display='none'; var d=document.getElementById('dbinitials-${char.id}'); if(d) d.style.display='flex';">
+            <div id="dbinitials-${char.id}" style="width:50px;height:50px;border-radius:50%;background:var(--accent-yellow);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#111;">${initials}</div>
+            <div style="font-size:10px;font-weight:700;margin-top:4px;text-align:center;word-break:break-word;line-height:1.2;">${char.name}</div>
+        </div>
+        ${bwDbCell(char.gender, colors.gender)}
+        ${bwDbCell(char.race, colors.race)}
+        ${bwDbCell(char.origin, colors.origin)}
+        ${bwDbCell(bwDbAffil(char.affiliation), colors.affiliation)}
+        ${bwDbCell(char.transformation ? 'Yes' : 'No', colors.transformation)}
+        ${bwDbCell(char.debutSeries, colors.debutSeries)}
+        ${bwDbCell(char.debutArc, colors.debutArc)}
+    </div>`;
+}
+
+function bwDbShowResult() {
+    const { answer, guesses, solved } = window.bwDbState;
+    const resultEl = document.getElementById('bwdb-result');
+    const inputArea = document.getElementById('bwdb-input-area');
+    if (!resultEl) return;
+    if (solved) {
+        const initials = answer.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        resultEl.style.display = 'block';
+        resultEl.style.background = '#1b5e20';
+        resultEl.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <img id="dbimg-answer" src="" style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:3px solid #FF6F00;display:none;">
+            <div id="dbinitials-answer" style="width:100px;height:100px;border-radius:50%;background:var(--accent-yellow);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;color:#111;">${initials}</div>
+            <div style="font-size:20px;font-weight:800;color:#FF6F00;">${answer.name}</div>
+            <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
+            <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
+                <button onclick="window.bwDbShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);"><span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result</button>
+                <button id="bwdb-post-btn" onclick="window.bwDbPostToFeed(this)" class="action-btn" style="background:#FF6F00;color:#111;font-size:13px;"><span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed</button>
+            </div>
+        </div>`;
+        if (inputArea) inputArea.style.display = 'none';
+        window.bwDbEnsureImages();
+        const statusEl = document.getElementById('bwdb-status-text');
+        if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
+    } else {
+        resultEl.style.display = 'none';
+        if (inputArea) inputArea.style.display = 'block';
+    }
+}
+
+function bwDbRender() {
+    const grid = document.getElementById('bwdb-grid');
+    if (!grid) return;
+    const { answer, guesses } = window.bwDbState;
+    grid.innerHTML = guesses.map(g => bwDbBuildRow(g, bwDbCalcColors(g, answer))).join('');
+    window.bwDbEnsureImages();
+    bwDbShowResult();
+}
+
+function bwDbAnimateNewRow(char, colors) {
+    const grid = document.getElementById('bwdb-grid');
+    if (!grid) return;
+    grid.insertAdjacentHTML('beforeend', bwDbBuildRow(char, colors));
+    window.bwDbEnsureImages();
+    const newRow = grid.lastElementChild;
+    const cells = newRow.querySelectorAll('.wordle-cell');
+    cells.forEach((cell, i) => {
+        cell.style.transform = 'rotateX(-90deg)';
+        cell.style.opacity = '0';
+        setTimeout(() => {
+            cell.style.transition = 'transform 0.75s ease, opacity 0.55s ease';
+            cell.style.transform = '';
+            cell.style.opacity = '';
+        }, i * 500);
+    });
+}
+
+function bwDbGetToday() {
+    const today = new Date().toISOString().split('T')[0];
+    const seed = today.split('-').reduce((a,b) => a + parseInt(b), 0) + 13;
+    return BW_DB_CHARS[seed % BW_DB_CHARS.length];
+}
+
+window.bwDbState = { answer: null, guesses: [], solved: false, selectedChar: null, date: null };
+
+window.openBwDbModal = function() {
+    window.closeAllModals();
+    document.getElementById('bwdb-modal').style.display = 'flex';
+    window.initBwDbGame();
+};
+
+window.initBwDbGame = async function() {
+    const today = new Date().toISOString().split('T')[0];
+    if (window.bwDbState.answer && window.bwDbState.date === today) {
+        document.getElementById('bwdb-loading').style.display = 'none';
+        document.getElementById('bwdb-content').style.display = 'block';
+        bwDbRender(); return;
+    }
+    window.bwDbState = { answer: bwDbGetToday(), guesses: [], solved: false, selectedChar: null, date: today };
+    try {
+        if (auth.currentUser) {
+            const snap = await getDoc(doc(db, 'bw_db_games', `${auth.currentUser.uid}_${today}`));
+            if (snap.exists()) {
+                const d = snap.data();
+                window.bwDbState.guesses = (d.guesses||[]).map(id => BW_DB_CHARS.find(c => c.id === id)).filter(Boolean);
+                window.bwDbState.solved = d.solved || false;
+            }
+        } else {
+            const saved = localStorage.getItem(`wb_bwdb_${today}`);
+            if (saved) { const d = JSON.parse(saved); window.bwDbState.guesses=(d.guesses||[]).map(id=>BW_DB_CHARS.find(c=>c.id===id)).filter(Boolean); window.bwDbState.solved=d.solved||false; }
+        }
+    } catch(e) {}
+    document.getElementById('bwdb-loading').style.display = 'none';
+    document.getElementById('bwdb-content').style.display = 'block';
+    bwDbRender();
+    window.bwDbLoadImages();
+};
+
+window.bwDbEnterGuess = function() {
+    if (window.bwDbState.selectedChar) { window.submitBwDbGuess(); return; }
+    const first = document.getElementById('bwdb-suggestions')?.querySelector('.wordle-suggestion-item');
+    if (first) first.click();
+};
+
+window.searchBwDbChar = function() {
+    window.bwDbState.selectedChar = null;
+    const q = document.getElementById('bwdb-search')?.value.trim().toLowerCase();
+    const sugg = document.getElementById('bwdb-suggestions');
+    if (!sugg) return;
+    if (!q) { sugg.style.display = 'none'; return; }
+    const guessedIds = new Set(window.bwDbState.guesses.map(g => g.id));
+    const matches = BW_DB_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
+    sugg.style.display = matches.length ? 'block' : 'none';
+    sugg.innerHTML = matches.map(c => `<div class="wordle-suggestion-item" onclick="window.selectBwDbChar('${c.id}')">${c.name}</div>`).join('');
+};
+
+window.selectBwDbChar = function(id) {
+    const char = BW_DB_CHARS.find(c => c.id === id);
+    if (!char) return;
+    window.bwDbState.selectedChar = char;
+    const inp = document.getElementById('bwdb-search');
+    if (inp) inp.value = char.name;
+    const sugg = document.getElementById('bwdb-suggestions');
+    if (sugg) sugg.style.display = 'none';
+    window.submitBwDbGuess();
+};
+
+window.submitBwDbGuess = async function() {
+    const char = window.bwDbState.selectedChar;
+    if (!char || window.bwDbState.solved) return;
+    if (window.bwDbState.guesses.some(g => g.id === char.id)) return;
+    const colors = bwDbCalcColors(char, window.bwDbState.answer);
+    window.bwDbState.guesses.push(char);
+    window.bwDbState.selectedChar = null;
+    const inp = document.getElementById('bwdb-search');
+    if (inp) inp.value = '';
+    if (char.id === window.bwDbState.answer.id) window.bwDbState.solved = true;
+    bwDbAnimateNewRow(char, colors);
+    setTimeout(() => bwDbShowResult(), 8 * 500 + 800);
+    const today = new Date().toISOString().split('T')[0];
+    const saveData = { guesses: window.bwDbState.guesses.map(g=>g.id), solved: window.bwDbState.solved, date: today, guessCount: window.bwDbState.guesses.length, displayName: auth.currentUser?.displayName||'Player' };
+    if (auth.currentUser) {
+        setDoc(doc(db, 'bw_db_games', `${auth.currentUser.uid}_${today}`), saveData).catch(()=>{});
+        if (window.bwDbState.solved) window.bwDbUpdateLeaderboard(window.bwDbState.guesses.length);
+    } else {
+        localStorage.setItem(`wb_bwdb_${today}`, JSON.stringify(saveData));
+    }
+};
+
+window.bwDbUpdateLeaderboard = async function(guessCount) {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const ref = doc(db, 'bw_db_leaderboard', uid);
+    const snap = await getDoc(ref);
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+    let streak, totalWins;
+    if (snap.exists()) {
+        const d = snap.data();
+        streak = d.lastWinDate === yesterday ? (d.currentStreak||0)+1 : 1;
+        totalWins = (d.totalWins || 0) + 1;
+        await updateDoc(ref, { totalWins: increment(1), totalGuesses: increment(guessCount), currentStreak: streak, bestStreak: Math.max(d.bestStreak||0,streak), lastWinDate: today, displayName: auth.currentUser.displayName });
+    } else {
+        streak = 1; totalWins = 1;
+        await setDoc(ref, { totalWins:1, totalGuesses:guessCount, currentStreak:1, bestStreak:1, lastWinDate:today, displayName: auth.currentUser.displayName });
+    }
+    window.checkBwDbAchievements(guessCount, streak, totalWins).catch(() => {});
+};
+
+window.checkBwDbAchievements = async function(guessCount, streak, totalWins) {
+    if (!auth.currentUser) return;
+    const ids = [];
+    if (totalWins === 1) ids.push('bwdb_first');
+    if (guessCount === 1) ids.push('bwdb_1guess');
+    if (streak >= 7) ids.push('bwdb_streak_7');
+    if (totalWins >= 30) ids.push('bwdb_total_30');
+    if (ids.length) window.awardAchievements(ids).catch(() => {});
+};
+
+window.bwDbShare = function() {
+    const { answer, guesses, solved } = window.bwDbState;
+    const today = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
+    const rows = guesses.map(g => {
+        const c = bwDbCalcColors(g, answer);
+        return [c.gender,c.race,c.origin,c.affiliation,c.transformation,c.debutSeries,c.debutArc].map(x=>map[x]||'⬛').join('');
+    }).join('\n');
+    const text = `BuzzWord: Dragon Ball Characters — ${today}\n${solved?`Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`:'Not solved'}\n\n${rows}\n\nhttps://weebee.buzz/#community`;
+    navigator.clipboard.writeText(text).then(()=>alert('Copied to clipboard!')).catch(()=>alert('Could not copy'));
+};
+
+window.bwDbPostToFeed = async function(btn) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const { answer, guesses, solved } = window.bwDbState;
+    if (!solved) return;
+    const today = new Date().toISOString().split('T')[0];
+    const existing = await getDocs(query(collection(db,'bw_posts'), where('uid','==',auth.currentUser.uid), where('date','==',today), where('game','==','dragonball')));
+    if (!existing.empty) { btn.innerText='Already posted!'; btn.disabled=true; return; }
+    const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
+    const emojiGrid = guesses.map(g => {
+        const c = bwDbCalcColors(g, answer);
+        return [c.gender,c.race,c.origin,c.affiliation,c.transformation,c.debutSeries,c.debutArc].map(x=>map[x]||'⬛').join('');
+    }).join('\n');
+    try {
+        btn.disabled=true; btn.innerText='Posting...';
+        const av = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        await addDoc(collection(db,'bw_posts'),{
+            uid:auth.currentUser.uid, displayName:auth.currentUser.displayName, avatar:av,
+            game:'dragonball', guessCount:guesses.length, emojiGrid, date:today, timestamp:new Date(), likes:[], dislikes:[], commentCount:0
+        });
+        btn.innerText='✓ Posted!';
+        window.awardAchievements(['feed_showtime']).catch(() => {});
+        window.fetchBwCommunityFeed();
+        window.fetchHomeBwFeed();
+    } catch(e) { btn.disabled=false; btn.innerText='Post to Feed'; alert('Failed to post.'); }
+};
+
+window.openBwDbLeaderboard = function() {
+    window.closeAllModals();
+    document.getElementById('bwdb-leaderboard-modal').style.display = 'flex';
+    window.showBwDbLeaderboardTab('today');
+};
+
+window.showBwDbLeaderboardTab = async function(tab) {
+    const todayBtn = document.getElementById('bwdb-tab-today');
+    const alltimeBtn = document.getElementById('bwdb-tab-alltime');
+    const content = document.getElementById('bwdb-leaderboard-content');
+    if (!content) return;
+    todayBtn.style.background = tab==='today' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+    todayBtn.style.color = tab==='today' ? '#111' : 'var(--text-dark)';
+    alltimeBtn.style.background = tab==='alltime' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+    alltimeBtn.style.color = tab==='alltime' ? '#111' : 'var(--text-dark)';
+    content.innerHTML = '<div class="loading">Loading...</div>';
+    const today = new Date().toISOString().split('T')[0];
+    try {
+        if (tab === 'today') {
+            const snap = await getDocs(query(collection(db,'bw_db_games'), where('date','==',today), where('solved','==',true)));
+            const sorted = snap.docs.sort((a,b)=>(a.data().guessCount||99)-(b.data().guessCount||99)).slice(0,10);
+            if (!sorted.length) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:30px;">No winners yet today — be the first!</p>'; return; }
+            content.innerHTML = sorted.map((d,i)=>{
+                const data=d.data(); const medal=['🥇','🥈','🥉'][i]||`${i+1}.`;
+                return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;background:var(--bg-gray);margin-bottom:8px;">
+                    <span style="font-size:20px;width:28px;">${medal}</span>
+                    <div style="flex:1;"><div style="font-weight:700;font-size:14px;">${data.displayName||'Player'}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${data.guessCount} ${data.guessCount===1?'guess':'guesses'}</div></div></div>`;
+            }).join('');
+        } else {
+            const snap = await getDocs(collection(db,'bw_db_leaderboard'));
+            const sorted = snap.docs.sort((a,b)=>(b.data().totalWins||0)-(a.data().totalWins||0)).slice(0,10);
+            if (!sorted.length) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:30px;">No scores yet!</p>'; return; }
+            content.innerHTML = sorted.map((d,i)=>{
+                const data=d.data(); const avg=data.totalWins>0?(data.totalGuesses/data.totalWins).toFixed(1):'-';
+                const medal=['🥇','🥈','🥉'][i]||`${i+1}.`;
+                return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;background:var(--bg-gray);margin-bottom:8px;">
+                    <span style="font-size:20px;width:28px;">${medal}</span>
+                    <div style="flex:1;"><div style="font-weight:700;font-size:14px;">${data.displayName||'Player'}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${data.totalWins} wins · Avg ${avg} guesses · Best streak: ${data.bestStreak||1}</div></div></div>`;
+            }).join('');
+        }
+    } catch(e) { content.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:20px;">Could not load leaderboard.</p>'; }
+};
+
 document.addEventListener('click', e => {
     if (!e.target.closest('.bwop-search-wrap')) {
         const s = document.getElementById('bwop-suggestions');
@@ -6948,6 +7464,8 @@ document.addEventListener('click', e => {
         if (sn) sn.style.display = 'none';
         const sb = document.getElementById('bwblc-suggestions');
         if (sb) sb.style.display = 'none';
+        const sd = document.getElementById('bwdb-suggestions');
+        if (sd) sd.style.display = 'none';
     }
 });
 

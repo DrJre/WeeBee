@@ -725,6 +725,12 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 @keyframes wpFlip { 0% { transform:rotateX(-90deg); opacity:0; } 100% { transform:rotateX(0deg); opacity:1; } }
 .wordle-header-row { display:flex; gap:6px; margin-bottom:8px; }
 .wordle-col-header { flex:1; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); text-align:center; padding:4px 2px; }
+.bw-tip { position:relative; display:inline-flex; align-items:center; justify-content:center; cursor:default; }
+.bw-tip-icon { font-size:11px; color:var(--text-muted); opacity:0.7; margin-left:3px; vertical-align:middle; cursor:help; user-select:none; }
+.bw-tip-icon:hover { opacity:1; }
+.bw-tip .bw-tip-box { display:none; position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:#222; color:#fff; font-size:11px; font-weight:500; text-transform:none; letter-spacing:0; padding:7px 10px; border-radius:8px; white-space:nowrap; z-index:999; box-shadow:0 4px 12px rgba(0,0,0,0.4); pointer-events:none; line-height:1.5; }
+.bw-tip .bw-tip-box::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:5px solid transparent; border-top-color:#222; }
+.bw-tip:hover .bw-tip-box { display:block; }
 .wordle-char-header { width:100px; min-width:100px; flex:0 0 100px; }
 .wordle-row { display:flex; gap:6px; margin-bottom:6px; }
 .wordle-char-cell { width:100px; min-width:100px; flex:0 0 100px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:8px 4px; background:var(--bg-gray-darker); border-radius:10px; }

@@ -424,7 +424,7 @@
                     </div>
 
                     <!-- BUZZWORD: NARUTO CHARACTERS THUMBNAIL -->
-                    <div onclick="window.openBwNrtModal()" style="cursor:pointer; background:linear-gradient(135deg, #1a0a00 0%, #3d1a00 60%, #6b3300 100%); border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid #7a3300; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+                    <div onclick="window.openBwNrtModal()" style="cursor:pointer; background:linear-gradient(135deg, #1a1500 0%, #3a2e00 60%, #5c4a00 100%); border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid var(--accent-yellow); transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
                         <img id="bwnrt-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:0; height:100%; width:160px; object-fit:cover; object-position:center 20%; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
                         <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">🍃</div>
                         <div style="flex:1; min-width:0; position:relative; z-index:1;">
@@ -447,6 +447,18 @@
                         <div class="action-btn" style="pointer-events:none; background:#00BCD4; color:#111; flex-shrink:0; font-weight:800; position:relative; z-index:1;">Play →</div>
                     </div>
 
+                    <!-- BUZZWORD: DRAGON BALL CHARACTERS THUMBNAIL -->
+                    <div onclick="window.openBwDbModal()" style="cursor:pointer; background:linear-gradient(135deg, #1a0a00 0%, #2d1200 60%, #4a1f00 100%); border-radius:16px; padding:20px 24px; margin-bottom:20px; display:flex; align-items:center; gap:18px; border:2px solid #FF6F00; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+                        <img id="bwdb-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:-30px; height:130%; width:160px; object-fit:cover; object-position:center top; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
+                        <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">🐉</div>
+                        <div style="flex:1; min-width:0; position:relative; z-index:1;">
+                            <div style="font-size:20px; font-weight:800; color:#FF6F00; margin-bottom:4px;">BuzzWord: Dragon Ball Characters</div>
+                            <div style="font-size:13px; color:rgba(255,255,255,0.75);">Guess today's Dragon Ball character — new puzzle every day!</div>
+                            <div id="bwdb-status-text" style="font-size:12px; color:#FF6F00; margin-top:6px; font-weight:600;"></div>
+                        </div>
+                        <div class="action-btn" style="pointer-events:none; background:#FF6F00; color:#111; flex-shrink:0; font-weight:800; position:relative; z-index:1;">Play →</div>
+                    </div>
+
                     <!-- BUZZWORD — TODAY'S COMMUNITY RESULTS (ALL GAMES) -->
                     <div style="margin-bottom: 40px;">
                         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
@@ -460,6 +472,9 @@
                                 </button>
                                 <button onclick="window.openBwBlcLeaderboard()" class="action-btn" style="font-size:12px; padding:6px 12px; background:#006080; color:#00BCD4;">
                                     <span class="material-symbols-outlined" style="font-size:14px;">leaderboard</span> ⚔️ BLC Board
+                                </button>
+                                <button onclick="window.openBwDbLeaderboard()" class="action-btn" style="font-size:12px; padding:6px 12px; background:#4a1f00; color:#FF6F00;">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">leaderboard</span> 🐉 DB Board
                                 </button>
                             </div>
                         </div>
@@ -1253,10 +1268,11 @@
                 <div class="wordle-header-row">
                     <div class="wordle-col-header wordle-char-header">Character</div>
                     <div class="wordle-col-header">Gender</div>
-                    <div class="wordle-col-header">Village</div>
-                    <div class="wordle-col-header">Jutsu Type</div>
-                    <div class="wordle-col-header">Nature</div>
-                    <div class="wordle-col-header">Attribute</div>
+                    <div class="wordle-col-header"><span class="bw-tip">Affiliation<span class="bw-tip-icon">ℹ</span><span class="bw-tip-box">Leaf · Sand · Mist · Cloud · Stone · Sound · Akatsuki · Missing-nin · None<br>Characters may have multiple affiliations</span></span></div>
+                    <div class="wordle-col-header"><span class="bw-tip">Jutsu Type<span class="bw-tip-icon">ℹ</span><span class="bw-tip-box">Ninjutsu · Taijutsu · Genjutsu · Kenjutsu · Fuinjutsu · Medical Ninjutsu · Senjutsu · Kinjutsu</span></span></div>
+                    <div class="wordle-col-header"><span class="bw-tip">Nature<span class="bw-tip-icon">ℹ</span><span class="bw-tip-box">Fire · Wind · Lightning · Earth · Water</span></span></div>
+                    <div class="wordle-col-header"><span class="bw-tip">Attribute<span class="bw-tip-icon">ℹ</span><span class="bw-tip-box">Jinchuriki · Sage · Kage · Anbu · Sensor · Sannin · None</span></span></div>
+                    <div class="wordle-col-header"><span class="bw-tip">Kekkei Genkai<span class="bw-tip-icon">ℹ</span><span class="bw-tip-box">Yes · No — Inherited bloodline ability (e.g. Sharingan, Byakugan, Wood Release)</span></span></div>
                     <div class="wordle-col-header">Debut Arc</div>
                 </div>
                 <div id="bwnrt-grid"></div>
@@ -1337,6 +1353,59 @@
                 <button id="bwblc-tab-alltime" onclick="window.showBwBlcLeaderboardTab('alltime')" class="action-btn" style="font-size:12px; background:var(--bg-gray-darker); color:var(--text-dark);">All Time</button>
             </div>
             <div id="bwblc-leaderboard-content" style="min-height:200px;"><div class="loading">Loading...</div></div>
+            <div class="modal-actions" style="margin-top:16px;">
+                <button onclick="closeAllModals()" class="cancel-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BuzzWord: Dragon Ball Characters Modal -->
+    <div id="bwdb-modal" class="modal-overlay" style="display:none;" onclick="event.target===this&&closeAllModals()">
+        <div class="modal-content" style="max-width:1250px; width:96vw; max-height:92vh; overflow-y:auto; padding:24px; position:relative;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+                <div>
+                    <h2 style="margin:0 0 4px; font-size:22px;">🐉 BuzzWord: Dragon Ball Characters</h2>
+                    <p style="margin:0; color:var(--text-muted); font-size:13px;">Guess today's character — unlimited guesses</p>
+                </div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button onclick="window.openBwDbLeaderboard()" class="action-btn" style="font-size:12px;"><span class="material-symbols-outlined" style="font-size:15px;">leaderboard</span> Leaderboard</button>
+                    <button onclick="closeAllModals()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:28px;line-height:1;padding:0;">×</button>
+                </div>
+            </div>
+            <div id="bwdb-loading" style="text-align:center; padding:40px; color:var(--text-muted);">Loading today's puzzle...</div>
+            <div id="bwdb-content" style="display:none;">
+                <div class="wordle-header-row">
+                    <div class="wordle-col-header wordle-char-header">Character</div>
+                    <div class="wordle-col-header">Gender</div>
+                    <div class="wordle-col-header"><span class="bw-tip">Race<span class="bw-tip-icon">ℹ</span><span class="bw-tip-box">Saiyan · Half-Saiyan · Human · Namekian · Android · Majin · Frieza Race · Angel · Kai · Other</span></span></div>
+                    <div class="wordle-col-header"><span class="bw-tip">Origin<span class="bw-tip-icon">ℹ</span><span class="bw-tip-box">Earth · Planet Vegeta · Namek · Planet Sadala · Sacred World · Unknown</span></span></div>
+                    <div class="wordle-col-header"><span class="bw-tip">Affiliation<span class="bw-tip-icon">ℹ</span><span class="bw-tip-box">Z Fighters · Frieza Force · Ginyu Force · Red Ribbon Army · Galactic Patrol · Gods of Destruction · Angels · Villain · Other<br>Characters may have multiple affiliations</span></span></div>
+                    <div class="wordle-col-header">Transforms</div>
+                    <div class="wordle-col-header">Debut Series</div>
+                    <div class="wordle-col-header">Debut Arc</div>
+                </div>
+                <div id="bwdb-grid"></div>
+                <div id="bwdb-result" style="display:none; padding:20px; border-radius:12px; margin-top:10px;"></div>
+                <div class="bwop-search-wrap" id="bwdb-input-area" style="margin-top:16px;">
+                    <input type="text" id="bwdb-search" placeholder="Type a character name to guess..." autocomplete="off"
+                           oninput="window.searchBwDbChar()"
+                           onkeydown="if(event.key==='Enter') window.bwDbEnterGuess()"
+                           style="width:100%; padding:14px 16px; border-radius:10px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:15px; box-sizing:border-box;">
+                    <div id="bwdb-suggestions" class="bwop-suggestions"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- BuzzWord: Dragon Ball Characters Leaderboard Modal -->
+    <div id="bwdb-leaderboard-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:480px;">
+            <h3 style="margin-bottom:16px;">BuzzWord: Dragon Ball Characters — Leaderboard</h3>
+            <div style="display:flex; gap:8px; margin-bottom:16px;">
+                <button id="bwdb-tab-today" onclick="window.showBwDbLeaderboardTab('today')" class="action-btn" style="font-size:12px;">Today</button>
+                <button id="bwdb-tab-alltime" onclick="window.showBwDbLeaderboardTab('alltime')" class="action-btn" style="font-size:12px; background:var(--bg-gray-darker); color:var(--text-dark);">All Time</button>
+            </div>
+            <div id="bwdb-leaderboard-content" style="min-height:200px;"><div class="loading">Loading...</div></div>
             <div class="modal-actions" style="margin-top:16px;">
                 <button onclick="closeAllModals()" class="cancel-btn">Close</button>
             </div>

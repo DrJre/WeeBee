@@ -7,39 +7,23 @@
 ## Next Patch Notes
 <!-- Add entries here as features are completed. Claude will append to this after each task. -->
 
-🗨️ Tier List Comments
-- You can now comment on tier list posts directly from the home feed
-- Fixed Send button being hidden behind the anime thumbnail on cards with cover art
+🐉 BuzzWord: Dragon Ball Characters
+New BuzzWord game! Guess the daily Dragon Ball character across 7 columns: Gender, Race, Origin, Affiliation, Transforms, Debut Series, and Debut Arc. 50 characters from DB, DBZ, and DBS — main cast, Ginyu Force, Androids, Universe 6 Saiyans, and divine beings.
 
-🎮 BuzzWord Community Feed & Leaderboards
-- Fixed Today's Results on the Community tab not loading
-- Fixed BuzzWord leaderboards (One Piece, Naruto, Bleach) not loading
+🏯 Naruto BuzzWord — Category Overhaul
+The Naruto BuzzWord game has been significantly improved:
+- Village is now Affiliation, showing each character's full faction history (e.g. Itachi = Leaf, Missing-nin, Akatsuki)
+- Added Kekkei Genkai column (Yes/No) — bloodline limits are now their own category
+- Attribute column cleaned up — Kekkei Genkai and Missing-nin removed, only role-based traits remain
+- Land of Waves arc merged into Introduction — Zabuza and Haku now debut in the correct era
+- Nature column no longer includes Wood or Ice (those are Kekkei Genkai, not basic natures)
+- Info tooltips added to Affiliation, Jutsu Type, Nature, Attribute, and Kekkei Genkai columns
 
-🎨 BuzzWord Community Page Redesign
-- Added a BuzzWord hero banner at the top of the Community page
-- Added character art (Luffy, Naruto, Ichigo) to each game banner
-- Added character profile pictures to the search suggestion dropdowns in all BuzzWord games
-- Fixed profile picture on BuzzWord posts not being clickable to view that user's profile
+🔧 Add Friend Button Fix
+The Add Friend button on user profiles was sending the request correctly but not updating to "Pending" after clicking. Now works as expected.
 
-✏️ Edit Reviews
-- Added an Edit Review option to the three-dot menu on review cards
-- Opens directly into the correct Quick Score or In-Depth edit modal pre-filled with your existing scores and text
-
-📱 Mobile Improvements
-- Anime pages: cover image is now centered and larger, with stats and buttons stacking below it
-- BuzzWord feed posts: emoji grid is compact and no longer overflows; game thumbnail hidden on mobile so header text is no longer cut off
-- BuzzWord games: modals open as full-screen bottom sheets with a horizontally scrollable guess grid
-- My List: table fits the screen without side-scrolling; episodes column hidden on mobile
-- Discover: Seasonal vote displays as a 2-column grid instead of 5 columns
-- Pinch zoom disabled for a more app-like feel
-
-🔍 User Search Improvements
-- User search is now case-insensitive — searching "jbob" finds "JBob" and vice versa
-- Existing users get the fix automatically on their next sign-in
-
-📋 My List Score Fix
-- Score column now pulls from your review score instead of the list entry score
-- Shows "—" if no review has been written for that anime
+🛠️ Admin Panel Fix
+The Post Patch Notes panel on the News tab now appears reliably regardless of when you navigate to the tab after logging in.
 
 ## Standards
 - **Comment sections** — every comment section must include: post comment, edit (with "(edited)" indicator), delete (with confirm), and Enter-to-submit. Use `renderBwComment()` as the template for new comment sections going forward.
