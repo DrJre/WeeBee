@@ -2,28 +2,56 @@
 
 ## Pending Features
 - [ ] **Upload WeeBee logo/fonts** — branding assets to replace the plain text logo
-- [ ] **BuzzWord: Dragon Ball Characters** — new BuzzWord game
 
 ## Next Patch Notes
-<!-- Add entries here as features are completed. Claude will append to this after each task. -->
+
+🐝 Followers Tab
+- The Followers count on user profiles is now clickable — tap it to jump straight to the Followers tab
+- New Followers tab on every profile showing the full list of followers, each clickable to visit their profile
+
+📊 Dual Scores on Search & Top 10
+- Anime search results now show both a WeeBee score and a MAL score side by side, each labeled
+- The Discover page Top 10 list and podium now show both scores too — WeeBee badge in its tier color, MAL badge in blue
+
+🗂️ Profile Tab Reorder
+Tabs are now in a more logical order: Reviews → Tier Lists → Achievements → Friends → Following → Followers
+
+🖼️ Sharper Profile Banners
+Banner uploads now preserve significantly more detail — max resolution bumped from 1400px to 2400px, and JPEG quality raised from 85% to 92%. Re-upload your banner to get the improvement.
+
+🃏 Tier List Templates
+- Every tier list card on the home feed now has a "Make One" button in the top corner
+- The tier list viewer has "Use as Template" and "Start Fresh" buttons in the header
+- Both options pre-load the tier structure (categories and colors) from the original, but start with empty slots
+
+🔧 Follow Button Restored
+The Follow button on user profiles had gone missing after a previous redesign. It's back in the top-right of the banner alongside the Message and Add Friend buttons, and includes the notification bell for accounts you follow.
 
 🐉 BuzzWord: Dragon Ball Characters
-New BuzzWord game! Guess the daily Dragon Ball character across 7 columns: Gender, Race, Origin, Affiliation, Transforms, Debut Series, and Debut Arc. 50 characters from DB, DBZ, and DBS — main cast, Ginyu Force, Androids, Universe 6 Saiyans, and divine beings.
+New BuzzWord game! Guess the daily Dragon Ball character across 7 columns: Gender, Race, Origin, Affiliation, Transforms, Debut Series, and Debut Arc. 50 characters spanning DB, DBZ, and DBS — main cast, Ginyu Force, Androids, Universe 6 Saiyans, and divine beings.
 
 🏯 Naruto BuzzWord — Category Overhaul
-The Naruto BuzzWord game has been significantly improved:
 - Village is now Affiliation, showing each character's full faction history (e.g. Itachi = Leaf, Missing-nin, Akatsuki)
 - Added Kekkei Genkai column (Yes/No) — bloodline limits are now their own category
-- Attribute column cleaned up — Kekkei Genkai and Missing-nin removed, only role-based traits remain
+- Attribute column cleaned up — role-based traits only
 - Land of Waves arc merged into Introduction — Zabuza and Haku now debut in the correct era
 - Nature column no longer includes Wood or Ice (those are Kekkei Genkai, not basic natures)
 - Info tooltips added to Affiliation, Jutsu Type, Nature, Attribute, and Kekkei Genkai columns
 
-🔧 Add Friend Button Fix
-The Add Friend button on user profiles was sending the request correctly but not updating to "Pending" after clicking. Now works as expected.
+🩸 Bleach BuzzWord — Image Fix
+Characters from Thousand-Year Blood War Parts 2 & 3 (Yhwach, Jugram, Pernida, etc.) now load their images correctly.
 
-🛠️ Admin Panel Fix
-The Post Patch Notes panel on the News tab now appears reliably regardless of when you navigate to the tab after logging in.
+🏴‍☠️ One Piece BuzzWord — Marco Added
+Marco the Phoenix is now in the One Piece BuzzWord character pool.
+
+⏱️ Post Timestamps
+Review cards and BuzzWord feed posts now show how long ago they were posted.
+
+💡 BuzzWord Banners (Light Mode)
+BuzzWord game banners now use a subtle colored tint in light mode instead of full solid colors, reducing harsh contrast while keeping each game's color theme. Dark mode is unchanged.
+
+📺 Series Review Score Fix
+Series-level reviews (the overall score given after reviewing a full series) no longer count toward individual season WeeBee scores. Season scores only reflect per-season reviews.
 
 ## Standards
 - **Comment sections** — every comment section must include: post comment, edit (with "(edited)" indicator), delete (with confirm), and Enter-to-submit. Use `renderBwComment()` as the template for new comment sections going forward.

@@ -1326,6 +1326,29 @@ window.viewFriendList = function(uid) {
     window.viewFullAnimeList();
 };
 
+window.loadFollowersTab = async function(uid) {
+    const container = document.getElementById('followers-list-container');
+    if (!container) return;
+    container.innerHTML = '<div class="loading">Loading followers...</div>';
+    try {
+        const snap = await getDocs(query(collection(db, "follows"), where("targetId", "==", uid), where("type", "==", "user")));
+        if (snap.empty) { container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px; font-size:14px;">No followers yet.</p>'; return; }
+        const followerUids = snap.docs.map(d => d.data().followerUid).filter(Boolean);
+        const profileDocs = await Promise.all(followerUids.map(fuid => getDoc(doc(db, "profiles", fuid))));
+        container.innerHTML = '<div style="display:flex; flex-wrap:wrap; gap:10px; padding:16px 0;">' +
+            profileDocs.map((pd, i) => {
+                const p = pd.exists() ? pd.data() : {};
+                const fuid = followerUids[i];
+                const fname = p.displayName || 'WeeBee User';
+                const favatar = p.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(fname)}&backgroundColor=ffc107&fontColor=333333`;
+                return `<div style="display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px; background:var(--bg-gray);">
+                    <img src="${favatar}" class="avatar" style="width:36px; height:36px; flex-shrink:0; cursor:pointer;" onclick="viewUserProfile('${fuid}')">
+                    <span style="font-weight:600; font-size:14px; flex:1; cursor:pointer;" onclick="viewUserProfile('${fuid}')">${fname}</span>
+                </div>`;
+            }).join('') + '</div>';
+    } catch(e) { container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px; font-size:14px;">Failed to load followers.</p>'; }
+};
+
 window.sendReviewNotifications = async function(animeTitle, mal_id) {
     if (!auth.currentUser) return;
     try {
@@ -2199,7 +2222,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                     <div>
                         <strong class="clickable-user" onclick="event.stopPropagation(); viewUserProfile('${safeUid}')">${rev.username}</strong> ${window.getFounderBadgeHTML(safeUid)} ${window.getRankBadgeHTML(window.userRankCache[safeUid] || 0, 14)}
                         <span class="source-badge" style="background: #4CAF50; color: white; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase;">Suggestion</span><br>
-                        <span style="font-size: 12px; color: var(--text-muted);">Suggested: <strong style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong></span>
+                        <span style="font-size: 12px; color: var(--text-muted);">Suggested: <strong style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong> · ${formatTimeAgo(rev.timestamp)}</span>
                     </div>
                 </div>
                 ${window.getFollowBtnHTML(safeUid)}
@@ -2255,7 +2278,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                     <span style="font-size: 12px; color: var(--text-muted); display:flex; align-items:center; gap:6px; margin-top:3px; min-width:0;">${rev.animeImage ? `<img src="${rev.animeImage}" class="review-cover-mobile" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">` : ''}${rev.type === 'series'
                         ? `<span style="background:var(--accent-yellow); color:#111; font-size:10px; font-weight:800; padding:2px 7px; border-radius:4px; text-transform:uppercase; letter-spacing:0.5px;">Series Rating</span>`
                         : `Season Review: <strong class="review-anime-title" style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong>`
-                    }</span></div>
+                    } <span style="color:var(--text-muted); flex-shrink:0;">· ${formatTimeAgo(rev.timestamp)}</span></span></div>
                 </div>
                 ${window.getFollowBtnHTML(safeUid)}
             </div>
@@ -2347,7 +2370,7 @@ async function compressAvatar(file, size = 400, quality = 0.82) {
     });
 }
 
-async function compressBanner(file, maxWidth = 1400, quality = 0.85) {
+async function compressBanner(file, maxWidth = 2400, quality = 0.92) {
     return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -2582,6 +2605,7 @@ window.switchProfileTab = function(event, tabId) {
     if (tabId === 'p-achievements') window.loadProfileAchievements(window.currentProfileUid);
     if (tabId === 'p-friends') window.loadFriendsTab(window.currentProfileUid);
     if (tabId === 'p-tierlists') window.loadTierListsTab(window.currentProfileUid);
+    if (tabId === 'p-followers') window.loadFollowersTab(window.currentProfileUid);
 };
 
 window.fetchUserProfile = async function(targetUid = null) {
@@ -2659,9 +2683,11 @@ window.fetchUserProfile = async function(targetUid = null) {
 
     const topBtns = isMe
         ? `<button class="action-btn" onclick="openEditProfileModal()" style="position:absolute;top:14px;right:14px;z-index:5;background:rgba(0,0,0,0.45);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(6px);"><span class="material-symbols-outlined">edit</span> Edit Profile</button>`
-        : `<div style="position:absolute;top:14px;right:14px;z-index:5;display:flex;gap:8px;">
+        : `<div style="position:absolute;top:14px;right:14px;z-index:5;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
                <button onclick="openDMConversation('${uidToFetch}','${pName.replace(/'/g,"\\'")}','${pAvatar}')" class="action-btn" style="padding:8px;min-width:unset;background:rgba(0,0,0,0.45);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(6px);" title="Message"><span class="material-symbols-outlined">chat_bubble</span></button>
+               <button id="profile-notify-btn" onclick="toggleReviewNotify('${uidToFetch}', this)" class="action-btn" title="${notifyOn ? 'Review notifications on' : 'Review notifications off'}" style="padding:8px;min-width:unset;background:rgba(0,0,0,0.45);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(6px);display:${isFollowing ? 'inline-flex' : 'none'};"><span class="material-symbols-outlined" style="font-size:20px;">${notifyOn && isFollowing ? 'notifications_active' : 'notifications_off'}</span></button>
                <span id="profile-friend-btns">${friendBtnInner}</span>
+               <button onclick="toggleFollow('${uidToFetch}', 'user', this)" class="action-btn" style="background:rgba(0,0,0,0.45);color:white;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(6px);${isFollowing ? 'opacity:0.75;' : ''}"><span class="material-symbols-outlined">${isFollowing ? 'check' : 'person_add'}</span> ${isFollowing ? 'Following' : 'Follow'}</button>
            </div>`;
 
     const bioSection = pBio
@@ -2703,7 +2729,7 @@ window.fetchUserProfile = async function(targetUid = null) {
     let totalScore = 0; let reviewCount = 0; let myReviews = [];
     revSnap.forEach(d => {
         const data = d.data();
-        if(data.type !== 'suggestion') { totalScore += parseFloat(data.score); reviewCount++; }
+        if(data.type !== 'suggestion' && data.type !== 'series') { totalScore += parseFloat(data.score); reviewCount++; }
         myReviews.push({ ...data, id: d.id });
     });
     myReviews.sort((a,b) => b.timestamp - a.timestamp);
@@ -2795,7 +2821,9 @@ window.fetchUserProfile = async function(targetUid = null) {
             <strong>${followingCount}</strong> <span style="color:var(--text-muted); font-size:13px;">Following</span>
         </span>
         <span style="color:var(--border-color);">·</span>
-        <span><strong>${followersCount}</strong> <span style="color:var(--text-muted); font-size:13px;">Followers</span></span>`;
+        <span style="cursor:pointer;" onclick="switchProfileTab({currentTarget: document.querySelector('.p-tab[onclick*=p-followers]')}, 'p-followers')">
+            <strong>${followersCount}</strong> <span style="color:var(--text-muted); font-size:13px;">Followers</span>
+        </span>`;
 
     // SOCIAL (FOLLOWING)
     const followsSnap = await getDocs(query(collection(db, "follows"), where("followerUid", "==", uidToFetch)));
@@ -3094,6 +3122,11 @@ function renderTierListFeedCard(id, tl) {
     const padRight = coverImage ? 'padding-right:195px;' : '';
     return `<div class="review-card tl-post-card feed-post-card">
         ${thumbHTML}
+        <div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
+            <button onclick="window.useAsTemplate('${id}')" style="background:rgba(0,0,0,0.35);border:none;border-radius:20px;padding:5px 10px;cursor:pointer;color:white;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;">
+                <span class="material-symbols-outlined" style="font-size:13px;">content_copy</span> Make One
+            </button>
+        </div>
         <div class="review-header" style="margin-bottom:10px;position:relative;z-index:2;${padRight}">
             <img src="${avatar}" class="avatar" onclick="event.stopPropagation();viewUserProfile('${tl.uid}')" style="cursor:pointer;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(tl.authorName||'U')}&backgroundColor=ffc107&fontColor=333333'">
             <div style="min-width:0;">
@@ -3439,6 +3472,35 @@ window.openTierListCreator = function() {
     window.showTierStep('type');
 };
 
+window.useAsTemplate = async function(id) {
+    if (!auth.currentUser) return window.openAuthModal();
+    try {
+        const d = await getDoc(doc(db, 'tier_lists', id));
+        if (!d.exists()) return;
+        const tl = d.data();
+        const templateTiers = tl.tiers.map(t => ({ ...t, items: [] }));
+        window.tierListState = {
+            editingId: null,
+            type: tl.type || 'anime',
+            sourceAnimeId: tl.sourceAnimeId || null,
+            sourceAnimeTitle: tl.sourceAnimeTitle || null,
+            tiers: templateTiers,
+            unranked: [],
+            isPublic: true
+        };
+        window.closeAllModals();
+        document.getElementById('tier-list-creator').style.display = 'flex';
+        if (tl.type === 'characters' && tl.sourceAnimeId) {
+            // Load characters for the same source anime
+            await window.selectTierSource(tl.sourceAnimeId, tl.sourceAnimeTitle, tl._sourceAnimeImage || null);
+        } else {
+            document.getElementById('tl-source-label').innerText = 'Anime tier list';
+            window.showTierStep('editor');
+            window.renderTierEditor();
+        }
+    } catch(e) { console.error(e); alert('Could not load template.'); }
+};
+
 window.showTierStep = function(step) {
     ['type','source','editor'].forEach(s => { const el = document.getElementById(`tl-step-${s}`); if(el) el.style.display = 'none'; });
     const el = document.getElementById(`tl-step-${step}`); if(el) el.style.display = 'block';
@@ -3732,12 +3794,18 @@ window.openTierListViewer = async function(id) {
                     <span style="font-size:13px;color:var(--text-muted);">by <strong style="color:var(--text-dark);">${tl.authorName}</strong>${tl.type==='characters'&&tl.sourceAnimeTitle?` · Characters from <em>${tl.sourceAnimeTitle}</em>`:' · Anime'}</span>
                 </div>
             </div>
-            <div style="display:flex;gap:8px;flex-shrink:0;">
+            <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
                 <button onclick="likeTierList('${id}',this)" class="action-btn" style="padding:6px 14px;${liked?'background:var(--accent-yellow);':'background:var(--bg-gray-darker);color:var(--text-dark);'}">
                     <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">${liked?'favorite':'favorite_border'}</span> ${(tl.likes||[]).length}
                 </button>
                 <button onclick="shareTierList('${id}')" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);padding:6px 12px;" title="Copy share link">
                     <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">share</span>
+                </button>
+                <button onclick="window.useAsTemplate('${id}')" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);padding:6px 12px;" title="Use this tier structure as a template">
+                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">content_copy</span> Use as Template
+                </button>
+                <button onclick="window.openTierListCreator()" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);padding:6px 12px;" title="Start a brand new tier list">
+                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">add</span> Start Fresh
                 </button>
                 ${isOwner?`<button onclick="editTierList('${id}')" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);padding:6px 12px;"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">edit</span></button>`:''}
                 ${isOwner?`<button onclick="deleteTierList('${id}')" class="action-btn" style="background:#FF5252;color:white;padding:6px 12px;"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">delete</span></button>`:''}
@@ -3825,7 +3893,12 @@ function renderTierListCard(id, tl) {
         <div style="font-weight:700;font-size:15px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${tl.title}</div>
         <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">${tl.type==='characters'&&tl.sourceAnimeTitle?`Characters · ${tl.sourceAnimeTitle}`:'Anime'} · ${date}</div>
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">${preview}</div>
-        <div style="font-size:12px;color:var(--text-muted);">${count} item${count!==1?'s':''} ranked · ❤️ ${(tl.likes||[]).length}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+            <div style="font-size:12px;color:var(--text-muted);">${count} item${count!==1?'s':''} ranked · ❤️ ${(tl.likes||[]).length}</div>
+            <button onclick="event.stopPropagation(); window.useAsTemplate('${id}')" class="action-btn" style="font-size:11px;padding:4px 10px;background:var(--bg-gray-darker);color:var(--text-dark);">
+                <span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle;">content_copy</span> Make One
+            </button>
+        </div>
     </div>`;
 }
 
@@ -4090,7 +4163,7 @@ window.fetchDiscoverPage = async function() {
         const reviewerMap = {};
         revSnap.forEach(d => {
             const data = d.data();
-            if(data.type !== 'suggestion' && data.score && data.mal_id) {
+            if(data.type !== 'suggestion' && data.type !== 'series' && data.score && data.mal_id) {
                 if(!animeStats[data.mal_id]) { animeStats[data.mal_id] = { mal_id: data.mal_id, title: data.animeTitle, image: data.animeImage, totalScore: 0, count: 0 }; }
                 // Fill in missing title/image from any review that has them
                 if(!animeStats[data.mal_id].title && data.animeTitle) { animeStats[data.mal_id].title = data.animeTitle; animeStats[data.mal_id].image = data.animeImage; }
@@ -4151,14 +4224,26 @@ window.fetchDiscoverPage = async function() {
                 }
             } catch(e) {}
 
-            // Read rank history for permanent achievement badges
+            // Read rank history + MAL scores from cache in parallel
             const historyMap = {};
-            await Promise.all(top10.map(async a => {
-                try {
-                    const d = await getDoc(doc(db, "rankHistory", String(a.mal_id)));
-                    historyMap[a.mal_id] = d.exists() ? d.data() : {};
-                } catch(e) { historyMap[a.mal_id] = {}; }
-            }));
+            const malScoreMap = {};
+            await Promise.all([
+                ...top10.map(async a => {
+                    try {
+                        const d = await getDoc(doc(db, "rankHistory", String(a.mal_id)));
+                        historyMap[a.mal_id] = d.exists() ? d.data() : {};
+                    } catch(e) { historyMap[a.mal_id] = {}; }
+                }),
+                ...top10.map(async a => {
+                    try {
+                        const cd = await getDoc(doc(db, "anime_cache", `full_${a.mal_id}`));
+                        if (cd.exists()) {
+                            const score = cd.data().payload?.data?.score;
+                            if (score) malScoreMap[a.mal_id] = score;
+                        }
+                    } catch(e) {}
+                })
+            ]);
 
             // Award badges only to qualified podium anime (MIN_REVIEWS threshold)
             const histUpdates = [];
@@ -4234,7 +4319,13 @@ window.fetchDiscoverPage = async function() {
                         <div class="podium-rank-change">${getRankChange(podium[1].mal_id)}</div>
                         <img src="${podium[1].image}" alt="${podium[1].title}">
                         <h4>${podium[1].title}</h4>
-                        <div class="rating-badge tier-silver" style="width:38px;height:38px;font-size:13px;">${podium[1].avgScore}</div>
+                        <div style="display:flex;gap:5px;align-items:flex-end;justify-content:center;">
+                            <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                                <div class="rating-badge tier-silver" style="width:38px;height:38px;font-size:13px;">${podium[1].avgScore}</div>
+                                <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">WeeBee</span>
+                            </div>
+                            ${malScoreMap[podium[1].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div class="rating-badge blue" style="width:30px;height:30px;font-size:10px;">${malScoreMap[podium[1].mal_id]}</div><span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
+                        </div>
                         <div class="podium-step step-2">2</div>
                     </div>`;
             }
@@ -4247,7 +4338,13 @@ window.fetchDiscoverPage = async function() {
                         <div class="podium-rank-change">${getRankChange(podium[0].mal_id)}</div>
                         <img src="${podium[0].image}" alt="${podium[0].title}">
                         <h4>${podium[0].title}</h4>
-                        <div class="rating-badge tier-royal" style="width:48px;height:48px;font-size:16px;">${podium[0].avgScore}</div>
+                        <div style="display:flex;gap:5px;align-items:flex-end;justify-content:center;">
+                            <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                                <div class="rating-badge tier-royal" style="width:48px;height:48px;font-size:16px;">${podium[0].avgScore}</div>
+                                <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">WeeBee</span>
+                            </div>
+                            ${malScoreMap[podium[0].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div class="rating-badge blue" style="width:36px;height:36px;font-size:12px;">${malScoreMap[podium[0].mal_id]}</div><span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
+                        </div>
                         <div class="podium-step step-1">1</div>
                     </div>`;
             } else {
@@ -4262,7 +4359,13 @@ window.fetchDiscoverPage = async function() {
                         <div class="podium-rank-change">${getRankChange(podium[2].mal_id)}</div>
                         <img src="${podium[2].image}" alt="${podium[2].title}">
                         <h4>${podium[2].title}</h4>
-                        <div class="rating-badge tier-bronze" style="width:38px;height:38px;font-size:13px;">${podium[2].avgScore}</div>
+                        <div style="display:flex;gap:5px;align-items:flex-end;justify-content:center;">
+                            <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                                <div class="rating-badge tier-bronze" style="width:38px;height:38px;font-size:13px;">${podium[2].avgScore}</div>
+                                <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">WeeBee</span>
+                            </div>
+                            ${malScoreMap[podium[2].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div class="rating-badge blue" style="width:30px;height:30px;font-size:10px;">${malScoreMap[podium[2].mal_id]}</div><span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
+                        </div>
                         <div class="podium-step step-3">3</div>
                     </div>`;
             }
@@ -4290,7 +4393,13 @@ window.fetchDiscoverPage = async function() {
                                 </div>
                                 <p style="font-size:12px; color:var(--text-muted);">${anime.count} WeeBee Review${anime.count !== 1 ? 's' : ''}</p>
                             </div>
-                            <div class="rating-badge blue" style="width:42px;height:42px;font-size:14px;flex-shrink:0;">${anime.avgScore}</div>
+                            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                                <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+                                    <div class="rating-badge ${window.getScoreTier(anime.avgScore)}" style="width:42px;height:42px;font-size:14px;">${anime.avgScore}</div>
+                                    <span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">WeeBee</span>
+                                </div>
+                                ${malScoreMap[anime.mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="rating-badge blue" style="width:40px;height:40px;font-size:14px;">${malScoreMap[anime.mal_id]}</div><span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">MAL</span></div>` : ''}
+                            </div>
                         </div>
                     `;
                 });
@@ -4514,6 +4623,22 @@ window.searchAnime = async function(queryStr) {
         const data = json.data;
         if (!Array.isArray(data)) throw new Error('Unexpected response format');
 
+        // Fetch WeeBee scores for all returned anime in one query
+        const bwScoreMap = {};
+        if (data.length > 0) {
+            try {
+                const malIds = data.map(a => a.mal_id);
+                const bwSnap = await getDocs(query(collection(db, "reviews"), where("mal_id", "in", malIds)));
+                bwSnap.forEach(d => {
+                    const r = d.data();
+                    if (r.type === 'suggestion' || r.type === 'series' || !r.score) return;
+                    if (!bwScoreMap[r.mal_id]) bwScoreMap[r.mal_id] = { total: 0, count: 0 };
+                    bwScoreMap[r.mal_id].total += parseFloat(r.score);
+                    bwScoreMap[r.mal_id].count++;
+                });
+            } catch(e) { /* silently fail */ }
+        }
+
         if (data.length === 0 && userSnap.empty) {
             html = '<p style="color:var(--text-muted); text-align:center;">No results found.</p>';
         } else if (data.length > 0) {
@@ -4525,6 +4650,9 @@ window.searchAnime = async function(queryStr) {
                 const eps = anime.episodes || 0;
                 const inList = window.myAnimeList?.some(a => a.mal_id === anime.mal_id);
                 const safeTitle = title.replace(/'/g, "\\'");
+                const bw = bwScoreMap[anime.mal_id];
+                const bwScore = bw && bw.count > 0 ? (bw.total / bw.count).toFixed(1) : null;
+                const bwTier = bwScore ? window.getScoreTier(bwScore) : '';
                 html += `
                     <div class="top10-list-item" onclick="loadAnimeDetails(${anime.mal_id})">
                         <img src="${img}">
@@ -4533,7 +4661,14 @@ window.searchAnime = async function(queryStr) {
                             <p style="font-size:12px; color:var(--text-muted);">${anime.type || ''}, ${anime.year || 'N/A'}</p>
                         </div>
                         <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
-                            <div class="rating-badge blue" style="width:40px; height:40px; font-size:14px;">${anime.score || 'N/A'}</div>
+                            <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+                                <div class="rating-badge blue" style="width:40px; height:40px; font-size:14px;">${anime.score || 'N/A'}</div>
+                                <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">MAL</span>
+                            </div>
+                            <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+                                <div class="rating-badge ${bwTier || 'blue'}" style="width:40px; height:40px; font-size:14px; ${bwScore ? '' : 'opacity:0.35;'}">${bwScore || '—'}</div>
+                                <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">WeeBee</span>
+                            </div>
                             <button onclick="event.stopPropagation(); selectAnimeForList(${anime.mal_id}, '${safeTitle}', '${img}', ${eps})"
                                 class="action-btn search-quick-add" data-mal="${anime.mal_id}"
                                 style="padding:6px 12px; font-size:12px; ${inList ? 'background:var(--bg-gray-darker); color:var(--text-muted);' : ''}">
@@ -4665,7 +4800,7 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
     revSnapshot.forEach(d => { 
         const rData = d.data();
         if(rData.fanService) fanServiceScores.set(rData.uid, rData.fanService); 
-        if(rData.type !== 'suggestion' && rData.score) { weebeeTotal += parseFloat(rData.score); weebeeCount++; }
+        if(rData.type !== 'suggestion' && rData.type !== 'series' && rData.score) { weebeeTotal += parseFloat(rData.score); weebeeCount++; }
     });
 
     const listQ = query(collection(db, "anime_lists"), where("mal_id", "==", mal_id));
@@ -5647,7 +5782,7 @@ window.generateBwPostCardHTML = function(post) {
                         <strong style="color:var(--text-dark); font-size:14px;">${post.displayName}</strong>
                         <span class="bw-game-badge" style="background:${game.badgeBg}; color:${game.badgeColor};">${game.badge}</span>
                         ${window.getPinnedBadgesHTML(post.uid)}<br>
-                        <span style="font-size:12px; color:var(--text-muted);">Solved in <strong style="color:var(--text-dark);">${post.guessCount} ${post.guessCount===1?'guess':'guesses'}</strong></span>
+                        <span style="font-size:12px; color:var(--text-muted);">Solved in <strong style="color:var(--text-dark);">${post.guessCount} ${post.guessCount===1?'guess':'guesses'}</strong> · ${formatTimeAgo(post.timestamp)}</span>
                     </div>
                 </div>
             </div>
@@ -5866,6 +6001,7 @@ const BW_OP_CHARS = [
     {id:'jinbe',name:'Jinbe',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:1100000000,height:301,firstArc:'Impel Down'},
     {id:'shanks',name:'Shanks',gender:'Male',affiliation:'Red Hair Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:4048900000,height:199,firstArc:'Romance Dawn'},
     {id:'whitebeard',name:'Edward Newgate',gender:'Male',affiliation:'Whitebeard Pirates',df:{has:true,type:'Paramecia',name:'Gura Gura no Mi'},haki:['Observation','Armament','Conquerors'],bounty:5046000000,height:666,firstArc:'Jaya'},
+    {id:'marco',name:'Marco',gender:'Male',affiliation:'Whitebeard Pirates',df:{has:true,type:'Zoan',name:'Tori Tori no Mi, Phoenix Model'},haki:['Observation','Armament'],bounty:1374000000,height:203,firstArc:'Jaya'},
     {id:'kaido',name:'Kaido',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Uo Uo no Mi, Seiryu Model'},haki:['Observation','Armament','Conquerors'],bounty:4611100000,height:710,firstArc:'Dressrosa'},
     {id:'bigmom',name:'Charlotte Linlin',gender:'Female',affiliation:'Big Mom Pirates',df:{has:true,type:'Paramecia',name:'Soru Soru no Mi'},haki:['Observation','Armament','Conquerors'],bounty:4388000000,height:880,firstArc:'Fishman Island'},
     {id:'blackbeard',name:'Marshall D. Teach',gender:'Male',affiliation:'Blackbeard Pirates',df:{has:true,type:'Logia',name:'Yami Yami no Mi'},haki:['Armament'],bounty:3996000000,height:344,firstArc:'Jaya'},
@@ -5960,6 +6096,8 @@ const WP_NAME_ALIASES = {
     'big mom': 'charlotte linlin',
     'marshall d. teach': 'blackbeard',
     'gol d. roger': 'roger',
+    'marco': 'marco the phoenix',
+    'marco the phoenix': 'marco',
 };
 
 window.bwOpGetCharImage = function(name) {
@@ -6587,7 +6725,7 @@ window.bwBlcImageMap = {};
 window.bwBlcImgReady = false;
 
 window.bwBlcLoadImages = async function() {
-    const cacheKey = 'wb_blc_imgs_v1';
+    const cacheKey = 'wb_blc_imgs_v2';
     const cached = localStorage.getItem(cacheKey);
     if (cached) { try { window.bwBlcImageMap = JSON.parse(cached); window.bwBlcImgReady = true; return; } catch(e) {} }
     const addToMap = (data, map) => {
@@ -6612,11 +6750,13 @@ window.bwBlcLoadImages = async function() {
     };
     try {
         const map = {};
-        const res1 = await fetch('https://api.jikan.moe/v4/anime/269/characters');
-        if (res1.ok) { const d = await res1.json(); addToMap(d.data, map); }
-        await new Promise(r => setTimeout(r, 450));
-        const res2 = await fetch('https://api.jikan.moe/v4/anime/41467/characters');
-        if (res2.ok) { const d = await res2.json(); addToMap(d.data, map); }
+        // Original + all TYBW seasons
+        const animeIds = [269, 41467, 50441, 52893];
+        for (const id of animeIds) {
+            const res = await fetch(`https://api.jikan.moe/v4/anime/${id}/characters`);
+            if (res.ok) { const d = await res.json(); addToMap(d.data, map); }
+            await new Promise(r => setTimeout(r, 450));
+        }
         window.bwBlcImageMap = map;
         window.bwBlcImgReady = true;
         try { localStorage.setItem(cacheKey, JSON.stringify(map)); } catch(e) {}
@@ -6629,6 +6769,15 @@ const BLC_NAME_ALIASES = {
     'mayuri': 'kurotsuchi mayuri', 'aizen': 'aizen sousuke', 'gin': 'ichimaru gin',
     'urahara': 'urahara kisuke', 'yoruichi': 'shihouin yoruichi', 'grimmjow': 'jaegerjaquez grimmjow',
     'ulquiorra': 'cifer ulquiorra', 'yhwach': 'juha bach', 'orihime': 'inoue orihime',
+    // Special char romanization aliases
+    'tōshirō hitsugaya': 'hitsugaya toushirou', 'sōsuke aizen': 'aizen sousuke',
+    'kaname tōsen': 'tousen kaname', 'shunsui kyōraku': 'kyouraku shunsui',
+    'jūshirō ukitake': 'ukitake juushirou', 'shūhei hisagi': 'hisagi shuuhei',
+    'nanao ise': 'ise nanao', 'yoruichi shihōin': 'shihouin yoruichi',
+    'rōjūrō ōtoribashi': 'otoribashi roujuurou', 'nelliel tu odelschwanck': 'nelliel tu odelschwanck',
+    'bambietta': 'bambietta basterbine', 'liltotto': 'liltotto lamperd',
+    'giselle': 'giselle gewelle', 'haschwalth': 'jugram haschwalth',
+    'as nodt': 'as nodt', 'starrk': 'coyote starrk', 'baraggan': 'baraggan louisenbairn',
 };
 
 window.bwBlcGetCharImage = function(name) {

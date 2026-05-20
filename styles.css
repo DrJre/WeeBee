@@ -744,6 +744,43 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 .wordle-suggestion-item:last-child { border-bottom:none; }
 .wordle-suggestion-item:hover { background:var(--bg-gray); }
 
+/* --- BUZZWORD BANNERS --- */
+/* Light mode: subtle colored tint on card background */
+.bw-banner-hero { background: linear-gradient(135deg, rgba(139,0,0,0.07) 0%, rgba(90,50,0,0.07) 35%, rgba(13,59,85,0.07) 100%); border-color: rgba(100,100,100,0.15) !important; }
+.bw-banner-op   { background: rgba(183,28,28,0.08);  border-color: rgba(139,0,0,0.2) !important; }
+.bw-banner-nrt  { background: rgba(230,81,0,0.08);   border-color: rgba(180,90,0,0.2) !important; }
+.bw-banner-blc  { background: rgba(2,119,189,0.08);  border-color: rgba(0,100,160,0.2) !important; }
+.bw-banner-db   { background: rgba(191,54,12,0.08);  border-color: rgba(160,60,0,0.2) !important; }
+
+/* Light mode: make text dark since background is now light */
+.bw-banner-op  [style*="color:#FFD700"]             { color: #7b0000 !important; }
+.bw-banner-nrt [style*="color:#FF8C00"]             { color: #7a3500 !important; }
+.bw-banner-blc [style*="color:#00BCD4"]             { color: #005f80 !important; }
+.bw-banner-db  [style*="color:#FF6F00"]             { color: #7a2800 !important; }
+.bw-banner-op [style*="rgba(255,255,255"],
+.bw-banner-nrt [style*="rgba(255,255,255"],
+.bw-banner-blc [style*="rgba(255,255,255"],
+.bw-banner-db  [style*="rgba(255,255,255"],
+.bw-banner-hero [style*="rgba(255,255,255"]         { color: rgba(0,0,0,0.55) !important; }
+.bw-banner-hero [style*="color:white"]              { color: var(--text-dark) !important; }
+
+/* Dark mode: restore original dark gradients and text colors */
+[data-theme="dark"] .bw-banner-hero { background: linear-gradient(135deg, #1a0000 0%, #1a0a00 35%, #0d1b2a 100%); border-color: rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .bw-banner-op   { background: linear-gradient(135deg, #1a0000 0%, #3d0000 60%, #6b0000 100%); border-color: #8B0000 !important; }
+[data-theme="dark"] .bw-banner-nrt  { background: linear-gradient(135deg, #1a1500 0%, #3a2e00 60%, #5c4a00 100%); border-color: var(--accent-yellow) !important; }
+[data-theme="dark"] .bw-banner-blc  { background: linear-gradient(135deg, #0d1b2a 0%, #0a2a3d 60%, #0d3b55 100%); border-color: #006080 !important; }
+[data-theme="dark"] .bw-banner-db   { background: linear-gradient(135deg, #1a0a00 0%, #2d1200 60%, #4a1f00 100%); border-color: #FF6F00 !important; }
+[data-theme="dark"] .bw-banner-op  [style*="color:#FFD700"]  { color: #FFD700 !important; }
+[data-theme="dark"] .bw-banner-nrt [style*="color:#FF8C00"]  { color: #FF8C00 !important; }
+[data-theme="dark"] .bw-banner-blc [style*="color:#00BCD4"]  { color: #00BCD4 !important; }
+[data-theme="dark"] .bw-banner-db  [style*="color:#FF6F00"]  { color: #FF6F00 !important; }
+[data-theme="dark"] .bw-banner-op  [style*="rgba(255,255,255"],
+[data-theme="dark"] .bw-banner-nrt [style*="rgba(255,255,255"],
+[data-theme="dark"] .bw-banner-blc [style*="rgba(255,255,255"],
+[data-theme="dark"] .bw-banner-db  [style*="rgba(255,255,255"],
+[data-theme="dark"] .bw-banner-hero [style*="rgba(255,255,255"] { color: rgba(255,255,255,0.75) !important; }
+[data-theme="dark"] .bw-banner-hero [style*="color:white"]    { color: white !important; }
+
 /* --- ADVANCED ANIME SEARCH --- */
 .adv-search-trigger-btn { background:var(--accent-yellow); color:#1a1a1a; font-weight:700; }
 .adv-search-modal-content {

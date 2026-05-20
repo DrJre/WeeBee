@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=51">
+    <link rel="stylesheet" href="styles.css?v=54">
 </head>
 <body>
     <div class="app-container">
@@ -402,7 +402,7 @@
                 <div id="community-view" class="view">
 
                     <!-- BUZZWORD HERO BANNER -->
-                    <div style="background:linear-gradient(135deg, #1a0000 0%, #1a0a00 35%, #0d1b2a 100%); border-radius:20px; padding:36px 32px; margin-bottom:20px; text-align:center; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden;">
+                    <div class="bw-banner-hero" style="border-radius:20px; padding:36px 32px; margin-bottom:20px; text-align:center; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden;">
                         <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%, rgba(139,0,0,0.25) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(0,96,128,0.2) 0%, transparent 60%); pointer-events:none;"></div>
                         <div style="position:relative; z-index:1;">
                             <div style="font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:8px;">WeeBee</div>
@@ -412,7 +412,7 @@
                     </div>
 
                     <!-- BUZZWORD: ONE PIECE CHARACTERS THUMBNAIL -->
-                    <div onclick="window.openBwOpModal()" style="cursor:pointer; background:linear-gradient(135deg, #1a0000 0%, #3d0000 60%, #6b0000 100%); border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid #8B0000; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+                    <div class="bw-banner-op" onclick="window.openBwOpModal()" style="cursor:pointer; border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid #8B0000; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
                         <img id="bwop-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:0; height:100%; width:160px; object-fit:cover; object-position:center 20%; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
                         <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">⚓</div>
                         <div style="flex:1; min-width:0; position:relative; z-index:1;">
@@ -424,7 +424,7 @@
                     </div>
 
                     <!-- BUZZWORD: NARUTO CHARACTERS THUMBNAIL -->
-                    <div onclick="window.openBwNrtModal()" style="cursor:pointer; background:linear-gradient(135deg, #1a1500 0%, #3a2e00 60%, #5c4a00 100%); border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid var(--accent-yellow); transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+                    <div class="bw-banner-nrt" onclick="window.openBwNrtModal()" style="cursor:pointer; border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid var(--accent-yellow); transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
                         <img id="bwnrt-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:0; height:100%; width:160px; object-fit:cover; object-position:center 20%; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
                         <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">🍃</div>
                         <div style="flex:1; min-width:0; position:relative; z-index:1;">
@@ -436,7 +436,7 @@
                     </div>
 
                     <!-- BUZZWORD: BLEACH CHARACTERS THUMBNAIL -->
-                    <div onclick="window.openBwBlcModal()" style="cursor:pointer; background:linear-gradient(135deg, #0d1b2a 0%, #0a2a3d 60%, #0d3b55 100%); border-radius:16px; padding:20px 24px; margin-bottom:20px; display:flex; align-items:center; gap:18px; border:2px solid #006080; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+                    <div class="bw-banner-blc" onclick="window.openBwBlcModal()" style="cursor:pointer; border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid #006080; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
                         <img id="bwblc-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:0; height:100%; width:160px; object-fit:cover; object-position:center 20%; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
                         <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">⚔️</div>
                         <div style="flex:1; min-width:0; position:relative; z-index:1;">
@@ -448,7 +448,7 @@
                     </div>
 
                     <!-- BUZZWORD: DRAGON BALL CHARACTERS THUMBNAIL -->
-                    <div onclick="window.openBwDbModal()" style="cursor:pointer; background:linear-gradient(135deg, #1a0a00 0%, #2d1200 60%, #4a1f00 100%); border-radius:16px; padding:20px 24px; margin-bottom:20px; display:flex; align-items:center; gap:18px; border:2px solid #FF6F00; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+                    <div class="bw-banner-db" onclick="window.openBwDbModal()" style="cursor:pointer; border-radius:16px; padding:20px 24px; margin-bottom:20px; display:flex; align-items:center; gap:18px; border:2px solid #FF6F00; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
                         <img id="bwdb-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:-30px; height:130%; width:160px; object-fit:cover; object-position:center top; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
                         <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">🐉</div>
                         <div style="flex:1; min-width:0; position:relative; z-index:1;">
@@ -667,10 +667,11 @@
                         <div class="profile-main-feed">
                             <div class="profile-tabs">
                                 <button class="p-tab active" onclick="switchProfileTab(event, 'p-reviews')">Reviews</button>
-                                <button class="p-tab" onclick="switchProfileTab(event, 'p-friends')">Friends</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-tierlists')">Tier Lists</button>
-                                <button class="p-tab" onclick="switchProfileTab(event, 'p-social')">Following</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-achievements')">Achievements</button>
+                                <button class="p-tab" onclick="switchProfileTab(event, 'p-friends')">Friends</button>
+                                <button class="p-tab" onclick="switchProfileTab(event, 'p-social')">Following</button>
+                                <button class="p-tab" onclick="switchProfileTab(event, 'p-followers')">Followers</button>
                             </div>
 
                             <div id="p-reviews" class="p-tab-content active">
@@ -701,6 +702,10 @@
 
                             <div id="p-friends" class="p-tab-content" style="display:none;">
                                 <div id="friends-list-container"></div>
+                            </div>
+
+                            <div id="p-followers" class="p-tab-content" style="display:none;">
+                                <div id="followers-list-container"></div>
                             </div>
 
                         </div>
@@ -1560,6 +1565,6 @@
         </div>
     </div>
 
-    <script type="module" src="app.js?v=120"></script>
+    <script type="module" src="app.js?v=134"></script>
 </body>
 </html>
