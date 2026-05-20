@@ -401,6 +401,19 @@
 
                 <div id="community-view" class="view">
 
+                    <!-- COMMUNITY TABS -->
+                    <div class="detail-tabs" style="margin-bottom:24px;">
+                        <button class="detail-tab active community-tab-btn" onclick="switchCommunityTab(event,'community-tab-buzzword')">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">grid_view</span> BuzzWord
+                        </button>
+                        <button class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-tierlists')">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">leaderboard</span> Tier Lists
+                        </button>
+                    </div>
+
+                    <!-- BUZZWORD TAB -->
+                    <div id="community-tab-buzzword" class="community-tab-content">
+
                     <!-- BUZZWORD HERO BANNER -->
                     <div class="bw-banner-hero" style="border-radius:20px; padding:36px 32px; margin-bottom:20px; text-align:center; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden;">
                         <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%, rgba(139,0,0,0.25) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(0,96,128,0.2) 0%, transparent 60%); pointer-events:none;"></div>
@@ -481,6 +494,11 @@
                         <div id="bw-community-feed"><div class="loading">Loading results...</div></div>
                     </div>
 
+                    </div><!-- /community-tab-buzzword -->
+
+                    <!-- TIER LISTS TAB -->
+                    <div id="community-tab-tierlists" class="community-tab-content" style="display:none;">
+
                     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:24px;">
                         <div>
                             <h2 style="margin:0 0 4px;">Community Tier Lists</h2>
@@ -489,7 +507,7 @@
                         <button onclick="openTierListCreator()" class="action-btn"><span class="material-symbols-outlined">add</span> Create Tier List</button>
                     </div>
                     <input type="text" id="community-tl-search" placeholder="Search tier lists..." oninput="filterCommunityTierLists()" style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark); font-size:14px; box-sizing:border-box; margin-bottom:20px;">
-                    <div id="community-tierlists-feed" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px;"></div>
+                    <div id="community-tierlists-feed" style="display:flex; flex-direction:column; gap:16px;"></div>
 
                     <!-- Coming Soon -->
                     <div style="margin-top:60px; padding-top:40px; border-top:1px solid var(--border-color);">
@@ -513,7 +531,10 @@
                             </div>
                         </div>
                     </div>
-                </div>
+
+                    </div><!-- /community-tab-tierlists -->
+
+                </div><!-- /community-view -->
 
     <!-- Tier List Creator Modal -->
     <div id="tier-list-creator" class="modal-overlay" style="display:none; overflow-y:auto; align-items:flex-start; padding:8px;">
