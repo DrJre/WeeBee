@@ -813,6 +813,8 @@ window.openSettingsModal = function() {
     window.closeAllModals();
     document.getElementById('settings-modal').style.display = 'flex';
     document.getElementById('dark-mode-toggle').checked = document.body.getAttribute('data-theme') === 'dark';
+    const beeT = document.getElementById('bee-trail-toggle');
+    if (beeT) beeT.checked = localStorage.getItem('wb_bee_trail') === '1';
     if (auth.currentUser) {
         getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
             const data = pd.exists() ? pd.data() : {};
@@ -840,6 +842,58 @@ window.toggleDarkMode = function() {
     const newTheme = document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     document.body.setAttribute('data-theme', newTheme);
     localStorage.setItem('weebee-theme', newTheme);
+};
+
+// --- BEE TRAIL ---
+(function initBeeTrail() {
+    const canvas = document.getElementById('bee-trail-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (localStorage.getItem('wb_bee_trail') === '1') canvas.style.display = 'block';
+
+    const dots = []; // { x, y, born }
+    let lastDotX = null, lastDotY = null;
+    const DOT_SPACING = 10;  // px between dots
+    const DOT_LIFETIME = 600; // ms each dot lives
+    const DOT_RADIUS = 3;
+
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    resize();
+    window.addEventListener('resize', resize);
+
+    document.addEventListener('mousemove', e => {
+        if (canvas.style.display === 'none') return;
+        const dx = lastDotX === null ? DOT_SPACING : e.clientX - lastDotX;
+        const dy = lastDotY === null ? DOT_SPACING : e.clientY - lastDotY;
+        if (Math.sqrt(dx * dx + dy * dy) >= DOT_SPACING) {
+            dots.push({ x: e.clientX, y: e.clientY, born: Date.now() });
+            lastDotX = e.clientX; lastDotY = e.clientY;
+        }
+    });
+
+    (function draw() {
+        requestAnimationFrame(draw);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (canvas.style.display === 'none') return;
+        const now = Date.now();
+        for (let i = dots.length - 1; i >= 0; i--) {
+            const age = now - dots[i].born;
+            if (age > DOT_LIFETIME) { dots.splice(0, i + 1); break; }
+            const ratio = 1 - age / DOT_LIFETIME;
+            ctx.beginPath();
+            ctx.arc(dots[i].x, dots[i].y, DOT_RADIUS * (0.5 + ratio * 0.5), 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 193, 7, ${ratio * 0.85})`;
+            ctx.fill();
+        }
+    })();
+})();
+
+window.toggleBeeTrail = function() {
+    const on = document.getElementById('bee-trail-toggle').checked;
+    const canvas = document.getElementById('bee-trail-canvas');
+    canvas.style.display = on ? 'block' : 'none';
+    localStorage.setItem('wb_bee_trail', on ? '1' : '0');
 };
 
 // --- REVIEW SYSTEM ---
@@ -3836,7 +3890,7 @@ window.openTierListViewer = async function(id) {
                 </button>
                 ${isOwner?`<button onclick="editTierList('${id}')" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);padding:6px 12px;"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">edit</span></button>`:''}
                 ${isOwner?`<button onclick="deleteTierList('${id}')" class="action-btn" style="background:#FF5252;color:white;padding:6px 12px;"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">delete</span></button>`:''}
-                <button onclick="closeAllModals()" class="cancel-btn">Close</button>
+                <button onclick="closeAllModals()" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);padding:6px 12px;"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">close</span></button>
             </div>
         </div>`;
         tl.tiers.forEach(tier => {
