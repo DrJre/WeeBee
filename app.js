@@ -994,14 +994,14 @@ window.previewInDepthReview = function() {
     const catBadges = scored.map(c => `
         <div style="display:flex;flex-direction:column;align-items:center;width:75px;">
             <span style="font-size:10px;font-weight:600;margin-bottom:8px;text-align:center;height:24px;display:flex;align-items:flex-end;">${c.label}</span>
-            <div class="rating-badge ${window.getScoreTier(c.score)}" style="width:55px;height:55px;font-size:18px;">${c.score}</div>
+            <div class="rating-badge ${window.getScoreTier(c.score)}" style="width:64px;height:64px;font-size:17px;">${c.score}</div>
         </div>`).join('');
 
     const catDetails = scored.map(c => `
         <div style="background:var(--bg-gray);padding:12px;border-radius:10px;margin-bottom:10px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${c.text ? '8px' : '0'};">
                 <strong>${c.label}</strong>
-                <div class="rating-badge ${window.getScoreTier(c.score)}" style="width:32px;height:32px;font-size:11px;">${c.score}</div>
+                <div class="rating-badge ${window.getScoreTier(c.score)}" style="width:38px;height:38px;font-size:11px;">${c.score}</div>
             </div>
             ${c.text ? `<p style="font-size:13px;color:var(--text-muted);margin:0;">${c.text}</p>` : ''}
         </div>`).join('');
@@ -1013,7 +1013,7 @@ window.previewInDepthReview = function() {
             <div style="width:1px;height:45px;background:#E0E0E0;margin:0 10px;margin-bottom:5px;"></div>
             <div style="display:flex;flex-direction:column;align-items:center;width:75px;">
                 <span style="font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;height:24px;display:flex;align-items:flex-end;">Overall</span>
-                <div class="rating-badge ${window.getScoreTier(overallScore)}" style="width:55px;height:55px;font-size:18px;">${overallScore}</div>
+                <div class="rating-badge ${window.getScoreTier(overallScore)}" style="width:64px;height:64px;font-size:17px;">${overallScore}</div>
             </div>
         </div>
         ${catDetails}
@@ -2318,7 +2318,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             badgesHTML = `<div class="review-badges-row" style="display:flex; gap: 15px; margin-top: 20px; flex-wrap: nowrap; overflow-x: auto; align-items: flex-end; padding-right: 195px; position: relative; z-index: 2; padding-bottom: 4px;">
                 <div style="display:flex; flex-direction:column; align-items:center; width: 75px;">
                     <span style="font-size: 10px; font-weight: 800; color: var(--text-dark); text-transform: uppercase; margin-bottom: 8px; height: 24px; display: flex; align-items: flex-end;">Overall</span>
-                    <div class="rating-badge ${overallTier}" style="width: 65px; height: 65px; font-size: 22px; filter: drop-shadow(0 3px 8px rgba(0,0,0,0.2)); outline: 3px solid rgba(255,255,255,0.3);">${overallScore}</div>
+                    <div class="rating-badge ${overallTier}" style="width: 76px; height: 76px; font-size: 21px; filter: drop-shadow(0 3px 8px rgba(0,0,0,0.2)); outline: 3px solid rgba(255,255,255,0.3);">${overallScore}</div>
                 </div>
                 <div style="width: 1px; height: 55px; background: var(--border-color); margin: 0 10px; align-self: flex-end; margin-bottom: 5px;"></div>`;
             rev.categories.filter(cat => cat.score).forEach(cat => {
@@ -2336,7 +2336,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                 <div class="review-badges-row" style="display:flex; padding-right: 170px; margin-top: 15px; position: relative; z-index: 2;">
                     <div style="display:flex; flex-direction:column; align-items:center; width: 75px;">
                         <span style="font-size: 10px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px;">Overall</span>
-                        <div class="rating-badge ${overallTier}" style="width: 55px; height: 55px; font-size: 18px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));">${overallScore}</div>
+                        <div class="rating-badge ${overallTier}" style="width: 64px; height: 64px; font-size: 17px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));">${overallScore}</div>
                     </div>
                 </div>`;
             fullHTML = `
@@ -4453,7 +4453,7 @@ window.fetchDiscoverPage = async function() {
                         <h4>${podium[1].title}</h4>
                         <div style="display:flex;gap:5px;align-items:flex-end;justify-content:center;">
                             <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-                                <div class="rating-badge tier-silver" style="width:38px;height:38px;font-size:13px;">${podium[1].avgScore}</div>
+                                <div class="rating-badge tier-silver" style="width:44px;height:44px;font-size:12px;">${podium[1].avgScore}</div>
                                 <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">WeeBee</span>
                             </div>
                             ${malScoreMap[podium[1].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div class="rating-badge blue" style="width:30px;height:30px;font-size:10px;">${malScoreMap[podium[1].mal_id]}</div><span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
@@ -4472,7 +4472,7 @@ window.fetchDiscoverPage = async function() {
                         <h4>${podium[0].title}</h4>
                         <div style="display:flex;gap:5px;align-items:flex-end;justify-content:center;">
                             <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-                                <div class="rating-badge tier-royal" style="width:48px;height:48px;font-size:16px;">${podium[0].avgScore}</div>
+                                <div class="rating-badge tier-royal" style="width:56px;height:56px;font-size:15px;">${podium[0].avgScore}</div>
                                 <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">WeeBee</span>
                             </div>
                             ${malScoreMap[podium[0].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div class="rating-badge blue" style="width:36px;height:36px;font-size:12px;">${malScoreMap[podium[0].mal_id]}</div><span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
@@ -4493,7 +4493,7 @@ window.fetchDiscoverPage = async function() {
                         <h4>${podium[2].title}</h4>
                         <div style="display:flex;gap:5px;align-items:flex-end;justify-content:center;">
                             <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-                                <div class="rating-badge tier-bronze" style="width:38px;height:38px;font-size:13px;">${podium[2].avgScore}</div>
+                                <div class="rating-badge tier-bronze" style="width:44px;height:44px;font-size:12px;">${podium[2].avgScore}</div>
                                 <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">WeeBee</span>
                             </div>
                             ${malScoreMap[podium[2].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div class="rating-badge blue" style="width:30px;height:30px;font-size:10px;">${malScoreMap[podium[2].mal_id]}</div><span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
@@ -4527,10 +4527,10 @@ window.fetchDiscoverPage = async function() {
                             </div>
                             <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
                                 <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
-                                    <div class="rating-badge ${window.getScoreTier(anime.avgScore)}" style="width:42px;height:42px;font-size:14px;">${anime.avgScore}</div>
+                                    <div class="rating-badge ${window.getScoreTier(anime.avgScore)}" style="width:50px;height:50px;font-size:13px;">${anime.avgScore}</div>
                                     <span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">WeeBee</span>
                                 </div>
-                                ${malScoreMap[anime.mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="rating-badge blue" style="width:40px;height:40px;font-size:14px;">${malScoreMap[anime.mal_id]}</div><span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">MAL</span></div>` : ''}
+                                ${malScoreMap[anime.mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="rating-badge blue" style="width:48px;height:48px;font-size:13px;">${malScoreMap[anime.mal_id]}</div><span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">MAL</span></div>` : ''}
                             </div>
                         </div>
                     `;
@@ -4583,7 +4583,7 @@ window.fetchDiscoverPage = async function() {
                                 <h2 class="spotlight-title">${s.title}</h2>
                                 <p class="spotlight-meta" id="spotlight-meta-text">Loading details...</p>
                                 <div class="spotlight-footer">
-                                    <div class="rating-badge tier-royal" style="width:50px;height:50px;font-size:17px;">${s.avgScore}</div>
+                                    <div class="rating-badge tier-royal" style="width:58px;height:58px;font-size:16px;">${s.avgScore}</div>
                                     <button class="action-btn spotlight-btn" onclick="event.stopPropagation(); loadAnimeDetails(${s.mal_id})">View Anime</button>
                                 </div>
                             </div>
@@ -5510,7 +5510,7 @@ window.bwNrtImageMap = {};
 window.bwNrtImgReady = false;
 
 window.bwNrtLoadImages = async function() {
-    const cacheKey = 'wb_nrt_imgs_v3';
+    const cacheKey = 'wb_nrt_imgs_v4';
     const cached = localStorage.getItem(cacheKey);
     if (cached) { try { window.bwNrtImageMap = JSON.parse(cached); window.bwNrtImgReady = true; return; } catch(e) {} }
     const addToMap = (data, map) => {
@@ -5549,8 +5549,9 @@ window.bwNrtLoadImages = async function() {
 
 const NRT_NAME_ALIASES = {
     'nagato': 'pain', 'pain': 'nagato',
+    'nagato (pain)': 'nagato',
     'tobi': 'obito', 'obito': 'tobi',
-    'a': 'raikage',
+    'a': 'raikage', 'a (fourth raikage)': 'raikage',
     'choji akimichi': 'chouji akimichi', 'choji': 'chouji',
     'might guy': 'maito gai', 'maito gai': 'might guy', 'guy': 'maito gai',
     'rock lee': 'lee, rock', 'lee': 'lee, rock',
@@ -5724,8 +5725,8 @@ function bwNrtAnimateNewRow(char, colors) {
 
 function bwNrtGetToday() {
     const today = bwGetDate();
-    const seed = today.split('-').reduce((a,b) => a + parseInt(b), 0);
-    return bwSeededShuffle(BW_NRT_CHARS, seed)[0];
+    const order = bwGetOrder('nrt', BW_NRT_CHARS, 32533);
+    return order[bwDayIndex(today) % order.length];
 }
 
 // --- BuzzWord: Naruto — State & Init ---
@@ -6378,8 +6379,8 @@ function bwOpCalcColors(guess, answer) {
 
 function bwOpGetToday() {
     const today = bwGetDate();
-    const seed = today.split('-').reduce((a,b) => a + parseInt(b), 0) + 3;
-    return bwSeededShuffle(BW_OP_CHARS, seed)[0];
+    const order = bwGetOrder('op', BW_OP_CHARS, 10777);
+    return order[bwDayIndex(today) % order.length];
 }
 
 function bwOpRenderRow(char, colors) {
@@ -6957,6 +6958,11 @@ const BLC_NAME_ALIASES = {
     'bambietta': 'bambietta basterbine', 'liltotto': 'liltotto lamperd',
     'giselle': 'giselle gewelle', 'haschwalth': 'jugram haschwalth',
     'as nodt': 'as nodt', 'starrk': 'coyote starrk', 'baraggan': 'baraggan louisenbairn',
+    'isshin kurosaki': 'kurosaki isshin', 'isshin': 'kurosaki isshin',
+    'nnoitra': 'nnoitra gilga', 'nnoitra gilga': 'nnoitra gilga',
+    'mask de masculine': 'mask de masculine', 'mask': 'mask de masculine',
+    'pernida': 'pernida parnkgjas',
+    'yammy': 'yammy llargo', 'yammy llargo': 'yammy llargo',
 };
 
 window.bwBlcGetCharImage = function(name) {
@@ -7088,8 +7094,8 @@ function bwBlcAnimateNewRow(char, colors) {
 
 function bwBlcGetToday() {
     const today = bwGetDate();
-    const seed = today.split('-').reduce((a,b) => a + parseInt(b), 0) + 7;
-    return bwSeededShuffle(BW_BLC_CHARS, seed)[0];
+    const order = bwGetOrder('blc', BW_BLC_CHARS, 13108);
+    return order[bwDayIndex(today) % order.length];
 }
 
 window.bwBlcState = { answer: null, guesses: [], solved: false, selectedChar: null, date: null };
@@ -7375,7 +7381,7 @@ window.bwDbImageMap = {};
 window.bwDbImgReady = false;
 
 window.bwDbLoadImages = async function() {
-    const cacheKey = 'wb_db_imgs_v1';
+    const cacheKey = 'wb_db_imgs_v2';
     const cached = localStorage.getItem(cacheKey);
     if (cached) { try { window.bwDbImageMap = JSON.parse(cached); window.bwDbImgReady = true; return; } catch(e) {} }
     const addToMap = (data, map) => {
@@ -7437,6 +7443,12 @@ const DB_NAME_ALIASES = {
     'king kai': 'kaiou', 'kaiou': 'king kai',
     'kami': 'kami',
     'goku black': 'zamasu', 'zamasu': 'goku black',
+    'chi-chi': 'chichi', 'chichi': 'chi-chi',
+    'captain ginyu': 'ginyu', 'ginyu': 'captain ginyu',
+    'majin buu': 'buu', 'buu': 'majin buu',
+    'mr. satan': 'satan', 'hercule': 'satan', 'satan': 'hercule',
+    'king kai': 'kaiou', 'north kai': 'kaiou',
+    'supreme kai': 'kibito kai',
 };
 
 window.bwDbGetCharImage = function(name) {
@@ -7581,8 +7593,8 @@ function bwDbAnimateNewRow(char, colors) {
 
 function bwDbGetToday() {
     const today = bwGetDate();
-    const seed = today.split('-').reduce((a,b) => a + parseInt(b), 0) + 13;
-    return bwSeededShuffle(BW_DB_CHARS, seed)[0];
+    const order = bwGetOrder('db', BW_DB_CHARS, 111787);
+    return order[bwDayIndex(today) % order.length];
 }
 
 window.bwDbState = { answer: null, guesses: [], solved: false, selectedChar: null, date: null };
@@ -7594,7 +7606,7 @@ window.openBwDbModal = function() {
 };
 
 window.initBwDbGame = async function() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     if (window.bwDbState.answer && window.bwDbState.date === today) {
         document.getElementById('bwdb-loading').style.display = 'none';
         document.getElementById('bwdb-content').style.display = 'block';
@@ -7811,6 +7823,19 @@ if (_sentinel) _feedObserver.observe(_sentinel);
 // Returns today's date in America/New_York (resets at midnight EST/EDT)
 function bwGetDate() {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
+// Returns days elapsed since 2025-01-01 — used to cycle through the fixed character order
+function bwDayIndex(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return Math.floor((Date.UTC(y, m - 1, d, 12) - Date.UTC(2025, 0, 1, 12)) / 86400000);
+}
+
+// Cache for each game's stable shuffled order (computed once, reused)
+const _bwOrders = {};
+function bwGetOrder(key, chars, fixedSeed) {
+    if (!_bwOrders[key]) _bwOrders[key] = bwSeededShuffle([...chars], fixedSeed);
+    return _bwOrders[key];
 }
 
 // Deterministic shuffle — same seed produces same order every time
