@@ -5784,7 +5784,7 @@ window.searchBwNrtChar = function() {
     if (!sugg) return;
     if (!q) { sugg.style.display = 'none'; return; }
     const guessedIds = new Set(window.bwNrtState.guesses.map(g => g.id));
-    const matches = BW_NRT_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
+    const matches = BW_NRT_CHARS.filter(c => !guessedIds.has(c.id) && (c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q))).slice(0, 8);
     sugg.style.display = matches.length ? 'block' : 'none';
     sugg.innerHTML = matches.map(c => {
         const imgUrl = window.bwNrtGetCharImage(c.name);
@@ -6537,7 +6537,7 @@ window.searchBwOpChar = function() {
     if (!sugg) return;
     if (!q) { sugg.style.display = 'none'; return; }
     const guessedIds = new Set(window.bwOpState.guesses.map(g => g.id));
-    const matches = BW_OP_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
+    const matches = BW_OP_CHARS.filter(c => !guessedIds.has(c.id) && (c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q))).slice(0, 8);
     if (!matches.length) { sugg.style.display = 'none'; return; }
     sugg.style.display = 'block';
     sugg.innerHTML = matches.map(c => {
@@ -7152,7 +7152,7 @@ window.searchBwBlcChar = function() {
     if (!sugg) return;
     if (!q) { sugg.style.display = 'none'; return; }
     const guessedIds = new Set(window.bwBlcState.guesses.map(g => g.id));
-    const matches = BW_BLC_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
+    const matches = BW_BLC_CHARS.filter(c => !guessedIds.has(c.id) && (c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q))).slice(0, 8);
     sugg.style.display = matches.length ? 'block' : 'none';
     sugg.innerHTML = matches.map(c => {
         const imgUrl = window.bwBlcGetCharImage ? window.bwBlcGetCharImage(c.name) : null;
@@ -7645,7 +7645,7 @@ window.searchBwDbChar = function() {
     if (!sugg) return;
     if (!q) { sugg.style.display = 'none'; return; }
     const guessedIds = new Set(window.bwDbState.guesses.map(g => g.id));
-    const matches = BW_DB_CHARS.filter(c => !guessedIds.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 8);
+    const matches = BW_DB_CHARS.filter(c => !guessedIds.has(c.id) && (c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q))).slice(0, 8);
     sugg.style.display = matches.length ? 'block' : 'none';
     sugg.innerHTML = matches.map(c => `<div class="wordle-suggestion-item" onclick="window.selectBwDbChar('${c.id}')">${c.name}</div>`).join('');
 };
