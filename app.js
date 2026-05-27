@@ -5448,6 +5448,80 @@ const NRT_ARC_ORDER = [
     'Five Kage Summit','Fourth Shinobi World War','Kaguya Strikes'
 ];
 
+function bwImageLookup(m, aliases, name) {
+    const n = name.toLowerCase();
+    if (m[n]) return m[n];
+    const alias = aliases[n];
+    if (alias && m[alias]) return m[alias];
+    const words = n.split(' ').filter(w => w.length > 1);
+    for (const word of words) {
+        if (m[word]) return m[word];
+        const wa = aliases[word];
+        if (wa && m[wa]) return m[wa];
+    }
+    return null;
+}
+
+function bwAllGreen(colors) {
+    return Object.values(colors).every(v => v === 'green');
+}
+
+window.launchConfetti = function() {
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99999;';
+    document.body.appendChild(canvas);
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    const cols = ['#FFC107','#FF6F00','#4CAF50','#2196F3','#E91E63','#9C27B0','#00BCD4','#FF5722'];
+    const particles = [];
+    for (let i = 0; i < 120; i++) {
+        const left = i < 60;
+        particles.push({
+            x: left ? Math.random() * 80 : canvas.width - Math.random() * 80,
+            y: canvas.height,
+            vx: left ? (Math.random() * 12 + 4) : -(Math.random() * 12 + 4),
+            vy: -(Math.random() * 20 + 12),
+            color: cols[Math.floor(Math.random() * cols.length)],
+            rot: Math.random() * Math.PI * 2,
+            rs: (Math.random() - 0.5) * 0.3,
+            w: Math.random() * 10 + 5,
+            h: Math.random() * 6 + 3,
+            g: 0.55,
+            op: 1,
+        });
+    }
+    let t0 = null;
+    function frame(ts) {
+        if (!t0) t0 = ts;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let alive = false;
+        particles.forEach(p => {
+            p.vx *= 0.99; p.vy += p.g; p.x += p.vx; p.y += p.vy; p.rot += p.rs;
+            if (ts - t0 > 1800) p.op = Math.max(0, p.op - 0.018);
+            if (p.op > 0 && p.y < canvas.height + 30) {
+                alive = true;
+                ctx.save(); ctx.globalAlpha = p.op; ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+                ctx.fillStyle = p.color; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+                ctx.restore();
+            }
+        });
+        if (alive) requestAnimationFrame(frame); else canvas.remove();
+    }
+    requestAnimationFrame(frame);
+};
+
+function bwShowAllGreenNotice(gridId, delay) {
+    setTimeout(() => {
+        const grid = document.getElementById(gridId);
+        if (!grid) return;
+        const el = document.createElement('div');
+        el.style.cssText = 'text-align:center;padding:10px 16px;margin:6px 0 2px;border-radius:8px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.4);color:var(--accent-yellow);font-size:13px;font-weight:600;';
+        el.textContent = '⚠️ Same answers — but that\'s not today\'s character!';
+        grid.appendChild(el);
+    }, delay);
+}
+
 const BW_NRT_CHARS = [
     // ── Leaf ──
     {id:'naruto',    name:'Naruto Uzumaki',     gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Senjutsu','Fuinjutsu'],                                nature:['Wind','Fire','Earth','Water','Lightning'],       kekkeiGenkai:false, attribute:['Jinchuriki','Sage'],  debutArc:'Introduction'},
@@ -5570,17 +5644,7 @@ const NRT_NAME_ALIASES = {
 };
 
 window.bwNrtGetCharImage = function(name) {
-    const m = window.bwNrtImageMap;
-    const n = name.toLowerCase();
-    if (m[n]) return m[n];
-    const alias = NRT_NAME_ALIASES[n];
-    if (alias && m[alias]) return m[alias];
-    const parts = name.split(' ');
-    const last = parts[parts.length - 1].toLowerCase();
-    if (m[last]) return m[last];
-    const first = parts[0].toLowerCase();
-    if (m[first]) return m[first];
-    return null;
+    return bwImageLookup(window.bwNrtImageMap, NRT_NAME_ALIASES, name);
 };
 
 window.bwNrtApplyImages = function() {
@@ -5819,6 +5883,8 @@ window.submitBwNrtGuess = async function() {
     const totalCells = 6;
     const delay = totalCells * 500 + 800;
     setTimeout(() => bwNrtShowResult(), delay);
+    if (isCorrect) setTimeout(() => window.launchConfetti(), delay - 600);
+    if (!isCorrect && bwAllGreen(colors)) bwShowAllGreenNotice('bwnrt-grid', delay);
     const today = bwGetDate();
     const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
     const emojiRow = [colors.gender,colors.affiliation,colors.jutsuType,colors.nature,colors.attribute,colors.kekkeiGenkai,colors.debutArc].map(x=>map[x]||'⬛').join('');
@@ -6282,23 +6348,7 @@ const WP_NAME_ALIASES = {
 };
 
 window.bwOpGetCharImage = function(name) {
-    const m = window.bwOpImageMap;
-    const n = name.toLowerCase();
-    if (m[n]) return m[n];
-    // Try alias
-    const alias = WP_NAME_ALIASES[n];
-    if (alias && m[alias]) return m[alias];
-    const parts = name.split(' ');
-    // Try last name
-    const last = parts[parts.length - 1].toLowerCase();
-    if (m[last]) return m[last];
-    // Try first name
-    const first = parts[0].toLowerCase();
-    if (m[first]) return m[first];
-    // Try alias of last name
-    const lastAlias = WP_NAME_ALIASES[last];
-    if (lastAlias && m[lastAlias]) return m[lastAlias];
-    return null;
+    return bwImageLookup(window.bwOpImageMap, WP_NAME_ALIASES, name);
 };
 
 window.bwOpApplyImages = function() {
@@ -6573,6 +6623,8 @@ window.submitBwOpGuess = async function() {
     const totalCells = 7;
     const delay = totalCells * 500 + 800;
     setTimeout(() => bwOpShowResult(), delay);
+    if (isCorrect) setTimeout(() => window.launchConfetti(), delay - 600);
+    if (!isCorrect && bwAllGreen(colors)) bwShowAllGreenNotice('bwop-grid', delay);
     // Save state
     const today = bwGetDate();
     const saveData = { guesses: window.bwOpState.guesses.map(g=>g.id), solved: window.bwOpState.solved, date: today, guessCount: window.bwOpState.guesses.length, displayName: auth.currentUser?.displayName || 'Player' };
@@ -6905,7 +6957,7 @@ window.bwBlcImageMap = {};
 window.bwBlcImgReady = false;
 
 window.bwBlcLoadImages = async function() {
-    const cacheKey = 'wb_blc_imgs_v2';
+    const cacheKey = 'wb_blc_imgs_v3';
     const cached = localStorage.getItem(cacheKey);
     if (cached) { try { window.bwBlcImageMap = JSON.parse(cached); window.bwBlcImgReady = true; return; } catch(e) {} }
     const addToMap = (data, map) => {
@@ -6944,21 +6996,22 @@ window.bwBlcLoadImages = async function() {
 };
 
 const BLC_NAME_ALIASES = {
-    'ichigo': 'kurosaki ichigo', 'rukia': 'kuchiki rukia', 'renji': 'abarai renji',
-    'byakuya': 'kuchiki byakuya', 'hitsugaya': 'hitsugaya toushirou', 'kenpachi': 'zaraki kenpachi',
-    'mayuri': 'kurotsuchi mayuri', 'aizen': 'aizen sousuke', 'gin': 'ichimaru gin',
-    'urahara': 'urahara kisuke', 'yoruichi': 'shihouin yoruichi', 'grimmjow': 'jaegerjaquez grimmjow',
-    'ulquiorra': 'cifer ulquiorra', 'yhwach': 'juha bach', 'orihime': 'inoue orihime',
-    // Special char romanization aliases
-    'tōshirō hitsugaya': 'hitsugaya toushirou', 'sōsuke aizen': 'aizen sousuke',
-    'kaname tōsen': 'tousen kaname', 'shunsui kyōraku': 'kyouraku shunsui',
-    'jūshirō ukitake': 'ukitake juushirou', 'shūhei hisagi': 'hisagi shuuhei',
-    'nanao ise': 'ise nanao', 'yoruichi shihōin': 'shihouin yoruichi',
-    'rōjūrō ōtoribashi': 'otoribashi roujuurou', 'nelliel tu odelschwanck': 'nelliel tu odelschwanck',
+    'ichigo': 'ichigo kurosaki', 'rukia': 'rukia kuchiki', 'renji': 'renji abarai',
+    'byakuya': 'byakuya kuchiki', 'hitsugaya': 'toushirou hitsugaya', 'kenpachi': 'kenpachi zaraki',
+    'mayuri': 'mayuri kurotsuchi', 'aizen': 'sousuke aizen', 'gin': 'gin ichimaru',
+    'urahara': 'kisuke urahara', 'yoruichi': 'yoruichi shihouin', 'grimmjow': 'grimmjow jaegerjaquez',
+    'ulquiorra': 'ulquiorra cifer', 'yhwach': 'juha bach', 'orihime': 'orihime inoue',
+    // Macron names → correct romanized "First Last" form (Jikan addToMap creates "First Last" from "Last, First")
+    'tōshirō hitsugaya': 'toushirou hitsugaya', 'sōsuke aizen': 'sousuke aizen',
+    'kaname tōsen': 'kaname tousen', 'shunsui kyōraku': 'shunsui kyouraku',
+    'jūshirō ukitake': 'juushirou ukitake', 'shūhei hisagi': 'shuuhei hisagi',
+    'yoruichi shihōin': 'yoruichi shihouin', 'rōjūrō ōtoribashi': 'roujuurou otoribashi',
+    'uryū ishida': 'uryuu ishida',
+    // Other aliases
     'bambietta': 'bambietta basterbine', 'liltotto': 'liltotto lamperd',
     'giselle': 'giselle gewelle', 'haschwalth': 'jugram haschwalth',
     'as nodt': 'as nodt', 'starrk': 'coyote starrk', 'baraggan': 'baraggan louisenbairn',
-    'isshin kurosaki': 'kurosaki isshin', 'isshin': 'kurosaki isshin',
+    'isshin kurosaki': 'isshin kurosaki', 'isshin': 'isshin kurosaki',
     'nnoitra': 'nnoitra gilga', 'nnoitra gilga': 'nnoitra gilga',
     'mask de masculine': 'mask de masculine', 'mask': 'mask de masculine',
     'pernida': 'pernida parnkgjas',
@@ -6966,17 +7019,7 @@ const BLC_NAME_ALIASES = {
 };
 
 window.bwBlcGetCharImage = function(name) {
-    const m = window.bwBlcImageMap;
-    const n = name.toLowerCase();
-    if (m[n]) return m[n];
-    const alias = BLC_NAME_ALIASES[n];
-    if (alias && m[alias]) return m[alias];
-    const parts = name.split(' ');
-    const last = parts[parts.length - 1].toLowerCase();
-    if (m[last]) return m[last];
-    const first = parts[0].toLowerCase();
-    if (m[first]) return m[first];
-    return null;
+    return bwImageLookup(window.bwBlcImageMap, BLC_NAME_ALIASES, name);
 };
 
 window.bwBlcApplyImages = function() {
@@ -7185,6 +7228,8 @@ window.submitBwBlcGuess = async function() {
     if (isCorrect) window.bwBlcState.solved = true;
     bwBlcAnimateNewRow(char, colors);
     setTimeout(() => bwBlcShowResult(), 7 * 500 + 800);
+    if (isCorrect) setTimeout(() => window.launchConfetti(), 7 * 500 + 200);
+    if (!isCorrect && bwAllGreen(colors)) bwShowAllGreenNotice('bwblc-grid', 7 * 500 + 800);
     const today = bwGetDate();
     const saveData = { guesses: window.bwBlcState.guesses.map(g=>g.id), solved: window.bwBlcState.solved, date: today, guessCount: window.bwBlcState.guesses.length, displayName: auth.currentUser?.displayName||'Player' };
     localStorage.setItem(`wb_bwblc_${today}`, JSON.stringify(saveData));
@@ -7381,7 +7426,7 @@ window.bwDbImageMap = {};
 window.bwDbImgReady = false;
 
 window.bwDbLoadImages = async function() {
-    const cacheKey = 'wb_db_imgs_v2';
+    const cacheKey = 'wb_db_imgs_v3';
     const cached = localStorage.getItem(cacheKey);
     if (cached) { try { window.bwDbImageMap = JSON.parse(cached); window.bwDbImgReady = true; return; } catch(e) {} }
     const addToMap = (data, map) => {
@@ -7406,14 +7451,14 @@ window.bwDbLoadImages = async function() {
     };
     try {
         const map = {};
-        // Dragon Ball (430), Dragon Ball Z (813), Dragon Ball Super (39165)
+        // Dragon Ball (430), Dragon Ball Z (813), Dragon Ball Super (30697)
         const res1 = await fetch('https://api.jikan.moe/v4/anime/430/characters');
         if (res1.ok) { const d = await res1.json(); addToMap(d.data, map); }
         await new Promise(r => setTimeout(r, 450));
         const res2 = await fetch('https://api.jikan.moe/v4/anime/813/characters');
         if (res2.ok) { const d = await res2.json(); addToMap(d.data, map); }
         await new Promise(r => setTimeout(r, 450));
-        const res3 = await fetch('https://api.jikan.moe/v4/anime/30694/characters');
+        const res3 = await fetch('https://api.jikan.moe/v4/anime/30697/characters');
         if (res3.ok) { const d = await res3.json(); addToMap(d.data, map); }
         window.bwDbImageMap = map;
         window.bwDbImgReady = true;
@@ -7443,6 +7488,9 @@ const DB_NAME_ALIASES = {
     'king kai': 'kaiou', 'kaiou': 'king kai',
     'kami': 'kami',
     'goku black': 'zamasu', 'zamasu': 'goku black',
+    'champa': 'shanpa', 'shanpa': 'champa',
+    'whis': 'uisu', 'uisu': 'whis',
+    'vados': 'vados',
     'chi-chi': 'chichi', 'chichi': 'chi-chi',
     'captain ginyu': 'ginyu', 'ginyu': 'captain ginyu',
     'majin buu': 'buu', 'buu': 'majin buu',
@@ -7452,17 +7500,7 @@ const DB_NAME_ALIASES = {
 };
 
 window.bwDbGetCharImage = function(name) {
-    const m = window.bwDbImageMap;
-    const n = name.toLowerCase();
-    if (m[n]) return m[n];
-    const alias = DB_NAME_ALIASES[n];
-    if (alias && m[alias]) return m[alias];
-    const parts = name.split(' ');
-    const last = parts[parts.length - 1].toLowerCase();
-    if (m[last]) return m[last];
-    const first = parts[0].toLowerCase();
-    if (m[first]) return m[first];
-    return null;
+    return bwImageLookup(window.bwDbImageMap, DB_NAME_ALIASES, name);
 };
 
 window.bwDbApplyImages = function() {
@@ -7647,7 +7685,11 @@ window.searchBwDbChar = function() {
     const guessedIds = new Set(window.bwDbState.guesses.map(g => g.id));
     const matches = BW_DB_CHARS.filter(c => !guessedIds.has(c.id) && (c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q))).slice(0, 8);
     sugg.style.display = matches.length ? 'block' : 'none';
-    sugg.innerHTML = matches.map(c => `<div class="wordle-suggestion-item" onclick="window.selectBwDbChar('${c.id}')">${c.name}</div>`).join('');
+    sugg.innerHTML = matches.map(c => {
+        const imgUrl = window.bwDbGetCharImage(c.name);
+        const pic = imgUrl ? `<img src="${imgUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--bg-gray-darker);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${c.name[0]}</div>`;
+        return `<div class="wordle-suggestion-item" style="display:flex;align-items:center;gap:10px;" onclick="window.selectBwDbChar('${c.id}')">${pic}<span>${c.name}</span></div>`;
+    }).join('');
 };
 
 window.selectBwDbChar = function(id) {
@@ -7670,10 +7712,13 @@ window.submitBwDbGuess = async function() {
     window.bwDbState.selectedChar = null;
     const inp = document.getElementById('bwdb-search');
     if (inp) inp.value = '';
-    if (char.id === window.bwDbState.answer.id) window.bwDbState.solved = true;
+    const isCorrect = char.id === window.bwDbState.answer.id;
+    if (isCorrect) window.bwDbState.solved = true;
     bwDbAnimateNewRow(char, colors);
     setTimeout(() => bwDbShowResult(), 8 * 500 + 800);
-    const today = new Date().toISOString().split('T')[0];
+    if (isCorrect) setTimeout(() => window.launchConfetti(), 8 * 500 + 200);
+    if (!isCorrect && bwAllGreen(colors)) bwShowAllGreenNotice('bwdb-grid', 8 * 500 + 800);
+    const today = bwGetDate();
     const saveData = { guesses: window.bwDbState.guesses.map(g=>g.id), solved: window.bwDbState.solved, date: today, guessCount: window.bwDbState.guesses.length, displayName: auth.currentUser?.displayName||'Player' };
     if (auth.currentUser) {
         setDoc(doc(db, 'bw_db_games', `${auth.currentUser.uid}_${today}`), saveData).catch(()=>{});
@@ -7797,6 +7842,7 @@ window.showBwDbLeaderboardTab = async function(tab) {
 };
 
 document.addEventListener('click', e => {
+    if (e.target.classList.contains('modal-overlay')) return;
     if (!e.target.closest('.bwop-search-wrap')) {
         const s = document.getElementById('bwop-suggestions');
         if (s) s.style.display = 'none';
