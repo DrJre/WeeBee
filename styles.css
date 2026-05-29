@@ -465,8 +465,8 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;}
 .modal-actions button { padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; }
-.cancel-btn { background: var(--bg-gray-darker); color: var(--text-dark); }
-.submit-btn { background: var(--accent-yellow); color: var(--text-dark); }
+.cancel-btn { background: var(--bg-gray-darker); color: var(--text-dark); padding: 8px 16px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; }
+.submit-btn { background: var(--accent-yellow); color: var(--text-dark); padding: 8px 16px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; }
 .submit-btn:hover { background: #e5ad06; }
 
 .category-block { background-color: var(--bg-gray); padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #E0E0E0; }
@@ -780,6 +780,40 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 [data-theme="dark"] .bw-banner-db  [style*="rgba(255,255,255"],
 [data-theme="dark"] .bw-banner-hero [style*="rgba(255,255,255"] { color: rgba(255,255,255,0.75) !important; }
 [data-theme="dark"] .bw-banner-hero [style*="color:white"]    { color: white !important; }
+
+/* --- TIER LIST BANNER --- */
+.tl-banner-hero { background: rgba(74,20,140,0.07); border:1px solid rgba(100,100,100,0.15); }
+.tl-banner-hero [style*="color:white"]              { color: var(--text-dark) !important; }
+.tl-banner-hero [style*="rgba(255,255,255"]         { color: rgba(0,0,0,0.55) !important; }
+.tl-banner-hero [style*="color:#FFC107"]            { color: #7a5800 !important; }
+[data-theme="dark"] .tl-banner-hero                 { background: linear-gradient(135deg, #1a0a2e 0%, #2d1054 60%, #1a0a2e 100%); border-color: rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .tl-banner-hero [style*="color:white"]              { color: white !important; }
+[data-theme="dark"] .tl-banner-hero [style*="rgba(255,255,255"]         { color: rgba(255,255,255,0.75) !important; }
+[data-theme="dark"] .tl-banner-hero [style*="color:#FFC107"]            { color: #FFC107 !important; }
+
+/* --- HOT TAKES BANNER --- */
+.ht-banner-hero { background: rgba(255,69,0,0.07); border:1px solid rgba(100,100,100,0.15); }
+.ht-banner-hero [style*="color:white"]              { color: var(--text-dark) !important; }
+.ht-banner-hero [style*="rgba(255,255,255"]         { color: rgba(0,0,0,0.55) !important; }
+[data-theme="dark"] .ht-banner-hero                 { background: linear-gradient(135deg, #2a0a00 0%, #3d1500 60%, #2a0a00 100%); border-color: rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .ht-banner-hero [style*="color:white"]              { color: white !important; }
+[data-theme="dark"] .ht-banner-hero [style*="rgba(255,255,255"]         { color: rgba(255,255,255,0.75) !important; }
+
+/* --- POLLS BANNER --- */
+.polls-banner-hero { background: rgba(33,150,243,0.07); border:1px solid rgba(100,100,100,0.15); }
+.polls-banner-hero [style*="color:white"]              { color: var(--text-dark) !important; }
+.polls-banner-hero [style*="rgba(255,255,255"]         { color: rgba(0,0,0,0.55) !important; }
+[data-theme="dark"] .polls-banner-hero                 { background: linear-gradient(135deg, #0a1929 0%, #0d2137 60%, #1a0a2e 100%); border-color: rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .polls-banner-hero [style*="color:white"]              { color: white !important; }
+[data-theme="dark"] .polls-banner-hero [style*="rgba(255,255,255"]         { color: rgba(255,255,255,0.75) !important; }
+
+/* --- BRACKETS BANNER --- */
+.brackets-banner-hero { background: rgba(255,193,7,0.07); border:1px solid rgba(100,100,100,0.15); }
+.brackets-banner-hero [style*="color:white"]              { color: var(--text-dark) !important; }
+.brackets-banner-hero [style*="rgba(255,255,255"]         { color: rgba(0,0,0,0.55) !important; }
+[data-theme="dark"] .brackets-banner-hero                 { background: linear-gradient(135deg, #1a1200 0%, #2d2000 60%, #1a1200 100%); border-color: rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .brackets-banner-hero [style*="color:white"]              { color: white !important; }
+[data-theme="dark"] .brackets-banner-hero [style*="rgba(255,255,255"]         { color: rgba(255,255,255,0.75) !important; }
 
 /* --- ADVANCED ANIME SEARCH --- */
 .adv-search-trigger-btn { background:var(--accent-yellow); color:#1a1a1a; font-weight:700; }

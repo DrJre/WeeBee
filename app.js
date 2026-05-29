@@ -1038,34 +1038,39 @@ window.submitInDepthReview = async function() {
                 timestamp: new Date()
             });
         } else {
+            const reviewType = window.isSeriesReview ? 'series' : 'in-depth';
             await addDoc(collection(db, "reviews"), {
                 mal_id: window.currentAnimeId,
                 animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
                 animeImage: window.currentAnime?.images?.jpg?.image_url,
-                type: 'in-depth', score: parseFloat(overallScore), categories,
+                type: reviewType, score: parseFloat(overallScore), categories,
                 fanService: fanService !== null ? fanService : null, text: '',
                 username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
                 uid: auth.currentUser.uid, timestamp: new Date(),
                 likes: [], dislikes: [], commentCount: 0
             });
-            window.myReviewCount = (window.myReviewCount || 0) + 1;
-            window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
-            const _avId = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
-            setDoc(doc(db, "profiles", auth.currentUser.uid), { reviewCount: increment(1), indepthCount: increment(1), displayName: auth.currentUser.displayName, avatar: _avId }, { merge: true }).catch(() => {});
-            const _tb = document.getElementById('topbar-rank-badge');
-            if (_tb) _tb.innerHTML = window.getRankBadgeHTML(window.myReviewCount, 16);
-            getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
-                const p = pd.exists() ? pd.data() : {};
-                window.awardAchievements([...window.getEarnedIds('review', p.reviewCount || window.myReviewCount), ...window.getEarnedIds('indepth', p.indepthCount || 1)]).catch(() => {});
-            }).catch(() => {});
+            if (!window.isSeriesReview) {
+                window.myReviewCount = (window.myReviewCount || 0) + 1;
+                window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
+                const _avId = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+                setDoc(doc(db, "profiles", auth.currentUser.uid), { reviewCount: increment(1), indepthCount: increment(1), displayName: auth.currentUser.displayName, avatar: _avId }, { merge: true }).catch(() => {});
+                const _tb = document.getElementById('topbar-rank-badge');
+                if (_tb) _tb.innerHTML = window.getRankBadgeHTML(window.myReviewCount, 16);
+                getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
+                    const p = pd.exists() ? pd.data() : {};
+                    window.awardAchievements([...window.getEarnedIds('review', p.reviewCount || window.myReviewCount), ...window.getEarnedIds('indepth', p.indepthCount || 1)]).catch(() => {});
+                }).catch(() => {});
+            }
         }
         if (!window.existingReviewId) {
             const _animeTitle = window.currentAnime?.title_english || window.currentAnime?.title;
             window.sendReviewNotifications(_animeTitle, window.currentAnimeId).catch(() => {});
         }
         window.pendingInDepthData = null;
+        const _wasSeries = window.isSeriesReview;
+        window.isSeriesReview = false;
         window.closeAllModals();
-        await window.maybeTriggerSeriesPrompt();
+        if (!_wasSeries) await window.maybeTriggerSeriesPrompt();
     } catch(e) { alert('Failed to submit review.'); console.error(e); }
 };
 
@@ -1129,9 +1134,8 @@ window.maybeTriggerSeriesPrompt = async function() {
     } catch(_) {}
     const title = window.currentAnime.title_english || window.currentAnime.title;
     document.getElementById('series-review-subtitle').innerText =
-        `You just reviewed a season of ${title}. Want to also leave an overall series rating?`;
-    document.getElementById('series-score-value').value = '';
-    document.getElementById('series-score-text').value = '';
+        `You just reviewed a season of ${title}. Want to also leave an overall series review?`;
+    window._resetSeriesModal();
     document.getElementById('series-review-modal').style.display = 'flex';
 };
 
@@ -1142,13 +1146,32 @@ window.openSeriesRatingDirect = async function() {
             where('uid', '==', auth.currentUser.uid),
             where('mal_id', '==', window.currentAnimeId),
             where('type', '==', 'series')));
-        if (!existing.empty) return alert('You\'ve already submitted a series rating for this anime. Find it in your profile reviews to edit or delete it.');
+        if (!existing.empty) return alert('You\'ve already submitted a series review for this anime. Find it in your profile reviews to edit or delete it.');
     } catch(_) {}
     const title = window.currentAnime?.title_english || window.currentAnime?.title || 'this series';
-    document.getElementById('series-review-subtitle').innerText = `Leave an overall rating for the ${title} series.`;
+    document.getElementById('series-review-subtitle').innerText = `Leave an overall review for the ${title} series.`;
+    window._resetSeriesModal();
+    document.getElementById('series-review-modal').style.display = 'flex';
+};
+
+window._resetSeriesModal = function() {
+    document.getElementById('series-review-choice').style.display = 'flex';
+    document.getElementById('series-quick-form').style.display = 'none';
     document.getElementById('series-score-value').value = '';
     document.getElementById('series-score-text').value = '';
-    document.getElementById('series-review-modal').style.display = 'flex';
+};
+
+window.showSeriesQuickForm = function() {
+    document.getElementById('series-review-choice').style.display = 'none';
+    document.getElementById('series-quick-form').style.display = 'block';
+};
+
+window.openSeriesInDepthReview = function() {
+    window.isSeriesReview = true;
+    window.pendingInDepthData = null;
+    window.existingReviewId = null;
+    window.closeAllModals();
+    window.openInDepthModal();
 };
 
 window.submitSeriesReview = async function() {
@@ -3195,7 +3218,8 @@ function renderTierListFeedCard(id, tl) {
     const isDisliked = auth.currentUser && dislikes.includes(auth.currentUser.uid);
     const topTierItem = (tl.tiers || []).find(t => (t.items||[]).length > 0)?.items?.[0];
     const coverImage = topTierItem?.image || tl.coverImage || null;
-    const typeLabel = tl.type === 'characters' && tl.sourceAnimeTitle ? tl.sourceAnimeTitle : null;
+    const _animeTitles = tl.type === 'characters' ? (tl.sourceAnimeTitles?.length ? tl.sourceAnimeTitles : (tl.sourceAnimeTitle ? [tl.sourceAnimeTitle] : [])) : [];
+    const typeLabel = _animeTitles.length ? (_animeTitles.length <= 2 ? _animeTitles.join(', ') : `${_animeTitles.slice(0,2).join(', ')} +${_animeTitles.length-2} more`) : null;
     const thumbHTML = coverImage ? `<img class="review-anime-thumb" src="${coverImage}" onclick="event.stopPropagation();window.openTierListViewer('${id}')" onerror="this.style.display='none'">` : '';
     const padRight = coverImage ? 'padding-right:195px;' : '';
     return `<div class="review-card tl-post-card feed-post-card">
@@ -3549,7 +3573,91 @@ window.openTierListCreator = function() {
     window.tierListState = { editingId:null, type:null, sourceAnimeId:null, sourceAnimeTitle:null, tiers:TL_DEFAULT_TIERS(), unranked:[], isPublic:true };
     window.closeAllModals();
     document.getElementById('tier-list-creator').style.display = 'flex';
+    document.getElementById('tl-template-toggle').checked = false;
     window.showTierStep('type');
+    window.loadCommunityTemplates();
+};
+
+window._communityTemplates = [];
+
+window.loadCommunityTemplates = async function() {
+    const el = document.getElementById('tl-template-results');
+    if (!el) return;
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;">Loading templates...</div>';
+    try {
+        const snap = await getDocs(query(collection(db,'tier_lists'), where('isTemplate','==',true), limit(100)));
+        window._communityTemplates = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+        window._communityTemplates.sort((a,b) => ((b.templateLikes||[]).length-(b.templateDislikes||[]).length) - ((a.templateLikes||[]).length-(a.templateDislikes||[]).length));
+        window.filterCommunityTemplates(document.getElementById('tl-template-search')?.value || '');
+    } catch(e) { el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;">Could not load templates.</div>'; }
+};
+
+window.filterCommunityTemplates = function(q) {
+    const el = document.getElementById('tl-template-results');
+    if (!el) return;
+    const query_lc = q.toLowerCase().trim();
+    const list = query_lc ? window._communityTemplates.filter(t => t.title?.toLowerCase().includes(query_lc) || t.authorName?.toLowerCase().includes(query_lc)) : window._communityTemplates;
+    if (!list.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;">No templates found.</div>'; return; }
+    const uid = auth.currentUser?.uid;
+    el.innerHTML = list.map(t => {
+        const likes = (t.templateLikes||[]).length;
+        const dislikes = (t.templateDislikes||[]).length;
+        const liked = uid && (t.templateLikes||[]).includes(uid);
+        const disliked = uid && (t.templateDislikes||[]).includes(uid);
+        const isOwner = uid && t.uid === uid;
+        return `<div style="background:var(--bg-gray);border-radius:10px;overflow:hidden;border:2px solid transparent;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='transparent'">
+            <div onclick="window.useAsTemplate('${t.id}')" style="display:flex;gap:10px;padding:10px;align-items:flex-start;cursor:pointer;">
+                ${t.coverImage ? `<img src="${t.coverImage}" style="width:48px;height:64px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none'">` : `<div style="width:48px;height:64px;border-radius:6px;background:var(--bg-gray-darker);flex-shrink:0;"></div>`}
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:700;font-size:13px;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${t.title}</div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">by ${t.authorName}</div>
+                </div>
+                ${isOwner ? `<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;" onclick="event.stopPropagation()">
+                    <button onclick="window.editTierList('${t.id}')" title="Edit" style="background:var(--bg-gray-darker);border:none;border-radius:6px;padding:4px 6px;cursor:pointer;color:var(--text-dark);display:flex;align-items:center;"><span class="material-symbols-outlined" style="font-size:15px;">edit</span></button>
+                    <button onclick="window.deleteTierList('${t.id}')" title="Delete" style="background:#FF5252;border:none;border-radius:6px;padding:4px 6px;cursor:pointer;color:white;display:flex;align-items:center;"><span class="material-symbols-outlined" style="font-size:15px;">delete</span></button>
+                </div>` : ''}
+            </div>
+            <div style="display:flex;gap:6px;padding:6px 10px 10px;border-top:1px solid var(--border-color);" onclick="event.stopPropagation()">
+                <button onclick="window.voteTemplate('${t.id}','up')" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;background:${liked?'var(--accent-yellow)':'var(--bg-gray-darker)'};color:${liked?'#333':'var(--text-dark)'};border:none;border-radius:6px;padding:5px 8px;cursor:pointer;font-size:12px;font-weight:700;">
+                    👍 ${likes}
+                </button>
+                <button onclick="window.voteTemplate('${t.id}','down')" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;background:${disliked?'#e74c3c':'var(--bg-gray-darker)'};color:${disliked?'white':'var(--text-dark)'};border:none;border-radius:6px;padding:5px 8px;cursor:pointer;font-size:12px;font-weight:700;">
+                    👎 ${dislikes}
+                </button>
+            </div>
+        </div>`;
+    }).join('');
+};
+
+window.voteTemplate = async function(id, dir) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const uid = auth.currentUser.uid;
+    const ref = doc(db,'tier_lists',id);
+    const t = window._communityTemplates.find(x => x.id === id);
+    if (!t) return;
+    const liked = (t.templateLikes||[]).includes(uid);
+    const disliked = (t.templateDislikes||[]).includes(uid);
+    if (dir === 'up') {
+        if (liked) {
+            t.templateLikes = t.templateLikes.filter(x=>x!==uid);
+            await updateDoc(ref, { templateLikes: arrayRemove(uid) });
+        } else {
+            t.templateLikes = [...(t.templateLikes||[]), uid];
+            t.templateDislikes = (t.templateDislikes||[]).filter(x=>x!==uid);
+            await updateDoc(ref, { templateLikes: arrayUnion(uid), templateDislikes: arrayRemove(uid) });
+        }
+    } else {
+        if (disliked) {
+            t.templateDislikes = t.templateDislikes.filter(x=>x!==uid);
+            await updateDoc(ref, { templateDislikes: arrayRemove(uid) });
+        } else {
+            t.templateDislikes = [...(t.templateDislikes||[]), uid];
+            t.templateLikes = (t.templateLikes||[]).filter(x=>x!==uid);
+            await updateDoc(ref, { templateDislikes: arrayUnion(uid), templateLikes: arrayRemove(uid) });
+        }
+    }
+    window._communityTemplates.sort((a,b) => ((b.templateLikes||[]).length-(b.templateDislikes||[]).length) - ((a.templateLikes||[]).length-(a.templateDislikes||[]).length));
+    window.filterCommunityTemplates(document.getElementById('tl-template-search')?.value || '');
 };
 
 window.useAsTemplate = async function(id) {
@@ -3559,25 +3667,23 @@ window.useAsTemplate = async function(id) {
         if (!d.exists()) return;
         const tl = d.data();
         const templateTiers = tl.tiers.map(t => ({ ...t, items: [] }));
+        const allItems = tl.isTemplate
+            ? [...(tl.tiers || []).flatMap(t => t.items || []), ...(tl.unranked || [])]
+            : (tl.tiers || []).flatMap(t => t.items || []);
         window.tierListState = {
             editingId: null,
             type: tl.type || 'anime',
             sourceAnimeId: tl.sourceAnimeId || null,
             sourceAnimeTitle: tl.sourceAnimeTitle || null,
             tiers: templateTiers,
-            unranked: [],
+            unranked: allItems,
             isPublic: true
         };
         window.closeAllModals();
         document.getElementById('tier-list-creator').style.display = 'flex';
-        if (tl.type === 'characters' && tl.sourceAnimeId) {
-            // Load characters for the same source anime
-            await window.selectTierSource(tl.sourceAnimeId, tl.sourceAnimeTitle, tl._sourceAnimeImage || null);
-        } else {
-            document.getElementById('tl-source-label').innerText = 'Anime tier list';
-            window.showTierStep('editor');
-            window.renderTierEditor();
-        }
+        document.getElementById('tl-source-label').innerText = tl.sourceAnimeTitle || 'Tier list';
+        window.showTierStep('editor');
+        window.renderTierEditor();
     } catch(e) { console.error(e); alert('Could not load template.'); }
 };
 
@@ -3621,7 +3727,7 @@ window.selectTierSource = async function(malId, title, imageUrl) {
     try {
         const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}/characters`);
         const { data } = await res.json();
-        const toItem = c => ({ id:`char_${c.character.mal_id}`, title:c.character.name, image:c.character.images?.jpg?.image_url||'' });
+        const toItem = c => ({ id:`char_${c.character.mal_id}`, title:c.character.name, image:c.character.images?.jpg?.image_url||'', animeTitle:title });
         const mains = (data||[]).filter(c=>c.role==='Main').sort((a,b)=>(b.favorites||0)-(a.favorites||0)).map(toItem);
         const supporting = (data||[]).filter(c=>c.role==='Supporting').sort((a,b)=>(b.favorites||0)-(a.favorites||0)).map(toItem);
         window.tierListState.unranked = [...mains, ...supporting];
@@ -3792,19 +3898,51 @@ window.searchTierPool = async function() {
         const isChar = window.tierListState?.type === 'characters';
         const url = isChar ? `https://api.jikan.moe/v4/characters?q=${encodeURIComponent(q)}&limit=8` : `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8`;
         const res = await fetch(url); const { data } = await res.json();
+        window._tlPoolItems = [];
+
+        const bwMatches = isChar ? (() => {
+            const q_lc = q.toLowerCase();
+            const all = [...(BW_NRT_CHARS||[]), ...(BW_OP_CHARS||[]), ...(BW_BLC_CHARS||[]), ...(BW_DB_CHARS||[])];
+            const seen = new Set();
+            return all.filter(c => {
+                if (seen.has(c.id)) return false;
+                seen.add(c.id);
+                return c.name.toLowerCase().includes(q_lc) && c.img;
+            }).slice(0, 5);
+        })() : [];
+
+        const bwHTML = bwMatches.map(c => {
+            const idx = window._tlPoolItems.push({id:`bw_${c.id}`, title:c.name, image:c.img, animeTitle:''}) - 1;
+            return `<div onclick="addToTierPool(window._tlPoolItems[${idx}])"
+                style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;margin-bottom:2px;border-left:2px solid var(--accent-yellow);"
+                onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='transparent'">
+                <img src="${c.img}" style="width:32px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;">${c.name}</div>
+                    <div style="font-size:11px;color:var(--accent-yellow);">WeeBee</div>
+                </div>
+                <span class="material-symbols-outlined" style="color:var(--accent-yellow);font-size:20px;">add_circle</span>
+            </div>`;
+        }).join('');
+
         results.innerHTML = (data||[]).map(item => {
             const id = isChar ? `char_${item.mal_id}` : String(item.mal_id);
             const title = isChar ? item.name : (item.title_english||item.title);
             const image = isChar ? (item.images?.jpg?.image_url||'') : item.images.jpg.image_url;
-            const safe = title.replace(/'/g,"\\'"); const safeImg = image.replace(/'/g,"\\'");
-            return `<div onclick="addToTierPool({id:'${id}',title:'${safe}',image:'${safeImg}'})"
+            const animeTitle = isChar ? (item.anime?.[0]?.anime?.title_english || item.anime?.[0]?.anime?.title || '') : '';
+            const idx = window._tlPoolItems.push({id, title, image, animeTitle}) - 1;
+            return `<div onclick="addToTierPool(window._tlPoolItems[${idx}])"
                 style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;margin-bottom:2px;"
                 onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='transparent'">
                 <img src="${image}" style="width:32px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.background='var(--bg-gray-darker)'">
-                <span style="font-size:13px;flex:1;">${title}</span>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;">${title}</div>
+                    ${animeTitle ? `<div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${animeTitle}</div>` : ''}
+                </div>
                 <span class="material-symbols-outlined" style="color:var(--accent-yellow);font-size:20px;">add_circle</span>
             </div>`;
         }).join('');
+        results.innerHTML = bwHTML + results.innerHTML;
     } catch(e) {}
 };
 
@@ -3824,16 +3962,19 @@ window.saveTierList = async function() {
     const title = document.getElementById('tl-title-input').value.trim();
     if (!title) return alert('Please give your tier list a title.');
     const isPublic = document.getElementById('tl-public-toggle').checked;
+    const isTemplate = document.getElementById('tl-template-toggle').checked;
     const pd = await getDoc(doc(db,"profiles",auth.currentUser.uid)).catch(()=>null);
     const displayName = pd?.data()?.displayName || auth.currentUser.displayName;
     const myAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
     const _allItems = [...(st.tiers||[]).flatMap(t => t.items||[]), ...(st.unranked||[])];
     const topTierItem = (st.tiers || []).find(t => (t.items||[]).length > 0)?.items?.[0];
     const coverImage = topTierItem?.image || _allItems.find(i => i.image)?.image || null;
-    const data = { uid:auth.currentUser.uid, authorName:displayName, authorAvatar:myAvatar, title, type:st.type, sourceAnimeId:st.sourceAnimeId||null, sourceAnimeTitle:st.sourceAnimeTitle||null, coverImage, tiers:st.tiers, unranked:st.unranked, public:isPublic, updatedAt:new Date() };
+    const rankedItems = (st.tiers||[]).flatMap(t => t.items||[]);
+    const sourceAnimeTitles = [...new Set(rankedItems.map(i => i.animeTitle).filter(Boolean))];
+    const data = { uid:auth.currentUser.uid, authorName:displayName, authorAvatar:myAvatar, title, type:st.type, sourceAnimeId:st.sourceAnimeId||null, sourceAnimeTitle:st.sourceAnimeTitle||null, sourceAnimeTitles, coverImage, tiers:st.tiers, unranked:st.unranked, public:isPublic, isTemplate, updatedAt:new Date() };
     try {
         if (st.editingId) { await updateDoc(doc(db,"tier_lists",st.editingId), data); }
-        else { await addDoc(collection(db,"tier_lists"), { ...data, likes:[], dislikes:[], commentCount:0, timestamp:new Date() }); }
+        else { await addDoc(collection(db,"tier_lists"), { ...data, likes:[], dislikes:[], commentCount:0, templateLikes:[], templateDislikes:[], timestamp:new Date() }); }
         window.closeAllModals();
         if (window.currentActiveViewId==='profile-view') window.loadTierListsTab(auth.currentUser.uid);
     } catch(e) { alert('Failed to save.'); console.error(e); }
@@ -3872,7 +4013,7 @@ window.openTierListViewer = async function(id) {
                 <h2 style="margin:0 0 6px;">${tl.title}</h2>
                 <div style="display:flex;align-items:center;gap:8px;">
                     <img src="${tl.authorAvatar}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">
-                    <span style="font-size:13px;color:var(--text-muted);">by <strong style="color:var(--text-dark);">${tl.authorName}</strong>${tl.type==='characters'&&tl.sourceAnimeTitle?` · Characters from <em>${tl.sourceAnimeTitle}</em>`:' · Anime'}</span>
+                    <span style="font-size:13px;color:var(--text-muted);">by <strong style="color:var(--text-dark);">${tl.authorName}</strong>${(()=>{if(tl.type!=='characters')return' · Anime';const t=tl.sourceAnimeTitles?.length?tl.sourceAnimeTitles:(tl.sourceAnimeTitle?[tl.sourceAnimeTitle]:[]);if(!t.length)return' · Characters';const label=t.length<=2?t.join(', '):`${t.slice(0,2).join(', ')} +${t.length-2} more`;return` · Characters from <em>${label}</em>`;})()}</span>
                 </div>
             </div>
             <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
@@ -4022,7 +4163,7 @@ function renderTierListCard(id, tl) {
             <span style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${tl.authorName}</span>
         </div>
         <div style="font-weight:700;font-size:15px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${tl.title}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">${tl.type==='characters'&&tl.sourceAnimeTitle?`Characters · ${tl.sourceAnimeTitle}`:'Anime'} · ${date}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">${(()=>{if(tl.type!=='characters')return'Anime';const t=tl.sourceAnimeTitles?.length?tl.sourceAnimeTitles:(tl.sourceAnimeTitle?[tl.sourceAnimeTitle]:[]);if(!t.length)return'Characters';return`Characters · ${t.length<=2?t.join(', '):`${t.slice(0,2).join(', ')} +${t.length-2} more`}`;})()} · ${date}</div>
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">${preview}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
             <div style="font-size:12px;color:var(--text-muted);">${count} item${count!==1?'s':''} ranked · ❤️ ${(tl.likes||[]).length}</div>
@@ -4054,8 +4195,559 @@ window.editTierList = async function(id) {
     window.showTierStep('editor');
     document.getElementById('tl-title-input').value=tl.title;
     document.getElementById('tl-public-toggle').checked=tl.public;
+    document.getElementById('tl-template-toggle').checked=!!tl.isTemplate;
     document.getElementById('tl-source-label').innerText=tl.type==='characters'?`Characters from: ${tl.sourceAnimeTitle}`:'Anime tier list';
     window.renderTierEditor();
+};
+
+// --- HOT TAKES ---
+window._hotTakesSort = 'hot';
+window._hotTakesLastDoc = null;
+window._hotTakesList = [];
+
+window.setHotTakeSort = function(sort) {
+    window._hotTakesSort = sort;
+    document.getElementById('ht-sort-hot').style.background = sort === 'hot' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+    document.getElementById('ht-sort-hot').style.color = sort === 'hot' ? '#111' : 'var(--text-dark)';
+    document.getElementById('ht-sort-new').style.background = sort === 'new' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+    document.getElementById('ht-sort-new').style.color = sort === 'new' ? '#111' : 'var(--text-dark)';
+    window.loadHotTakes();
+};
+
+window.loadHotTakes = async function() {
+    const feed = document.getElementById('hot-takes-feed');
+    if (!feed) return;
+    feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">Loading...</div>';
+    window._hotTakesLastDoc = null;
+    window._hotTakesList = [];
+    try {
+        const snap = await getDocs(query(collection(db, 'hot_takes'), orderBy('timestamp', 'desc'), limit(20)));
+        window._hotTakesLastDoc = snap.docs[snap.docs.length - 1] || null;
+        window._hotTakesList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        window._renderHotTakesFeed();
+        document.getElementById('hot-takes-load-more').style.display = snap.docs.length === 20 ? 'block' : 'none';
+    } catch(e) { feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">Could not load hot takes.</div>'; }
+};
+
+window.loadMoreHotTakes = async function() {
+    if (!window._hotTakesLastDoc) return;
+    try {
+        const snap = await getDocs(query(collection(db, 'hot_takes'), orderBy('timestamp', 'desc'), startAfter(window._hotTakesLastDoc), limit(20)));
+        window._hotTakesLastDoc = snap.docs[snap.docs.length - 1] || null;
+        window._hotTakesList.push(...snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        window._renderHotTakesFeed();
+        document.getElementById('hot-takes-load-more').style.display = snap.docs.length === 20 ? 'block' : 'none';
+    } catch(e) {}
+};
+
+window._renderHotTakesFeed = function() {
+    const feed = document.getElementById('hot-takes-feed');
+    if (!feed) return;
+    const uid = auth.currentUser?.uid;
+    let list = [...window._hotTakesList];
+    if (window._hotTakesSort === 'hot') {
+        list.sort((a, b) => ((b.agreeUids||[]).length - (b.disagreeUids||[]).length) - ((a.agreeUids||[]).length - (a.disagreeUids||[]).length));
+    }
+    if (!list.length) { feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">No hot takes yet — be the first!</div>'; return; }
+    feed.innerHTML = list.map(ht => window._renderHotTakeCard(ht, uid)).join('');
+};
+
+window._renderHotTakeCard = function(ht, uid) {
+    const agrees = (ht.agreeUids||[]).length;
+    const disagrees = (ht.disagreeUids||[]).length;
+    const agreed = uid && (ht.agreeUids||[]).includes(uid);
+    const disagreed = uid && (ht.disagreeUids||[]).includes(uid);
+    const isOwner = uid && ht.uid === uid;
+    const ago = ht.timestamp?.toDate ? formatTimeAgo(ht.timestamp.toDate()) : '';
+    return `<div style="background:var(--bg-gray);border-radius:14px;padding:16px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+            <img src="${ht.authorAvatar||''}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">
+            <div style="flex:1;min-width:0;">
+                <span style="font-weight:700;font-size:14px;">${ht.authorName||'Anonymous'}</span>
+                <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">${ago}</span>
+            </div>
+            ${isOwner ? `<button onclick="window.deleteHotTake('${ht.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></button>` : ''}
+        </div>
+        <p style="font-size:15px;line-height:1.55;margin:0 0 14px;color:var(--text-dark);white-space:pre-wrap;">${ht.text}</p>
+        <div style="display:flex;gap:8px;">
+            <button onclick="window.voteHotTake('${ht.id}','agree')" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:14px;background:${agreed?'#2e7d32':'var(--bg-gray-darker)'};color:${agreed?'white':'var(--text-dark)'};">
+                🔥 Agree <span style="font-size:13px;opacity:0.85;">${agrees}</span>
+            </button>
+            <button onclick="window.voteHotTake('${ht.id}','disagree')" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:14px;background:${disagreed?'#c62828':'var(--bg-gray-darker)'};color:${disagreed?'white':'var(--text-dark)'};">
+                ❄️ Disagree <span style="font-size:13px;opacity:0.85;">${disagrees}</span>
+            </button>
+        </div>
+    </div>`;
+};
+
+window.postHotTake = async function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    const input = document.getElementById('hot-take-input');
+    const text = input.value.trim();
+    if (!text) return;
+    if (text.length > 280) return alert('Hot take must be 280 characters or less.');
+    if (window.checkTextContent(text)) return alert('Your hot take contains language that isn\'t allowed on WeeBee.');
+    const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid)).catch(() => null);
+    const displayName = pd?.data()?.displayName || auth.currentUser.displayName;
+    const avatar = pd?.data()?.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
+    try {
+        const ref = await addDoc(collection(db, 'hot_takes'), {
+            uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar,
+            text, agreeUids: [], disagreeUids: [], timestamp: new Date(), commentCount: 0
+        });
+        input.value = '';
+        document.getElementById('ht-char-count').innerText = '0';
+        window._hotTakesList.unshift({ id: ref.id, uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar, text, agreeUids: [], disagreeUids: [], timestamp: { toDate: () => new Date() }, commentCount: 0 });
+        window._renderHotTakesFeed();
+    } catch(e) { console.error('Hot take post failed:', e); alert('Failed to post hot take: ' + e.message); }
+};
+
+window.voteHotTake = async function(id, dir) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const uid = auth.currentUser.uid;
+    const ht = window._hotTakesList.find(x => x.id === id);
+    if (!ht) return;
+    const agreed = (ht.agreeUids||[]).includes(uid);
+    const disagreed = (ht.disagreeUids||[]).includes(uid);
+    const ref = doc(db, 'hot_takes', id);
+    if (dir === 'agree') {
+        if (agreed) {
+            ht.agreeUids = ht.agreeUids.filter(x => x !== uid);
+            await updateDoc(ref, { agreeUids: arrayRemove(uid) });
+        } else {
+            ht.agreeUids = [...(ht.agreeUids||[]), uid];
+            ht.disagreeUids = (ht.disagreeUids||[]).filter(x => x !== uid);
+            await updateDoc(ref, { agreeUids: arrayUnion(uid), disagreeUids: arrayRemove(uid) });
+        }
+    } else {
+        if (disagreed) {
+            ht.disagreeUids = ht.disagreeUids.filter(x => x !== uid);
+            await updateDoc(ref, { disagreeUids: arrayRemove(uid) });
+        } else {
+            ht.disagreeUids = [...(ht.disagreeUids||[]), uid];
+            ht.agreeUids = (ht.agreeUids||[]).filter(x => x !== uid);
+            await updateDoc(ref, { disagreeUids: arrayUnion(uid), agreeUids: arrayRemove(uid) });
+        }
+    }
+    window._renderHotTakesFeed();
+};
+
+window.deleteHotTake = async function(id) {
+    if (!auth.currentUser) return;
+    if (!confirm('Delete this hot take?')) return;
+    try {
+        await deleteDoc(doc(db, 'hot_takes', id));
+        window._hotTakesList = window._hotTakesList.filter(x => x.id !== id);
+        window._renderHotTakesFeed();
+    } catch(e) { alert('Failed to delete.'); }
+};
+
+// --- POLLS ---
+window._pollsSort = 'new';
+window._pollsLastDoc = null;
+window._pollsList = [];
+
+window.setPollSort = function(sort) {
+    window._pollsSort = sort;
+    document.getElementById('poll-sort-new').style.background = sort === 'new' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+    document.getElementById('poll-sort-new').style.color = sort === 'new' ? '#111' : 'var(--text-dark)';
+    document.getElementById('poll-sort-popular').style.background = sort === 'popular' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+    document.getElementById('poll-sort-popular').style.color = sort === 'popular' ? '#111' : 'var(--text-dark)';
+    window._renderPollsFeed();
+};
+
+window.addPollOption = function() {
+    const container = document.getElementById('poll-options-inputs');
+    const current = container.querySelectorAll('.poll-option-input').length;
+    if (current >= 4) { document.getElementById('poll-add-option-btn').style.display = 'none'; return; }
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'poll-option-input';
+    input.placeholder = `Option ${current + 1}`;
+    input.maxLength = 100;
+    input.style.cssText = 'width:100%; padding:9px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; box-sizing:border-box; margin-bottom:8px;';
+    container.appendChild(input);
+    if (current + 1 >= 4) document.getElementById('poll-add-option-btn').style.display = 'none';
+};
+
+window.loadPolls = async function() {
+    const feed = document.getElementById('polls-feed');
+    if (!feed) return;
+    feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">Loading...</div>';
+    window._pollsLastDoc = null;
+    window._pollsList = [];
+    try {
+        const snap = await getDocs(query(collection(db, 'polls'), orderBy('timestamp', 'desc'), limit(20)));
+        window._pollsLastDoc = snap.docs[snap.docs.length - 1] || null;
+        window._pollsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        window._renderPollsFeed();
+        document.getElementById('polls-load-more').style.display = snap.docs.length === 20 ? 'block' : 'none';
+    } catch(e) { feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">Could not load polls.</div>'; }
+};
+
+window.loadMorePolls = async function() {
+    if (!window._pollsLastDoc) return;
+    try {
+        const snap = await getDocs(query(collection(db, 'polls'), orderBy('timestamp', 'desc'), startAfter(window._pollsLastDoc), limit(20)));
+        window._pollsLastDoc = snap.docs[snap.docs.length - 1] || null;
+        window._pollsList.push(...snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        window._renderPollsFeed();
+        document.getElementById('polls-load-more').style.display = snap.docs.length === 20 ? 'block' : 'none';
+    } catch(e) {}
+};
+
+window._renderPollsFeed = function() {
+    const feed = document.getElementById('polls-feed');
+    if (!feed) return;
+    const uid = auth.currentUser?.uid;
+    let list = [...window._pollsList];
+    if (window._pollsSort === 'popular') {
+        list.sort((a, b) => {
+            const aVotes = (a.options||[]).reduce((s, o) => s + (o.voters||[]).length, 0);
+            const bVotes = (b.options||[]).reduce((s, o) => s + (o.voters||[]).length, 0);
+            return bVotes - aVotes;
+        });
+    }
+    if (!list.length) { feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">No polls yet — create the first one!</div>'; return; }
+    feed.innerHTML = list.map(p => window._renderPollCard(p, uid)).join('');
+};
+
+window._renderPollCard = function(poll, uid) {
+    const totalVotes = (poll.options||[]).reduce((s, o) => s + (o.voters||[]).length, 0);
+    const myVoteIdx = uid ? (poll.options||[]).findIndex(o => (o.voters||[]).includes(uid)) : -1;
+    const hasVoted = myVoteIdx !== -1;
+    const ago = poll.timestamp?.toDate ? formatTimeAgo(poll.timestamp.toDate()) : '';
+    const isOwner = uid && poll.uid === uid;
+
+    const optionsHTML = (poll.options||[]).map((opt, i) => {
+        const count = (opt.voters||[]).length;
+        const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+        const isMyVote = myVoteIdx === i;
+
+        if (hasVoted) {
+            return `<div style="margin-bottom:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                    <span style="font-size:14px;font-weight:${isMyVote?'700':'400'};color:var(--text-dark);">${isMyVote?'✓ ':''}${opt.text}</span>
+                    <span style="font-size:13px;font-weight:700;color:var(--text-muted);">${pct}%</span>
+                </div>
+                <div style="height:8px;border-radius:4px;background:var(--bg-gray-darker);overflow:hidden;">
+                    <div style="height:100%;width:${pct}%;background:${isMyVote?'var(--accent-yellow)':'#2196F3'};border-radius:4px;transition:width 0.4s ease;"></div>
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${count} vote${count!==1?'s':''}</div>
+            </div>`;
+        } else {
+            return `<button onclick="window.votePoll('${poll.id}',${i})" style="width:100%;text-align:left;padding:10px 14px;margin-bottom:8px;border-radius:8px;border:2px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:14px;cursor:pointer;font-weight:600;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='var(--border-color)'">${opt.text}</button>`;
+        }
+    }).join('');
+
+    return `<div style="background:var(--bg-gray);border-radius:14px;padding:16px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+            <img src="${poll.authorAvatar||''}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">
+            <div style="flex:1;min-width:0;">
+                <span style="font-weight:700;font-size:14px;">${poll.authorName||'Anonymous'}</span>
+                <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">${ago}</span>
+            </div>
+            ${isOwner ? `<button onclick="window.deletePoll('${poll.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></button>` : ''}
+        </div>
+        <div style="font-weight:700;font-size:16px;margin-bottom:12px;line-height:1.4;">${poll.question}</div>
+        ${optionsHTML}
+        ${hasVoted ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px;">${totalVotes} total vote${totalVotes!==1?'s':''}</div>` : ''}
+    </div>`;
+};
+
+window.createPoll = async function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    const question = document.getElementById('poll-question-input').value.trim();
+    if (!question) return alert('Please enter a question.');
+    if (window.checkTextContent(question)) return alert('Your poll contains language that isn\'t allowed on WeeBee.');
+    const optionEls = document.querySelectorAll('.poll-option-input');
+    const options = [...optionEls].map(el => el.value.trim()).filter(Boolean);
+    if (options.length < 2) return alert('Please add at least 2 options.');
+    for (const o of options) { if (window.checkTextContent(o)) return alert('An option contains language that isn\'t allowed on WeeBee.'); }
+    const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid)).catch(() => null);
+    const displayName = pd?.data()?.displayName || auth.currentUser.displayName;
+    const avatar = pd?.data()?.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
+    try {
+        const data = {
+            uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar,
+            question, options: options.map(text => ({ text, voters: [] })),
+            timestamp: new Date(), commentCount: 0
+        };
+        const ref = await addDoc(collection(db, 'polls'), data);
+        // Reset form
+        document.getElementById('poll-question-input').value = '';
+        const container = document.getElementById('poll-options-inputs');
+        container.innerHTML = `
+            <input type="text" class="poll-option-input" placeholder="Option 1" maxlength="100" style="width:100%; padding:9px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; box-sizing:border-box; margin-bottom:8px;">
+            <input type="text" class="poll-option-input" placeholder="Option 2" maxlength="100" style="width:100%; padding:9px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; box-sizing:border-box; margin-bottom:8px;">`;
+        document.getElementById('poll-add-option-btn').style.display = '';
+        window._pollsList.unshift({ id: ref.id, ...data, timestamp: { toDate: () => new Date() } });
+        window._renderPollsFeed();
+    } catch(e) { console.error('Poll create failed:', e); alert('Failed to create poll: ' + e.message); }
+};
+
+window.votePoll = async function(pollId, optionIdx) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const uid = auth.currentUser.uid;
+    const poll = window._pollsList.find(p => p.id === pollId);
+    if (!poll) return;
+    const alreadyVoted = poll.options.some(o => (o.voters||[]).includes(uid));
+    if (alreadyVoted) return;
+    poll.options[optionIdx].voters = [...(poll.options[optionIdx].voters||[]), uid];
+    window._renderPollsFeed();
+    try {
+        await updateDoc(doc(db, 'polls', pollId), { [`options.${optionIdx}.voters`]: arrayUnion(uid) });
+    } catch(e) {
+        poll.options[optionIdx].voters = poll.options[optionIdx].voters.filter(x => x !== uid);
+        window._renderPollsFeed();
+        alert('Failed to submit vote.');
+    }
+};
+
+window.deletePoll = async function(id) {
+    if (!auth.currentUser) return;
+    if (!confirm('Delete this poll?')) return;
+    try {
+        await deleteDoc(doc(db, 'polls', id));
+        window._pollsList = window._pollsList.filter(p => p.id !== id);
+        window._renderPollsFeed();
+    } catch(e) { alert('Failed to delete poll.'); }
+};
+
+// --- BRACKETS ---
+window._bracketsList = [];
+window._bracketAnimePool = [];
+
+window.loadBrackets = async function() {
+    const feed = document.getElementById('brackets-feed');
+    if (!feed) return;
+    feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">Loading...</div>';
+    window._bracketsList = [];
+    try {
+        const snap = await getDocs(query(collection(db, 'brackets'), orderBy('timestamp', 'desc'), limit(10)));
+        window._bracketsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        window._renderBracketsFeed();
+    } catch(e) { feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">Could not load brackets.</div>'; }
+};
+
+window._renderBracketsFeed = function() {
+    const feed = document.getElementById('brackets-feed');
+    if (!feed) return;
+    const uid = auth.currentUser?.uid;
+    if (!window._bracketsList.length) { feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">No brackets yet — create the first one!</div>'; return; }
+    feed.innerHTML = window._bracketsList.map(b => window._renderBracketCard(b, uid)).join('');
+};
+
+window._renderBracketCard = function(b, uid) {
+    const isOwner = uid && b.uid === uid;
+    const ago = b.timestamp?.toDate ? formatTimeAgo(b.timestamp.toDate()) : '';
+    const currentRound = b.currentRound || 0;
+    const totalRounds = b.rounds?.length || 0;
+    const isCompleted = b.status === 'completed';
+
+    let bodyHTML = '';
+
+    if (isCompleted && b.champion) {
+        bodyHTML = `<div style="text-align:center;padding:16px 0;">
+            <div style="font-size:28px;margin-bottom:8px;">🏆</div>
+            <div style="font-size:13px;font-weight:700;color:var(--accent-yellow);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">Champion</div>
+            <img src="${b.champion.image}" style="width:80px;height:112px;object-fit:cover;border-radius:8px;border:3px solid var(--accent-yellow);display:block;margin:0 auto 8px;">
+            <div style="font-weight:800;font-size:18px;">${b.champion.title}</div>
+        </div>`;
+    } else {
+        const matchups = b.rounds?.[currentRound] || [];
+        bodyHTML = `<div style="font-size:12px;font-weight:700;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;">Round ${currentRound + 1} of ${totalRounds}</div>` +
+        matchups.map((m, mi) => {
+            const keyA = `${currentRound}_${mi}_A`, keyB = `${currentRound}_${mi}_B`;
+            const votesA = (b.votes?.[keyA] || []).length;
+            const votesB = (b.votes?.[keyB] || []).length;
+            const total = votesA + votesB;
+            const pctA = total > 0 ? Math.round(votesA / total * 100) : 50;
+            const pctB = 100 - pctA;
+            const myVote = uid ? ((b.votes?.[keyA]||[]).includes(uid) ? 'A' : (b.votes?.[keyB]||[]).includes(uid) ? 'B' : null) : null;
+            const voted = myVote !== null;
+
+            return `<div style="background:var(--bg-gray-darker);border-radius:12px;padding:12px;margin-bottom:10px;">
+                <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:10px;">
+                    <div style="text-align:center;">
+                        <img src="${m.animeA.image}" style="width:60px;height:84px;object-fit:cover;border-radius:6px;border:2px solid ${myVote==='A'?'var(--accent-yellow)':'transparent'};display:block;margin:0 auto 6px;">
+                        <div style="font-size:12px;font-weight:700;line-height:1.3;">${m.animeA.title}</div>
+                    </div>
+                    <div style="font-weight:900;font-size:18px;color:var(--text-muted);">VS</div>
+                    <div style="text-align:center;">
+                        <img src="${m.animeB.image}" style="width:60px;height:84px;object-fit:cover;border-radius:6px;border:2px solid ${myVote==='B'?'var(--accent-yellow)':'transparent'};display:block;margin:0 auto 6px;">
+                        <div style="font-size:12px;font-weight:700;line-height:1.3;">${m.animeB.title}</div>
+                    </div>
+                </div>
+                ${voted
+                    ? `<div style="margin-bottom:6px;">
+                        <div style="display:flex;height:10px;border-radius:5px;overflow:hidden;margin-bottom:4px;">
+                            <div style="width:${pctA}%;background:${myVote==='A'?'var(--accent-yellow)':'#2196F3'};transition:width .4s;"></div>
+                            <div style="width:${pctB}%;background:${myVote==='B'?'var(--accent-yellow)':'#e53935'};transition:width .4s;"></div>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);">
+                            <span>${pctA}% (${votesA})</span><span>${pctB}% (${votesB})</span>
+                        </div>
+                    </div>`
+                    : `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <button onclick="window.voteInBracket('${b.id}',${currentRound},${mi},'A')" style="padding:9px;border:none;border-radius:8px;background:var(--accent-yellow);color:#111;font-weight:700;font-size:13px;cursor:pointer;">Vote ${m.animeA.title.split(' ')[0]}</button>
+                        <button onclick="window.voteInBracket('${b.id}',${currentRound},${mi},'B')" style="padding:9px;border:none;border-radius:8px;background:var(--bg-gray);color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;border:1px solid var(--border-color);">Vote ${m.animeB.title.split(' ')[0]}</button>
+                    </div>`}
+            </div>`;
+        }).join('') +
+        (isOwner ? `<button onclick="window.advanceBracket('${b.id}')" class="action-btn" style="width:100%;justify-content:center;margin-top:4px;background:var(--accent-yellow);color:#111;font-weight:700;">Advance to Next Round →</button>` : '');
+    }
+
+    return `<div style="background:var(--bg-gray);border-radius:14px;padding:16px;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+            <img src="${b.authorAvatar||''}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:800;font-size:15px;">${b.title}</div>
+                <div style="font-size:12px;color:var(--text-muted);">${b.authorName} · ${ago} ${isCompleted?'· ✅ Completed':''}</div>
+            </div>
+            ${isOwner ? `<button onclick="window.deleteBracket('${b.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></button>` : ''}
+        </div>
+        ${bodyHTML}
+    </div>`;
+};
+
+window.searchBracketAnime = async function() {
+    const q = document.getElementById('bracket-anime-search').value.trim();
+    const results = document.getElementById('bracket-anime-results');
+    if (q.length < 2) { results.style.display = 'none'; return; }
+    results.style.display = 'block';
+    results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;">Searching...</div>';
+    try {
+        const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=6&type=tv`);
+        const { data } = await res.json();
+        window._bracketSearchItems = data || [];
+        results.innerHTML = (data||[]).map((a, i) => {
+            const title = a.title_english || a.title;
+            return `<div onclick="window.addAnimeToBracket(${i})" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--bg-gray);" onmouseover="this.style.background='var(--bg-gray)'" onmouseout="this.style.background=''">
+                <img src="${a.images.jpg.image_url}" style="width:32px;height:44px;object-fit:cover;border-radius:4px;flex-shrink:0;">
+                <span style="font-size:13px;font-weight:600;">${title}</span>
+            </div>`;
+        }).join('') || '<div style="padding:10px;color:var(--text-muted);font-size:13px;">No results.</div>';
+    } catch(e) { results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;">Search failed.</div>'; }
+};
+
+window._bracketSearchItems = [];
+window.addAnimeToBracket = function(idx) {
+    const a = window._bracketSearchItems[idx];
+    if (!a) return;
+    const title = a.title_english || a.title;
+    const image = a.images.jpg.image_url;
+    const mal_id = a.mal_id;
+    if (window._bracketAnimePool.some(x => x.mal_id === mal_id)) return;
+    window._bracketAnimePool.push({ mal_id, title, image });
+    document.getElementById('bracket-anime-search').value = '';
+    document.getElementById('bracket-anime-results').style.display = 'none';
+    window._renderBracketPool();
+};
+
+window._renderBracketPool = function() {
+    const pool = document.getElementById('bracket-anime-pool');
+    const label = document.getElementById('bracket-count-label');
+    if (!pool) return;
+    const count = window._bracketAnimePool.length;
+    pool.innerHTML = window._bracketAnimePool.map((a, i) =>
+        `<div style="display:flex;align-items:center;gap:6px;background:var(--bg-gray-darker);border-radius:8px;padding:5px 10px 5px 6px;">
+            <img src="${a.image}" style="width:28px;height:38px;object-fit:cover;border-radius:4px;flex-shrink:0;">
+            <span style="font-size:12px;font-weight:700;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.title}</span>
+            <button onclick="window._bracketAnimePool.splice(${i},1); window._renderBracketPool();" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;margin-left:2px;font-size:16px;line-height:1;">×</button>
+        </div>`
+    ).join('');
+    if (label) label.innerText = count < 4 ? `Add ${4 - count} more (min 4, even number)` : count % 2 !== 0 ? 'Add 1 more (must be even)' : `${count} anime — ready to start!`;
+};
+
+window.createBracket = async function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    const title = document.getElementById('bracket-title-input').value.trim();
+    if (!title) return alert('Please enter a bracket title.');
+    const pool = window._bracketAnimePool;
+    if (pool.length < 4) return alert('Add at least 4 anime.');
+    if (pool.length % 2 !== 0) return alert('You need an even number of anime.');
+    const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid)).catch(() => null);
+    const displayName = pd?.data()?.displayName || auth.currentUser.displayName;
+    const avatar = pd?.data()?.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    const round0 = [];
+    for (let i = 0; i < shuffled.length; i += 2) round0.push({ animeA: shuffled[i], animeB: shuffled[i+1] });
+    const totalRounds = Math.ceil(Math.log2(pool.length));
+    const rounds = [round0, ...Array(totalRounds - 1).fill([])];
+    try {
+        const data = { uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar, title, rounds, currentRound: 0, votes: {}, status: 'voting', champion: null, timestamp: new Date() };
+        const ref = await addDoc(collection(db, 'brackets'), data);
+        document.getElementById('bracket-title-input').value = '';
+        window._bracketAnimePool = [];
+        window._renderBracketPool();
+        document.getElementById('bracket-create-body').style.display = 'none';
+        window._bracketsList.unshift({ id: ref.id, ...data, timestamp: { toDate: () => new Date() } });
+        window._renderBracketsFeed();
+    } catch(e) { console.error('Bracket create failed:', e); alert('Failed to create bracket: ' + e.message); }
+};
+
+window.voteInBracket = async function(bracketId, round, matchIdx, side) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const uid = auth.currentUser.uid;
+    const b = window._bracketsList.find(x => x.id === bracketId);
+    if (!b) return;
+    const keyA = `${round}_${matchIdx}_A`, keyB = `${round}_${matchIdx}_B`;
+    if ((b.votes?.[keyA]||[]).includes(uid) || (b.votes?.[keyB]||[]).includes(uid)) return;
+    if (!b.votes) b.votes = {};
+    const key = side === 'A' ? keyA : keyB;
+    b.votes[key] = [...(b.votes[key]||[]), uid];
+    window._renderBracketsFeed();
+    try {
+        await updateDoc(doc(db, 'brackets', bracketId), { [`votes.${key}`]: arrayUnion(uid) });
+    } catch(e) {
+        b.votes[key] = b.votes[key].filter(x => x !== uid);
+        window._renderBracketsFeed();
+        alert('Failed to submit vote.');
+    }
+};
+
+window.advanceBracket = async function(bracketId) {
+    if (!auth.currentUser) return;
+    const b = window._bracketsList.find(x => x.id === bracketId);
+    if (!b) return;
+    const round = b.currentRound || 0;
+    const matchups = b.rounds[round];
+    const winners = matchups.map((m, mi) => {
+        const votesA = (b.votes?.[`${round}_${mi}_A`]||[]).length;
+        const votesB = (b.votes?.[`${round}_${mi}_B`]||[]).length;
+        return votesA >= votesB ? m.animeA : m.animeB;
+    });
+    if (winners.length === 1) {
+        b.champion = winners[0];
+        b.status = 'completed';
+        try {
+            await updateDoc(doc(db, 'brackets', bracketId), { champion: winners[0], status: 'completed' });
+            window._renderBracketsFeed();
+        } catch(e) { alert('Failed to advance: ' + e.message); }
+        return;
+    }
+    const nextRound = [];
+    for (let i = 0; i < winners.length; i += 2) nextRound.push({ animeA: winners[i], animeB: winners[i+1] });
+    const nextIdx = round + 1;
+    b.rounds[nextIdx] = nextRound;
+    b.currentRound = nextIdx;
+    try {
+        const updatedRounds = [...b.rounds];
+        updatedRounds[nextIdx] = nextRound;
+        await updateDoc(doc(db, 'brackets', bracketId), { rounds: updatedRounds, currentRound: nextIdx });
+        window._renderBracketsFeed();
+    } catch(e) { alert('Failed to advance: ' + e.message); }
+};
+
+window.deleteBracket = async function(id) {
+    if (!auth.currentUser) return;
+    if (!confirm('Delete this bracket?')) return;
+    try {
+        await deleteDoc(doc(db, 'brackets', id));
+        window._bracketsList = window._bracketsList.filter(b => b.id !== id);
+        window._renderBracketsFeed();
+    } catch(e) { alert('Failed to delete.'); }
 };
 
 // --- PATCH NOTES ---
@@ -4916,6 +5608,17 @@ window.addEventListener('popstate', (e) => {
     }
 });
 
+function getSeasonLabel(anime) {
+    const t = anime.title_english || anime.title || '';
+    const m2 = t.match(/\b(\d+)(st|nd|rd|th)\s+season/i) || t.match(/\bseason\s+(\d+)/i);
+    if (m2) return `Review Season ${m2[1]}`;
+    if (/final\s+season/i.test(t)) return 'Review Final Season';
+    const mp = t.match(/\bpart\s+(\d+|i{1,3}|iv|v|vi)\b/i);
+    if (mp) return `Review Part ${mp[1].toUpperCase ? mp[1].toUpperCase() : mp[1]}`;
+    const hasPrequel = anime.relations?.some(r => r.relation === 'Prequel');
+    return hasPrequel ? 'Review This Season' : 'Review Season 1';
+}
+
 // --- ANIME DETAIL SYSTEM ---
 window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
     window.currentAnimeId = mal_id;
@@ -5049,11 +5752,11 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
             <button id="add-to-list-btn" onclick="addCurrentAnimeToList()" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px; ${window.myAnimeList?.some(a => a.mal_id === mal_id) ? 'background:var(--bg-gray-darker); color:var(--text-muted);' : ''}"><span class="material-symbols-outlined">${window.myAnimeList?.some(a => a.mal_id === mal_id) ? 'check' : 'add'}</span> ${window.myAnimeList?.some(a => a.mal_id === mal_id) ? 'In My List' : 'Add to List'}</button>
             <button id="follow-anime-btn" onclick="toggleFollow(${mal_id}, 'anime', this)" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px; background:${isFollowingAnime ? 'var(--bg-gray-darker)' : 'var(--accent-yellow)'}; color:var(--text-dark);"><span class="material-symbols-outlined">${isFollowingAnime ? 'check' : 'bookmark_add'}</span> ${isFollowingAnime ? 'Following' : 'Follow Anime'}</button>
             <button onclick="openReviewModal()" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px; background: transparent; color: var(--text-dark); border: 1px solid #E0E0E0;">
-                <span class="material-symbols-outlined">rate_review</span> Review Anime
+                <span class="material-symbols-outlined">rate_review</span> ${getSeasonLabel(anime)}
             </button>
             ${['Sequel','Prequel','Parent story','Full story'].some(r => anime.relations?.some(rel => rel.relation === r)) ? `
             <button onclick="window.openSeriesRatingDirect()" class="action-btn" style="width:100%; justify-content:center; margin-bottom: 10px; background: transparent; color: var(--text-dark); border: 1px solid #E0E0E0;">
-                <span class="material-symbols-outlined">auto_stories</span> Rate Series Overall
+                <span class="material-symbols-outlined">auto_stories</span> Review Series Overall
             </button>` : ''}
             <button onclick="openSuggestModal()" class="action-btn" style="width:100%; justify-content:center; background: transparent; color: var(--text-dark); border: 1px solid #E0E0E0;">
                 <span class="material-symbols-outlined">send</span> Suggest
@@ -5462,6 +6165,37 @@ function bwImageLookup(m, aliases, name) {
     return null;
 }
 
+// Loads images for a BW game by searching Jikan by each character's name.
+// Mutates mapRef in place so applyFn sees new entries immediately on each call.
+async function bwLoadBySearch(chars, cacheKey, mapRef, applyFn) {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+        try {
+            Object.assign(mapRef, JSON.parse(cached));
+            if (applyFn) applyFn();
+            return;
+        } catch(e) {}
+    }
+    for (const char of chars) {
+        try {
+            const res = await fetch(`https://api.jikan.moe/v4/characters?q=${encodeURIComponent(char.name)}&limit=5`);
+            if (res.ok) {
+                const { data } = await res.json();
+                if (data?.length) {
+                    const exact = data.find(c => c.name.toLowerCase() === char.name.toLowerCase());
+                    const pick = exact || data[0];
+                    if (pick?.images?.jpg?.image_url) {
+                        mapRef[char.name.toLowerCase()] = pick.images.jpg.image_url;
+                        if (applyFn) applyFn();
+                    }
+                }
+            }
+        } catch(e) {}
+        await new Promise(r => setTimeout(r, 440));
+    }
+    try { localStorage.setItem(cacheKey, JSON.stringify(mapRef)); } catch(e) {}
+}
+
 function bwAllGreen(colors) {
     return Object.values(colors).every(v => v === 'green');
 }
@@ -5524,146 +6258,71 @@ function bwShowAllGreenNotice(gridId, delay) {
 
 const BW_NRT_CHARS = [
     // ── Leaf ──
-    {id:'naruto',    name:'Naruto Uzumaki',     gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Senjutsu','Fuinjutsu'],                                nature:['Wind','Fire','Earth','Water','Lightning'],       kekkeiGenkai:false, attribute:['Jinchuriki','Sage'],  debutArc:'Introduction'},
-    {id:'sasuke',    name:'Sasuke Uchiha',       gender:'Male',   affiliation:['Leaf','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu'],                                 nature:['Lightning','Fire','Wind','Earth','Water'],       kekkeiGenkai:true,  attribute:[],                    debutArc:'Introduction'},
-    {id:'sakura',    name:'Sakura Haruno',       gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Genjutsu'],                          nature:['Earth','Water','Fire'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
-    {id:'kakashi',   name:'Kakashi Hatake',      gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu'],                      nature:['Lightning','Earth','Water','Fire','Wind'],       kekkeiGenkai:false, attribute:['Anbu'],              debutArc:'Introduction'},
-    {id:'iruka',     name:'Iruka Umino',         gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Water','Earth'],                                kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
-    {id:'gai',       name:'Might Guy',           gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Taijutsu','Ninjutsu'],                                                        nature:['Lightning'],                                    kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
-    {id:'rock-lee',  name:'Rock Lee',            gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Taijutsu'],                                                                   nature:[],                                               kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
-    {id:'neji',      name:'Neji Hyuga',          gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Taijutsu','Ninjutsu'],                                                        nature:['Fire'],                                         kekkeiGenkai:true,  attribute:[],                    debutArc:'Chunin Exams'},
-    {id:'tenten',    name:'Tenten',              gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Kenjutsu','Ninjutsu','Taijutsu'],                                             nature:[],                                               kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
-    {id:'shikamaru', name:'Shikamaru Nara',      gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Fire','Earth'],                                 kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
-    {id:'ino',       name:'Ino Yamanaka',        gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Genjutsu'],                          nature:['Fire','Earth','Water'],                          kekkeiGenkai:false, attribute:['Sensor'],            debutArc:'Chunin Exams'},
-    {id:'choji',     name:'Choji Akimichi',      gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Fire','Earth'],                                 kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
-    {id:'kiba',      name:'Kiba Inuzuka',        gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Earth'],                                        kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
-    {id:'hinata',    name:'Hinata Hyuga',        gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Taijutsu','Ninjutsu','Medical Ninjutsu'],                                     nature:['Fire','Earth'],                                 kekkeiGenkai:true,  attribute:[],                    debutArc:'Chunin Exams'},
-    {id:'shino',     name:'Shino Aburame',       gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Earth','Fire'],                                 kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
-    {id:'kurenai',   name:'Kurenai Yuhi',        gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Genjutsu','Taijutsu'],                                             nature:['Fire'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
-    {id:'asuma',     name:'Asuma Sarutobi',      gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],                                 nature:['Fire','Wind'],                                  kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
-    {id:'hiruzen',   name:'Hiruzen Sarutobi',    gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Senjutsu'],                      nature:['Fire','Earth','Wind','Water','Lightning'],       kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Introduction'},
-    {id:'minato',    name:'Minato Namikaze',     gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Senjutsu'],                                 nature:['Fire','Wind','Lightning'],                       kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Sasuke Recovery Mission'},
-    {id:'tsunade',   name:'Tsunade',             gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu','Genjutsu'],               nature:['Earth','Fire','Water'],                          kekkeiGenkai:false, attribute:['Sannin','Kage'],     debutArc:'Search for Tsunade'},
-    {id:'jiraiya',   name:'Jiraiya',             gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Senjutsu','Genjutsu'],                      nature:['Fire','Earth','Wind','Water'],                   kekkeiGenkai:false, attribute:['Sannin','Sage'],     debutArc:'Search for Tsunade'},
-    {id:'sai',       name:'Sai',                gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],                                 nature:['Fire'],                                         kekkeiGenkai:false, attribute:['Anbu'],              debutArc:'Tenchi Bridge Reconnaissance'},
-    {id:'yamato',    name:'Yamato',             gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Earth','Fire','Water'],                          kekkeiGenkai:true,  attribute:['Anbu'],              debutArc:'Tenchi Bridge Reconnaissance'},
-    {id:'hashirama', name:'Hashirama Senju',    gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu','Genjutsu','Senjutsu'],    nature:['Earth','Fire','Water','Wind'],                   kekkeiGenkai:true,  attribute:['Kage','Sage'],       debutArc:'Fourth Shinobi World War'},
-    {id:'tobirama',  name:'Tobirama Senju',     gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu','Kinjutsu'],                      nature:['Water','Earth','Fire','Wind'],                   kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Fourth Shinobi World War'},
+    {id:'naruto',    name:'Naruto Uzumaki',     img:'https://cdn.myanimelist.net/images/characters/2/284121.jpg',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Senjutsu','Fuinjutsu'],                                nature:['Wind','Fire','Earth','Water','Lightning'],       kekkeiGenkai:false, attribute:['Jinchuriki','Sage'],  debutArc:'Introduction'},
+    {id:'sasuke',    name:'Sasuke Uchiha',       img:'https://cdn.myanimelist.net/images/characters/9/131317.jpg',  gender:'Male',   affiliation:['Leaf','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu'],                                 nature:['Lightning','Fire','Wind','Earth','Water'],       kekkeiGenkai:true,  attribute:[],                    debutArc:'Introduction'},
+    {id:'sakura',    name:'Sakura Haruno',       img:'https://cdn.myanimelist.net/images/characters/9/69275.jpg',   gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Genjutsu'],                          nature:['Earth','Water','Fire'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'kakashi',   name:'Kakashi Hatake',      img:'https://cdn.myanimelist.net/images/characters/7/284129.jpg',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu'],                      nature:['Lightning','Earth','Water','Fire','Wind'],       kekkeiGenkai:false, attribute:['Anbu'],              debutArc:'Introduction'},
+    {id:'iruka',     name:'Iruka Umino',         img:'https://cdn.myanimelist.net/images/characters/10/100216.jpg', gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Water','Earth'],                                kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'gai',       name:'Might Guy',           img:'https://cdn.myanimelist.net/images/characters/16/103576.jpg', gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Taijutsu','Ninjutsu'],                                                        nature:['Lightning'],                                    kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'rock-lee',  name:'Rock Lee',            img:'https://cdn.myanimelist.net/images/characters/13/433353.jpg', gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Taijutsu'],                                                                   nature:[],                                               kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'neji',      name:'Neji Hyuga',          img:'https://cdn.myanimelist.net/images/characters/2/105538.jpg',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Taijutsu','Ninjutsu'],                                                        nature:['Fire'],                                         kekkeiGenkai:true,  attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'tenten',    name:'Tenten',              img:'https://cdn.myanimelist.net/images/characters/16/110946.jpg', gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Kenjutsu','Ninjutsu','Taijutsu'],                                             nature:[],                                               kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'shikamaru', name:'Shikamaru Nara',      img:'https://cdn.myanimelist.net/images/characters/3/131315.jpg',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Fire','Earth'],                                 kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'ino',       name:'Ino Yamanaka',        img:'https://cdn.myanimelist.net/images/characters/9/60062.jpg',   gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Genjutsu'],                          nature:['Fire','Earth','Water'],                          kekkeiGenkai:false, attribute:['Sensor'],            debutArc:'Chunin Exams'},
+    {id:'choji',     name:'Choji Akimichi',      img:'https://cdn.myanimelist.net/images/characters/9/105421.jpg',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Fire','Earth'],                                 kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'kiba',      name:'Kiba Inuzuka',        img:'https://cdn.myanimelist.net/images/characters/11/131217.jpg', gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Earth'],                                        kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'hinata',    name:'Hinata Hyuga',        img:'https://cdn.myanimelist.net/images/characters/6/278736.jpg',  gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Taijutsu','Ninjutsu','Medical Ninjutsu'],                                     nature:['Fire','Earth'],                                 kekkeiGenkai:true,  attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'shino',     name:'Shino Aburame',       img:'https://cdn.myanimelist.net/images/characters/16/292449.jpg', gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Earth','Fire'],                                 kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'kurenai',   name:'Kurenai Yuhi',        img:'https://cdn.myanimelist.net/images/characters/8/103797.jpg',  gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Genjutsu','Taijutsu'],                                             nature:['Fire'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'asuma',     name:'Asuma Sarutobi',      img:'https://cdn.myanimelist.net/images/characters/13/82538.jpg',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],                                 nature:['Fire','Wind'],                                  kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'hiruzen',   name:'Hiruzen Sarutobi',    img:'https://cdn.myanimelist.net/images/characters/2/68520.jpg',   gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Senjutsu'],                      nature:['Fire','Earth','Wind','Water','Lightning'],       kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Introduction'},
+    {id:'minato',    name:'Minato Namikaze',     img:'https://cdn.myanimelist.net/images/characters/14/128074.jpg', gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Senjutsu'],                                 nature:['Fire','Wind','Lightning'],                       kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Sasuke Recovery Mission'},
+    {id:'tsunade',   name:'Tsunade',             img:'https://cdn.myanimelist.net/images/characters/12/523646.jpg', gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu','Genjutsu'],               nature:['Earth','Fire','Water'],                          kekkeiGenkai:false, attribute:['Sannin','Kage'],     debutArc:'Search for Tsunade'},
+    {id:'jiraiya',   name:'Jiraiya',             img:'https://cdn.myanimelist.net/images/characters/15/68618.jpg',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Senjutsu','Genjutsu'],                      nature:['Fire','Earth','Wind','Water'],                   kekkeiGenkai:false, attribute:['Sannin','Sage'],     debutArc:'Search for Tsunade'},
+    {id:'sai',       name:'Sai',                img:'https://cdn.myanimelist.net/images/characters/3/36032.jpg',   gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],                                 nature:['Fire'],                                         kekkeiGenkai:false, attribute:['Anbu'],              debutArc:'Tenchi Bridge Reconnaissance'},
+    {id:'yamato',    name:'Yamato',             img:'https://cdn.myanimelist.net/images/characters/8/128096.jpg',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Earth','Fire','Water'],                          kekkeiGenkai:true,  attribute:['Anbu'],              debutArc:'Tenchi Bridge Reconnaissance'},
+    {id:'hashirama', name:'Hashirama Senju',    img:'https://cdn.myanimelist.net/images/characters/10/34809.jpg',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu','Genjutsu','Senjutsu'],    nature:['Earth','Fire','Water','Wind'],                   kekkeiGenkai:true,  attribute:['Kage','Sage'],       debutArc:'Fourth Shinobi World War'},
+    {id:'tobirama',  name:'Tobirama Senju',     img:'https://cdn.myanimelist.net/images/characters/2/293367.jpg',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu','Kinjutsu'],                      nature:['Water','Earth','Fire','Wind'],                   kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Fourth Shinobi World War'},
     // ── Sound ──
-    {id:'orochimaru',name:'Orochimaru',          gender:'Male',   affiliation:['Leaf','Missing-nin','Akatsuki','Sound'],  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Kenjutsu','Medical Ninjutsu'],  nature:['Fire','Earth','Wind','Lightning','Water'],       kekkeiGenkai:false, attribute:['Sannin'],            debutArc:'Chunin Exams'},
-    {id:'kabuto',    name:'Kabuto Yakushi',      gender:'Male',   affiliation:['Sound','Missing-nin'],                   jutsuType:['Ninjutsu','Medical Ninjutsu','Taijutsu','Senjutsu','Genjutsu'],                nature:['Earth','Water','Fire','Wind','Lightning'],       kekkeiGenkai:false, attribute:['Sage'],              debutArc:'Chunin Exams'},
-    {id:'kimimaro',  name:'Kimimaro',            gender:'Male',   affiliation:['Sound'],                                 jutsuType:['Taijutsu','Ninjutsu','Kenjutsu'],                                             nature:['Earth'],                                        kekkeiGenkai:true,  attribute:[],                    debutArc:'Sasuke Recovery Mission'},
+    {id:'orochimaru',name:'Orochimaru',          img:'https://cdn.myanimelist.net/images/characters/16/484669.jpg', gender:'Male',   affiliation:['Leaf','Missing-nin','Akatsuki','Sound'],  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Kenjutsu','Medical Ninjutsu'],  nature:['Fire','Earth','Wind','Lightning','Water'],       kekkeiGenkai:false, attribute:['Sannin'],            debutArc:'Chunin Exams'},
+    {id:'kabuto',    name:'Kabuto Yakushi',      img:'https://cdn.myanimelist.net/images/characters/9/34769.jpg',   gender:'Male',   affiliation:['Sound','Missing-nin'],                   jutsuType:['Ninjutsu','Medical Ninjutsu','Taijutsu','Senjutsu','Genjutsu'],                nature:['Earth','Water','Fire','Wind','Lightning'],       kekkeiGenkai:false, attribute:['Sage'],              debutArc:'Chunin Exams'},
+    {id:'kimimaro',  name:'Kimimaro',            img:'https://cdn.myanimelist.net/images/characters/13/103598.jpg', gender:'Male',   affiliation:['Sound'],                                 jutsuType:['Taijutsu','Ninjutsu','Kenjutsu'],                                             nature:['Earth'],                                        kekkeiGenkai:true,  attribute:[],                    debutArc:'Sasuke Recovery Mission'},
     // ── Sand ──
-    {id:'gaara',     name:'Gaara',              gender:'Male',   affiliation:['Sand'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Earth','Lightning','Wind'],                      kekkeiGenkai:false, attribute:['Jinchuriki','Kage'], debutArc:'Chunin Exams'},
-    {id:'temari',    name:'Temari',             gender:'Female', affiliation:['Sand'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu'],                                             nature:['Wind'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
-    {id:'kankuro',   name:'Kankuro',            gender:'Male',   affiliation:['Sand'],                                  jutsuType:['Ninjutsu','Kinjutsu'],                                                        nature:['Earth'],                                        kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
-    {id:'chiyo',     name:'Chiyo',              gender:'Female', affiliation:['Sand'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu'],                          nature:['Earth','Fire','Wind'],                           kekkeiGenkai:false, attribute:[],                    debutArc:'Kazekage Rescue'},
+    {id:'gaara',     name:'Gaara',              img:'https://cdn.myanimelist.net/images/characters/10/293375.jpg', gender:'Male',   affiliation:['Sand'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Earth','Lightning','Wind'],                      kekkeiGenkai:false, attribute:['Jinchuriki','Kage'], debutArc:'Chunin Exams'},
+    {id:'temari',    name:'Temari',             img:'https://cdn.myanimelist.net/images/characters/13/292452.jpg', gender:'Female', affiliation:['Sand'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu'],                                             nature:['Wind'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'kankuro',   name:'Kankuro',            img:'https://cdn.myanimelist.net/images/characters/7/68615.jpg',   gender:'Male',   affiliation:['Sand'],                                  jutsuType:['Ninjutsu','Kinjutsu'],                                                        nature:['Earth'],                                        kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'chiyo',     name:'Chiyo',              img:'https://cdn.myanimelist.net/images/characters/12/69008.jpg',  gender:'Female', affiliation:['Sand'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Fuinjutsu'],                          nature:['Earth','Fire','Wind'],                           kekkeiGenkai:false, attribute:[],                    debutArc:'Kazekage Rescue'},
     // ── Mist ──
-    {id:'zabuza',    name:'Zabuza Momochi',     gender:'Male',   affiliation:['Mist','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Genjutsu'],                                  nature:['Water','Wind','Earth'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
-    {id:'haku',      name:'Haku',               gender:'Male',   affiliation:['Mist','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu'],                                     nature:['Wind','Water'],                                 kekkeiGenkai:true,  attribute:[],                    debutArc:'Introduction'},
-    {id:'kisame',    name:'Kisame Hoshigaki',   gender:'Male',   affiliation:['Mist','Missing-nin','Akatsuki'],         jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],                                 nature:['Water','Earth','Fire'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Search for Tsunade'},
+    {id:'zabuza',    name:'Zabuza Momochi',     img:'https://cdn.myanimelist.net/images/characters/14/103706.jpg', gender:'Male',   affiliation:['Mist','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Genjutsu'],                                  nature:['Water','Wind','Earth'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'haku',      name:'Haku',               img:'https://cdn.myanimelist.net/images/characters/10/103707.jpg', gender:'Male',   affiliation:['Mist','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu'],                                     nature:['Wind','Water'],                                 kekkeiGenkai:true,  attribute:[],                    debutArc:'Introduction'},
+    {id:'kisame',    name:'Kisame Hoshigaki',   img:'https://cdn.myanimelist.net/images/characters/11/433351.jpg', gender:'Male',   affiliation:['Mist','Missing-nin','Akatsuki'],         jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],                                 nature:['Water','Earth','Fire'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Search for Tsunade'},
     // ── Cloud ──
-    {id:'killerbee', name:'Killer Bee',         gender:'Male',   affiliation:['Cloud'],                                 jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Senjutsu','Fuinjutsu'],                      nature:['Lightning','Fire','Water','Earth','Wind'],       kekkeiGenkai:false, attribute:['Jinchuriki','Sage'], debutArc:'Akatsuki Suppression'},
-    {id:'raikage',   name:'A (Fourth Raikage)', gender:'Male',   affiliation:['Cloud'],                                 jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Lightning','Fire'],                              kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Five Kage Summit'},
+    {id:'killerbee', name:'Killer Bee',         img:'https://cdn.myanimelist.net/images/characters/2/128072.jpg',  gender:'Male',   affiliation:['Cloud'],                                 jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Senjutsu','Fuinjutsu'],                      nature:['Lightning','Fire','Water','Earth','Wind'],       kekkeiGenkai:false, attribute:['Jinchuriki','Sage'], debutArc:'Akatsuki Suppression'},
+    {id:'raikage',   name:'A (Fourth Raikage)', img:'https://cdn.myanimelist.net/images/characters/15/112222.jpg', gender:'Male',   affiliation:['Cloud'],                                 jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Lightning','Fire'],                              kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Five Kage Summit'},
     // ── Akatsuki ──
-    {id:'itachi',    name:'Itachi Uchiha',      gender:'Male',   affiliation:['Leaf','Missing-nin','Akatsuki'],         jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu'],                      nature:['Fire','Water','Wind'],                           kekkeiGenkai:true,  attribute:['Anbu'],              debutArc:'Chunin Exams'},
-    {id:'nagato',    name:'Nagato (Pain)',       gender:'Male',   affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Genjutsu'],                                 nature:['Wind','Lightning','Earth','Water','Fire'],       kekkeiGenkai:true,  attribute:[],                    debutArc:"Pain's Assault"},
-    {id:'konan',     name:'Konan',              gender:'Female', affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Water','Fire','Earth'],                          kekkeiGenkai:false, attribute:[],                    debutArc:"Pain's Assault"},
-    {id:'deidara',   name:'Deidara',            gender:'Male',   affiliation:['Stone','Missing-nin','Akatsuki'],        jutsuType:['Ninjutsu','Taijutsu','Kinjutsu'],                                             nature:['Earth','Lightning','Wind'],                      kekkeiGenkai:true,  attribute:[],                    debutArc:'Kazekage Rescue'},
-    {id:'sasori',    name:'Sasori',             gender:'Male',   affiliation:['Sand','Missing-nin','Akatsuki'],         jutsuType:['Ninjutsu','Taijutsu','Kinjutsu'],                                             nature:['Fire','Earth','Wind'],                           kekkeiGenkai:false, attribute:[],                    debutArc:'Kazekage Rescue'},
-    {id:'hidan',     name:'Hidan',              gender:'Male',   affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Kinjutsu'],                                  nature:['Fire'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Akatsuki Suppression'},
-    {id:'kakuzu',    name:'Kakuzu',             gender:'Male',   affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu','Kinjutsu','Fuinjutsu'],                                 nature:['Fire','Wind','Lightning','Earth','Water'],       kekkeiGenkai:false, attribute:[],                    debutArc:'Akatsuki Suppression'},
-    {id:'zetsu',     name:'Zetsu',              gender:'Male',   affiliation:['Akatsuki'],                              jutsuType:['Ninjutsu','Fuinjutsu'],                                                        nature:['Earth','Water'],                                 kekkeiGenkai:true,  attribute:[],                    debutArc:'Kazekage Rescue'},
-    {id:'obito',     name:'Obito Uchiha',       gender:'Male',   affiliation:['Leaf','Missing-nin','Akatsuki'],         jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu','Senjutsu'],            nature:['Fire','Earth','Wind','Water','Lightning'],        kekkeiGenkai:true,  attribute:['Jinchuriki'],        debutArc:'Itachi Pursuit'},
-    {id:'madara',    name:'Madara Uchiha',      gender:'Male',   affiliation:['Leaf','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu','Senjutsu'],            nature:['Fire','Earth','Wind','Water','Lightning'],        kekkeiGenkai:true,  attribute:['Jinchuriki','Sage'], debutArc:'Fourth Shinobi World War'},
-    {id:'kaguya',    name:'Kaguya Otsutsuki',   gender:'Female', affiliation:['None'],                                  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Kinjutsu'],                      nature:['Fire','Wind','Earth','Water','Lightning'],       kekkeiGenkai:true,  attribute:['Jinchuriki'],        debutArc:'Kaguya Strikes'},
+    {id:'itachi',    name:'Itachi Uchiha',      img:'https://cdn.myanimelist.net/images/characters/9/284122.jpg',  gender:'Male',   affiliation:['Leaf','Missing-nin','Akatsuki'],         jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu'],                      nature:['Fire','Water','Wind'],                           kekkeiGenkai:true,  attribute:['Anbu'],              debutArc:'Chunin Exams'},
+    {id:'nagato',    name:'Nagato (Pain)',       img:'https://cdn.myanimelist.net/images/characters/8/73473.jpg',   gender:'Male',   affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Genjutsu'],                                 nature:['Wind','Lightning','Earth','Water','Fire'],       kekkeiGenkai:true,  attribute:[],                    debutArc:"Pain's Assault"},
+    {id:'konan',     name:'Konan',              img:'https://cdn.myanimelist.net/images/characters/13/158755.jpg', gender:'Female', affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Water','Fire','Earth'],                          kekkeiGenkai:false, attribute:[],                    debutArc:"Pain's Assault"},
+    {id:'deidara',   name:'Deidara',            img:'https://cdn.myanimelist.net/images/characters/3/68616.jpg',   gender:'Male',   affiliation:['Stone','Missing-nin','Akatsuki'],        jutsuType:['Ninjutsu','Taijutsu','Kinjutsu'],                                             nature:['Earth','Lightning','Wind'],                      kekkeiGenkai:true,  attribute:[],                    debutArc:'Kazekage Rescue'},
+    {id:'sasori',    name:'Sasori',             img:'https://cdn.myanimelist.net/images/characters/6/128070.jpg',  gender:'Male',   affiliation:['Sand','Missing-nin','Akatsuki'],         jutsuType:['Ninjutsu','Taijutsu','Kinjutsu'],                                             nature:['Fire','Earth','Wind'],                           kekkeiGenkai:false, attribute:[],                    debutArc:'Kazekage Rescue'},
+    {id:'hidan',     name:'Hidan',              img:'https://cdn.myanimelist.net/images/characters/8/103578.jpg',  gender:'Male',   affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Kinjutsu'],                                  nature:['Fire'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Akatsuki Suppression'},
+    {id:'kakuzu',    name:'Kakuzu',             img:'https://cdn.myanimelist.net/images/characters/11/255727.jpg', gender:'Male',   affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu','Kinjutsu','Fuinjutsu'],                                 nature:['Fire','Wind','Lightning','Earth','Water'],       kekkeiGenkai:false, attribute:[],                    debutArc:'Akatsuki Suppression'},
+    {id:'zetsu',     name:'Zetsu',              img:'https://cdn.myanimelist.net/images/characters/11/76260.jpg',  gender:'Male',   affiliation:['Akatsuki'],                              jutsuType:['Ninjutsu','Fuinjutsu'],                                                        nature:['Earth','Water'],                                 kekkeiGenkai:true,  attribute:[],                    debutArc:'Kazekage Rescue'},
+    {id:'obito',     name:'Obito Uchiha',       img:'https://cdn.myanimelist.net/images/characters/8/70596.jpg',   gender:'Male',   affiliation:['Leaf','Missing-nin','Akatsuki'],         jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu','Senjutsu'],            nature:['Fire','Earth','Wind','Water','Lightning'],        kekkeiGenkai:true,  attribute:['Jinchuriki'],        debutArc:'Itachi Pursuit'},
+    {id:'madara',    name:'Madara Uchiha',      img:'https://cdn.myanimelist.net/images/characters/12/450359.jpg', gender:'Male',   affiliation:['Leaf','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu','Senjutsu'],            nature:['Fire','Earth','Wind','Water','Lightning'],        kekkeiGenkai:true,  attribute:['Jinchuriki','Sage'], debutArc:'Fourth Shinobi World War'},
+    {id:'kaguya',    name:'Kaguya Otsutsuki',   img:'https://cdn.myanimelist.net/images/characters/5/292976.jpg',  gender:'Female', affiliation:['None'],                                  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Fuinjutsu','Kinjutsu'],                      nature:['Fire','Wind','Earth','Water','Lightning'],       kekkeiGenkai:true,  attribute:['Jinchuriki'],        debutArc:'Kaguya Strikes'},
 ];
 
 // --- BuzzWord: Naruto — Image System ---
-window.bwNrtImageMap = {};
-window.bwNrtImgReady = false;
-
-window.bwNrtLoadImages = async function() {
-    const cacheKey = 'wb_nrt_imgs_v4';
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) { try { window.bwNrtImageMap = JSON.parse(cached); window.bwNrtImgReady = true; return; } catch(e) {} }
-    const addToMap = (data, map) => {
-        (data || []).forEach(entry => {
-            const char = entry.character;
-            if (!char?.images?.jpg?.image_url) return;
-            const img = char.images.jpg.image_url;
-            const raw = char.name;
-            map[raw.toLowerCase()] = img;
-            if (raw.includes(',')) {
-                const [last, ...rest] = raw.split(',');
-                const natural = `${rest.join(',').trim()} ${last.trim()}`;
-                map[natural.toLowerCase()] = img;
-                const firstWord = rest.join(' ').trim().split(' ')[0].toLowerCase();
-                if (firstWord && !map[firstWord]) map[firstWord] = img;
-            } else {
-                const parts = raw.split(' ');
-                const lastName = parts[parts.length - 1].toLowerCase();
-                if (!map[lastName]) map[lastName] = img;
-            }
-        });
-    };
-    try {
-        const map = {};
-        // Fetch Naruto (20) and Naruto Shippuden (1735) characters
-        const res1 = await fetch('https://api.jikan.moe/v4/anime/20/characters');
-        if (res1.ok) { const d = await res1.json(); addToMap(d.data, map); }
-        await new Promise(r => setTimeout(r, 450)); // respect rate limit
-        const res2 = await fetch('https://api.jikan.moe/v4/anime/1735/characters');
-        if (res2.ok) { const d = await res2.json(); addToMap(d.data, map); }
-        window.bwNrtImageMap = map;
-        window.bwNrtImgReady = true;
-        try { localStorage.setItem(cacheKey, JSON.stringify(map)); } catch(e) {}
-    } catch(e) {}
-};
-
-const NRT_NAME_ALIASES = {
-    'nagato': 'pain', 'pain': 'nagato',
-    'nagato (pain)': 'nagato',
-    'tobi': 'obito', 'obito': 'tobi',
-    'a': 'raikage', 'a (fourth raikage)': 'raikage',
-    'choji akimichi': 'chouji akimichi', 'choji': 'chouji',
-    'might guy': 'maito gai', 'maito gai': 'might guy', 'guy': 'maito gai',
-    'rock lee': 'lee, rock', 'lee': 'lee, rock',
-    'killer bee': 'killer bee', 'kirabi': 'killer bee',
-    'minato': 'namikaze minato', 'namikaze': 'namikaze minato',
-    'hashirama': 'senju hashirama', 'senju': 'senju hashirama',
-    'tobirama': 'senju tobirama',
-    'kaguya': 'otsutsuki kaguya', 'otsutsuki': 'otsutsuki kaguya',
-    'zabuza': 'momochi zabuza', 'momochi': 'momochi zabuza',
-    'haku': 'haku',
-    'chiyo': 'chiyo',
-    'yamato': 'yamato', 'tenzou': 'yamato',
-    'sai': 'sai',
-    'kimimaro': 'kimimaro',
-    'kisame': 'hoshigaki kisame', 'hoshigaki': 'hoshigaki kisame',
-};
-
-window.bwNrtGetCharImage = function(name) {
-    return bwImageLookup(window.bwNrtImageMap, NRT_NAME_ALIASES, name);
-};
-
 window.bwNrtApplyImages = function() {
     document.querySelectorAll('[id^="nimg-"]').forEach(img => {
         const charId = img.id.replace('nimg-', '');
         const char = charId === 'answer' ? window.bwNrtState.answer : BW_NRT_CHARS.find(c => c.id === charId);
-        if (!char) return;
-        const url = window.bwNrtGetCharImage(char.name);
-        if (url) {
-            img.src = url; img.style.display = 'block';
-            const fb = document.getElementById(`ninitials-${charId}`);
-            if (fb) fb.style.display = 'none';
-        }
+        if (!char?.img) return;
+        img.src = char.img; img.style.display = 'block';
+        const fb = document.getElementById(`ninitials-${charId}`);
+        if (fb) fb.style.display = 'none';
     });
-};
-
-window.bwNrtEnsureImages = async function() {
-    if (!window.bwNrtImgReady) await window.bwNrtLoadImages();
-    window.bwNrtApplyImages();
 };
 
 // --- BuzzWord: Naruto — Helpers ---
@@ -5751,7 +6410,7 @@ function bwNrtShowResult() {
             </div>
         </div>`;
         if (inputArea) inputArea.style.display = 'none';
-        window.bwNrtEnsureImages();
+        window.bwNrtApplyImages();
         const statusEl = document.getElementById('bwnrt-status-text');
         if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
     } else {
@@ -5765,7 +6424,7 @@ function bwNrtRender() {
     if (!grid) return;
     const { answer, guesses } = window.bwNrtState;
     grid.innerHTML = guesses.map(g => bwNrtBuildRow(g, bwNrtCalcColors(g, answer))).join('');
-    window.bwNrtEnsureImages();
+    window.bwNrtApplyImages();
     bwNrtShowResult();
 }
 
@@ -5773,7 +6432,7 @@ function bwNrtAnimateNewRow(char, colors) {
     const grid = document.getElementById('bwnrt-grid');
     if (!grid) return;
     grid.insertAdjacentHTML('beforeend', bwNrtBuildRow(char, colors));
-    window.bwNrtEnsureImages();
+    window.bwNrtApplyImages();
     const newRow = grid.lastElementChild;
     const cells = newRow.querySelectorAll('.wordle-cell');
     cells.forEach((cell, i) => {
@@ -5832,7 +6491,7 @@ window.initBwNrtGame = async function() {
     document.getElementById('bwnrt-loading').style.display = 'none';
     document.getElementById('bwnrt-content').style.display = 'block';
     bwNrtRender();
-    window.bwNrtLoadImages();
+    window.bwNrtApplyImages();
 };
 
 window.bwNrtEnterGuess = function() {
@@ -5851,8 +6510,7 @@ window.searchBwNrtChar = function() {
     const matches = BW_NRT_CHARS.filter(c => !guessedIds.has(c.id) && (c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q))).slice(0, 8);
     sugg.style.display = matches.length ? 'block' : 'none';
     sugg.innerHTML = matches.map(c => {
-        const imgUrl = window.bwNrtGetCharImage(c.name);
-        const pic = imgUrl ? `<img src="${imgUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--bg-gray-darker);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${c.name[0]}</div>`;
+        const pic = c.img ? `<img src="${c.img}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--bg-gray-darker);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${c.name[0]}</div>`;
         return `<div class="wordle-suggestion-item" style="display:flex;align-items:center;gap:10px;" onclick="window.selectBwNrtChar('${c.id}')">${pic}<span>${c.name}</span></div>`;
     }).join('');
 };
@@ -6236,140 +6894,76 @@ const OP_ARC_ORDER = [
 ];
 
 const BW_OP_CHARS = [
-    {id:'luffy',name:'Monkey D. Luffy',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:true,type:'Zoan',name:'Hito Hito no Mi, Nika Model'},haki:['Observation','Armament','Conquerors'],bounty:3000000000,height:174,firstArc:'Romance Dawn'},
-    {id:'zoro',name:'Roronoa Zoro',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:1111000000,height:181,firstArc:'Romance Dawn'},
-    {id:'nami',name:'Nami',gender:'Female',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:[],bounty:366000000,height:170,firstArc:'Orange Town'},
-    {id:'usopp',name:'Usopp',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation'],bounty:500000000,height:176,firstArc:'Syrup Village'},
-    {id:'sanji',name:'Sanji',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:1032000000,height:180,firstArc:'Baratie'},
-    {id:'chopper',name:'Tony Tony Chopper',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:true,type:'Zoan',name:'Hito Hito no Mi'},haki:[],bounty:1000,height:90,firstArc:'Drum Island'},
-    {id:'robin',name:'Nico Robin',gender:'Female',affiliation:'Straw Hat Pirates',df:{has:true,type:'Paramecia',name:'Hana Hana no Mi'},haki:['Observation','Armament'],bounty:930000000,height:188,firstArc:'Alabasta'},
-    {id:'franky',name:'Franky',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:[],bounty:394000000,height:225,firstArc:'Water 7'},
-    {id:'brook',name:'Brook',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:true,type:'Paramecia',name:'Yomi Yomi no Mi'},haki:[],bounty:383000000,height:277,firstArc:'Thriller Bark'},
-    {id:'jinbe',name:'Jinbe',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:1100000000,height:301,firstArc:'Impel Down'},
-    {id:'shanks',name:'Shanks',gender:'Male',affiliation:'Red Hair Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:4048900000,height:199,firstArc:'Romance Dawn'},
-    {id:'whitebeard',name:'Edward Newgate',gender:'Male',affiliation:'Whitebeard Pirates',df:{has:true,type:'Paramecia',name:'Gura Gura no Mi'},haki:['Observation','Armament','Conquerors'],bounty:5046000000,height:666,firstArc:'Jaya'},
-    {id:'marco',name:'Marco',gender:'Male',affiliation:'Whitebeard Pirates',df:{has:true,type:'Zoan',name:'Tori Tori no Mi, Phoenix Model'},haki:['Observation','Armament'],bounty:1374000000,height:203,firstArc:'Jaya'},
-    {id:'kaido',name:'Kaido',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Uo Uo no Mi, Seiryu Model'},haki:['Observation','Armament','Conquerors'],bounty:4611100000,height:710,firstArc:'Dressrosa'},
-    {id:'bigmom',name:'Charlotte Linlin',gender:'Female',affiliation:'Big Mom Pirates',df:{has:true,type:'Paramecia',name:'Soru Soru no Mi'},haki:['Observation','Armament','Conquerors'],bounty:4388000000,height:880,firstArc:'Fishman Island'},
-    {id:'blackbeard',name:'Marshall D. Teach',gender:'Male',affiliation:'Blackbeard Pirates',df:{has:true,type:'Logia',name:'Yami Yami no Mi'},haki:['Armament'],bounty:3996000000,height:344,firstArc:'Jaya'},
-    {id:'akainu',name:'Sakazuki',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Magu Magu no Mi'},haki:['Observation','Armament'],bounty:0,height:306,firstArc:'Marineford'},
-    {id:'aokiji',name:'Kuzan',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Hie Hie no Mi'},haki:['Observation','Armament'],bounty:0,height:298,firstArc:'Long Ring Long Land'},
-    {id:'kizaru',name:'Borsalino',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Pika Pika no Mi'},haki:['Observation','Armament'],bounty:0,height:302,firstArc:'Sabaody Archipelago'},
-    {id:'garp',name:'Monkey D. Garp',gender:'Male',affiliation:'Marines',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:0,height:287,firstArc:'Post-Enies Lobby'},
-    {id:'smoker',name:'Smoker',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Moku Moku no Mi'},haki:['Armament'],bounty:0,height:209,firstArc:'Loguetown'},
-    {id:'tashigi',name:'Tashigi',gender:'Female',affiliation:'Marines',df:{has:false,type:null,name:null},haki:['Armament'],bounty:0,height:170,firstArc:'Loguetown'},
-    {id:'coby',name:'Coby',gender:'Male',affiliation:'Marines',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:0,height:183,firstArc:'Romance Dawn'},
-    {id:'mihawk',name:'Dracule Mihawk',gender:'Male',affiliation:'Cross Guild',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:3590000000,height:198,firstArc:'Baratie'},
-    {id:'hancock',name:'Boa Hancock',gender:'Female',affiliation:'Kuja Pirates',df:{has:true,type:'Paramecia',name:'Mero Mero no Mi'},haki:['Observation','Armament','Conquerors'],bounty:1659000000,height:191,firstArc:'Amazon Lily'},
-    {id:'doflamingo',name:'Donquixote Doflamingo',gender:'Male',affiliation:'Donquixote Pirates',df:{has:true,type:'Paramecia',name:'Ito Ito no Mi'},haki:['Observation','Armament','Conquerors'],bounty:340000000,height:305,firstArc:'Jaya'},
-    {id:'crocodile',name:'Crocodile',gender:'Male',affiliation:'Cross Guild',df:{has:true,type:'Logia',name:'Suna Suna no Mi'},haki:['Armament'],bounty:1965000000,height:253,firstArc:'Alabasta'},
-    {id:'law',name:'Trafalgar D. Water Law',gender:'Male',affiliation:'Heart Pirates',df:{has:true,type:'Paramecia',name:'Ope Ope no Mi'},haki:['Observation','Armament','Conquerors'],bounty:3000000000,height:191,firstArc:'Sabaody Archipelago'},
-    {id:'buggy',name:'Buggy',gender:'Male',affiliation:'Cross Guild',df:{has:true,type:'Paramecia',name:'Bara Bara no Mi'},haki:[],bounty:3189000000,height:182,firstArc:'Orange Town'},
-    {id:'sabo',name:'Sabo',gender:'Male',affiliation:'Revolutionary Army',df:{has:true,type:'Logia',name:'Mera Mera no Mi'},haki:['Observation','Armament','Conquerors'],bounty:602000000,height:187,firstArc:'Dressrosa'},
-    {id:'ace',name:'Portgas D. Ace',gender:'Male',affiliation:'Whitebeard Pirates',df:{has:true,type:'Logia',name:'Mera Mera no Mi'},haki:['Observation','Armament','Conquerors'],bounty:550000000,height:185,firstArc:'Alabasta'},
-    {id:'rayleigh',name:'Silvers Rayleigh',gender:'Male',affiliation:'Roger Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:0,height:188,firstArc:'Sabaody Archipelago'},
-    {id:'roger',name:'Gol D. Roger',gender:'Male',affiliation:'Roger Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:5564800000,height:274,firstArc:'Romance Dawn'},
-    {id:'kid',name:'Eustass Kid',gender:'Male',affiliation:'Kid Pirates',df:{has:true,type:'Paramecia',name:'Jiki Jiki no Mi'},haki:['Armament','Conquerors'],bounty:3000000000,height:205,firstArc:'Sabaody Archipelago'},
-    {id:'killer',name:'Killer',gender:'Male',affiliation:'Kid Pirates',df:{has:false,type:null,name:null},haki:['Armament'],bounty:200000000,height:195,firstArc:'Sabaody Archipelago'},
-    {id:'hawkins',name:'Basil Hawkins',gender:'Male',affiliation:'Hawkins Pirates',df:{has:true,type:'Paramecia',name:'Wara Wara no Mi'},haki:['Armament'],bounty:320000000,height:210,firstArc:'Sabaody Archipelago'},
-    {id:'drake',name:'X Drake',gender:'Male',affiliation:'SWORD',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Allosaurus Model'},haki:['Observation','Armament'],bounty:222000000,height:233,firstArc:'Sabaody Archipelago'},
-    {id:'bonney',name:'Jewelry Bonney',gender:'Female',affiliation:'Bonney Pirates',df:{has:true,type:'Paramecia',name:'Toshi Toshi no Mi'},haki:[],bounty:320000000,height:174,firstArc:'Sabaody Archipelago'},
-    {id:'bege',name:'Capone Bege',gender:'Male',affiliation:'Firetank Pirates',df:{has:true,type:'Paramecia',name:'Shiro Shiro no Mi'},haki:['Armament'],bounty:350000000,height:166,firstArc:'Sabaody Archipelago'},
-    {id:'lucci',name:'Rob Lucci',gender:'Male',affiliation:'CP0',df:{has:true,type:'Zoan',name:'Neko Neko no Mi, Leopard Model'},haki:['Observation','Armament'],bounty:0,height:212,firstArc:'Water 7'},
-    {id:'vivi',name:'Nefeltari Vivi',gender:'Female',affiliation:'Alabasta Kingdom',df:{has:false,type:null,name:null},haki:[],bounty:0,height:169,firstArc:'Whisky Peak'},
-    {id:'enel',name:'Enel',gender:'Male',affiliation:'Skypiea',df:{has:true,type:'Logia',name:'Goro Goro no Mi'},haki:['Observation'],bounty:0,height:266,firstArc:'Skypiea'},
-    {id:'arlong',name:'Arlong',gender:'Male',affiliation:'Arlong Pirates',df:{has:false,type:null,name:null},haki:[],bounty:20000000,height:263,firstArc:'Arlong Park'},
-    {id:'moria',name:'Gecko Moria',gender:'Male',affiliation:'Thriller Bark Pirates',df:{has:true,type:'Paramecia',name:'Kage Kage no Mi'},haki:[],bounty:320000000,height:692,firstArc:'Thriller Bark'},
-    {id:'perona',name:'Perona',gender:'Female',affiliation:'Thriller Bark Pirates',df:{has:true,type:'Paramecia',name:'Horo Horo no Mi'},haki:[],bounty:0,height:156,firstArc:'Thriller Bark'},
-    {id:'caesar',name:'Caesar Clown',gender:'Male',affiliation:'Punk Hazard',df:{has:true,type:'Logia',name:'Gasu Gasu no Mi'},haki:[],bounty:300000000,height:309,firstArc:'Punk Hazard'},
-    {id:'bartolomeo',name:'Bartolomeo',gender:'Male',affiliation:'Barto Club',df:{has:true,type:'Paramecia',name:'Bari Bari no Mi'},haki:['Armament'],bounty:200000000,height:220,firstArc:'Dressrosa'},
-    {id:'cavendish',name:'Cavendish',gender:'Male',affiliation:'Beautiful Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:330000000,height:200,firstArc:'Dressrosa'},
-    {id:'rebecca',name:'Rebecca',gender:'Female',affiliation:'Dressrosa',df:{has:false,type:null,name:null},haki:[],bounty:0,height:165,firstArc:'Dressrosa'},
-    {id:'katakuri',name:'Charlotte Katakuri',gender:'Male',affiliation:'Big Mom Pirates',df:{has:true,type:'Paramecia',name:'Mochi Mochi no Mi'},haki:['Observation','Armament','Conquerors'],bounty:1057000000,height:509,firstArc:'Whole Cake Island'},
-    {id:'carrot',name:'Carrot',gender:'Female',affiliation:'Mink Tribe',df:{has:false,type:null,name:null},haki:['Armament'],bounty:0,height:169,firstArc:'Zou'},
-    {id:'yamato',name:'Yamato',gender:'Female',affiliation:'Wano',df:{has:true,type:'Zoan',name:'Inu Inu no Mi, Okuchi-no-Makami Model'},haki:['Observation','Armament','Conquerors'],bounty:0,height:263,firstArc:'Wano'},
-    {id:'queen',name:'Queen',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Brachiosaurus Model'},haki:['Armament'],bounty:1320000000,height:612,firstArc:'Wano'},
-    {id:'king',name:'King',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Pteranodon Model'},haki:['Observation','Armament','Conquerors'],bounty:1390000000,height:613,firstArc:'Wano'},
-    {id:'jack',name:'Jack',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Zou Zou no Mi, Mammoth Model'},haki:['Armament'],bounty:1000000000,height:450,firstArc:'Zou'},
-    {id:'sengoku',name:'Sengoku',gender:'Male',affiliation:'Marines',df:{has:true,type:'Zoan',name:'Hito Hito no Mi, Daibutsu Model'},haki:['Observation','Armament','Conquerors'],bounty:0,height:278,firstArc:'Marineford'},
+    {id:'luffy',name:'Monkey D. Luffy',img:'https://cdn.myanimelist.net/images/characters/9/310307.jpg',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:true,type:'Zoan',name:'Hito Hito no Mi, Nika Model'},haki:['Observation','Armament','Conquerors'],bounty:3000000000,height:174,firstArc:'Romance Dawn'},
+    {id:'zoro',name:'Roronoa Zoro',img:'https://cdn.myanimelist.net/images/characters/3/100534.jpg',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:1111000000,height:181,firstArc:'Romance Dawn'},
+    {id:'nami',name:'Nami',img:'https://cdn.myanimelist.net/images/characters/6/59914.jpg',gender:'Female',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:[],bounty:366000000,height:170,firstArc:'Orange Town'},
+    {id:'usopp',name:'Usopp',img:'https://cdn.myanimelist.net/images/characters/16/188076.jpg',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation'],bounty:500000000,height:176,firstArc:'Syrup Village'},
+    {id:'sanji',name:'Sanji',img:'https://cdn.myanimelist.net/images/characters/5/136769.jpg',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:1032000000,height:180,firstArc:'Baratie'},
+    {id:'chopper',name:'Tony Tony Chopper',img:'https://cdn.myanimelist.net/images/characters/3/100536.jpg',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:true,type:'Zoan',name:'Hito Hito no Mi'},haki:[],bounty:1000,height:90,firstArc:'Drum Island'},
+    {id:'robin',name:'Nico Robin',img:'https://cdn.myanimelist.net/images/characters/16/363700.jpg',gender:'Female',affiliation:'Straw Hat Pirates',df:{has:true,type:'Paramecia',name:'Hana Hana no Mi'},haki:['Observation','Armament'],bounty:930000000,height:188,firstArc:'Alabasta'},
+    {id:'franky',name:'Franky',img:'https://cdn.myanimelist.net/images/characters/13/210053.jpg',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:[],bounty:394000000,height:225,firstArc:'Water 7'},
+    {id:'brook',name:'Brook',img:'https://cdn.myanimelist.net/images/characters/10/161005.jpg',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:true,type:'Paramecia',name:'Yomi Yomi no Mi'},haki:[],bounty:383000000,height:277,firstArc:'Thriller Bark'},
+    {id:'jinbe',name:'Jinbe',img:'https://cdn.myanimelist.net/images/characters/15/307148.jpg',gender:'Male',affiliation:'Straw Hat Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:1100000000,height:301,firstArc:'Impel Down'},
+    {id:'shanks',name:'Shanks',img:'https://cdn.myanimelist.net/images/characters/9/307639.jpg',gender:'Male',affiliation:'Red Hair Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:4048900000,height:199,firstArc:'Romance Dawn'},
+    {id:'whitebeard',name:'Edward Newgate',img:'https://cdn.myanimelist.net/images/characters/3/100236.jpg',gender:'Male',affiliation:'Whitebeard Pirates',df:{has:true,type:'Paramecia',name:'Gura Gura no Mi'},haki:['Observation','Armament','Conquerors'],bounty:5046000000,height:666,firstArc:'Jaya'},
+    {id:'marco',name:'Marco',img:'https://cdn.myanimelist.net/images/characters/4/100226.jpg',gender:'Male',affiliation:'Whitebeard Pirates',df:{has:true,type:'Zoan',name:'Tori Tori no Mi, Phoenix Model'},haki:['Observation','Armament'],bounty:1374000000,height:203,firstArc:'Jaya'},
+    {id:'kaido',name:'Kaido',img:'https://cdn.myanimelist.net/images/characters/4/492819.jpg',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Uo Uo no Mi, Seiryu Model'},haki:['Observation','Armament','Conquerors'],bounty:4611100000,height:710,firstArc:'Dressrosa'},
+    {id:'bigmom',name:'Charlotte Linlin',img:'https://cdn.myanimelist.net/images/characters/14/337166.jpg',gender:'Female',affiliation:'Big Mom Pirates',df:{has:true,type:'Paramecia',name:'Soru Soru no Mi'},haki:['Observation','Armament','Conquerors'],bounty:4388000000,height:880,firstArc:'Fishman Island'},
+    {id:'blackbeard',name:'Marshall D. Teach',img:'https://cdn.myanimelist.net/images/characters/2/109536.jpg',gender:'Male',affiliation:'Blackbeard Pirates',df:{has:true,type:'Logia',name:'Yami Yami no Mi'},haki:['Armament'],bounty:3996000000,height:344,firstArc:'Jaya'},
+    {id:'akainu',name:'Sakazuki',img:'https://cdn.myanimelist.net/images/characters/16/306908.jpg',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Magu Magu no Mi'},haki:['Observation','Armament'],bounty:0,height:306,firstArc:'Marineford'},
+    {id:'aokiji',name:'Kuzan',img:'https://cdn.myanimelist.net/images/characters/9/96167.jpg',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Hie Hie no Mi'},haki:['Observation','Armament'],bounty:0,height:298,firstArc:'Long Ring Long Land'},
+    {id:'kizaru',name:'Borsalino',img:'https://cdn.myanimelist.net/images/characters/12/96168.jpg',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Pika Pika no Mi'},haki:['Observation','Armament'],bounty:0,height:302,firstArc:'Sabaody Archipelago'},
+    {id:'garp',name:'Monkey D. Garp',img:'https://cdn.myanimelist.net/images/characters/5/509073.jpg',gender:'Male',affiliation:'Marines',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:0,height:287,firstArc:'Post-Enies Lobby'},
+    {id:'smoker',name:'Smoker',img:'https://cdn.myanimelist.net/images/characters/5/235841.jpg',gender:'Male',affiliation:'Marines',df:{has:true,type:'Logia',name:'Moku Moku no Mi'},haki:['Armament'],bounty:0,height:209,firstArc:'Loguetown'},
+    {id:'tashigi',name:'Tashigi',img:'https://cdn.myanimelist.net/images/characters/2/266983.jpg',gender:'Female',affiliation:'Marines',df:{has:false,type:null,name:null},haki:['Armament'],bounty:0,height:170,firstArc:'Loguetown'},
+    {id:'coby',name:'Koby',img:'https://cdn.myanimelist.net/images/characters/11/49289.jpg',gender:'Male',affiliation:'Marines',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:0,height:183,firstArc:'Romance Dawn'},
+    {id:'mihawk',name:'Dracule Mihawk',img:'https://cdn.myanimelist.net/images/characters/7/69747.jpg',gender:'Male',affiliation:'Cross Guild',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:3590000000,height:198,firstArc:'Baratie'},
+    {id:'hancock',name:'Boa Hancock',img:'https://cdn.myanimelist.net/images/characters/14/146013.jpg',gender:'Female',affiliation:'Kuja Pirates',df:{has:true,type:'Paramecia',name:'Mero Mero no Mi'},haki:['Observation','Armament','Conquerors'],bounty:1659000000,height:191,firstArc:'Amazon Lily'},
+    {id:'doflamingo',name:'Donquixote Doflamingo',img:'https://cdn.myanimelist.net/images/characters/5/349513.jpg',gender:'Male',affiliation:'Donquixote Pirates',df:{has:true,type:'Paramecia',name:'Ito Ito no Mi'},haki:['Observation','Armament','Conquerors'],bounty:340000000,height:305,firstArc:'Jaya'},
+    {id:'crocodile',name:'Crocodile',img:'https://cdn.myanimelist.net/images/characters/6/100535.jpg',gender:'Male',affiliation:'Cross Guild',df:{has:true,type:'Logia',name:'Suna Suna no Mi'},haki:['Armament'],bounty:1965000000,height:253,firstArc:'Alabasta'},
+    {id:'law',name:'Trafalgar D. Water Law',img:'https://cdn.myanimelist.net/images/characters/10/258757.jpg',gender:'Male',affiliation:'Heart Pirates',df:{has:true,type:'Paramecia',name:'Ope Ope no Mi'},haki:['Observation','Armament','Conquerors'],bounty:3000000000,height:191,firstArc:'Sabaody Archipelago'},
+    {id:'buggy',name:'Buggy',img:'https://cdn.myanimelist.net/images/characters/6/69112.jpg',gender:'Male',affiliation:'Cross Guild',df:{has:true,type:'Paramecia',name:'Bara Bara no Mi'},haki:[],bounty:3189000000,height:182,firstArc:'Orange Town'},
+    {id:'sabo',name:'Sabo',img:'https://cdn.myanimelist.net/images/characters/15/131855.jpg',gender:'Male',affiliation:'Revolutionary Army',df:{has:true,type:'Logia',name:'Mera Mera no Mi'},haki:['Observation','Armament','Conquerors'],bounty:602000000,height:187,firstArc:'Dressrosa'},
+    {id:'ace',name:'Portgas D. Ace',img:'https://cdn.myanimelist.net/images/characters/2/72220.jpg',gender:'Male',affiliation:'Whitebeard Pirates',df:{has:true,type:'Logia',name:'Mera Mera no Mi'},haki:['Observation','Armament','Conquerors'],bounty:550000000,height:185,firstArc:'Alabasta'},
+    {id:'rayleigh',name:'Silvers Rayleigh',img:'https://cdn.myanimelist.net/images/characters/16/141861.jpg',gender:'Male',affiliation:'Roger Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:0,height:188,firstArc:'Sabaody Archipelago'},
+    {id:'roger',name:'Gol D. Roger',img:'https://cdn.myanimelist.net/images/characters/3/51747.jpg',gender:'Male',affiliation:'Roger Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:5564800000,height:274,firstArc:'Romance Dawn'},
+    {id:'kid',name:'Eustass Kid',img:'https://cdn.myanimelist.net/images/characters/12/146187.jpg',gender:'Male',affiliation:'Kid Pirates',df:{has:true,type:'Paramecia',name:'Jiki Jiki no Mi'},haki:['Armament','Conquerors'],bounty:3000000000,height:205,firstArc:'Sabaody Archipelago'},
+    {id:'killer',name:'Killer',img:'https://cdn.myanimelist.net/images/characters/12/51350.jpg',gender:'Male',affiliation:'Kid Pirates',df:{has:false,type:null,name:null},haki:['Armament'],bounty:200000000,height:195,firstArc:'Sabaody Archipelago'},
+    {id:'hawkins',name:'Basil Hawkins',img:'https://cdn.myanimelist.net/images/characters/8/391979.jpg',gender:'Male',affiliation:'Hawkins Pirates',df:{has:true,type:'Paramecia',name:'Wara Wara no Mi'},haki:['Armament'],bounty:320000000,height:210,firstArc:'Sabaody Archipelago'},
+    {id:'drake',name:'X Drake',img:'https://cdn.myanimelist.net/images/characters/10/146041.jpg',gender:'Male',affiliation:'SWORD',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Allosaurus Model'},haki:['Observation','Armament'],bounty:222000000,height:233,firstArc:'Sabaody Archipelago'},
+    {id:'bonney',name:'Jewelry Bonney',img:'https://cdn.myanimelist.net/images/characters/14/146045.jpg',gender:'Female',affiliation:'Bonney Pirates',df:{has:true,type:'Paramecia',name:'Toshi Toshi no Mi'},haki:[],bounty:320000000,height:174,firstArc:'Sabaody Archipelago'},
+    {id:'bege',name:'Capone Bege',img:'https://cdn.myanimelist.net/images/characters/9/146047.jpg',gender:'Male',affiliation:'Firetank Pirates',df:{has:true,type:'Paramecia',name:'Shiro Shiro no Mi'},haki:['Armament'],bounty:350000000,height:166,firstArc:'Sabaody Archipelago'},
+    {id:'lucci',name:'Rob Lucci',img:'https://cdn.myanimelist.net/images/characters/14/71509.jpg',gender:'Male',affiliation:'CP0',df:{has:true,type:'Zoan',name:'Neko Neko no Mi, Leopard Model'},haki:['Observation','Armament'],bounty:0,height:212,firstArc:'Water 7'},
+    {id:'vivi',name:'Nefeltari Vivi',img:'https://cdn.myanimelist.net/images/characters/9/298188.jpg',gender:'Female',affiliation:'Alabasta Kingdom',df:{has:false,type:null,name:null},haki:[],bounty:0,height:169,firstArc:'Whisky Peak'},
+    {id:'enel',name:'Enel',img:'https://cdn.myanimelist.net/images/characters/16/55111.jpg',gender:'Male',affiliation:'Skypiea',df:{has:true,type:'Logia',name:'Goro Goro no Mi'},haki:['Observation'],bounty:0,height:266,firstArc:'Skypiea'},
+    {id:'arlong',name:'Arlong',img:'https://cdn.myanimelist.net/images/characters/12/350919.jpg',gender:'Male',affiliation:'Arlong Pirates',df:{has:false,type:null,name:null},haki:[],bounty:20000000,height:263,firstArc:'Arlong Park'},
+    {id:'moria',name:'Gecko Moria',img:'https://cdn.myanimelist.net/images/characters/2/61709.jpg',gender:'Male',affiliation:'Thriller Bark Pirates',df:{has:true,type:'Paramecia',name:'Kage Kage no Mi'},haki:[],bounty:320000000,height:692,firstArc:'Thriller Bark'},
+    {id:'perona',name:'Perona',img:'https://cdn.myanimelist.net/images/characters/15/136777.jpg',gender:'Female',affiliation:'Thriller Bark Pirates',df:{has:true,type:'Paramecia',name:'Horo Horo no Mi'},haki:[],bounty:0,height:156,firstArc:'Thriller Bark'},
+    {id:'caesar',name:'Caesar Clown',img:'https://cdn.myanimelist.net/images/characters/7/235823.jpg',gender:'Male',affiliation:'Punk Hazard',df:{has:true,type:'Logia',name:'Gasu Gasu no Mi'},haki:[],bounty:300000000,height:309,firstArc:'Punk Hazard'},
+    {id:'bartolomeo',name:'Bartolomeo',img:'https://cdn.myanimelist.net/images/characters/13/249217.jpg',gender:'Male',affiliation:'Barto Club',df:{has:true,type:'Paramecia',name:'Bari Bari no Mi'},haki:['Armament'],bounty:200000000,height:220,firstArc:'Dressrosa'},
+    {id:'cavendish',name:'Cavendish',img:'https://cdn.myanimelist.net/images/characters/15/280596.jpg',gender:'Male',affiliation:'Beautiful Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:330000000,height:200,firstArc:'Dressrosa'},
+    {id:'rebecca',name:'Rebecca',img:'https://cdn.myanimelist.net/images/characters/11/284339.jpg',gender:'Female',affiliation:'Dressrosa',df:{has:false,type:null,name:null},haki:[],bounty:0,height:165,firstArc:'Dressrosa'},
+    {id:'katakuri',name:'Charlotte Katakuri',img:'https://cdn.myanimelist.net/images/characters/8/342776.jpg',gender:'Male',affiliation:'Big Mom Pirates',df:{has:true,type:'Paramecia',name:'Mochi Mochi no Mi'},haki:['Observation','Armament','Conquerors'],bounty:1057000000,height:509,firstArc:'Whole Cake Island'},
+    {id:'carrot',name:'Carrot',img:'https://cdn.myanimelist.net/images/characters/8/323766.jpg',gender:'Female',affiliation:'Mink Tribe',df:{has:false,type:null,name:null},haki:['Armament'],bounty:0,height:169,firstArc:'Zou'},
+    {id:'yamato',name:'Yamato',img:'https://cdn.myanimelist.net/images/characters/14/490104.jpg',gender:'Female',affiliation:'Wano',df:{has:true,type:'Zoan',name:'Inu Inu no Mi, Okuchi-no-Makami Model'},haki:['Observation','Armament','Conquerors'],bounty:0,height:263,firstArc:'Wano'},
+    {id:'queen',name:'Queen',img:'https://cdn.myanimelist.net/images/characters/14/401501.jpg',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Brachiosaurus Model'},haki:['Armament'],bounty:1320000000,height:612,firstArc:'Wano'},
+    {id:'king',name:'King',img:'https://cdn.myanimelist.net/images/characters/15/401447.jpg',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Pteranodon Model'},haki:['Observation','Armament','Conquerors'],bounty:1390000000,height:613,firstArc:'Wano'},
+    {id:'jack',name:'Jack',img:'https://cdn.myanimelist.net/images/characters/10/337290.jpg',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Zou Zou no Mi, Mammoth Model'},haki:['Armament'],bounty:1000000000,height:450,firstArc:'Zou'},
+    {id:'sengoku',name:'Sengoku',img:'https://cdn.myanimelist.net/images/characters/7/88938.jpg',gender:'Male',affiliation:'Marines',df:{has:true,type:'Zoan',name:'Hito Hito no Mi, Daibutsu Model'},haki:['Observation','Armament','Conquerors'],bounty:0,height:278,firstArc:'Marineford'},
 ];
 
 // --- BuzzWord: One Piece — Image System ---
-window.bwOpImageMap = {};
-window.bwOpImgReady = false;
-
-window.bwOpLoadImages = async function() {
-    const cacheKey = 'wb_op_imgs_v5';
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-        try { window.bwOpImageMap = JSON.parse(cached); window.bwOpImgReady = true; return; } catch(e) {}
-    }
-    try {
-        const res = await fetch('https://api.jikan.moe/v4/anime/21/characters');
-        if (!res.ok) return;
-        const { data } = await res.json();
-        const map = {};
-        (data || []).forEach(entry => {
-            const char = entry.character;
-            if (!char?.images?.jpg?.image_url) return;
-            const img = char.images.jpg.image_url;
-            const raw = char.name; // Jikan uses "Last, First" for Japanese names
-            map[raw.toLowerCase()] = img;
-            if (raw.includes(',')) {
-                // "Luffy, Monkey D." → "Monkey D. Luffy"
-                const [last, ...rest] = raw.split(',');
-                const natural = `${rest.join(',').trim()} ${last.trim()}`;
-                map[natural.toLowerCase()] = img;
-                // Also index by first word of first name
-                const firstWord = rest.join(' ').trim().split(' ')[0].toLowerCase();
-                if (firstWord && !map[firstWord]) map[firstWord] = img;
-            } else {
-                // Index by last word (common surname/nickname)
-                const parts = raw.split(' ');
-                const last = parts[parts.length - 1].toLowerCase();
-                if (!map[last]) map[last] = img;
-            }
-        });
-        window.bwOpImageMap = map;
-        window.bwOpImgReady = true;
-        try { localStorage.setItem(cacheKey, JSON.stringify(map)); } catch(e) {}
-    } catch(e) {}
-};
-
-const WP_NAME_ALIASES = {
-    'kaido': 'kaidou',
-    'kaidou': 'kaido',
-    'charlotte linlin': 'big mom',
-    'big mom': 'charlotte linlin',
-    'marshall d. teach': 'blackbeard',
-    'gol d. roger': 'roger',
-    'marco': 'marco the phoenix',
-    'marco the phoenix': 'marco',
-};
-
-window.bwOpGetCharImage = function(name) {
-    return bwImageLookup(window.bwOpImageMap, WP_NAME_ALIASES, name);
-};
-
 window.bwOpApplyImages = function() {
     document.querySelectorAll('[id^="wimg-"]').forEach(img => {
         const charId = img.id.replace('wimg-', '');
         const char = charId === 'answer'
             ? window.bwOpState.answer
             : BW_OP_CHARS.find(c => c.id === charId);
-        if (!char) return;
-        const url = window.bwOpGetCharImage(char.name);
-        if (url) {
-            img.src = url; img.style.display = 'block';
-            const fb = document.getElementById(`winitials-${charId}`);
-            if (fb) fb.style.display = 'none';
-        }
+        if (!char?.img) return;
+        img.src = char.img; img.style.display = 'block';
+        const fb = document.getElementById(`winitials-${charId}`);
+        if (fb) fb.style.display = 'none';
     });
-};
-
-window.bwOpEnsureImages = async function() {
-    if (!window.bwOpImgReady) await window.bwOpLoadImages();
-    window.bwOpApplyImages();
 };
 
 window.bwOpEnterGuess = function() {
@@ -6487,7 +7081,7 @@ function bwOpShowResult() {
         </div>`;
         if (inputArea) inputArea.style.display = 'none';
         // Load answer image
-        window.bwOpEnsureImages();
+        window.bwOpApplyImages();
         // Update thumbnail status
         const statusEl = document.getElementById('bwop-status-text');
         if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
@@ -6502,7 +7096,7 @@ function bwOpRender() {
     if (!grid) return;
     const { answer, guesses } = window.bwOpState;
     grid.innerHTML = guesses.map(g => bwOpRenderRow(g, bwOpCalcColors(g, answer))).join('');
-    window.bwOpEnsureImages();
+    window.bwOpApplyImages();
     bwOpShowResult();
 }
 
@@ -6510,7 +7104,7 @@ function bwOpAnimateNewRow(char, colors) {
     const grid = document.getElementById('bwop-grid');
     if (!grid) return;
     grid.insertAdjacentHTML('beforeend', bwOpRenderRow(char, colors));
-    window.bwOpEnsureImages();
+    window.bwOpApplyImages();
     const newRow = grid.lastElementChild;
     const cells = newRow.querySelectorAll('.wordle-cell');
     cells.forEach((cell, i) => {
@@ -6531,7 +7125,7 @@ window.openBwOpModal = function() {
     window.closeAllModals();
     document.getElementById('bwop-modal').style.display = 'flex';
     window.initBwOpGame();
-    window.bwOpLoadImages(); // pre-warm cache in background
+    window.bwOpApplyImages();
 };
 
 window.initBwOpGame = async function() {
@@ -6591,8 +7185,7 @@ window.searchBwOpChar = function() {
     if (!matches.length) { sugg.style.display = 'none'; return; }
     sugg.style.display = 'block';
     sugg.innerHTML = matches.map(c => {
-        const imgUrl = window.bwOpGetCharImage ? window.bwOpGetCharImage(c.name) : null;
-        const pic = imgUrl ? `<img src="${imgUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--bg-gray-darker);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${c.name[0]}</div>`;
+        const pic = c.img ? `<img src="${c.img}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--bg-gray-darker);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${c.name[0]}</div>`;
         return `<div class="wordle-suggestion-item" style="display:flex;align-items:center;gap:10px;" onclick="window.selectBwOpChar('${c.id}')">${pic}<span>${c.name}</span></div>`;
     }).join('');
 };
@@ -6894,151 +7487,69 @@ const BLC_ARC_ORDER = [
 
 const BW_BLC_CHARS = [
     // Main Cast
-    {id:'ichigo',    name:'Ichigo Kurosaki',         gender:'Male',   race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Agent of the Shinigami'},
-    {id:'rukia',     name:'Rukia Kuchiki',            gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Elemental',hasBankai:true,  debutArc:'Agent of the Shinigami'},
-    {id:'orihime',   name:'Orihime Inoue',            gender:'Female', race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
-    {id:'chad',      name:'Yasutora Sado',            gender:'Male',   race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
-    {id:'ishida',    name:'Uryū Ishida',              gender:'Male',   race:'Quincy',    affiliation:'Neutral',      rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
+    {id:'ichigo',    name:'Ichigo Kurosaki',         img:'https://cdn.myanimelist.net/images/characters/3/512788.jpg',  gender:'Male',   race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Agent of the Shinigami'},
+    {id:'rukia',     name:'Rukia Kuchiki',            img:'https://cdn.myanimelist.net/images/characters/2/78215.jpg',   gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Elemental',hasBankai:true,  debutArc:'Agent of the Shinigami'},
+    {id:'orihime',   name:'Orihime Inoue',            img:'https://cdn.myanimelist.net/images/characters/9/505076.jpg',  gender:'Female', race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
+    {id:'chad',      name:'Yasutora Sado',            img:'https://cdn.myanimelist.net/images/characters/2/102739.jpg',  gender:'Male',   race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
+    {id:'ishida',    name:'Uryū Ishida',              img:'https://cdn.myanimelist.net/images/characters/16/139189.jpg', gender:'Male',   race:'Quincy',    affiliation:'Neutral',      rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
+    {id:'tatsuki',   name:'Tatsuki Arisawa',          img:'https://cdn.myanimelist.net/images/characters/4/56779.jpg',   gender:'Female', race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
     // Gotei 13
-    {id:'renji',     name:'Renji Abarai',             gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
-    {id:'byakuya',   name:'Byakuya Kuchiki',          gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Other',    hasBankai:true,  debutArc:'Agent of the Shinigami'},
-    {id:'hitsugaya', name:'Tōshirō Hitsugaya',        gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Elemental',hasBankai:true,  debutArc:'Soul Society'},
-    {id:'rangiku',   name:'Rangiku Matsumoto',         gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Elemental',hasBankai:false, debutArc:'Soul Society'},
-    {id:'kenpachi',  name:'Kenpachi Zaraki',           gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
-    {id:'yachiru',   name:'Yachiru Kusajishi',         gender:'Female', race:'Other',     affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Other',    hasBankai:false, debutArc:'Soul Society'},
-    {id:'mayuri',    name:'Mayuri Kurotsuchi',         gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Other',    hasBankai:true,  debutArc:'Soul Society'},
-    {id:'nemu',      name:'Nemu Kurotsuchi',           gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'N/A',      hasBankai:false, debutArc:'Soul Society'},
-    {id:'unohana',   name:'Retsu Unohana',             gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Healing',  hasBankai:true,  debutArc:'Soul Society'},
-    {id:'shunsui',   name:'Shunsui Kyōraku',          gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Illusion', hasBankai:true,  debutArc:'Soul Society'},
-    {id:'ukitake',   name:'Jūshirō Ukitake',          gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Other',    hasBankai:false, debutArc:'Soul Society'},
-    {id:'komamura',  name:'Sajin Komamura',            gender:'Male',   race:'Other',     affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
-    {id:'hinamori',  name:'Momo Hinamori',             gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Elemental',hasBankai:false, debutArc:'Soul Society'},
-    {id:'kira',      name:'Izuru Kira',                gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Other',    hasBankai:false, debutArc:'Soul Society'},
-    {id:'hisagi',    name:'Shūhei Hisagi',             gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
-    {id:'nanao',     name:'Nanao Ise',                 gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Other',    hasBankai:false, debutArc:'Soul Society'},
-    {id:'isane',     name:'Isane Kotetsu',             gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Melee',    hasBankai:false, debutArc:'Soul Society'},
+    {id:'renji',     name:'Renji Abarai',             img:'https://cdn.myanimelist.net/images/characters/10/171877.jpg', gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'byakuya',   name:'Byakuya Kuchiki',          img:'https://cdn.myanimelist.net/images/characters/7/100098.jpg',  gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Other',    hasBankai:true,  debutArc:'Agent of the Shinigami'},
+    {id:'hitsugaya', name:'Tōshirō Hitsugaya',        img:'https://cdn.myanimelist.net/images/characters/11/36579.jpg',  gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Elemental',hasBankai:true,  debutArc:'Soul Society'},
+    {id:'rangiku',   name:'Rangiku Matsumoto',         img:'https://cdn.myanimelist.net/images/characters/14/520193.jpg', gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Elemental',hasBankai:false, debutArc:'Soul Society'},
+    {id:'kenpachi',  name:'Kenpachi Zaraki',           img:'https://cdn.myanimelist.net/images/characters/8/150265.jpg',  gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'yachiru',   name:'Yachiru Kusajishi',         img:'https://cdn.myanimelist.net/images/characters/9/85348.jpg',   gender:'Female', race:'Other',     affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Other',    hasBankai:false, debutArc:'Soul Society'},
+    {id:'mayuri',    name:'Mayuri Kurotsuchi',         img:'https://cdn.myanimelist.net/images/characters/11/73295.jpg',  gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Other',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'nemu',      name:'Nemu Kurotsuchi',           img:'https://cdn.myanimelist.net/images/characters/9/33239.jpg',   gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'N/A',      hasBankai:false, debutArc:'Soul Society'},
+    {id:'unohana',   name:'Retsu Unohana',             img:'https://cdn.myanimelist.net/images/characters/2/33252.jpg',   gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Healing',  hasBankai:true,  debutArc:'Soul Society'},
+    {id:'shunsui',   name:'Shunsui Kyōraku',          img:'https://cdn.myanimelist.net/images/characters/14/33242.jpg',  gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Illusion', hasBankai:true,  debutArc:'Soul Society'},
+    {id:'ukitake',   name:'Jūshirō Ukitake',          img:'https://cdn.myanimelist.net/images/characters/2/33251.jpg',   gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Other',    hasBankai:false, debutArc:'Soul Society'},
+    {id:'komamura',  name:'Sajin Komamura',            img:'https://cdn.myanimelist.net/images/characters/16/59028.jpg',  gender:'Male',   race:'Other',     affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'hinamori',  name:'Momo Hinamori',             img:'https://cdn.myanimelist.net/images/characters/8/33231.jpg',   gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Elemental',hasBankai:false, debutArc:'Soul Society'},
+    {id:'kira',      name:'Izuru Kira',                img:'https://cdn.myanimelist.net/images/characters/11/33234.jpg',  gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Other',    hasBankai:false, debutArc:'Soul Society'},
+    {id:'hisagi',    name:'Shūhei Hisagi',             img:'https://cdn.myanimelist.net/images/characters/13/76390.jpg',  gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'nanao',     name:'Nanao Ise',                 img:'https://cdn.myanimelist.net/images/characters/2/33233.jpg',   gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Other',    hasBankai:false, debutArc:'Soul Society'},
+    {id:'isane',     name:'Isane Kotetsu',             img:'https://cdn.myanimelist.net/images/characters/5/33236.jpg',   gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Melee',    hasBankai:false, debutArc:'Soul Society'},
+    {id:'yumichika', name:'Yumichika Ayasegawa',       img:'https://cdn.myanimelist.net/images/characters/4/33228.jpg',   gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'None',        zanpakutoType:'Illusion', hasBankai:false, debutArc:'Soul Society'},
     // Traitors
-    {id:'aizen',     name:'Sōsuke Aizen',              gender:'Male',   race:'Shinigami', affiliation:'Hueco Mundo',  rank:'Captain',     zanpakutoType:'Illusion', hasBankai:false, debutArc:'Soul Society'},
-    {id:'gin',       name:'Gin Ichimaru',              gender:'Male',   race:'Shinigami', affiliation:'Hueco Mundo',  rank:'Captain',     zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
-    {id:'tosen',     name:'Kaname Tōsen',              gender:'Male',   race:'Shinigami', affiliation:'Hueco Mundo',  rank:'Captain',     zanpakutoType:'Illusion', hasBankai:true,  debutArc:'Soul Society'},
+    {id:'aizen',     name:'Sōsuke Aizen',              img:'https://cdn.myanimelist.net/images/characters/16/73909.jpg',  gender:'Male',   race:'Shinigami', affiliation:'Hueco Mundo',  rank:'Captain',     zanpakutoType:'Illusion', hasBankai:false, debutArc:'Soul Society'},
+    {id:'gin',       name:'Gin Ichimaru',              img:'https://cdn.myanimelist.net/images/characters/12/98077.jpg',  gender:'Male',   race:'Shinigami', affiliation:'Hueco Mundo',  rank:'Captain',     zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'tosen',     name:'Kaname Tōsen',              img:'https://cdn.myanimelist.net/images/characters/14/33249.jpg',  gender:'Male',   race:'Shinigami', affiliation:'Hueco Mundo',  rank:'Captain',     zanpakutoType:'Illusion', hasBankai:true,  debutArc:'Soul Society'},
     // Neutral / Exiled
-    {id:'urahara',   name:'Kisuke Urahara',            gender:'Male',   race:'Shinigami', affiliation:'Neutral',      rank:'Captain',     zanpakutoType:'Other',    hasBankai:true,  debutArc:'Agent of the Shinigami'},
-    {id:'yoruichi',  name:'Yoruichi Shihōin',          gender:'Female', race:'Shinigami', affiliation:'Neutral',      rank:'Captain',     zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
-    {id:'isshin',    name:'Isshin Kurosaki',           gender:'Male',   race:'Shinigami', affiliation:'Neutral',      rank:'Captain',     zanpakutoType:'Elemental',hasBankai:false, debutArc:'Agent of the Shinigami'},
+    {id:'urahara',   name:'Kisuke Urahara',            img:'https://cdn.myanimelist.net/images/characters/15/149491.jpg', gender:'Male',   race:'Shinigami', affiliation:'Neutral',      rank:'Captain',     zanpakutoType:'Other',    hasBankai:true,  debutArc:'Agent of the Shinigami'},
+    {id:'yoruichi',  name:'Yoruichi Shihōin',          img:'https://cdn.myanimelist.net/images/characters/10/536083.jpg', gender:'Female', race:'Shinigami', affiliation:'Neutral',      rank:'Captain',     zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
+    {id:'isshin',    name:'Isshin Kurosaki',           img:'https://cdn.myanimelist.net/images/characters/2/33290.jpg',   gender:'Male',   race:'Shinigami', affiliation:'Neutral',      rank:'Captain',     zanpakutoType:'Elemental',hasBankai:false, debutArc:'Agent of the Shinigami'},
+    {id:'ryuuken',   name:'Ryūken Ishida',             img:'https://cdn.myanimelist.net/images/characters/14/141837.jpg', gender:'Male',   race:'Quincy',    affiliation:'Neutral',      rank:'None',        zanpakutoType:'N/A',      hasBankai:false, debutArc:'Arrancar'},
     // Vizards
-    {id:'shinji',    name:'Shinji Hirako',             gender:'Male',   race:'Vizard',    affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Illusion', hasBankai:true,  debutArc:'Arrancar'},
-    {id:'hiyori',    name:'Hiyori Sarugaki',           gender:'Female', race:'Vizard',    affiliation:'Neutral',      rank:'Lieutenant',  zanpakutoType:'Melee',    hasBankai:false, debutArc:'Arrancar'},
-    {id:'kensei',    name:'Kensei Muguruma',           gender:'Male',   race:'Vizard',    affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Elemental',hasBankai:true,  debutArc:'Arrancar'},
-    {id:'rose',      name:'Rōjūrō Ōtoribashi',        gender:'Male',   race:'Vizard',    affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Illusion', hasBankai:true,  debutArc:'Arrancar'},
+    {id:'shinji',    name:'Shinji Hirako',             img:'https://cdn.myanimelist.net/images/characters/3/72979.jpg',   gender:'Male',   race:'Vizard',    affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Illusion', hasBankai:true,  debutArc:'Arrancar'},
+    {id:'hiyori',    name:'Hiyori Sarugaki',           img:'https://cdn.myanimelist.net/images/characters/4/72982.jpg',   gender:'Female', race:'Vizard',    affiliation:'Neutral',      rank:'Lieutenant',  zanpakutoType:'Melee',    hasBankai:false, debutArc:'Arrancar'},
+    {id:'kensei',    name:'Kensei Muguruma',           img:'https://cdn.myanimelist.net/images/characters/10/45938.jpg',  gender:'Male',   race:'Vizard',    affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Elemental',hasBankai:true,  debutArc:'Arrancar'},
+    {id:'rose',      name:'Rōjūrō Ōtoribashi',        img:'https://cdn.myanimelist.net/images/characters/15/40966.jpg',  gender:'Male',   race:'Vizard',    affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Illusion', hasBankai:true,  debutArc:'Arrancar'},
+    {id:'mashiro',   name:'Mashiro Kuna',              img:'https://cdn.myanimelist.net/images/characters/13/45940.jpg',  gender:'Female', race:'Vizard',    affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Melee',    hasBankai:false, debutArc:'Arrancar'},
     // Espada
-    {id:'grimmjow',  name:'Grimmjow Jaegerjaquez',     gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Melee',    hasBankai:false, debutArc:'Arrancar'},
-    {id:'ulquiorra', name:'Ulquiorra Cifer',           gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Arrancar'},
-    {id:'nnoitra',   name:'Nnoitra Gilga',             gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Melee',    hasBankai:false, debutArc:'Hueco Mundo'},
-    {id:'starrk',    name:'Coyote Starrk',             gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Fake Karakura Town'},
-    {id:'baraggan',  name:'Baraggan Louisenbairn',     gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Fake Karakura Town'},
-    {id:'harribel',  name:'Tier Harribel',             gender:'Female', race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Elemental',hasBankai:false, debutArc:'Fake Karakura Town'},
-    {id:'szayel',    name:'Szayelaporro Granz',        gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Hueco Mundo'},
-    {id:'nelliel',   name:'Nelliel Tu Odelschwanck',  gender:'Female', race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Hueco Mundo'},
-    {id:'yammy',     name:'Yammy Llargo',              gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Melee',    hasBankai:false, debutArc:'Arrancar'},
-    // Wandenreich
-    {id:'yhwach',    name:'Yhwach',                    gender:'Male',   race:'Quincy',    affiliation:'Wandenreich',  rank:'Other',       zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
-    {id:'haschwalth',name:'Jugram Haschwalth',         gender:'Male',   race:'Quincy',    affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
-    {id:'bambietta', name:'Bambietta Basterbine',      gender:'Female', race:'Quincy',    affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
-    {id:'asnodt',    name:'As Nodt',                   gender:'Male',   race:'Quincy',    affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
-    {id:'giselle',   name:'Giselle Gewelle',           gender:'Female', race:'Quincy',    affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
-    {id:'liltotto',  name:'Liltotto Lamperd',          gender:'Female', race:'Quincy',    affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
-    {id:'mask',      name:'Mask De Masculine',         gender:'Male',   race:'Quincy',    affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
-    {id:'pernida',   name:'Pernida Parnkgjas',         gender:'Other',  race:'Other',     affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
-    {id:'gerard',    name:'Gerard Valkyrie',           gender:'Male',   race:'Other',     affiliation:'Wandenreich',  rank:'Sternritter', zanpakutoType:'N/A',      hasBankai:false, debutArc:'Thousand-Year Blood War'},
+    {id:'grimmjow',  name:'Grimmjow Jaegerjaquez',     img:'https://cdn.myanimelist.net/images/characters/3/529456.jpg',  gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Melee',    hasBankai:false, debutArc:'Arrancar'},
+    {id:'ulquiorra', name:'Ulquiorra Cifer',           img:'https://cdn.myanimelist.net/images/characters/8/72048.jpg',   gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Arrancar'},
+    {id:'nnoitra',   name:'Nnoitra Gilga',             img:'https://cdn.myanimelist.net/images/characters/15/55463.jpg',  gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Melee',    hasBankai:false, debutArc:'Hueco Mundo'},
+    {id:'starrk',    name:'Coyote Starrk',             img:'https://cdn.myanimelist.net/images/characters/11/529318.jpg', gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Fake Karakura Town'},
+    {id:'baraggan',  name:'Baraggan Louisenbairn',     img:'https://cdn.myanimelist.net/images/characters/4/51358.jpg',   gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Fake Karakura Town'},
+    {id:'harribel',  name:'Tier Harribel',             img:'https://cdn.myanimelist.net/images/characters/16/519305.jpg', gender:'Female', race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Elemental',hasBankai:false, debutArc:'Fake Karakura Town'},
+    {id:'szayel',    name:'Szayelaporro Granz',        img:'https://cdn.myanimelist.net/images/characters/5/529322.jpg',  gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Hueco Mundo'},
+    {id:'nelliel',   name:'Nelliel Tu Odelschwanck',  img:'https://cdn.myanimelist.net/images/characters/6/368248.jpg',  gender:'Female', race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Hueco Mundo'},
+    {id:'yammy',     name:'Yammy Llargo',              img:'https://cdn.myanimelist.net/images/characters/15/92015.jpg',  gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Melee',    hasBankai:false, debutArc:'Arrancar'},
+    {id:'loly',      name:'Loly Aivirrne',             img:'https://cdn.myanimelist.net/images/characters/5/56720.jpg',   gender:'Female', race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'None',        zanpakutoType:'Melee',    hasBankai:false, debutArc:'Hueco Mundo'},
 ];
 
 // --- BuzzWord: Bleach — Image System ---
-window.bwBlcImageMap = {};
-window.bwBlcImgReady = false;
-
-window.bwBlcLoadImages = async function() {
-    const cacheKey = 'wb_blc_imgs_v3';
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) { try { window.bwBlcImageMap = JSON.parse(cached); window.bwBlcImgReady = true; return; } catch(e) {} }
-    const addToMap = (data, map) => {
-        (data || []).forEach(entry => {
-            const char = entry.character;
-            if (!char?.images?.jpg?.image_url) return;
-            const img = char.images.jpg.image_url;
-            const raw = char.name;
-            map[raw.toLowerCase()] = img;
-            if (raw.includes(',')) {
-                const [last, ...rest] = raw.split(',');
-                const natural = `${rest.join(',').trim()} ${last.trim()}`;
-                map[natural.toLowerCase()] = img;
-                const firstWord = rest.join(' ').trim().split(' ')[0].toLowerCase();
-                if (firstWord && !map[firstWord]) map[firstWord] = img;
-            } else {
-                const parts = raw.split(' ');
-                const lastName = parts[parts.length - 1].toLowerCase();
-                if (!map[lastName]) map[lastName] = img;
-            }
-        });
-    };
-    try {
-        const map = {};
-        // Original + all TYBW seasons
-        const animeIds = [269, 41467, 50441, 52893];
-        for (const id of animeIds) {
-            const res = await fetch(`https://api.jikan.moe/v4/anime/${id}/characters`);
-            if (res.ok) { const d = await res.json(); addToMap(d.data, map); }
-            await new Promise(r => setTimeout(r, 450));
-        }
-        window.bwBlcImageMap = map;
-        window.bwBlcImgReady = true;
-        try { localStorage.setItem(cacheKey, JSON.stringify(map)); } catch(e) {}
-    } catch(e) {}
-};
-
-const BLC_NAME_ALIASES = {
-    'ichigo': 'ichigo kurosaki', 'rukia': 'rukia kuchiki', 'renji': 'renji abarai',
-    'byakuya': 'byakuya kuchiki', 'hitsugaya': 'toushirou hitsugaya', 'kenpachi': 'kenpachi zaraki',
-    'mayuri': 'mayuri kurotsuchi', 'aizen': 'sousuke aizen', 'gin': 'gin ichimaru',
-    'urahara': 'kisuke urahara', 'yoruichi': 'yoruichi shihouin', 'grimmjow': 'grimmjow jaegerjaquez',
-    'ulquiorra': 'ulquiorra cifer', 'yhwach': 'juha bach', 'orihime': 'orihime inoue',
-    // Macron names → correct romanized "First Last" form (Jikan addToMap creates "First Last" from "Last, First")
-    'tōshirō hitsugaya': 'toushirou hitsugaya', 'sōsuke aizen': 'sousuke aizen',
-    'kaname tōsen': 'kaname tousen', 'shunsui kyōraku': 'shunsui kyouraku',
-    'jūshirō ukitake': 'juushirou ukitake', 'shūhei hisagi': 'shuuhei hisagi',
-    'yoruichi shihōin': 'yoruichi shihouin', 'rōjūrō ōtoribashi': 'roujuurou otoribashi',
-    'uryū ishida': 'uryuu ishida',
-    // Other aliases
-    'bambietta': 'bambietta basterbine', 'liltotto': 'liltotto lamperd',
-    'giselle': 'giselle gewelle', 'haschwalth': 'jugram haschwalth',
-    'as nodt': 'as nodt', 'starrk': 'coyote starrk', 'baraggan': 'baraggan louisenbairn',
-    'isshin kurosaki': 'isshin kurosaki', 'isshin': 'isshin kurosaki',
-    'nnoitra': 'nnoitra gilga', 'nnoitra gilga': 'nnoitra gilga',
-    'mask de masculine': 'mask de masculine', 'mask': 'mask de masculine',
-    'pernida': 'pernida parnkgjas',
-    'yammy': 'yammy llargo', 'yammy llargo': 'yammy llargo',
-};
-
-window.bwBlcGetCharImage = function(name) {
-    return bwImageLookup(window.bwBlcImageMap, BLC_NAME_ALIASES, name);
-};
-
 window.bwBlcApplyImages = function() {
     document.querySelectorAll('[id^="blcimg-"]').forEach(img => {
         const charId = img.id.replace('blcimg-', '');
         const char = charId === 'answer' ? window.bwBlcState.answer : BW_BLC_CHARS.find(c => c.id === charId);
-        if (!char) return;
-        const url = window.bwBlcGetCharImage(char.name);
-        if (url) {
-            img.src = url; img.style.display = 'block';
-            const fb = document.getElementById(`blcinitials-${charId}`);
-            if (fb) fb.style.display = 'none';
-        }
+        if (!char?.img) return;
+        img.src = char.img; img.style.display = 'block';
+        const fb = document.getElementById(`blcinitials-${charId}`);
+        if (fb) fb.style.display = 'none';
     });
-};
-
-window.bwBlcEnsureImages = async function() {
-    if (!window.bwBlcImgReady) await window.bwBlcLoadImages();
-    window.bwBlcApplyImages();
 };
 
 // --- BuzzWord: Bleach — Helpers ---
@@ -7099,7 +7610,7 @@ function bwBlcShowResult() {
             </div>
         </div>`;
         if (inputArea) inputArea.style.display = 'none';
-        window.bwBlcEnsureImages();
+        window.bwBlcApplyImages();
         const statusEl = document.getElementById('bwblc-status-text');
         if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
     } else {
@@ -7113,7 +7624,7 @@ function bwBlcRender() {
     if (!grid) return;
     const { answer, guesses } = window.bwBlcState;
     grid.innerHTML = guesses.map(g => bwBlcBuildRow(g, bwBlcCalcColors(g, answer))).join('');
-    window.bwBlcEnsureImages();
+    window.bwBlcApplyImages();
     bwBlcShowResult();
 }
 
@@ -7121,7 +7632,7 @@ function bwBlcAnimateNewRow(char, colors) {
     const grid = document.getElementById('bwblc-grid');
     if (!grid) return;
     grid.insertAdjacentHTML('beforeend', bwBlcBuildRow(char, colors));
-    window.bwBlcEnsureImages();
+    window.bwBlcApplyImages();
     const newRow = grid.lastElementChild;
     const cells = newRow.querySelectorAll('.wordle-cell');
     cells.forEach((cell, i) => {
@@ -7179,7 +7690,7 @@ window.initBwBlcGame = async function() {
     document.getElementById('bwblc-loading').style.display = 'none';
     document.getElementById('bwblc-content').style.display = 'block';
     bwBlcRender();
-    window.bwBlcLoadImages();
+    window.bwBlcApplyImages();
 };
 
 window.bwBlcEnterGuess = function() {
@@ -7198,8 +7709,7 @@ window.searchBwBlcChar = function() {
     const matches = BW_BLC_CHARS.filter(c => !guessedIds.has(c.id) && (c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q))).slice(0, 8);
     sugg.style.display = matches.length ? 'block' : 'none';
     sugg.innerHTML = matches.map(c => {
-        const imgUrl = window.bwBlcGetCharImage ? window.bwBlcGetCharImage(c.name) : null;
-        const pic = imgUrl ? `<img src="${imgUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--bg-gray-darker);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${c.name[0]}</div>`;
+        const pic = c.img ? `<img src="${c.img}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--bg-gray-darker);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${c.name[0]}</div>`;
         return `<div class="wordle-suggestion-item" style="display:flex;align-items:center;gap:10px;" onclick="window.selectBwBlcChar('${c.id}')">${pic}<span>${c.name}</span></div>`;
     }).join('');
 };
@@ -7365,161 +7875,72 @@ const DB_ARC_ORDER = [
 
 const BW_DB_CHARS = [
     // ── Main Cast ──
-    {id:'goku',        name:'Goku',           gender:'Male',   race:'Saiyan',      origin:'Planet Vegeta', affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DB',  debutArc:'Emperor Pilaf'},
-    {id:'vegeta',      name:'Vegeta',         gender:'Male',   race:'Saiyan',      origin:'Planet Vegeta', affiliation:['Frieza Force','Villain','Z Fighters'],   transformation:true,  debutSeries:'DBZ', debutArc:'Saiyan'},
-    {id:'gohan',       name:'Gohan',          gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Saiyan'},
-    {id:'piccolo',     name:'Piccolo',        gender:'Male',   race:'Namekian',    origin:'Earth',         affiliation:['Villain','Z Fighters'],                 transformation:true,  debutSeries:'DB',  debutArc:'King Piccolo'},
-    {id:'bulma',       name:'Bulma',          gender:'Female', race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
-    {id:'krillin',     name:'Krillin',        gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
-    {id:'future-trunks',name:'Future Trunks', gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Android / Cell'},
-    {id:'goten',       name:'Goten',          gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Buu'},
-    {id:'android18',   name:'Android 18',     gender:'Female', race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Z Fighters'],         transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
-    {id:'android17',   name:'Android 17',     gender:'Male',   race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Z Fighters'],         transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
-    {id:'yamcha',      name:'Yamcha',         gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
-    {id:'tien',        name:'Tien Shinhan',   gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DB',  debutArc:'King Piccolo'},
-    {id:'chiaotzu',    name:'Chiaotzu',       gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DB',  debutArc:'King Piccolo'},
-    {id:'roshi',       name:'Master Roshi',   gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DB',  debutArc:'Emperor Pilaf'},
-    {id:'chichi',      name:'Chi-Chi',        gender:'Female', race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
-    {id:'videl',       name:'Videl',          gender:'Female', race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
-    {id:'gotenks',     name:'Gotenks',        gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Buu'},
-    {id:'kid-trunks',  name:'Kid Trunks',     gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Buu'},
-    {id:'mr-satan',    name:'Mr. Satan',      gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'goku',        name:'Goku',           img:'https://cdn.myanimelist.net/images/characters/15/72546.jpg',  gender:'Male',   race:'Saiyan',      origin:'Planet Vegeta', affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'vegeta',      name:'Vegeta',         img:'https://cdn.myanimelist.net/images/characters/14/86185.jpg',  gender:'Male',   race:'Saiyan',      origin:'Planet Vegeta', affiliation:['Frieza Force','Villain','Z Fighters'],   transformation:true,  debutSeries:'DBZ', debutArc:'Saiyan'},
+    {id:'gohan',       name:'Gohan',          img:'https://cdn.myanimelist.net/images/characters/2/72715.jpg',   gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Saiyan'},
+    {id:'piccolo',     name:'Piccolo',        img:'https://cdn.myanimelist.net/images/characters/8/45628.jpg',   gender:'Male',   race:'Namekian',    origin:'Earth',         affiliation:['Villain','Z Fighters'],                 transformation:true,  debutSeries:'DB',  debutArc:'King Piccolo'},
+    {id:'bulma',       name:'Bulma',          img:'https://cdn.myanimelist.net/images/characters/14/280893.jpg', gender:'Female', race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'krillin',     name:'Krillin',        img:'https://cdn.myanimelist.net/images/characters/2/48517.jpg',   gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'future-trunks',name:'Future Trunks', img:'https://cdn.myanimelist.net/images/characters/5/375125.jpg',  gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'goten',       name:'Goten',          img:'https://cdn.myanimelist.net/images/characters/11/46985.jpg',  gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'android18',   name:'Android 18',     img:'https://cdn.myanimelist.net/images/characters/2/357828.jpg',  gender:'Female', race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Z Fighters'],         transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'android17',   name:'Android 17',     img:'https://cdn.myanimelist.net/images/characters/16/48582.jpg',  gender:'Male',   race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Z Fighters'],         transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'yamcha',      name:'Yamcha',         img:'https://cdn.myanimelist.net/images/characters/14/126147.jpg', gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'tien',        name:'Tien Shinhan',   img:'https://cdn.myanimelist.net/images/characters/8/102021.jpg',  gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DB',  debutArc:'King Piccolo'},
+    {id:'chiaotzu',    name:'Chiaotzu',       img:'https://cdn.myanimelist.net/images/characters/13/52822.jpg',  gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DB',  debutArc:'King Piccolo'},
+    {id:'roshi',       name:'Master Roshi',   img:'https://cdn.myanimelist.net/images/characters/13/357855.jpg', gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'chichi',      name:'Chi-Chi',        img:'https://cdn.myanimelist.net/images/characters/14/247963.jpg', gender:'Female', race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'videl',       name:'Videl',          img:'https://cdn.myanimelist.net/images/characters/12/357962.jpg', gender:'Female', race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'gotenks',     name:'Gotenks',        img:'https://cdn.myanimelist.net/images/characters/9/380617.jpg',  gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'kid-trunks',  name:'Kid Trunks',     img:'https://cdn.myanimelist.net/images/characters/5/312402.jpg',  gender:'Male',   race:'Half-Saiyan', origin:'Earth',         affiliation:['Z Fighters'],                           transformation:true,  debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'mr-satan',    name:'Mr. Satan',      img:'https://cdn.myanimelist.net/images/characters/2/48724.jpg',   gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Z Fighters'],                           transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
     // ── Villains ──
-    {id:'frieza',      name:'Frieza',         gender:'Male',   race:'Frieza Race', origin:'Unknown',       affiliation:['Frieza Force','Villain'],               transformation:true,  debutSeries:'DBZ', debutArc:'Namek'},
-    {id:'cell',        name:'Cell',           gender:'Male',   race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Villain'],            transformation:true,  debutSeries:'DBZ', debutArc:'Android / Cell'},
-    {id:'majin-buu',   name:'Majin Buu',      gender:'Male',   race:'Majin',       origin:'Unknown',       affiliation:['Villain','Z Fighters'],                 transformation:true,  debutSeries:'DBZ', debutArc:'Buu'},
-    {id:'raditz',      name:'Raditz',         gender:'Male',   race:'Saiyan',      origin:'Planet Vegeta', affiliation:['Frieza Force','Villain'],               transformation:false, debutSeries:'DBZ', debutArc:'Saiyan'},
-    {id:'nappa',       name:'Nappa',          gender:'Male',   race:'Saiyan',      origin:'Planet Vegeta', affiliation:['Frieza Force','Villain'],               transformation:false, debutSeries:'DBZ', debutArc:'Saiyan'},
-    {id:'zarbon',      name:'Zarbon',         gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Villain'],               transformation:true,  debutSeries:'DBZ', debutArc:'Namek'},
-    {id:'dodoria',     name:'Dodoria',        gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Villain'],               transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
-    {id:'ginyu',       name:'Captain Ginyu',  gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
-    {id:'jeice',       name:'Jeice',          gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
-    {id:'burter',      name:'Burter',         gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
-    {id:'recoome',     name:'Recoome',        gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
-    {id:'guldo',       name:'Guldo',          gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
-    {id:'android16',   name:'Android 16',     gender:'Male',   race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Z Fighters'],         transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
-    {id:'android19',   name:'Android 19',     gender:'Male',   race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Villain'],            transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
-    {id:'dr-gero',     name:'Dr. Gero',       gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Red Ribbon Army','Villain'],            transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
-    {id:'king-piccolo',name:'King Piccolo',   gender:'Male',   race:'Namekian',    origin:'Namek',         affiliation:['Villain'],                              transformation:false, debutSeries:'DB',  debutArc:'King Piccolo'},
-    {id:'babidi',      name:'Babidi',         gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Villain'],                              transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
-    {id:'dabura',      name:'Dabura',         gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Villain'],                              transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
-    {id:'goku-black',  name:'Goku Black',     gender:'Male',   race:'Kai',         origin:'Sacred World',  affiliation:['Villain'],                              transformation:true,  debutSeries:'DBS', debutArc:'Future Trunks'},
+    {id:'frieza',      name:'Frieza',         img:'https://cdn.myanimelist.net/images/characters/2/87061.jpg',   gender:'Male',   race:'Frieza Race', origin:'Unknown',       affiliation:['Frieza Force','Villain'],               transformation:true,  debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'cell',        name:'Cell',           img:'https://cdn.myanimelist.net/images/characters/16/46984.jpg',  gender:'Male',   race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Villain'],            transformation:true,  debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'majin-buu',   name:'Majin Buu',      img:'https://cdn.myanimelist.net/images/characters/6/94545.jpg',   gender:'Male',   race:'Majin',       origin:'Unknown',       affiliation:['Villain','Z Fighters'],                 transformation:true,  debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'raditz',      name:'Raditz',         img:'https://cdn.myanimelist.net/images/characters/12/103846.jpg', gender:'Male',   race:'Saiyan',      origin:'Planet Vegeta', affiliation:['Frieza Force','Villain'],               transformation:false, debutSeries:'DBZ', debutArc:'Saiyan'},
+    {id:'nappa',       name:'Nappa',          img:'https://cdn.myanimelist.net/images/characters/12/393771.jpg', gender:'Male',   race:'Saiyan',      origin:'Planet Vegeta', affiliation:['Frieza Force','Villain'],               transformation:false, debutSeries:'DBZ', debutArc:'Saiyan'},
+    {id:'zarbon',      name:'Zarbon',         img:'https://cdn.myanimelist.net/images/characters/8/45220.jpg',   gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Villain'],               transformation:true,  debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'dodoria',     name:'Dodoria',        img:'https://cdn.myanimelist.net/images/characters/7/45236.jpg',   gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Villain'],               transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'ginyu',       name:'Captain Ginyu',  img:'https://cdn.myanimelist.net/images/characters/15/52866.jpg',  gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'jeice',       name:'Jeice',          img:'https://cdn.myanimelist.net/images/characters/9/65046.jpg',   gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'burter',      name:'Burter',         img:'https://cdn.myanimelist.net/images/characters/7/81986.jpg',   gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'recoome',     name:'Recoome',        img:'https://cdn.myanimelist.net/images/characters/3/52868.jpg',   gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'guldo',       name:'Guldo',          img:'https://cdn.myanimelist.net/images/characters/14/45224.jpg',  gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Frieza Force','Ginyu Force','Villain'], transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'android16',   name:'Android 16',     img:'https://cdn.myanimelist.net/images/characters/16/45212.jpg',  gender:'Male',   race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Z Fighters'],         transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'android19',   name:'Android 19',     img:'https://cdn.myanimelist.net/images/characters/5/65048.jpg',   gender:'Male',   race:'Android',     origin:'Earth',         affiliation:['Red Ribbon Army','Villain'],            transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'dr-gero',     name:'Dr. Gero',       img:'https://cdn.myanimelist.net/images/characters/2/52436.jpg',   gender:'Male',   race:'Human',       origin:'Earth',         affiliation:['Red Ribbon Army','Villain'],            transformation:false, debutSeries:'DBZ', debutArc:'Android / Cell'},
+    {id:'king-piccolo',name:'King Piccolo',   img:'https://cdn.myanimelist.net/images/characters/5/113176.jpg',  gender:'Male',   race:'Namekian',    origin:'Namek',         affiliation:['Villain'],                              transformation:false, debutSeries:'DB',  debutArc:'King Piccolo'},
+    {id:'babidi',      name:'Babidi',         img:'https://cdn.myanimelist.net/images/characters/6/356935.jpg',  gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Villain'],                              transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'dabura',      name:'Dabura',         img:'https://cdn.myanimelist.net/images/characters/10/273659.jpg', gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Villain'],                              transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'goku-black',  name:'Goku Black',     img:'https://cdn.myanimelist.net/images/characters/7/306940.jpg',  gender:'Male',   race:'Kai',         origin:'Sacred World',  affiliation:['Villain'],                              transformation:true,  debutSeries:'DBS', debutArc:'Future Trunks'},
     // ── Divine / DBS ──
-    {id:'beerus',      name:'Beerus',         gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Gods of Destruction'],                  transformation:false, debutSeries:'DBS', debutArc:'Battle of Gods'},
-    {id:'whis',        name:'Whis',           gender:'Male',   race:'Angel',       origin:'Unknown',       affiliation:['Angels','Gods of Destruction'],         transformation:false, debutSeries:'DBS', debutArc:'Battle of Gods'},
-    {id:'champa',      name:'Champa',         gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Gods of Destruction'],                  transformation:false, debutSeries:'DBS', debutArc:'Universe 6'},
-    {id:'vados',       name:'Vados',          gender:'Female', race:'Angel',       origin:'Unknown',       affiliation:['Angels','Gods of Destruction'],         transformation:false, debutSeries:'DBS', debutArc:'Universe 6'},
-    {id:'kami',        name:'Kami',           gender:'Male',   race:'Namekian',    origin:'Namek',         affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DB',  debutArc:'King Piccolo'},
-    {id:'king-kai',    name:'King Kai',       gender:'Male',   race:'Kai',         origin:'Sacred World',  affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DBZ', debutArc:'Saiyan'},
-    {id:'supreme-kai', name:'Supreme Kai',    gender:'Male',   race:'Kai',         origin:'Sacred World',  affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'beerus',      name:'Beerus',         img:'https://cdn.myanimelist.net/images/characters/12/348954.jpg', gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Gods of Destruction'],                  transformation:false, debutSeries:'DBS', debutArc:'Battle of Gods'},
+    {id:'whis',        name:'Whis',           img:'https://cdn.myanimelist.net/images/characters/12/304545.jpg', gender:'Male',   race:'Angel',       origin:'Unknown',       affiliation:['Angels','Gods of Destruction'],         transformation:false, debutSeries:'DBS', debutArc:'Battle of Gods'},
+    {id:'champa',      name:'Champa',         img:'https://cdn.myanimelist.net/images/characters/9/302850.jpg',  gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Gods of Destruction'],                  transformation:false, debutSeries:'DBS', debutArc:'Universe 6'},
+    {id:'vados',       name:'Vados',          img:'https://cdn.myanimelist.net/images/characters/13/340295.jpg', gender:'Female', race:'Angel',       origin:'Unknown',       affiliation:['Angels','Gods of Destruction'],         transformation:false, debutSeries:'DBS', debutArc:'Universe 6'},
+    {id:'kami',        name:'Kami',           img:'https://cdn.myanimelist.net/images/characters/4/73430.jpg',   gender:'Male',   race:'Namekian',    origin:'Namek',         affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DB',  debutArc:'King Piccolo'},
+    {id:'king-kai',    name:'King Kai',       img:'https://cdn.myanimelist.net/images/characters/7/53213.jpg',   gender:'Male',   race:'Kai',         origin:'Sacred World',  affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DBZ', debutArc:'Saiyan'},
+    {id:'supreme-kai', name:'Supreme Kai',    img:'https://cdn.myanimelist.net/images/characters/16/359296.jpg', gender:'Male',   race:'Kai',         origin:'Sacred World',  affiliation:['Other','Z Fighters'],                   transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
     // ── Universe 6 / DBS ──
-    {id:'hit',         name:'Hit',            gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Other','Villain'],                      transformation:false, debutSeries:'DBS', debutArc:'Universe 6'},
-    {id:'cabba',       name:'Cabba',          gender:'Male',   race:'Saiyan',      origin:'Planet Sadala', affiliation:['Other','Z Fighters'],                   transformation:true,  debutSeries:'DBS', debutArc:'Universe 6'},
-    {id:'kale',        name:'Kale',           gender:'Female', race:'Saiyan',      origin:'Planet Sadala', affiliation:['Other','Z Fighters'],                   transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
-    {id:'caulifla',    name:'Caulifla',       gender:'Female', race:'Saiyan',      origin:'Planet Sadala', affiliation:['Other','Z Fighters'],                   transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
-    {id:'jiren',       name:'Jiren',          gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Other','Villain'],                      transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
-    {id:'toppo',       name:'Toppo',          gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Other','Villain'],                      transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
+    {id:'hit',         name:'Hit',            img:'https://cdn.myanimelist.net/images/characters/8/348952.jpg',  gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Other','Villain'],                      transformation:false, debutSeries:'DBS', debutArc:'Universe 6'},
+    {id:'cabba',       name:'Cabba',          img:'https://cdn.myanimelist.net/images/characters/7/300413.jpg',  gender:'Male',   race:'Saiyan',      origin:'Planet Sadala', affiliation:['Other','Z Fighters'],                   transformation:true,  debutSeries:'DBS', debutArc:'Universe 6'},
+    {id:'kale',        name:'Kale',           img:'https://cdn.myanimelist.net/images/characters/13/359025.jpg', gender:'Female', race:'Saiyan',      origin:'Planet Sadala', affiliation:['Other','Z Fighters'],                   transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
+    {id:'caulifla',    name:'Caulifla',       img:'https://cdn.myanimelist.net/images/characters/13/358997.jpg', gender:'Female', race:'Saiyan',      origin:'Planet Sadala', affiliation:['Other','Z Fighters'],                   transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
+    {id:'jiren',       name:'Jiren',          img:'https://cdn.myanimelist.net/images/characters/12/380618.jpg', gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Other','Villain'],                      transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
+    {id:'toppo',       name:'Toppo',          img:'https://cdn.myanimelist.net/images/characters/15/358958.jpg', gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Other','Villain'],                      transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
 ];
 
 // --- BuzzWord: Dragon Ball — Image System ---
-window.bwDbImageMap = {};
-window.bwDbImgReady = false;
-
-window.bwDbLoadImages = async function() {
-    const cacheKey = 'wb_db_imgs_v3';
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) { try { window.bwDbImageMap = JSON.parse(cached); window.bwDbImgReady = true; return; } catch(e) {} }
-    const addToMap = (data, map) => {
-        (data || []).forEach(entry => {
-            const char = entry.character;
-            if (!char?.images?.jpg?.image_url) return;
-            const img = char.images.jpg.image_url;
-            const raw = char.name;
-            map[raw.toLowerCase()] = img;
-            if (raw.includes(',')) {
-                const [last, ...rest] = raw.split(',');
-                const natural = `${rest.join(',').trim()} ${last.trim()}`;
-                map[natural.toLowerCase()] = img;
-                const firstWord = rest.join(' ').trim().split(' ')[0].toLowerCase();
-                if (firstWord && !map[firstWord]) map[firstWord] = img;
-            } else {
-                const parts = raw.split(' ');
-                const lastName = parts[parts.length - 1].toLowerCase();
-                if (!map[lastName]) map[lastName] = img;
-            }
-        });
-    };
-    try {
-        const map = {};
-        // Dragon Ball (430), Dragon Ball Z (813), Dragon Ball Super (30697)
-        const res1 = await fetch('https://api.jikan.moe/v4/anime/430/characters');
-        if (res1.ok) { const d = await res1.json(); addToMap(d.data, map); }
-        await new Promise(r => setTimeout(r, 450));
-        const res2 = await fetch('https://api.jikan.moe/v4/anime/813/characters');
-        if (res2.ok) { const d = await res2.json(); addToMap(d.data, map); }
-        await new Promise(r => setTimeout(r, 450));
-        const res3 = await fetch('https://api.jikan.moe/v4/anime/30697/characters');
-        if (res3.ok) { const d = await res3.json(); addToMap(d.data, map); }
-        window.bwDbImageMap = map;
-        window.bwDbImgReady = true;
-        try { localStorage.setItem(cacheKey, JSON.stringify(map)); } catch(e) {}
-    } catch(e) {}
-};
-
-const DB_NAME_ALIASES = {
-    'goku': 'son goku', 'son goku': 'goku',
-    'gohan': 'son gohan', 'son gohan': 'gohan',
-    'goten': 'son goten', 'son goten': 'goten',
-    'piccolo': 'piccolo jr.',
-    'krillin': 'kuririn', 'kuririn': 'krillin',
-    'roshi': 'muten roshi', 'muten roshi': 'roshi', 'master roshi': 'muten roshi',
-    'tien': 'tenshinhan', 'tenshinhan': 'tien shinhan', 'tien shinhan': 'tenshinhan',
-    'chiaotzu': 'chaozu', 'chaozu': 'chiaotzu',
-    'yamcha': 'yamcha',
-    'future trunks': 'trunks', 'kid trunks': 'trunks',
-    'android 18': 'lazuli', 'lazuli': 'android 18',
-    'android 17': 'lapis', 'lapis': 'android 17',
-    'frieza': 'freeza', 'freeza': 'frieza',
-    'cell': 'cell',
-    'beerus': 'bills', 'bills': 'beerus',
-    'mr. satan': 'hercule', 'hercule': 'mr. satan', 'satan': 'hercule',
-    'king piccolo': 'piccolo daimao',
-    'supreme kai': 'shin', 'shin': 'supreme kai',
-    'king kai': 'kaiou', 'kaiou': 'king kai',
-    'kami': 'kami',
-    'goku black': 'zamasu', 'zamasu': 'goku black',
-    'champa': 'shanpa', 'shanpa': 'champa',
-    'whis': 'uisu', 'uisu': 'whis',
-    'vados': 'vados',
-    'chi-chi': 'chichi', 'chichi': 'chi-chi',
-    'captain ginyu': 'ginyu', 'ginyu': 'captain ginyu',
-    'majin buu': 'buu', 'buu': 'majin buu',
-    'mr. satan': 'satan', 'hercule': 'satan', 'satan': 'hercule',
-    'king kai': 'kaiou', 'north kai': 'kaiou',
-    'supreme kai': 'kibito kai',
-};
-
-window.bwDbGetCharImage = function(name) {
-    return bwImageLookup(window.bwDbImageMap, DB_NAME_ALIASES, name);
-};
-
 window.bwDbApplyImages = function() {
     document.querySelectorAll('[id^="dbimg-"]').forEach(img => {
         const charId = img.id.replace('dbimg-', '');
         const char = charId === 'answer' ? window.bwDbState.answer : BW_DB_CHARS.find(c => c.id === charId);
-        if (!char) return;
-        const url = window.bwDbGetCharImage(char.name);
-        if (url) {
-            img.src = url; img.style.display = 'block';
-            const fb = document.getElementById(`dbinitials-${charId}`);
-            if (fb) fb.style.display = 'none';
-        }
+        if (!char?.img) return;
+        img.src = char.img; img.style.display = 'block';
+        const fb = document.getElementById(`dbinitials-${charId}`);
+        if (fb) fb.style.display = 'none';
     });
-};
-
-window.bwDbEnsureImages = async function() {
-    if (!window.bwDbImgReady) await window.bwDbLoadImages();
-    window.bwDbApplyImages();
 };
 
 // --- BuzzWord: Dragon Ball — Helpers ---
@@ -7593,7 +8014,7 @@ function bwDbShowResult() {
             </div>
         </div>`;
         if (inputArea) inputArea.style.display = 'none';
-        window.bwDbEnsureImages();
+        window.bwDbApplyImages();
         const statusEl = document.getElementById('bwdb-status-text');
         if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
     } else {
@@ -7607,7 +8028,7 @@ function bwDbRender() {
     if (!grid) return;
     const { answer, guesses } = window.bwDbState;
     grid.innerHTML = guesses.map(g => bwDbBuildRow(g, bwDbCalcColors(g, answer))).join('');
-    window.bwDbEnsureImages();
+    window.bwDbApplyImages();
     bwDbShowResult();
 }
 
@@ -7615,7 +8036,7 @@ function bwDbAnimateNewRow(char, colors) {
     const grid = document.getElementById('bwdb-grid');
     if (!grid) return;
     grid.insertAdjacentHTML('beforeend', bwDbBuildRow(char, colors));
-    window.bwDbEnsureImages();
+    window.bwDbApplyImages();
     const newRow = grid.lastElementChild;
     const cells = newRow.querySelectorAll('.wordle-cell');
     cells.forEach((cell, i) => {
@@ -7667,7 +8088,7 @@ window.initBwDbGame = async function() {
     document.getElementById('bwdb-loading').style.display = 'none';
     document.getElementById('bwdb-content').style.display = 'block';
     bwDbRender();
-    window.bwDbLoadImages();
+    window.bwDbApplyImages();
 };
 
 window.bwDbEnterGuess = function() {
@@ -7686,8 +8107,7 @@ window.searchBwDbChar = function() {
     const matches = BW_DB_CHARS.filter(c => !guessedIds.has(c.id) && (c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q))).slice(0, 8);
     sugg.style.display = matches.length ? 'block' : 'none';
     sugg.innerHTML = matches.map(c => {
-        const imgUrl = window.bwDbGetCharImage(c.name);
-        const pic = imgUrl ? `<img src="${imgUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--bg-gray-darker);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${c.name[0]}</div>`;
+        const pic = c.img ? `<img src="${c.img}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--bg-gray-darker);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${c.name[0]}</div>`;
         return `<div class="wordle-suggestion-item" style="display:flex;align-items:center;gap:10px;" onclick="window.selectBwDbChar('${c.id}')">${pic}<span>${c.name}</span></div>`;
     }).join('');
 };
