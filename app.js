@@ -5506,7 +5506,7 @@ window.loadPatchNotes = async function() {
                     </div>
                     <h3 style="font-size:14px; font-weight:700; margin-bottom:6px; line-height:1.4;">${p.title}</h3>
                     <p style="font-size:12px; color:var(--text-muted); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; line-height:1.5;">${p.body.replace(/\n/g, ' ')}</p>
-                    <div class="news-footer" style="margin-top:10px;">
+                    <div class="news-footer">
                         <span style="font-size:11px; color:var(--text-muted);">${p.timestamp?.toDate ? new Date(p.timestamp.toDate()).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : ''}</span>
                         <span class="news-link" style="font-size:12px;">Read More</span>
                     </div>
