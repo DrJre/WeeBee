@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 
@@ -2702,10 +2702,76 @@ window.switchProfileTab = function(event, tabId) {
     document.querySelectorAll('.profile-main-feed .p-tab').forEach(t => t.classList.remove('active'));
     document.getElementById(tabId).style.display = 'block';
     event.currentTarget.classList.add('active');
+    if (tabId === 'p-feed') window.loadProfileFeed(window.currentProfileUid);
+    if (tabId === 'p-reviews') window.loadProfileReviews(window.currentProfileUid);
     if (tabId === 'p-achievements') window.loadProfileAchievements(window.currentProfileUid);
     if (tabId === 'p-friends') window.loadFriendsTab(window.currentProfileUid);
-    if (tabId === 'p-tierlists') window.loadTierListsTab(window.currentProfileUid);
     if (tabId === 'p-followers') window.loadFollowersTab(window.currentProfileUid);
+};
+
+window.loadProfileFeed = async function(uid) {
+    const container = document.getElementById('user-profile-feed');
+    if (!container || container.dataset.loaded === uid) return;
+    container.innerHTML = '<div class="loading" style="padding:24px;text-align:center;">Loading...</div>';
+    try {
+        const isMe = uid === auth.currentUser?.uid;
+        const tlFilter = isMe
+            ? query(collection(db, 'tier_lists'), where('uid', '==', uid), limit(30))
+            : query(collection(db, 'tier_lists'), where('uid', '==', uid), where('public', '==', true), limit(30));
+        const [revSnap, tlSnap, htSnap, pollSnap, bracketSnap, bwSnap] = await Promise.all([
+            getDocs(query(collection(db, 'reviews'), where('uid', '==', uid), limit(60))),
+            getDocs(tlFilter),
+            getDocs(query(collection(db, 'hot_takes'), where('uid', '==', uid), limit(30))),
+            getDocs(query(collection(db, 'polls'), where('uid', '==', uid), limit(30))),
+            getDocs(query(collection(db, 'brackets'), where('uid', '==', uid), limit(20))),
+            getDocs(query(collection(db, 'bw_posts'), where('uid', '==', uid), limit(30))),
+        ]);
+        const items = [];
+        revSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'review', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+        tlSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'tierlist', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+        htSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'hot_take', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+        pollSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'poll', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+        bracketSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'bracket', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+        bwSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'bw', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+        items.sort((a, b) => b._ts - a._ts);
+        if (!items.length) {
+            container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:32px;">No posts yet.</p>';
+            container.dataset.loaded = uid;
+            return;
+        }
+        const curUid = auth.currentUser?.uid;
+        container.innerHTML = '';
+        items.forEach(item => {
+            let html = '';
+            try {
+                if (item._type === 'review') html = window.generateReviewCardHTML(item);
+                else if (item._type === 'tierlist') html = renderTierListFeedCard(item.id, item);
+                else if (item._type === 'bw') html = window.generateBwPostCardHTML(item);
+                else if (item._type === 'hot_take') html = window._renderHotTakeCard(item, curUid);
+                else if (item._type === 'poll') html = window._renderPollCard(item, curUid);
+                else if (item._type === 'bracket') html = window._renderBracketFeedCard(item);
+            } catch(e) { console.error('Profile feed render error:', item._type, e); }
+            if (html) container.innerHTML += `<div>${html}</div>`;
+        });
+        container.dataset.loaded = uid;
+    } catch(e) {
+        console.error('loadProfileFeed error:', e);
+        container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:32px;">Failed to load feed.</p>';
+    }
+};
+
+window.loadProfileReviews = async function(uid) {
+    const feed = document.getElementById('user-reviews-feed');
+    if (!feed || feed.dataset.loaded === uid) return;
+    feed.innerHTML = '<div class="loading" style="padding:24px;text-align:center;">Loading...</div>';
+    try {
+        const snap = await getDocs(query(collection(db, 'reviews'), where('uid', '==', uid)));
+        const reviews = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+        feed.innerHTML = '';
+        if (!reviews.length) feed.innerHTML = '<p class="empty-msg" style="color:var(--text-muted);">No reviews yet.</p>';
+        else reviews.forEach(d => feed.innerHTML += window.generateReviewCardHTML(d));
+        feed.dataset.loaded = uid;
+    } catch(e) { feed.innerHTML = '<p style="color:var(--text-muted);">Failed to load reviews.</p>'; }
 };
 
 window.fetchUserProfile = async function(targetUid = null) {
@@ -2897,10 +2963,17 @@ window.fetchUserProfile = async function(targetUid = null) {
         });
     }
 
-    // FEED
-    const feed = document.getElementById('user-reviews-feed'); feed.innerHTML = '';
-    if(myReviews.length === 0) feed.innerHTML = '<p class="empty-msg" style="color:var(--text-muted);">No activity to display.</p>';
-    else myReviews.forEach(d => feed.innerHTML += window.generateReviewCardHTML(d));
+    // Reset to Feed tab
+    document.querySelectorAll('.profile-main-feed .p-tab-content').forEach(c => c.style.display = 'none');
+    document.querySelectorAll('.profile-main-feed .p-tab').forEach(t => t.classList.remove('active'));
+    const feedTabEl = document.getElementById('p-feed');
+    if (feedTabEl) feedTabEl.style.display = 'block';
+    const feedTabBtn = document.querySelector('.profile-main-feed .p-tab[onclick*="p-feed"]');
+    if (feedTabBtn) feedTabBtn.classList.add('active');
+    // Clear reviews cache for this profile
+    const reviewsFeedEl = document.getElementById('user-reviews-feed');
+    if (reviewsFeedEl) { reviewsFeedEl.innerHTML = ''; delete reviewsFeedEl.dataset.loaded; }
+    window.loadProfileFeed(uidToFetch);
 
     // Follower / Following counts
     const [followingSnap, followersSnap, friendsCountSnap] = await Promise.all([
@@ -3284,18 +3357,36 @@ function renderActivityBatch() {
         if (sentinel) sentinel.style.display = 'none';
         return;
     }
+    const uid = auth.currentUser?.uid;
     batch.forEach(item => {
         try {
             let html = '';
             if (item._type === 'review') html = window.generateReviewCardHTML(item);
             else if (item._type === 'tierlist') html = renderTierListFeedCard(item.id, item);
             else if (item._type === 'bw') html = window.generateBwPostCardHTML(item);
-            if (html) feed.innerHTML += html;
+            else if (item._type === 'hot_take') html = window._renderHotTakeCard(item, uid);
+            else if (item._type === 'poll') html = window._renderPollCard(item, uid);
+            else if (item._type === 'bracket') html = window._renderBracketFeedCard(item);
+            if (html) feed.innerHTML += `<div data-fid="${item.id}">${html}</div>`;
         } catch(e) { console.error('Feed render error:', item._type, e); }
     });
     window._activityIndex += batch.length;
     if (sentinel) sentinel.style.display = window._activityIndex < items.length ? 'block' : 'none';
 }
+
+window._refreshHomeFeedItem = function(id) {
+    const feed = document.getElementById('home-activity-feed');
+    if (!feed) return;
+    const el = feed.querySelector(`[data-fid="${id}"]`);
+    if (!el) return;
+    const item = (window._activityItems||[]).find(i => i.id === id);
+    if (!item) return;
+    const uid = auth.currentUser?.uid;
+    let html = '';
+    if (item._type === 'hot_take') html = window._renderHotTakeCard(item, uid);
+    else if (item._type === 'poll') html = window._renderPollCard(item, uid);
+    if (html) el.innerHTML = html;
+};
 
 window.fetchHomeActivityFeed = async function() {
     const feed = document.getElementById('home-activity-feed');
@@ -3307,10 +3398,13 @@ window.fetchHomeActivityFeed = async function() {
     window._activityIndex = 0;
     try {
         const today = bwGetDate();
-        const [reviewSnap, tlSnap, bwSnap] = await Promise.all([
+        const [reviewSnap, tlSnap, bwSnap, htSnap, pollSnap, bracketSnap] = await Promise.all([
             getDocs(query(collection(db, 'reviews'), orderBy('timestamp', 'desc'), limit(60))),
             getDocs(query(collection(db, 'tier_lists'), where('public', '==', true))),
-            getDocs(query(collection(db, 'bw_posts'), orderBy('timestamp', 'desc'), limit(50)))
+            getDocs(query(collection(db, 'bw_posts'), orderBy('timestamp', 'desc'), limit(50))),
+            getDocs(query(collection(db, 'hot_takes'), orderBy('timestamp', 'desc'), limit(30))),
+            getDocs(query(collection(db, 'polls'), orderBy('timestamp', 'desc'), limit(20))),
+            getDocs(query(collection(db, 'brackets'), orderBy('timestamp', 'desc'), limit(20)))
         ]);
 
         // Build set of social UIDs (follows + friends)
@@ -3340,6 +3434,22 @@ window.fetchHomeActivityFeed = async function() {
         bwSnap.forEach(d => {
             const data = d.data();
             items.push({ ...data, id: d.id, _type: 'bw', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid), _col: 'bw_posts' });
+        });
+        htSnap.forEach(d => {
+            const data = d.data();
+            const item = { ...data, id: d.id, _type: 'hot_take', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) };
+            items.push(item);
+            if (!window._hotTakesList.find(x => x.id === d.id)) window._hotTakesList.push(item);
+        });
+        pollSnap.forEach(d => {
+            const data = d.data();
+            const item = { ...data, id: d.id, _type: 'poll', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) };
+            items.push(item);
+            if (!window._pollsList.find(x => x.id === d.id)) window._pollsList.push(item);
+        });
+        bracketSnap.forEach(d => {
+            const data = d.data();
+            items.push({ ...data, id: d.id, _type: 'bracket', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) });
         });
 
         await window.prefetchRankCache([...new Set(items.map(i => i.uid).filter(Boolean))]);
@@ -3698,22 +3808,28 @@ window.selectTierListType = function(type) {
     else { window.showTierStep('editor'); document.getElementById('tl-source-label').innerText = 'Anime tier list'; window.renderTierEditor(); }
 };
 
+let _tierSourceTimer = null, _tierSourceReqId = 0;
 window.searchTierSource = async function() {
+    clearTimeout(_tierSourceTimer);
     const q = document.getElementById('tl-source-search').value.trim();
     const results = document.getElementById('tl-source-results');
     if (q.length < 2) { results.innerHTML = ''; return; }
     results.innerHTML = '<div class="loading" style="padding:12px;">Searching...</div>';
-    try {
-        const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8&type=tv`);
-        const { data } = await res.json();
-        results.innerHTML = (data || []).map(a => `
-            <div onclick="selectTierSource(${a.mal_id},'${(a.title_english||a.title).replace(/'/g,"\\'")}','${a.images.jpg.image_url}')"
-                style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--bg-gray);background:var(--bg-white);"
-                onmouseover="this.style.background='var(--bg-gray)'" onmouseout="this.style.background='var(--bg-white)'">
-                <img src="${a.images.jpg.image_url}" style="width:36px;height:50px;object-fit:cover;border-radius:4px;flex-shrink:0;">
-                <span style="font-weight:600;font-size:14px;">${a.title_english||a.title}</span>
-            </div>`).join('');
-    } catch(e) { results.innerHTML = '<div style="padding:12px;color:var(--text-muted);">Failed to search.</div>'; }
+    _tierSourceTimer = setTimeout(async () => {
+        const reqId = ++_tierSourceReqId;
+        try {
+            const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8&type=tv`);
+            const { data } = await res.json();
+            if (reqId !== _tierSourceReqId) return;
+            results.innerHTML = (data || []).map(a => `
+                <div onclick="selectTierSource(${a.mal_id},'${(a.title_english||a.title).replace(/'/g,"\\'")}','${a.images.jpg.image_url}')"
+                    style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--bg-gray);background:var(--bg-white);"
+                    onmouseover="this.style.background='var(--bg-gray)'" onmouseout="this.style.background='var(--bg-white)'">
+                    <img src="${a.images.jpg.image_url}" style="width:36px;height:50px;object-fit:cover;border-radius:4px;flex-shrink:0;">
+                    <span style="font-weight:600;font-size:14px;">${a.title_english||a.title}</span>
+                </div>`).join('');
+        } catch(e) { if (reqId === _tierSourceReqId) results.innerHTML = '<div style="padding:12px;color:var(--text-muted);">Failed to search.</div>'; }
+    }, 300);
 };
 
 window.selectTierSource = async function(malId, title, imageUrl) {
@@ -3890,60 +4006,67 @@ window.removeTlItem = function(itemId) {
     window.renderTierEditor();
 };
 
+let _tierPoolTimer = null, _tierPoolReqId = 0;
 window.searchTierPool = async function() {
+    clearTimeout(_tierPoolTimer);
     const q = document.getElementById('tl-pool-search').value.trim();
     const results = document.getElementById('tl-pool-results');
     if (q.length < 2) { results.innerHTML=''; return; }
-    try {
-        const isChar = window.tierListState?.type === 'characters';
-        const url = isChar ? `https://api.jikan.moe/v4/characters?q=${encodeURIComponent(q)}&limit=8` : `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8`;
-        const res = await fetch(url); const { data } = await res.json();
-        window._tlPoolItems = [];
+    results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">Searching...</div>';
+    _tierPoolTimer = setTimeout(async () => {
+        const reqId = ++_tierPoolReqId;
+        try {
+            const isChar = window.tierListState?.type === 'characters';
+            const url = isChar ? `https://api.jikan.moe/v4/characters?q=${encodeURIComponent(q)}&limit=8` : `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8`;
+            const res = await fetch(url); const { data } = await res.json();
+            if (reqId !== _tierPoolReqId) return;
+            window._tlPoolItems = [];
 
-        const bwMatches = isChar ? (() => {
-            const q_lc = q.toLowerCase();
-            const all = [...(BW_NRT_CHARS||[]), ...(BW_OP_CHARS||[]), ...(BW_BLC_CHARS||[]), ...(BW_DB_CHARS||[])];
-            const seen = new Set();
-            return all.filter(c => {
-                if (seen.has(c.id)) return false;
-                seen.add(c.id);
-                return c.name.toLowerCase().includes(q_lc) && c.img;
-            }).slice(0, 5);
-        })() : [];
+            const bwMatches = isChar ? (() => {
+                const q_lc = q.toLowerCase();
+                const all = [...(BW_NRT_CHARS||[]), ...(BW_OP_CHARS||[]), ...(BW_BLC_CHARS||[]), ...(BW_DB_CHARS||[])];
+                const seen = new Set();
+                return all.filter(c => {
+                    if (seen.has(c.id)) return false;
+                    seen.add(c.id);
+                    return c.name.toLowerCase().includes(q_lc) && c.img;
+                }).slice(0, 5);
+            })() : [];
 
-        const bwHTML = bwMatches.map(c => {
-            const idx = window._tlPoolItems.push({id:`bw_${c.id}`, title:c.name, image:c.img, animeTitle:''}) - 1;
-            return `<div onclick="addToTierPool(window._tlPoolItems[${idx}])"
-                style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;margin-bottom:2px;border-left:2px solid var(--accent-yellow);"
-                onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='transparent'">
-                <img src="${c.img}" style="width:32px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;">
-                <div style="flex:1;min-width:0;">
-                    <div style="font-size:13px;">${c.name}</div>
-                    <div style="font-size:11px;color:var(--accent-yellow);">WeeBee</div>
-                </div>
-                <span class="material-symbols-outlined" style="color:var(--accent-yellow);font-size:20px;">add_circle</span>
-            </div>`;
-        }).join('');
+            const bwHTML = bwMatches.map(c => {
+                const idx = window._tlPoolItems.push({id:`bw_${c.id}`, title:c.name, image:c.img, animeTitle:''}) - 1;
+                return `<div onclick="addToTierPool(window._tlPoolItems[${idx}])"
+                    style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;margin-bottom:2px;border-left:2px solid var(--accent-yellow);"
+                    onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='transparent'">
+                    <img src="${c.img}" style="width:32px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;">${c.name}</div>
+                        <div style="font-size:11px;color:var(--accent-yellow);">WeeBee</div>
+                    </div>
+                    <span class="material-symbols-outlined" style="color:var(--accent-yellow);font-size:20px;">add_circle</span>
+                </div>`;
+            }).join('');
 
-        results.innerHTML = (data||[]).map(item => {
-            const id = isChar ? `char_${item.mal_id}` : String(item.mal_id);
-            const title = isChar ? item.name : (item.title_english||item.title);
-            const image = isChar ? (item.images?.jpg?.image_url||'') : item.images.jpg.image_url;
-            const animeTitle = isChar ? (item.anime?.[0]?.anime?.title_english || item.anime?.[0]?.anime?.title || '') : '';
-            const idx = window._tlPoolItems.push({id, title, image, animeTitle}) - 1;
-            return `<div onclick="addToTierPool(window._tlPoolItems[${idx}])"
-                style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;margin-bottom:2px;"
-                onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='transparent'">
-                <img src="${image}" style="width:32px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.background='var(--bg-gray-darker)'">
-                <div style="flex:1;min-width:0;">
-                    <div style="font-size:13px;">${title}</div>
-                    ${animeTitle ? `<div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${animeTitle}</div>` : ''}
-                </div>
-                <span class="material-symbols-outlined" style="color:var(--accent-yellow);font-size:20px;">add_circle</span>
-            </div>`;
-        }).join('');
-        results.innerHTML = bwHTML + results.innerHTML;
-    } catch(e) {}
+            const jikanHTML = (data||[]).map(item => {
+                const id = isChar ? `char_${item.mal_id}` : String(item.mal_id);
+                const title = isChar ? item.name : (item.title_english||item.title);
+                const image = isChar ? (item.images?.jpg?.image_url||'') : item.images.jpg.image_url;
+                const animeTitle = isChar ? (item.anime?.[0]?.anime?.title_english || item.anime?.[0]?.anime?.title || '') : '';
+                const idx = window._tlPoolItems.push({id, title, image, animeTitle}) - 1;
+                return `<div onclick="addToTierPool(window._tlPoolItems[${idx}])"
+                    style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;margin-bottom:2px;"
+                    onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='transparent'">
+                    <img src="${image}" style="width:32px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.background='var(--bg-gray-darker)'">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;">${title}</div>
+                        ${animeTitle ? `<div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${animeTitle}</div>` : ''}
+                    </div>
+                    <span class="material-symbols-outlined" style="color:var(--accent-yellow);font-size:20px;">add_circle</span>
+                </div>`;
+            }).join('');
+            results.innerHTML = bwHTML + jikanHTML;
+        } catch(e) {}
+    }, 300);
 };
 
 window.addToTierPool = function(item) {
@@ -4259,7 +4382,11 @@ window._renderHotTakeCard = function(ht, uid) {
     const disagreed = uid && (ht.disagreeUids||[]).includes(uid);
     const isOwner = uid && ht.uid === uid;
     const ago = ht.timestamp?.toDate ? formatTimeAgo(ht.timestamp.toDate()) : '';
-    return `<div style="background:var(--bg-gray);border-radius:14px;padding:16px;margin-bottom:12px;">
+    const likes = ht.likes || [];
+    const dislikes = ht.dislikes || [];
+    const isLiked = uid && likes.includes(uid);
+    const isDisliked = uid && dislikes.includes(uid);
+    return `<div class="feed-post-card" style="background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.22);border-radius:14px;padding:16px;margin-bottom:12px;">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
             <img src="${ht.authorAvatar||''}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">
             <div style="flex:1;min-width:0;">
@@ -4269,13 +4396,40 @@ window._renderHotTakeCard = function(ht, uid) {
             ${isOwner ? `<button onclick="window.deleteHotTake('${ht.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></button>` : ''}
         </div>
         <p style="font-size:15px;line-height:1.55;margin:0 0 14px;color:var(--text-dark);white-space:pre-wrap;">${ht.text}</p>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
             <button onclick="window.voteHotTake('${ht.id}','agree')" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:14px;background:${agreed?'#2e7d32':'var(--bg-gray-darker)'};color:${agreed?'white':'var(--text-dark)'};">
                 🔥 Agree <span style="font-size:13px;opacity:0.85;">${agrees}</span>
             </button>
             <button onclick="window.voteHotTake('${ht.id}','disagree')" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:14px;background:${disagreed?'#c62828':'var(--bg-gray-darker)'};color:${disagreed?'white':'var(--text-dark)'};">
                 ❄️ Disagree <span style="font-size:13px;opacity:0.85;">${disagrees}</span>
             </button>
+        </div>
+        <div class="review-actions">
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostComments(event,this,'${ht.id}')">
+                    <span class="material-symbols-outlined">chat_bubble</span>
+                </button>
+                <span class="action-label bw-comment-count">${ht.commentCount || 0} Comments</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${ht.id}','hot_takes','like',this)" style="${isLiked?'color:var(--accent-yellow);':''}">
+                    <span class="material-symbols-outlined">thumb_up</span>
+                </button>
+                <span class="action-label" id="bw-likes-${ht.id}">${likes.length} Likes</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${ht.id}','hot_takes','dislike',this)" style="${isDisliked?'color:red;':''}">
+                    <span class="material-symbols-outlined">thumb_down</span>
+                </button>
+                <span class="action-label" id="bw-dislikes-${ht.id}">${dislikes.length} Dislikes</span>
+            </div>
+        </div>
+        <div class="bw-post-comments" data-post-collection="hot_takes" style="display:none;margin-top:15px;padding-top:15px;border-top:1px solid var(--border-color);" onclick="event.stopPropagation();">
+            <div class="bw-comments-list"></div>
+            <div style="display:flex;gap:10px;margin-top:10px;">
+                <input type="text" class="bw-comment-input" placeholder="Add a comment..." style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
+                <button class="action-btn" onclick="window.submitBwPostComment(event,this,'${ht.id}','hot_takes')">Send</button>
+            </div>
         </div>
     </div>`;
 };
@@ -4293,7 +4447,7 @@ window.postHotTake = async function() {
     try {
         const ref = await addDoc(collection(db, 'hot_takes'), {
             uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar,
-            text, agreeUids: [], disagreeUids: [], timestamp: new Date(), commentCount: 0
+            text, agreeUids: [], disagreeUids: [], likes: [], dislikes: [], timestamp: new Date(), commentCount: 0
         });
         input.value = '';
         document.getElementById('ht-char-count').innerText = '0';
@@ -4305,31 +4459,34 @@ window.postHotTake = async function() {
 window.voteHotTake = async function(id, dir) {
     if (!auth.currentUser) return window.openAuthModal();
     const uid = auth.currentUser.uid;
-    const ht = window._hotTakesList.find(x => x.id === id);
+    const listHt = window._hotTakesList.find(x => x.id === id);
+    const actHt = (window._activityItems||[]).find(x => x.id === id && x._type === 'hot_take');
+    const ht = listHt || actHt;
     if (!ht) return;
     const agreed = (ht.agreeUids||[]).includes(uid);
     const disagreed = (ht.disagreeUids||[]).includes(uid);
+    function applyAgree(h) {
+        if (agreed) { h.agreeUids = (h.agreeUids||[]).filter(x => x !== uid); }
+        else { h.agreeUids = [...(h.agreeUids||[]), uid]; h.disagreeUids = (h.disagreeUids||[]).filter(x => x !== uid); }
+    }
+    function applyDisagree(h) {
+        if (disagreed) { h.disagreeUids = (h.disagreeUids||[]).filter(x => x !== uid); }
+        else { h.disagreeUids = [...(h.disagreeUids||[]), uid]; h.agreeUids = (h.agreeUids||[]).filter(x => x !== uid); }
+    }
+    const applyVote = dir === 'agree' ? applyAgree : applyDisagree;
+    applyVote(ht);
+    if (listHt && listHt !== ht) applyVote(listHt);
+    if (actHt && actHt !== ht) applyVote(actHt);
+    window._renderHotTakesFeed();
+    window._refreshHomeFeedItem(id);
     const ref = doc(db, 'hot_takes', id);
     if (dir === 'agree') {
-        if (agreed) {
-            ht.agreeUids = ht.agreeUids.filter(x => x !== uid);
-            await updateDoc(ref, { agreeUids: arrayRemove(uid) });
-        } else {
-            ht.agreeUids = [...(ht.agreeUids||[]), uid];
-            ht.disagreeUids = (ht.disagreeUids||[]).filter(x => x !== uid);
-            await updateDoc(ref, { agreeUids: arrayUnion(uid), disagreeUids: arrayRemove(uid) });
-        }
+        if (agreed) await updateDoc(ref, { agreeUids: arrayRemove(uid) });
+        else await updateDoc(ref, { agreeUids: arrayUnion(uid), disagreeUids: arrayRemove(uid) });
     } else {
-        if (disagreed) {
-            ht.disagreeUids = ht.disagreeUids.filter(x => x !== uid);
-            await updateDoc(ref, { disagreeUids: arrayRemove(uid) });
-        } else {
-            ht.disagreeUids = [...(ht.disagreeUids||[]), uid];
-            ht.agreeUids = (ht.agreeUids||[]).filter(x => x !== uid);
-            await updateDoc(ref, { disagreeUids: arrayUnion(uid), agreeUids: arrayRemove(uid) });
-        }
+        if (disagreed) await updateDoc(ref, { disagreeUids: arrayRemove(uid) });
+        else await updateDoc(ref, { disagreeUids: arrayUnion(uid), agreeUids: arrayRemove(uid) });
     }
-    window._renderHotTakesFeed();
 };
 
 window.deleteHotTake = async function(id) {
@@ -4396,6 +4553,8 @@ window.loadMorePolls = async function() {
     } catch(e) {}
 };
 
+const _pollOpts = (p) => Array.isArray(p.options) ? p.options : Object.values(p.options || {});
+
 window._renderPollsFeed = function() {
     const feed = document.getElementById('polls-feed');
     if (!feed) return;
@@ -4403,8 +4562,8 @@ window._renderPollsFeed = function() {
     let list = [...window._pollsList];
     if (window._pollsSort === 'popular') {
         list.sort((a, b) => {
-            const aVotes = (a.options||[]).reduce((s, o) => s + (o.voters||[]).length, 0);
-            const bVotes = (b.options||[]).reduce((s, o) => s + (o.voters||[]).length, 0);
+            const aVotes = _pollOpts(a).reduce((s, o) => s + (o.voters||[]).length, 0);
+            const bVotes = _pollOpts(b).reduce((s, o) => s + (o.voters||[]).length, 0);
             return bVotes - aVotes;
         });
     }
@@ -4413,13 +4572,14 @@ window._renderPollsFeed = function() {
 };
 
 window._renderPollCard = function(poll, uid) {
-    const totalVotes = (poll.options||[]).reduce((s, o) => s + (o.voters||[]).length, 0);
-    const myVoteIdx = uid ? (poll.options||[]).findIndex(o => (o.voters||[]).includes(uid)) : -1;
+    const opts = _pollOpts(poll);
+    const totalVotes = opts.reduce((s, o) => s + (o.voters||[]).length, 0);
+    const myVoteIdx = uid ? opts.findIndex(o => (o.voters||[]).includes(uid)) : -1;
     const hasVoted = myVoteIdx !== -1;
     const ago = poll.timestamp?.toDate ? formatTimeAgo(poll.timestamp.toDate()) : '';
     const isOwner = uid && poll.uid === uid;
 
-    const optionsHTML = (poll.options||[]).map((opt, i) => {
+    const optionsHTML = opts.map((opt, i) => {
         const count = (opt.voters||[]).length;
         const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
         const isMyVote = myVoteIdx === i;
@@ -4436,11 +4596,15 @@ window._renderPollCard = function(poll, uid) {
                 <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${count} vote${count!==1?'s':''}</div>
             </div>`;
         } else {
-            return `<button onclick="window.votePoll('${poll.id}',${i})" style="width:100%;text-align:left;padding:10px 14px;margin-bottom:8px;border-radius:8px;border:2px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:14px;cursor:pointer;font-weight:600;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='var(--border-color)'">${opt.text}</button>`;
+            return `<button onclick="window.votePoll('${poll.id}',${i})" style="width:100%;text-align:left;padding:10px 14px;margin-bottom:8px;border-radius:8px;border:2px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;cursor:pointer;font-weight:600;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='var(--border-color)'">${opt.text}</button>`;
         }
     }).join('');
 
-    return `<div style="background:var(--bg-gray);border-radius:14px;padding:16px;margin-bottom:12px;">
+    const likes = poll.likes || [];
+    const dislikes = poll.dislikes || [];
+    const isLiked = uid && likes.includes(uid);
+    const isDisliked = uid && dislikes.includes(uid);
+    return `<div class="feed-post-card" style="background:rgba(33,150,243,0.06);border:1px solid rgba(33,150,243,0.22);border-radius:14px;padding:16px;margin-bottom:12px;">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
             <img src="${poll.authorAvatar||''}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">
             <div style="flex:1;min-width:0;">
@@ -4451,7 +4615,34 @@ window._renderPollCard = function(poll, uid) {
         </div>
         <div style="font-weight:700;font-size:16px;margin-bottom:12px;line-height:1.4;">${poll.question}</div>
         ${optionsHTML}
-        ${hasVoted ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px;">${totalVotes} total vote${totalVotes!==1?'s':''}</div>` : ''}
+        ${hasVoted ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px;margin-bottom:12px;">${totalVotes} total vote${totalVotes!==1?'s':''}</div>` : ''}
+        <div class="review-actions">
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostComments(event,this,'${poll.id}')">
+                    <span class="material-symbols-outlined">chat_bubble</span>
+                </button>
+                <span class="action-label bw-comment-count">${poll.commentCount || 0} Comments</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${poll.id}','polls','like',this)" style="${isLiked?'color:var(--accent-yellow);':''}">
+                    <span class="material-symbols-outlined">thumb_up</span>
+                </button>
+                <span class="action-label" id="bw-likes-${poll.id}">${likes.length} Likes</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${poll.id}','polls','dislike',this)" style="${isDisliked?'color:red;':''}">
+                    <span class="material-symbols-outlined">thumb_down</span>
+                </button>
+                <span class="action-label" id="bw-dislikes-${poll.id}">${dislikes.length} Dislikes</span>
+            </div>
+        </div>
+        <div class="bw-post-comments" data-post-collection="polls" style="display:none;margin-top:15px;padding-top:15px;border-top:1px solid var(--border-color);" onclick="event.stopPropagation();">
+            <div class="bw-comments-list"></div>
+            <div style="display:flex;gap:10px;margin-top:10px;">
+                <input type="text" class="bw-comment-input" placeholder="Add a comment..." style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
+                <button class="action-btn" onclick="window.submitBwPostComment(event,this,'${poll.id}','polls')">Send</button>
+            </div>
+        </div>
     </div>`;
 };
 
@@ -4471,7 +4662,7 @@ window.createPoll = async function() {
         const data = {
             uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar,
             question, options: options.map(text => ({ text, voters: [] })),
-            timestamp: new Date(), commentCount: 0
+            likes: [], dislikes: [], timestamp: new Date(), commentCount: 0
         };
         const ref = await addDoc(collection(db, 'polls'), data);
         // Reset form
@@ -4489,17 +4680,33 @@ window.createPoll = async function() {
 window.votePoll = async function(pollId, optionIdx) {
     if (!auth.currentUser) return window.openAuthModal();
     const uid = auth.currentUser.uid;
-    const poll = window._pollsList.find(p => p.id === pollId);
+    const listPoll = window._pollsList.find(p => p.id === pollId);
+    const actPoll = (window._activityItems||[]).find(x => x.id === pollId && x._type === 'poll');
+    const poll = listPoll || actPoll;
     if (!poll) return;
-    const alreadyVoted = poll.options.some(o => (o.voters||[]).includes(uid));
+    const opts = _pollOpts(poll);
+    const alreadyVoted = opts.some(o => (o.voters||[]).includes(uid));
     if (alreadyVoted) return;
-    poll.options[optionIdx].voters = [...(poll.options[optionIdx].voters||[]), uid];
+    function applyVote(p) {
+        if (!Array.isArray(p.options)) p.options = _pollOpts(p);
+        p.options[optionIdx].voters = [...(p.options[optionIdx].voters||[]), uid];
+    }
+    applyVote(poll);
+    if (listPoll && listPoll !== poll) applyVote(listPoll);
+    if (actPoll && actPoll !== poll) applyVote(actPoll);
     window._renderPollsFeed();
+    window._refreshHomeFeedItem(pollId);
     try {
         await updateDoc(doc(db, 'polls', pollId), { [`options.${optionIdx}.voters`]: arrayUnion(uid) });
     } catch(e) {
-        poll.options[optionIdx].voters = poll.options[optionIdx].voters.filter(x => x !== uid);
+        function rollbackVote(p) {
+            if (Array.isArray(p.options)) p.options[optionIdx].voters = p.options[optionIdx].voters.filter(x => x !== uid);
+        }
+        rollbackVote(poll);
+        if (listPoll && listPoll !== poll) rollbackVote(listPoll);
+        if (actPoll && actPoll !== poll) rollbackVote(actPoll);
         window._renderPollsFeed();
+        window._refreshHomeFeedItem(pollId);
         alert('Failed to submit vote.');
     }
 };
@@ -4517,6 +4724,18 @@ window.deletePoll = async function(id) {
 // --- BRACKETS ---
 window._bracketsList = [];
 window._bracketAnimePool = [];
+window._bracketMatchupIdx = {};
+window._bracketPendingVote = {}; // { bracketId: { round, matchIdx, side } }
+
+window.selectBracketVote = function(bracketId, round, matchIdx, side) {
+    const p = window._bracketPendingVote[bracketId];
+    if (p && p.round === round && p.matchIdx === matchIdx && p.side === side) {
+        delete window._bracketPendingVote[bracketId]; // deselect
+    } else {
+        window._bracketPendingVote[bracketId] = { round, matchIdx, side }; // select or switch
+    }
+    window._renderBracketsFeed();
+};
 
 window.loadBrackets = async function() {
     const feed = document.getElementById('brackets-feed');
@@ -4538,11 +4757,195 @@ window._renderBracketsFeed = function() {
     feed.innerHTML = window._bracketsList.map(b => window._renderBracketCard(b, uid)).join('');
 };
 
+window._renderBracketFeedCard = function(b) {
+    const ago = b.timestamp?.toDate ? formatTimeAgo(b.timestamp.toDate()) : '';
+    const isCompleted = b.status === 'completed';
+    const champion = b.champion;
+    const currentRound = b.currentRound || 0;
+    const totalRounds = b.totalRounds || 0;
+
+    const round0 = Array.isArray(b.rounds?.['0']) ? b.rounds['0'] : Object.values(b.rounds?.['0'] || {});
+    const competitors = round0.flatMap(m => [m.animeA, m.animeB]).filter(Boolean);
+
+    const thumbs = competitors.slice(0, 6).map(c =>
+        `<img src="${c.image}" style="width:36px;height:50px;object-fit:cover;border-radius:5px;flex-shrink:0;" onerror="this.style.display='none'">`
+    ).join('');
+
+    const bgImg = champion?.image || competitors[0]?.image || '';
+
+    const likes = b.likes || [];
+    const dislikes = b.dislikes || [];
+    const bUid = auth.currentUser?.uid;
+    const isLiked = bUid && likes.includes(bUid);
+    const isDisliked = bUid && dislikes.includes(bUid);
+    return `<div class="feed-post-card" style="background:rgba(255,193,7,0.06);border:1px solid rgba(255,193,7,0.25);border-radius:14px;padding:16px;margin-bottom:12px;position:relative;overflow:hidden;">
+        ${bgImg ? `<img src="${bgImg}" style="position:absolute;top:0;right:0;height:100%;width:185px;object-fit:cover;opacity:0.7;-webkit-mask-image:linear-gradient(to right,transparent 0%,black 55%);mask-image:linear-gradient(to right,transparent 0%,black 55%);border-radius:0 14px 14px 0;pointer-events:none;z-index:0;" onerror="this.style.display='none'">` : ''}
+        <div style="position:relative;z-index:1;padding-right:${bgImg ? '105px' : '0'};">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <img src="${b.authorAvatar||''}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">
+                <div style="flex:1;min-width:0;">
+                    <span style="font-weight:700;font-size:13px;">${b.authorName||'Anonymous'}</span>
+                    <span style="font-size:12px;color:var(--text-muted);margin-left:6px;">${ago}</span>
+                </div>
+                <div style="background:rgba(255,193,7,0.18);color:var(--accent-yellow);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:800;letter-spacing:.5px;flex-shrink:0;">🏆 Bracket</div>
+            </div>
+            <div style="font-weight:800;font-size:16px;margin-bottom:10px;">${b.title}</div>
+            ${isCompleted && champion
+                ? `<div style="display:flex;align-items:center;gap:10px;">
+                    <img src="${champion.image}" style="width:36px;height:50px;object-fit:cover;border-radius:5px;flex-shrink:0;border:2px solid var(--accent-yellow);">
+                    <div>
+                        <div style="font-size:10px;font-weight:700;color:var(--accent-yellow);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">Champion</div>
+                        <div style="font-weight:800;font-size:14px;line-height:1.3;">${champion.title}</div>
+                    </div>
+                </div>`
+                : `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Round ${currentRound + 1} / ${totalRounds} · Active</div>
+                   <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${thumbs}</div>`}
+            <div onclick="event.stopPropagation();window.showBracketModal('${b.id}')" style="margin-top:10px;font-size:12px;font-weight:700;color:var(--accent-yellow);cursor:pointer;">View Bracket →</div>
+        </div>
+        <div class="review-actions" style="margin-top:12px;" onclick="event.stopPropagation();">
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostComments(event,this,'${b.id}')">
+                    <span class="material-symbols-outlined">chat_bubble</span>
+                </button>
+                <span class="action-label bw-comment-count">${b.commentCount || 0} Comments</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${b.id}','brackets','like',this)" style="${isLiked?'color:var(--accent-yellow);':''}">
+                    <span class="material-symbols-outlined">thumb_up</span>
+                </button>
+                <span class="action-label" id="bw-likes-${b.id}">${likes.length} Likes</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${b.id}','brackets','dislike',this)" style="${isDisliked?'color:red;':''}">
+                    <span class="material-symbols-outlined">thumb_down</span>
+                </button>
+                <span class="action-label" id="bw-dislikes-${b.id}">${dislikes.length} Dislikes</span>
+            </div>
+        </div>
+        <div class="bw-post-comments" data-post-collection="brackets" style="display:none;margin-top:15px;padding-top:15px;border-top:1px solid var(--border-color);" onclick="event.stopPropagation();">
+            <div class="bw-comments-list"></div>
+            <div style="display:flex;gap:10px;margin-top:10px;">
+                <input type="text" class="bw-comment-input" placeholder="Add a comment..." style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
+                <button class="action-btn" onclick="window.submitBwPostComment(event,this,'${b.id}','brackets')">Send</button>
+            </div>
+        </div>
+    </div>`;
+};
+
+window.showBracketModal = async function(bracketId) {
+    let b = (window._bracketsList||[]).find(x => x.id === bracketId)
+          || (window._activityItems||[]).find(x => x.id === bracketId);
+    if (!b) {
+        try {
+            const snap = await getDoc(doc(db, 'brackets', bracketId));
+            if (!snap.exists()) return;
+            b = { id: snap.id, ...snap.data() };
+        } catch(e) { return; }
+    }
+
+    document.getElementById('bracket-view-modal')?.remove();
+
+    const totalRounds = b.totalRounds || 0;
+    const currentRound = b.currentRound || 0;
+    const isCompleted = b.status === 'completed';
+
+    function getRound(r) {
+        const rd = b.rounds?.[String(r)];
+        if (!rd) return [];
+        return Array.isArray(rd) ? rd : Object.values(rd);
+    }
+    function getWinnerSide(r, i) {
+        const vA = (b.votes?.[`${r}_${i}_A`]||[]).length;
+        const vB = (b.votes?.[`${r}_${i}_B`]||[]).length;
+        if (vA > vB) return 'A';
+        if (vB > vA) return 'B';
+        return null;
+    }
+    function getRoundLabel(r) {
+        if (r === totalRounds - 1) return 'Final';
+        if (totalRounds > 2 && r === totalRounds - 2) return 'Semifinals';
+        if (totalRounds > 3 && r === totalRounds - 3) return 'Quarterfinals';
+        return 'Round ' + (r + 1);
+    }
+
+    const maxRound = isCompleted ? totalRounds - 1 : currentRound;
+    const columns = [];
+
+    for (let r = 0; r <= maxRound; r++) {
+        const matchups = getRound(r);
+        if (!matchups.length) continue;
+        const isActive = r === currentRound && !isCompleted;
+        const label = getRoundLabel(r);
+
+        const matchupsHTML = matchups.map((m, i) => {
+            const roundDone = r < currentRound || isCompleted;
+            const ws = roundDone ? getWinnerSide(r, i) : null;
+            const aWon = ws === 'A', bWon = ws === 'B';
+            const vA = (b.votes?.[`${r}_${i}_A`]||[]).length;
+            const vB = (b.votes?.[`${r}_${i}_B`]||[]).length;
+            return `<div style="background:var(--bg-white);border-radius:10px;padding:10px 12px;margin-bottom:8px;border:1px solid ${(aWon||bWon)?'rgba(255,193,7,0.35)':'var(--border-color)'};">
+                <div style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;background:${aWon?'rgba(255,193,7,0.12)':'transparent'};">
+                    <img src="${m.animeA?.image||''}" style="width:28px;height:40px;object-fit:cover;border-radius:3px;flex-shrink:0;opacity:${bWon?0.3:1};" onerror="this.style.display='none'">
+                    <span style="font-size:12px;font-weight:${aWon?800:500};color:${aWon?'var(--accent-yellow)':'var(--text-dark)'};flex:1;line-height:1.3;">${m.animeA?.title||'?'}</span>
+                    ${isActive ? `<span style="font-size:11px;color:var(--text-muted);flex-shrink:0;">${vA}</span>` : ''}
+                    ${aWon ? '<span style="flex-shrink:0;">🏆</span>' : ''}
+                </div>
+                <div style="text-align:center;font-size:10px;color:var(--text-muted);padding:3px 0;font-weight:700;letter-spacing:.5px;">VS</div>
+                <div style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;background:${bWon?'rgba(255,193,7,0.12)':'transparent'};">
+                    <img src="${m.animeB?.image||''}" style="width:28px;height:40px;object-fit:cover;border-radius:3px;flex-shrink:0;opacity:${aWon?0.3:1};" onerror="this.style.display='none'">
+                    <span style="font-size:12px;font-weight:${bWon?800:500};color:${bWon?'var(--accent-yellow)':'var(--text-dark)'};flex:1;line-height:1.3;">${m.animeB?.title||'?'}</span>
+                    ${isActive ? `<span style="font-size:11px;color:var(--text-muted);flex-shrink:0;">${vB}</span>` : ''}
+                    ${bWon ? '<span style="flex-shrink:0;">🏆</span>' : ''}
+                </div>
+            </div>`;
+        }).join('');
+
+        columns.push(`<div style="flex-shrink:0;width:220px;">
+            <div style="font-size:10px;font-weight:800;letter-spacing:1.2px;color:${isActive?'var(--accent-yellow)':'var(--text-muted)'};text-transform:uppercase;margin-bottom:10px;text-align:center;padding-top:2px;">${label}${isActive?' · Active':''}</div>
+            ${matchupsHTML}
+        </div>`);
+    }
+
+    const arrowSep = `<div style="flex-shrink:0;display:flex;align-items:flex-start;padding:0 6px;padding-top:38px;color:var(--text-muted);font-size:20px;">›</div>`;
+    let bracketHTML = columns.join(arrowSep);
+
+    if (b.champion) {
+        bracketHTML += arrowSep + `<div style="flex-shrink:0;width:140px;">
+            <div style="font-size:10px;font-weight:800;letter-spacing:1.2px;color:var(--accent-yellow);text-transform:uppercase;margin-bottom:10px;text-align:center;">Champion</div>
+            <div style="text-align:center;padding:14px 12px;background:rgba(255,193,7,0.1);border-radius:12px;border:2px solid var(--accent-yellow);">
+                <img src="${b.champion.image}" style="width:60px;height:84px;object-fit:cover;border-radius:6px;margin-bottom:8px;">
+                <div style="font-weight:800;font-size:13px;line-height:1.3;">${b.champion.title}</div>
+            </div>
+        </div>`;
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'bracket-view-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.78);display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;';
+    modal.innerHTML = `<div style="background:var(--bg-gray);border-radius:16px;width:100%;max-width:980px;padding:20px 22px;position:relative;margin:auto;" onclick="event.stopPropagation();">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;">
+            <div>
+                <div style="font-size:10px;font-weight:800;color:var(--accent-yellow);letter-spacing:1.2px;margin-bottom:3px;">🏆 BRACKET</div>
+                <div style="font-weight:800;font-size:20px;line-height:1.2;">${b.title}</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">by ${b.authorName||'Anonymous'} · ${isCompleted?'Completed':'Active — Round '+(currentRound+1)+' / '+totalRounds}</div>
+            </div>
+            <button onclick="document.getElementById('bracket-view-modal').remove()" style="background:var(--bg-gray-darker);border:none;border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:20px;line-height:1;color:var(--text-dark);flex-shrink:0;margin-left:12px;">×</button>
+        </div>
+        <div style="overflow-x:auto;padding-bottom:4px;">
+            <div style="display:flex;align-items:flex-start;gap:0;min-width:max-content;padding-bottom:8px;">
+                ${bracketHTML}
+            </div>
+        </div>
+    </div>`;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+};
+
 window._renderBracketCard = function(b, uid) {
     const isOwner = uid && b.uid === uid;
     const ago = b.timestamp?.toDate ? formatTimeAgo(b.timestamp.toDate()) : '';
     const currentRound = b.currentRound || 0;
-    const totalRounds = b.rounds?.length || 0;
+    const totalRounds = b.totalRounds || 0;
     const isCompleted = b.status === 'completed';
 
     let bodyHTML = '';
@@ -4555,47 +4958,82 @@ window._renderBracketCard = function(b, uid) {
             <div style="font-weight:800;font-size:18px;">${b.champion.title}</div>
         </div>`;
     } else {
-        const matchups = b.rounds?.[currentRound] || [];
-        bodyHTML = `<div style="font-size:12px;font-weight:700;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;">Round ${currentRound + 1} of ${totalRounds}</div>` +
-        matchups.map((m, mi) => {
-            const keyA = `${currentRound}_${mi}_A`, keyB = `${currentRound}_${mi}_B`;
-            const votesA = (b.votes?.[keyA] || []).length;
-            const votesB = (b.votes?.[keyB] || []).length;
-            const total = votesA + votesB;
-            const pctA = total > 0 ? Math.round(votesA / total * 100) : 50;
-            const pctB = 100 - pctA;
-            const myVote = uid ? ((b.votes?.[keyA]||[]).includes(uid) ? 'A' : (b.votes?.[keyB]||[]).includes(uid) ? 'B' : null) : null;
-            const voted = myVote !== null;
+        const matchups = b.rounds?.[String(currentRound)] || [];
+        const totalMatchups = matchups.length;
 
-            return `<div style="background:var(--bg-gray-darker);border-radius:12px;padding:12px;margin-bottom:10px;">
-                <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:10px;">
-                    <div style="text-align:center;">
-                        <img src="${m.animeA.image}" style="width:60px;height:84px;object-fit:cover;border-radius:6px;border:2px solid ${myVote==='A'?'var(--accent-yellow)':'transparent'};display:block;margin:0 auto 6px;">
-                        <div style="font-size:12px;font-weight:700;line-height:1.3;">${m.animeA.title}</div>
-                    </div>
-                    <div style="font-weight:900;font-size:18px;color:var(--text-muted);">VS</div>
-                    <div style="text-align:center;">
-                        <img src="${m.animeB.image}" style="width:60px;height:84px;object-fit:cover;border-radius:6px;border:2px solid ${myVote==='B'?'var(--accent-yellow)':'transparent'};display:block;margin:0 auto 6px;">
-                        <div style="font-size:12px;font-weight:700;line-height:1.3;">${m.animeB.title}</div>
-                    </div>
+        if (window._bracketMatchupIdx[b.id] === undefined) window._bracketMatchupIdx[b.id] = 0;
+        const mi = Math.min(window._bracketMatchupIdx[b.id], totalMatchups - 1);
+        const m = matchups[mi];
+
+        const keyA = `${currentRound}_${mi}_A`, keyB = `${currentRound}_${mi}_B`;
+        const votesA = (b.votes?.[keyA] || []).length;
+        const votesB = (b.votes?.[keyB] || []).length;
+        const total = votesA + votesB;
+        const pctA = total > 0 ? Math.round(votesA / total * 100) : 50;
+        const pctB = 100 - pctA;
+        const myVote = uid ? ((b.votes?.[keyA]||[]).includes(uid) ? 'A' : (b.votes?.[keyB]||[]).includes(uid) ? 'B' : null) : null;
+        const voted = myVote !== null;
+
+        const pv = window._bracketPendingVote[b.id];
+        const pending = (!voted && pv && pv.round === currentRound && pv.matchIdx === mi) ? pv.side : null;
+
+        const allVoted = uid && matchups.every((_, i) => {
+            const kA = `${currentRound}_${i}_A`, kB = `${currentRound}_${i}_B`;
+            return (b.votes?.[kA]||[]).includes(uid) || (b.votes?.[kB]||[]).includes(uid);
+        });
+
+        const dots = matchups.map((_, i) => {
+            const kA = `${currentRound}_${i}_A`, kB = `${currentRound}_${i}_B`;
+            const hasVoted = uid && ((b.votes?.[kA]||[]).includes(uid) || (b.votes?.[kB]||[]).includes(uid));
+            const isCurrent = i === mi;
+            return `<div onclick="window._bracketMatchupIdx['${b.id}']=${i};window._renderBracketsFeed();" style="width:${isCurrent?20:8}px;height:8px;border-radius:4px;cursor:pointer;flex-shrink:0;transition:all .2s;background:${isCurrent?'var(--accent-yellow)':hasVoted?'rgba(255,193,7,0.45)':'var(--border-color)'};"></div>`;
+        }).join('');
+
+        const highlightA = voted ? myVote === 'A' : pending === 'A';
+        const highlightB = voted ? myVote === 'B' : pending === 'B';
+        const dimA = voted ? myVote === 'B' : pending === 'B';
+        const dimB = voted ? myVote === 'A' : pending === 'A';
+
+        const btnBase = 'border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;padding:8px 14px;';
+        const prevBtn = mi > 0
+            ? `<button onclick="window._bracketMatchupIdx['${b.id}']=${mi-1};window._renderBracketsFeed();" style="${btnBase}background:var(--bg-gray-darker);color:var(--text-muted);">← Prev</button>`
+            : `<div></div>`;
+        const confirmBtn = pending
+            ? `<button onclick="window.voteInBracket('${b.id}',${currentRound},${mi},'${pending}')" style="${btnBase}background:var(--accent-yellow);color:#111;">Confirm Vote ✓</button>`
+            : null;
+        const nextBtn = mi < totalMatchups - 1
+            ? `<button onclick="window._bracketMatchupIdx['${b.id}']=${mi+1};window._renderBracketsFeed();" style="${btnBase}background:${voted?'var(--accent-yellow)':'var(--bg-gray-darker)'};color:${voted?'#111':'var(--text-muted)'};">Next →</button>`
+            : (allVoted && isOwner
+                ? `<button onclick="window.advanceBracket('${b.id}')" style="${btnBase}background:var(--accent-yellow);color:#111;">Next Round →</button>`
+                : `<div></div>`);
+
+        bodyHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                <div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;">Round ${currentRound + 1} / ${totalRounds}</div>
+                <div style="font-size:11px;font-weight:700;color:var(--text-muted);">Match ${mi + 1} / ${totalMatchups}</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 32px 1fr;gap:10px;align-items:center;margin-bottom:12px;">
+                <div onclick="${!voted ? `window.selectBracketVote('${b.id}',${currentRound},${mi},'A')` : ''}"
+                    style="text-align:center;cursor:${!voted?'pointer':'default'};background:${highlightA?'rgba(255,193,7,0.13)':'var(--bg-gray-darker)'};border:2px solid ${highlightA?'var(--accent-yellow)':'transparent'};border-radius:12px;padding:14px 10px;opacity:${dimA?'0.45':'1'};transition:opacity .2s,border-color .2s,background .2s;">
+                    <img src="${m.animeA.image}" style="width:80px;height:112px;object-fit:cover;border-radius:8px;display:block;margin:0 auto 8px;">
+                    <div style="font-size:12px;font-weight:800;line-height:1.3;">${m.animeA.title}</div>
+                    ${voted ? `<div style="font-size:14px;font-weight:800;margin-top:6px;color:${myVote==='A'?'var(--accent-yellow)':'var(--text-muted)'};">${pctA}%</div>` : ''}
                 </div>
-                ${voted
-                    ? `<div style="margin-bottom:6px;">
-                        <div style="display:flex;height:10px;border-radius:5px;overflow:hidden;margin-bottom:4px;">
-                            <div style="width:${pctA}%;background:${myVote==='A'?'var(--accent-yellow)':'#2196F3'};transition:width .4s;"></div>
-                            <div style="width:${pctB}%;background:${myVote==='B'?'var(--accent-yellow)':'#e53935'};transition:width .4s;"></div>
-                        </div>
-                        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);">
-                            <span>${pctA}% (${votesA})</span><span>${pctB}% (${votesB})</span>
-                        </div>
-                    </div>`
-                    : `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                        <button onclick="window.voteInBracket('${b.id}',${currentRound},${mi},'A')" style="padding:9px;border:none;border-radius:8px;background:var(--accent-yellow);color:#111;font-weight:700;font-size:13px;cursor:pointer;">Vote ${m.animeA.title.split(' ')[0]}</button>
-                        <button onclick="window.voteInBracket('${b.id}',${currentRound},${mi},'B')" style="padding:9px;border:none;border-radius:8px;background:var(--bg-gray);color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;border:1px solid var(--border-color);">Vote ${m.animeB.title.split(' ')[0]}</button>
-                    </div>`}
+                <div style="font-weight:900;font-size:15px;color:var(--text-muted);text-align:center;">VS</div>
+                <div onclick="${!voted ? `window.selectBracketVote('${b.id}',${currentRound},${mi},'B')` : ''}"
+                    style="text-align:center;cursor:${!voted?'pointer':'default'};background:${highlightB?'rgba(255,193,7,0.13)':'var(--bg-gray-darker)'};border:2px solid ${highlightB?'var(--accent-yellow)':'transparent'};border-radius:12px;padding:14px 10px;opacity:${dimB?'0.45':'1'};transition:opacity .2s,border-color .2s,background .2s;">
+                    <img src="${m.animeB.image}" style="width:80px;height:112px;object-fit:cover;border-radius:8px;display:block;margin:0 auto 8px;">
+                    <div style="font-size:12px;font-weight:800;line-height:1.3;">${m.animeB.title}</div>
+                    ${voted ? `<div style="font-size:14px;font-weight:800;margin-top:6px;color:${myVote==='B'?'var(--accent-yellow)':'var(--text-muted)'};">${pctB}%</div>` : ''}
+                </div>
+            </div>
+            ${voted ? `<div style="height:5px;border-radius:3px;overflow:hidden;background:var(--border-color);margin-bottom:14px;">
+                <div style="height:100%;width:${pctA}%;background:${myVote==='A'?'var(--accent-yellow)':'#888'};transition:width .4s;"></div>
+            </div>` : '<div style="height:19px;margin-bottom:14px;"></div>'}
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <div style="display:flex;gap:5px;align-items:center;">${dots}</div>
+                <div style="display:flex;gap:8px;align-items:center;">${prevBtn}${confirmBtn || nextBtn}</div>
             </div>`;
-        }).join('') +
-        (isOwner ? `<button onclick="window.advanceBracket('${b.id}')" class="action-btn" style="width:100%;justify-content:center;margin-top:4px;background:var(--accent-yellow);color:#111;font-weight:700;">Advance to Next Round →</button>` : '');
     }
 
     return `<div style="background:var(--bg-gray);border-radius:14px;padding:16px;margin-bottom:16px;">
@@ -4611,33 +5049,59 @@ window._renderBracketCard = function(b, uid) {
     </div>`;
 };
 
+let _bracketSearchTimer = null, _bracketSearchReqId = 0;
 window.searchBracketAnime = async function() {
+    clearTimeout(_bracketSearchTimer);
     const q = document.getElementById('bracket-anime-search').value.trim();
     const results = document.getElementById('bracket-anime-results');
     if (q.length < 2) { results.style.display = 'none'; return; }
     results.style.display = 'block';
     results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;">Searching...</div>';
-    try {
-        const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=6&type=tv`);
-        const { data } = await res.json();
-        window._bracketSearchItems = data || [];
-        results.innerHTML = (data||[]).map((a, i) => {
-            const title = a.title_english || a.title;
-            return `<div onclick="window.addAnimeToBracket(${i})" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--bg-gray);" onmouseover="this.style.background='var(--bg-gray)'" onmouseout="this.style.background=''">
-                <img src="${a.images.jpg.image_url}" style="width:32px;height:44px;object-fit:cover;border-radius:4px;flex-shrink:0;">
-                <span style="font-size:13px;font-weight:600;">${title}</span>
-            </div>`;
-        }).join('') || '<div style="padding:10px;color:var(--text-muted);font-size:13px;">No results.</div>';
-    } catch(e) { results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;">Search failed.</div>'; }
+    _bracketSearchTimer = setTimeout(async () => {
+        const reqId = ++_bracketSearchReqId;
+        try {
+            const q_lc = q.toLowerCase();
+            const allBw = [...(BW_NRT_CHARS||[]), ...(BW_OP_CHARS||[]), ...(BW_BLC_CHARS||[]), ...(BW_DB_CHARS||[])];
+            const seen = new Set();
+            const bwMatches = allBw.filter(c => {
+                if (seen.has(c.id)) return false;
+                seen.add(c.id);
+                return c.name.toLowerCase().includes(q_lc) && c.img;
+            }).slice(0, 5).map(c => ({ _bw: true, mal_id: `bw_${c.id}`, name: c.name, img: c.img }));
+
+            const res = await fetch(`https://api.jikan.moe/v4/characters?q=${encodeURIComponent(q)}&limit=8`);
+            const { data } = await res.json();
+            if (reqId !== _bracketSearchReqId) return;
+
+            window._bracketSearchItems = [...bwMatches, ...(data || [])];
+
+            const bwHTML = bwMatches.map((c, i) =>
+                `<div onclick="window.addAnimeToBracket(${i})" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-left:2px solid var(--accent-yellow);" onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background=''">
+                    <img src="${c.img}" style="width:32px;height:44px;object-fit:cover;border-radius:4px;flex-shrink:0;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:600;">${c.name}</div>
+                        <div style="font-size:11px;color:var(--accent-yellow);">WeeBee</div>
+                    </div>
+                </div>`).join('');
+
+            const jikanHTML = (data||[]).map((a, i) =>
+                `<div onclick="window.addAnimeToBracket(${bwMatches.length + i})" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--bg-gray-darker);" onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background=''">
+                    <img src="${a.images?.jpg?.image_url||''}" style="width:32px;height:44px;object-fit:cover;border-radius:4px;flex-shrink:0;">
+                    <span style="font-size:13px;font-weight:600;">${a.name}</span>
+                </div>`).join('');
+
+            results.innerHTML = (bwHTML + jikanHTML) || '<div style="padding:10px;color:var(--text-muted);font-size:13px;">No results.</div>';
+        } catch(e) { if (reqId === _bracketSearchReqId) results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;">Search failed.</div>'; }
+    }, 300);
 };
 
 window._bracketSearchItems = [];
 window.addAnimeToBracket = function(idx) {
     const a = window._bracketSearchItems[idx];
     if (!a) return;
-    const title = a.title_english || a.title;
-    const image = a.images.jpg.image_url;
-    const mal_id = a.mal_id;
+    const mal_id = a._bw ? a.mal_id : a.mal_id;
+    const title = a.name;
+    const image = a._bw ? a.img : (a.images?.jpg?.image_url || '');
     if (window._bracketAnimePool.some(x => x.mal_id === mal_id)) return;
     window._bracketAnimePool.push({ mal_id, title, image });
     document.getElementById('bracket-anime-search').value = '';
@@ -4657,7 +5121,133 @@ window._renderBracketPool = function() {
             <button onclick="window._bracketAnimePool.splice(${i},1); window._renderBracketPool();" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;margin-left:2px;font-size:16px;line-height:1;">×</button>
         </div>`
     ).join('');
-    if (label) label.innerText = count < 4 ? `Add ${4 - count} more (min 4, even number)` : count % 2 !== 0 ? 'Add 1 more (must be even)' : `${count} anime — ready to start!`;
+    const isPow2 = count >= 4 && (count & (count - 1)) === 0;
+    const nextPow2 = count < 4 ? 4 : Math.pow(2, Math.ceil(Math.log2(count + 1)));
+    if (label) label.innerText = isPow2 ? `${count} characters — ready to start!` : `Need ${nextPow2 - count} more (brackets require 4, 8, or 16)`;
+};
+
+window.toggleBracketCreate = function() {
+    const b = document.getElementById('bracket-create-body');
+    const opening = b.style.display === 'none';
+    b.style.display = opening ? 'block' : 'none';
+    if (opening) {
+        window.renderBuiltinBracketTemplates();
+        window.loadBracketCommunityTemplates();
+    }
+};
+
+window.switchBracketTab = function(event, tab) {
+    document.getElementById('bracket-tab-templates').style.display = tab === 'templates' ? 'block' : 'none';
+    document.getElementById('bracket-tab-custom').style.display   = tab === 'custom'    ? 'block' : 'none';
+    document.getElementById('bracket-tab-btn-templates').classList.toggle('active', tab === 'templates');
+    document.getElementById('bracket-tab-btn-custom').classList.toggle('active', tab === 'custom');
+};
+
+window._getBracketTemplates = function() {
+    if (window._bracketTemplateCache) return window._bracketTemplateCache;
+    const bwc = (arr, id, pfx) => { const c = arr.find(x => x.id === id); return c ? { title: c.name, image: c.img, mal_id: `bwbt_${pfx}_${id}` } : null; };
+    const nrt = id => bwc(BW_NRT_CHARS, id, 'nrt');
+    const op  = id => bwc(BW_OP_CHARS,  id, 'op');
+    const blc = id => bwc(BW_BLC_CHARS, id, 'blc');
+    const db  = id => bwc(BW_DB_CHARS,  id, 'db');
+    window._bracketTemplateCache = [
+        {
+            id: 'bwbt_goat',
+            title: 'The GOAT Debate',
+            description: 'Who is the greatest anime character of all time?',
+            items: [db('goku'), op('luffy'), nrt('naruto'), blc('ichigo'), db('vegeta'), op('zoro'), nrt('madara'), blc('aizen')].filter(Boolean)
+        },
+        {
+            id: 'bwbt_villains',
+            title: 'Greatest Villain',
+            description: 'The most iconic antagonists in anime.',
+            items: [nrt('madara'), blc('aizen'), db('frieza'), op('blackbeard'), nrt('orochimaru'), db('cell'), op('doflamingo'), blc('ulquiorra')].filter(Boolean)
+        },
+        {
+            id: 'bwbt_rivals',
+            title: 'Best Rival',
+            description: 'The most iconic rivals and foils.',
+            items: [nrt('sasuke'), op('zoro'), db('vegeta'), blc('byakuya'), nrt('itachi'), op('mihawk'), db('frieza'), blc('grimmjow')].filter(Boolean)
+        },
+        {
+            id: 'bwbt_aura',
+            title: 'Top Aura Farmer',
+            description: 'Who has the most drip and presence?',
+            items: [op('shanks'), nrt('itachi'), blc('aizen'), nrt('minato'), op('roger'), db('beerus'), blc('ulquiorra'), nrt('madara')].filter(Boolean)
+        },
+        {
+            id: 'bwbt_sensei',
+            title: 'Best Mentor',
+            description: 'The greatest teachers and guides in anime.',
+            items: [nrt('jiraiya'), op('rayleigh'), db('roshi'), blc('urahara'), nrt('kakashi'), op('shanks'), db('piccolo'), blc('yoruichi')].filter(Boolean)
+        }
+    ];
+    return window._bracketTemplateCache;
+};
+
+window.renderBuiltinBracketTemplates = function() {
+    const el = document.getElementById('bracket-builtin-grid');
+    if (!el) return;
+    const templates = window._getBracketTemplates();
+    el.innerHTML = templates.map(t => {
+        const imgs = t.items.slice(0, 4).map(it => `<img src="${it.image}" style="flex:1;min-width:0;object-fit:cover;height:52px;" onerror="this.style.display='none'">`).join('');
+        return `<div onclick="window.useBracketTemplate('${t.id}',true)" style="background:var(--bg-gray-darker);border-radius:10px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='transparent'">
+            <div style="display:flex;height:52px;overflow:hidden;">${imgs}</div>
+            <div style="padding:8px 10px;">
+                <div style="font-weight:700;font-size:13px;line-height:1.3;">${t.title}</div>
+                <div style="font-size:11px;color:var(--accent-yellow);margin-top:2px;font-weight:600;">${t.items.length} chars · WeeBee ⭐</div>
+            </div>
+        </div>`;
+    }).join('');
+};
+
+window._bracketCommunityTemplates = [];
+
+window.loadBracketCommunityTemplates = async function() {
+    const el = document.getElementById('bracket-community-grid');
+    if (!el) return;
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;text-align:center;">Loading...</div>';
+    try {
+        const snap = await getDocs(query(collection(db, 'bracket_templates'), orderBy('timestamp', 'desc'), limit(50)));
+        window._bracketCommunityTemplates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        window.filterBracketTemplates(document.getElementById('bracket-template-search')?.value || '');
+    } catch(e) {
+        window._bracketCommunityTemplates = [];
+        window.filterBracketTemplates('');
+    }
+};
+
+window.filterBracketTemplates = function(q) {
+    const el = document.getElementById('bracket-community-grid');
+    if (!el) return;
+    const lq = q.toLowerCase().trim();
+    const list = lq ? window._bracketCommunityTemplates.filter(t => t.title?.toLowerCase().includes(lq) || t.authorName?.toLowerCase().includes(lq)) : window._bracketCommunityTemplates;
+    if (!list.length) {
+        el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;text-align:center;">No community templates yet — create one!</div>';
+        return;
+    }
+    el.innerHTML = list.map(t => {
+        const imgs = (t.items||[]).slice(0, 4).map(it => `<img src="${it.image}" style="width:30px;height:42px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.display='none'">`).join('');
+        const ago = t.timestamp?.toDate ? formatTimeAgo(t.timestamp.toDate()) : '';
+        return `<div onclick="window.useBracketTemplate('${t.id}',false)" style="display:flex;align-items:center;gap:10px;background:var(--bg-gray-darker);border-radius:10px;padding:10px;cursor:pointer;border:2px solid transparent;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='transparent'">
+            <div style="display:flex;gap:3px;flex-shrink:0;">${imgs}</div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.title}</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${(t.items||[]).length} chars · ${t.authorName||'Anonymous'} · ${ago}</div>
+            </div>
+        </div>`;
+    }).join('');
+};
+
+window.useBracketTemplate = function(id, isBuiltIn) {
+    const t = isBuiltIn
+        ? window._getBracketTemplates().find(x => x.id === id)
+        : window._bracketCommunityTemplates.find(x => x.id === id);
+    if (!t) return;
+    document.getElementById('bracket-title-input').value = t.title;
+    window._bracketAnimePool = (t.items || []).map(item => ({ ...item }));
+    window._renderBracketPool();
+    window.switchBracketTab({ currentTarget: document.getElementById('bracket-tab-btn-custom') }, 'custom');
 };
 
 window.createBracket = async function() {
@@ -4665,8 +5255,8 @@ window.createBracket = async function() {
     const title = document.getElementById('bracket-title-input').value.trim();
     if (!title) return alert('Please enter a bracket title.');
     const pool = window._bracketAnimePool;
-    if (pool.length < 4) return alert('Add at least 4 anime.');
-    if (pool.length % 2 !== 0) return alert('You need an even number of anime.');
+    if (pool.length < 4) return alert('Add at least 4 characters.');
+    if ((pool.length & (pool.length - 1)) !== 0) return alert('Bracket requires exactly 4, 8, or 16 characters.');
     const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid)).catch(() => null);
     const displayName = pd?.data()?.displayName || auth.currentUser.displayName;
     const avatar = pd?.data()?.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
@@ -4674,11 +5264,17 @@ window.createBracket = async function() {
     const round0 = [];
     for (let i = 0; i < shuffled.length; i += 2) round0.push({ animeA: shuffled[i], animeB: shuffled[i+1] });
     const totalRounds = Math.ceil(Math.log2(pool.length));
-    const rounds = [round0, ...Array(totalRounds - 1).fill([])];
+    const saveAsTemplate = document.getElementById('bracket-save-template')?.checked;
     try {
-        const data = { uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar, title, rounds, currentRound: 0, votes: {}, status: 'voting', champion: null, timestamp: new Date() };
+        const data = { uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar, title, rounds: { "0": round0 }, totalRounds, currentRound: 0, votes: {}, status: 'voting', champion: null, timestamp: new Date() };
         const ref = await addDoc(collection(db, 'brackets'), data);
+        if (saveAsTemplate) {
+            const tmplData = { uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar, title, items: pool.map(p => ({ title: p.title, image: p.image, mal_id: p.mal_id })), timestamp: serverTimestamp(), likes: [], dislikes: [] };
+            const tmplRef = await addDoc(collection(db, 'bracket_templates'), tmplData);
+            window._bracketCommunityTemplates.unshift({ id: tmplRef.id, ...tmplData, timestamp: { toDate: () => new Date() } });
+        }
         document.getElementById('bracket-title-input').value = '';
+        document.getElementById('bracket-save-template').checked = false;
         window._bracketAnimePool = [];
         window._renderBracketPool();
         document.getElementById('bracket-create-body').style.display = 'none';
@@ -4689,6 +5285,7 @@ window.createBracket = async function() {
 
 window.voteInBracket = async function(bracketId, round, matchIdx, side) {
     if (!auth.currentUser) return window.openAuthModal();
+    delete window._bracketPendingVote[bracketId];
     const uid = auth.currentUser.uid;
     const b = window._bracketsList.find(x => x.id === bracketId);
     if (!b) return;
@@ -4698,6 +5295,14 @@ window.voteInBracket = async function(bracketId, round, matchIdx, side) {
     const key = side === 'A' ? keyA : keyB;
     b.votes[key] = [...(b.votes[key]||[]), uid];
     window._renderBracketsFeed();
+    // Auto-advance to next matchup after a short pause so the result is visible
+    const totalMatchups = (b.rounds?.[String(round)] || []).length;
+    if (matchIdx < totalMatchups - 1) {
+        setTimeout(() => {
+            window._bracketMatchupIdx[bracketId] = matchIdx + 1;
+            window._renderBracketsFeed();
+        }, 1400);
+    }
     try {
         await updateDoc(doc(db, 'brackets', bracketId), { [`votes.${key}`]: arrayUnion(uid) });
     } catch(e) {
@@ -4712,7 +5317,7 @@ window.advanceBracket = async function(bracketId) {
     const b = window._bracketsList.find(x => x.id === bracketId);
     if (!b) return;
     const round = b.currentRound || 0;
-    const matchups = b.rounds[round];
+    const matchups = b.rounds[String(round)];
     const winners = matchups.map((m, mi) => {
         const votesA = (b.votes?.[`${round}_${mi}_A`]||[]).length;
         const votesB = (b.votes?.[`${round}_${mi}_B`]||[]).length;
@@ -4728,14 +5333,16 @@ window.advanceBracket = async function(bracketId) {
         return;
     }
     const nextRound = [];
-    for (let i = 0; i < winners.length; i += 2) nextRound.push({ animeA: winners[i], animeB: winners[i+1] });
+    for (let i = 0; i < winners.length; i += 2) {
+        if (winners[i] && winners[i+1]) nextRound.push({ animeA: winners[i], animeB: winners[i+1] });
+    }
     const nextIdx = round + 1;
-    b.rounds[nextIdx] = nextRound;
+    if (!b.rounds) b.rounds = {};
+    b.rounds[String(nextIdx)] = nextRound;
     b.currentRound = nextIdx;
+    window._bracketMatchupIdx[bracketId] = 0;
     try {
-        const updatedRounds = [...b.rounds];
-        updatedRounds[nextIdx] = nextRound;
-        await updateDoc(doc(db, 'brackets', bracketId), { rounds: updatedRounds, currentRound: nextIdx });
+        await updateDoc(doc(db, 'brackets', bracketId), { [`rounds.${nextIdx}`]: nextRound, currentRound: nextIdx });
         window._renderBracketsFeed();
     } catch(e) { alert('Failed to advance: ' + e.message); }
 };

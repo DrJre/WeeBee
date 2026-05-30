@@ -436,8 +436,8 @@
                         <button class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-polls'); window.loadPolls();">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">bar_chart</span> Polls
                         </button>
-                        <button class="detail-tab community-tab-btn" disabled style="opacity:0.4; cursor:not-allowed;">
-                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">emoji_events</span> Brackets <span style="font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; vertical-align:middle;">(Soon)</span>
+                        <button class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-brackets'); window.loadBrackets();">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">emoji_events</span> Brackets
                         </button>
                     </div>
 
@@ -666,12 +666,52 @@
                             </div>
                         </div>
 
-                        <!-- COMING SOON -->
-                        <div style="text-align:center; padding:60px 20px; color:var(--text-muted);">
-                            <span class="material-symbols-outlined" style="font-size:64px; display:block; margin-bottom:16px; opacity:0.4;">emoji_events</span>
-                            <div style="font-size:22px; font-weight:800; margin-bottom:8px; color:var(--text-dark);">Coming Soon</div>
-                            <div style="font-size:15px; max-width:340px; margin:0 auto;">Tournament-style brackets are on their way. Pit your favorite anime head-to-head and let the community vote for a champion.</div>
+                        <!-- CREATE BRACKET FORM -->
+                        <div style="background:var(--bg-gray); border-radius:14px; padding:16px; margin-bottom:20px;">
+                            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0;">
+                                <div style="font-weight:700; font-size:15px;">🏆 Create a Bracket</div>
+                                <button onclick="window.toggleBracketCreate()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:22px;line-height:1;padding:0 4px;">+</button>
+                            </div>
+                            <div id="bracket-create-body" style="display:none; margin-top:14px;">
+                                <!-- Tab bar -->
+                                <div style="display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid var(--border-color);">
+                                    <button id="bracket-tab-btn-templates" class="p-tab active" onclick="window.switchBracketTab(event,'templates')" style="flex:1;">Templates</button>
+                                    <button id="bracket-tab-btn-custom" class="p-tab" onclick="window.switchBracketTab(event,'custom')" style="flex:1;">Custom</button>
+                                </div>
+
+                                <!-- Templates panel -->
+                                <div id="bracket-tab-templates">
+                                    <div style="display:none;font-size:10px;font-weight:800;color:var(--accent-yellow);letter-spacing:1.2px;margin-bottom:10px;">⭐ WEEBEE ORIGINALS</div>
+                                    <div id="bracket-builtin-grid" style="display:none;"></div>
+                                    <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1.2px;margin-bottom:8px;">👥 COMMUNITY</div>
+                                    <input type="text" id="bracket-template-search" placeholder="Search community templates..." oninput="window.filterBracketTemplates(this.value)" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;box-sizing:border-box;margin-bottom:10px;">
+                                    <div id="bracket-community-grid" style="max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;"></div>
+                                </div>
+
+                                <!-- Custom panel -->
+                                <div id="bracket-tab-custom" style="display:none;">
+                                    <input id="bracket-title-input" type="text" placeholder="Bracket title... e.g. Best Shonen Rival" maxlength="80" style="width:100%;padding:11px 14px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:14px;box-sizing:border-box;margin-bottom:10px;">
+                                    <div style="position:relative;margin-bottom:10px;">
+                                        <input id="bracket-anime-search" type="text" placeholder="Search for a character..." oninput="window.searchBracketAnime()" style="width:100%;padding:11px 14px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:14px;box-sizing:border-box;">
+                                        <div id="bracket-anime-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;z-index:50;max-height:240px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,0.12);"></div>
+                                    </div>
+                                    <div id="bracket-anime-pool" style="display:flex;flex-wrap:wrap;gap:8px;min-height:20px;margin-bottom:10px;"></div>
+                                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                                        <div>
+                                            <div id="bracket-count-label" style="font-size:13px;color:var(--text-muted);">Add 4 or more characters (even number)</div>
+                                            <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-muted);margin-top:6px;cursor:pointer;">
+                                                <input type="checkbox" id="bracket-save-template" style="accent-color:var(--accent-yellow);">
+                                                Save as Community Template
+                                            </label>
+                                        </div>
+                                        <button onclick="window.createBracket()" class="submit-btn">🏆 Create Bracket</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+
+                        <!-- FEED -->
+                        <div id="brackets-feed"></div>
 
                     </div><!-- /community-tab-brackets -->
 
@@ -838,15 +878,19 @@
                 
                         <div class="profile-main-feed">
                             <div class="profile-tabs">
-                                <button class="p-tab active" onclick="switchProfileTab(event, 'p-reviews')">Reviews</button>
-                                <button class="p-tab" onclick="switchProfileTab(event, 'p-tierlists')">Tier Lists</button>
+                                <button class="p-tab active" onclick="switchProfileTab(event, 'p-feed')">Feed</button>
+                                <button class="p-tab" onclick="switchProfileTab(event, 'p-reviews')">Reviews</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-achievements')">Achievements</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-friends')">Friends</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-social')">Following</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-followers')">Followers</button>
                             </div>
 
-                            <div id="p-reviews" class="p-tab-content active">
+                            <div id="p-feed" class="p-tab-content active">
+                                <div id="user-profile-feed"></div>
+                            </div>
+
+                            <div id="p-reviews" class="p-tab-content" style="display:none;">
                                 <div id="user-reviews-feed" class="review-feed"></div>
                             </div>
 
@@ -866,10 +910,6 @@
 
                             <div id="p-achievements" class="p-tab-content" style="display:none;">
                                 <div id="achievements-grid-container"></div>
-                            </div>
-
-                            <div id="p-tierlists" class="p-tab-content" style="display:none;">
-                                <div id="tier-lists-container"></div>
                             </div>
 
                             <div id="p-friends" class="p-tab-content" style="display:none;">
@@ -1767,6 +1807,6 @@
 
     <canvas id="bee-trail-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99999;display:none;"></canvas>
 
-    <script type="module" src="app.js?v=138"></script>
+    <script type="module" src="app.js?v=155"></script>
 </body>
 </html>
