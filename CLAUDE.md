@@ -5,6 +5,28 @@
 
 ## Next Patch Notes
 
+🗃️ WeeBee Character Database
+WeeBee now has its own character database — 800+ characters pulled from the top 50 most popular anime, each with a name, image, and series. Character searches in tier lists and brackets now hit this local database first (instant results), fall back to AniList for anything not found, and auto-save new results for next time. MAL is still used for all anime data; only character lookups have moved to AniList.
+
+⭐ WeeBee Original Templates
+- 5 bracket tournament templates: Top Aura Farmer, The GOAT Debate, Greatest Villain, Best Swordsman, Best Sensei — each with 16 characters pre-loaded
+- 5 tier list templates: Power Rankings, Shonen Protagonists, Best Rivals, Greatest Villains, Best Sensei — each with 20+ characters ready to rank
+- Templates appear in the WeeBee Originals section when creating a bracket or tier list
+
+🔍 Smarter Character Search
+- When building a character tier list with a source anime selected, search results now prioritize characters from that anime — type "Guy" in a Naruto tier list and Might Guy appears first
+- "Narrator" and other non-character entries are filtered out of all results
+- Source anime character pools are now capped at 50 (main cast first) instead of loading hundreds
+
+🃏 Bracket Templates
+Bracket tournament templates now feature 16 characters each, giving you a full bracket right out of the box.
+
+🟣 Tier List Card Color
+Tier list posts on the feed now use a purple-blue tint instead of solid blue, matching the tier list page banner color.
+
+🐛 Like Count Fix
+Liking a tier list post on the Community page now correctly updates the count shown on screen. (The same post appearing in multiple feeds simultaneously was causing the wrong counter to update.)
+
 🐝 Followers Tab
 - The Followers count on user profiles is now clickable — tap it to jump straight to the Followers tab
 - New Followers tab on every profile showing the full list of followers, each clickable to visit their profile

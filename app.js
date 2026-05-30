@@ -3691,6 +3691,7 @@ window.openTierListCreator = function() {
 window._communityTemplates = [];
 
 window.loadCommunityTemplates = async function() {
+    window.renderBuiltinTierTemplates();
     const el = document.getElementById('tl-template-results');
     if (!el) return;
     el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;">Loading templates...</div>';
@@ -3797,6 +3798,113 @@ window.useAsTemplate = async function(id) {
     } catch(e) { console.error(e); alert('Could not load template.'); }
 };
 
+// ─── WeeBee Built-in Tier List Templates ──────────────────────────────────────
+window._getTierListTemplates = function() {
+    if (window._tlTemplateCache) return window._tlTemplateCache;
+    const wb = (name, hint) => {
+        if (!window.WB_CHARACTERS) return null;
+        const nl = name.toLowerCase(), hl = hint ? hint.toLowerCase() : null;
+        const c = (hl ? window.WB_CHARACTERS.find(c => c.name.toLowerCase().includes(nl) && c.anime.toLowerCase().includes(hl)) : null)
+            || window.WB_CHARACTERS.find(c => c.name.toLowerCase().includes(nl));
+        return c ? { id: `wb_${c.name}`, title: c.name, image: c.image, animeTitle: c.anime } : null;
+    };
+    window._tlTemplateCache = [
+        {
+            id: 'tlt_power', title: 'Power Rankings', type: 'characters',
+            items: [
+                wb('Gojo', 'Jujutsu'), wb('Sukuna', 'Jujutsu'), wb('Saitama', 'Punch'), wb('Garou', 'Punch'),
+                wb('Meruem', 'Hunter'), wb('Netero', 'Hunter'), wb('Madara', 'Naruto'), wb('Aizen', 'Bleach'),
+                wb('Tatsumaki', 'Punch'), wb('Escanor', 'Seven'), wb('Eren Yeager', 'Titan'), wb('Levi Ackerman', 'Titan'),
+                wb('Muzan', 'Demon Slayer'), wb('All Might', 'Hero'), wb('Pain', 'Naruto'), wb('Itachi', 'Naruto'),
+                wb('Shanks', 'Piece'), wb('Whitebeard', 'Piece'), wb('Meliodas', 'Seven'), wb('Ban', 'Seven'),
+                wb('Kenpachi', 'Bleach'), wb('Lelouch', 'Geass'), wb('Killua', 'Hunter'), wb('Kakashi', 'Naruto'),
+            ].filter(Boolean)
+        },
+        {
+            id: 'tlt_protagonists', title: 'Shonen Protagonists', type: 'characters',
+            items: [
+                wb('Naruto Uzumaki', 'Naruto'), wb('Monkey D. Luffy', 'Piece'), wb('Ichigo Kurosaki', 'Bleach'),
+                wb('Izuku Midoriya', 'Hero'), wb('Eren Yeager', 'Titan'), wb('Tanjiro Kamado', 'Demon Slayer'),
+                wb('Gon Freecss', 'Hunter'), wb('Yuji Itadori', 'Jujutsu'), wb('Denji', 'Chainsaw'),
+                wb('Asta', 'Black Clover'), wb('Edward Elric', 'Fullmetal'), wb('Lelouch', 'Geass'),
+                wb('Mob', 'Mob Psycho'), wb('Subaru', 'Re:Zero'), wb('Senku', 'Stone'), wb('Thorfinn', 'Vinland'),
+                wb('Nagisa', 'Assassination'), wb('Shinichi', 'Parasyte'), wb('Kazuma', 'Konosuba'), wb('Hiro', 'DARLING'),
+            ].filter(Boolean)
+        },
+        {
+            id: 'tlt_rivals', title: 'Best Rivals', type: 'characters',
+            items: [
+                wb('Sasuke Uchiha', 'Naruto'), wb('Roronoa Zoro', 'Piece'), wb('Katsuki Bakugo', 'Hero'),
+                wb('Killua', 'Hunter'), wb('Byakuya', 'Bleach'), wb('Todoroki', 'Hero'),
+                wb('Hisoka', 'Hunter'), wb('Itachi', 'Naruto'), wb('Grimmjow', 'Bleach'),
+                wb('Reiner', 'Titan'), wb('Askeladd', 'Vinland'), wb('Levi Ackerman', 'Titan'),
+                wb('Meruem', 'Hunter'), wb('Pain', 'Naruto'), wb('Sukuna', 'Jujutsu'), wb('Doflamingo', 'Piece'),
+                wb('Garou', 'Punch'), wb('Ban', 'Seven'), wb('Erwin', 'Titan'), wb('Kenpachi', 'Bleach'),
+            ].filter(Boolean)
+        },
+        {
+            id: 'tlt_villains', title: 'Greatest Villains', type: 'characters',
+            items: [
+                wb('Madara', 'Naruto'), wb('Aizen', 'Bleach'), wb('Muzan', 'Demon Slayer'), wb('Light Yagami', 'Death Note'),
+                wb('Meruem', 'Hunter'), wb('Makima', 'Chainsaw'), wb('Doflamingo', 'Piece'), wb('Shigaraki', 'Hero'),
+                wb('Pain', 'Naruto'), wb('Ulquiorra', 'Bleach'), wb('Hisoka', 'Hunter'), wb('Blackbeard', 'Piece'),
+                wb('Orochimaru', 'Naruto'), wb('Akaza', 'Demon Slayer'), wb('Mahito', 'Jujutsu'), wb('Garou', 'Punch'),
+                wb('Reiner', 'Titan'), wb('Annie', 'Titan'), wb('Griffith'), wb('Askeladd', 'Vinland'),
+            ].filter(Boolean)
+        },
+        {
+            id: 'tlt_sensei', title: 'Best Sensei', type: 'characters',
+            items: [
+                wb('Kakashi', 'Naruto'), wb('Jiraiya', 'Naruto'), wb('Koro', 'Assassination'), wb('All Might', 'Hero'),
+                wb('Whitebeard', 'Piece'), wb('Urahara', 'Bleach'), wb('Netero', 'Hunter'), wb('Gojo', 'Jujutsu'),
+                wb('Minato', 'Naruto'), wb('Rayleigh', 'Piece'), wb('Yoruichi', 'Bleach'), wb('Erwin', 'Titan'),
+                wb('Reigen', 'Mob Psycho'), wb('Aizawa', 'Hero'), wb('Shanks', 'Piece'), wb('Piccolo'),
+                wb('Tsunade', 'Naruto'), wb('Silvers Rayleigh', 'Piece'), wb('Bang', 'Punch'), wb('Nanami', 'Jujutsu'),
+            ].filter(Boolean)
+        },
+    ];
+    return window._tlTemplateCache;
+};
+
+window.renderBuiltinTierTemplates = function() {
+    const el = document.getElementById('tl-builtin-grid');
+    if (!el) return;
+    const templates = window._getTierListTemplates();
+    el.innerHTML = templates.map(t => {
+        const imgs = t.items.slice(0, 4).map(it =>
+            `<img src="${it.image}" style="flex:1;min-width:0;object-fit:cover;height:52px;" onerror="this.style.display='none'">`
+        ).join('');
+        return `<div onclick="window.useBuiltinTierTemplate('${t.id}')" style="background:var(--bg-gray-darker);border-radius:10px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='transparent'">
+            <div style="display:flex;height:52px;overflow:hidden;">${imgs}</div>
+            <div style="padding:8px 10px;">
+                <div style="font-weight:700;font-size:13px;line-height:1.3;">${t.title}</div>
+                <div style="font-size:11px;color:var(--accent-yellow);margin-top:2px;font-weight:600;">${t.items.length} chars · WeeBee ⭐</div>
+            </div>
+        </div>`;
+    }).join('');
+};
+
+window.useBuiltinTierTemplate = function(id) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const t = window._getTierListTemplates().find(x => x.id === id);
+    if (!t) return;
+    window.tierListState = {
+        editingId: null,
+        type: t.type,
+        sourceAnimeId: null,
+        sourceAnimeTitle: t.title,
+        tiers: TL_DEFAULT_TIERS(),
+        unranked: t.items.map(item => ({ ...item })),
+        isPublic: true
+    };
+    const creator = document.getElementById('tier-list-creator');
+    if (creator.style.display !== 'flex') { window.closeAllModals(); creator.style.display = 'flex'; }
+    document.getElementById('tl-template-toggle').checked = false;
+    document.getElementById('tl-source-label').innerText = `Based on: ${t.title}`;
+    window.showTierStep('editor');
+    window.renderTierEditor();
+};
+
 window.showTierStep = function(step) {
     ['type','source','editor'].forEach(s => { const el = document.getElementById(`tl-step-${s}`); if(el) el.style.display = 'none'; });
     const el = document.getElementById(`tl-step-${step}`); if(el) el.style.display = 'block';
@@ -3843,10 +3951,11 @@ window.selectTierSource = async function(malId, title, imageUrl) {
     try {
         const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}/characters`);
         const { data } = await res.json();
+        const validChar = c => !/^(narrator|singer|announcer|voice actor)$/i.test(c.character.name.trim());
         const toItem = c => ({ id:`char_${c.character.mal_id}`, title:c.character.name, image:c.character.images?.jpg?.image_url||'', animeTitle:title });
-        const mains = (data||[]).filter(c=>c.role==='Main').sort((a,b)=>(b.favorites||0)-(a.favorites||0)).map(toItem);
-        const supporting = (data||[]).filter(c=>c.role==='Supporting').sort((a,b)=>(b.favorites||0)-(a.favorites||0)).map(toItem);
-        window.tierListState.unranked = [...mains, ...supporting];
+        const mains = (data||[]).filter(c=>c.role==='Main' && validChar(c)).sort((a,b)=>(b.favorites||0)-(a.favorites||0)).map(toItem);
+        const supporting = (data||[]).filter(c=>c.role==='Supporting' && validChar(c)).sort((a,b)=>(b.favorites||0)-(a.favorites||0)).map(toItem);
+        window.tierListState.unranked = [...mains, ...supporting].slice(0, 50);
         window.renderTierEditor();
     } catch(e) { if(zone) zone.innerHTML = '<div style="color:var(--text-muted);padding:10px;">Failed to load characters.</div>'; }
 };
@@ -4017,55 +4126,57 @@ window.searchTierPool = async function() {
         const reqId = ++_tierPoolReqId;
         try {
             const isChar = window.tierListState?.type === 'characters';
-            const url = isChar ? `https://api.jikan.moe/v4/characters?q=${encodeURIComponent(q)}&limit=8` : `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8`;
-            const res = await fetch(url); const { data } = await res.json();
-            if (reqId !== _tierPoolReqId) return;
             window._tlPoolItems = [];
 
-            const bwMatches = isChar ? (() => {
-                const q_lc = q.toLowerCase();
-                const all = [...(BW_NRT_CHARS||[]), ...(BW_OP_CHARS||[]), ...(BW_BLC_CHARS||[]), ...(BW_DB_CHARS||[])];
-                const seen = new Set();
-                return all.filter(c => {
-                    if (seen.has(c.id)) return false;
-                    seen.add(c.id);
-                    return c.name.toLowerCase().includes(q_lc) && c.img;
-                }).slice(0, 5);
-            })() : [];
-
-            const bwHTML = bwMatches.map(c => {
-                const idx = window._tlPoolItems.push({id:`bw_${c.id}`, title:c.name, image:c.img, animeTitle:''}) - 1;
-                return `<div onclick="addToTierPool(window._tlPoolItems[${idx}])"
-                    style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;margin-bottom:2px;border-left:2px solid var(--accent-yellow);"
-                    onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='transparent'">
-                    <img src="${c.img}" style="width:32px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;">
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:13px;">${c.name}</div>
-                        <div style="font-size:11px;color:var(--accent-yellow);">WeeBee</div>
-                    </div>
-                    <span class="material-symbols-outlined" style="color:var(--accent-yellow);font-size:20px;">add_circle</span>
-                </div>`;
-            }).join('');
-
-            const jikanHTML = (data||[]).map(item => {
-                const id = isChar ? `char_${item.mal_id}` : String(item.mal_id);
-                const title = isChar ? item.name : (item.title_english||item.title);
-                const image = isChar ? (item.images?.jpg?.image_url||'') : item.images.jpg.image_url;
-                const animeTitle = isChar ? (item.anime?.[0]?.anime?.title_english || item.anime?.[0]?.anime?.title || '') : '';
-                const idx = window._tlPoolItems.push({id, title, image, animeTitle}) - 1;
-                return `<div onclick="addToTierPool(window._tlPoolItems[${idx}])"
-                    style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;margin-bottom:2px;"
-                    onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='transparent'">
-                    <img src="${image}" style="width:32px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.background='var(--bg-gray-darker)'">
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:13px;">${title}</div>
-                        ${animeTitle ? `<div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${animeTitle}</div>` : ''}
-                    </div>
-                    <span class="material-symbols-outlined" style="color:var(--accent-yellow);font-size:20px;">add_circle</span>
-                </div>`;
-            }).join('');
-            results.innerHTML = bwHTML + jikanHTML;
-        } catch(e) {}
+            if (isChar) {
+                let chars = await window.searchCharacters(q);
+                if (reqId !== _tierPoolReqId) return;
+                if (!chars.length) { results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">No results.</div>'; return; }
+                // Boost characters from the selected source anime to the top
+                const srcTitle = (window.tierListState?.sourceAnimeTitle || '').toLowerCase();
+                if (srcTitle) {
+                    chars = [...chars].sort((a, b) => {
+                        const aMatch = (a.anime || '').toLowerCase().includes(srcTitle) || srcTitle.includes((a.anime || '').toLowerCase().replace(/:.+/, '').trim());
+                        const bMatch = (b.anime || '').toLowerCase().includes(srcTitle) || srcTitle.includes((b.anime || '').toLowerCase().replace(/:.+/, '').trim());
+                        return (bMatch ? 1 : 0) - (aMatch ? 1 : 0);
+                    });
+                }
+                results.innerHTML = chars.map(c => {
+                    const item = { id: `wb_${c.name}`, title: c.name, image: c.image, animeTitle: c.anime || '' };
+                    const idx = window._tlPoolItems.push(item) - 1;
+                    return `<div onclick="addToTierPool(window._tlPoolItems[${idx}])"
+                        style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;margin-bottom:2px;"
+                        onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='transparent'">
+                        <img src="${c.image}" style="width:32px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.background='var(--bg-gray-darker)'">
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:13px;">${c.name}</div>
+                            ${c.anime ? `<div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.anime}</div>` : ''}
+                        </div>
+                        <span class="material-symbols-outlined" style="color:var(--accent-yellow);font-size:20px;">add_circle</span>
+                    </div>`;
+                }).join('');
+            } else {
+                const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8`);
+                const { data } = await res.json();
+                if (reqId !== _tierPoolReqId) return;
+                if (!(data||[]).length) { results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">No results.</div>'; return; }
+                results.innerHTML = (data||[]).map(item => {
+                    const id = String(item.mal_id);
+                    const title = item.title_english || item.title;
+                    const image = item.images?.jpg?.image_url || '';
+                    const idx = window._tlPoolItems.push({ id, title, image, animeTitle: '' }) - 1;
+                    return `<div onclick="addToTierPool(window._tlPoolItems[${idx}])"
+                        style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;margin-bottom:2px;"
+                        onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='transparent'">
+                        <img src="${image}" style="width:32px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.background='var(--bg-gray-darker)'">
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:13px;">${title}</div>
+                        </div>
+                        <span class="material-symbols-outlined" style="color:var(--accent-yellow);font-size:20px;">add_circle</span>
+                    </div>`;
+                }).join('');
+            }
+        } catch(e) { results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">Search failed.</div>'; }
     }, 300);
 };
 
@@ -5059,39 +5170,21 @@ window.searchBracketAnime = async function() {
     results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;">Searching...</div>';
     _bracketSearchTimer = setTimeout(async () => {
         const reqId = ++_bracketSearchReqId;
-        try {
-            const q_lc = q.toLowerCase();
-            const allBw = [...(BW_NRT_CHARS||[]), ...(BW_OP_CHARS||[]), ...(BW_BLC_CHARS||[]), ...(BW_DB_CHARS||[])];
-            const seen = new Set();
-            const bwMatches = allBw.filter(c => {
-                if (seen.has(c.id)) return false;
-                seen.add(c.id);
-                return c.name.toLowerCase().includes(q_lc) && c.img;
-            }).slice(0, 5).map(c => ({ _bw: true, mal_id: `bw_${c.id}`, name: c.name, img: c.img }));
-
-            const res = await fetch(`https://api.jikan.moe/v4/characters?q=${encodeURIComponent(q)}&limit=8`);
-            const { data } = await res.json();
-            if (reqId !== _bracketSearchReqId) return;
-
-            window._bracketSearchItems = [...bwMatches, ...(data || [])];
-
-            const bwHTML = bwMatches.map((c, i) =>
-                `<div onclick="window.addAnimeToBracket(${i})" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-left:2px solid var(--accent-yellow);" onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background=''">
-                    <img src="${c.img}" style="width:32px;height:44px;object-fit:cover;border-radius:4px;flex-shrink:0;">
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:13px;font-weight:600;">${c.name}</div>
-                        <div style="font-size:11px;color:var(--accent-yellow);">WeeBee</div>
-                    </div>
-                </div>`).join('');
-
-            const jikanHTML = (data||[]).map((a, i) =>
-                `<div onclick="window.addAnimeToBracket(${bwMatches.length + i})" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--bg-gray-darker);" onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background=''">
-                    <img src="${a.images?.jpg?.image_url||''}" style="width:32px;height:44px;object-fit:cover;border-radius:4px;flex-shrink:0;">
-                    <span style="font-size:13px;font-weight:600;">${a.name}</span>
-                </div>`).join('');
-
-            results.innerHTML = (bwHTML + jikanHTML) || '<div style="padding:10px;color:var(--text-muted);font-size:13px;">No results.</div>';
-        } catch(e) { if (reqId === _bracketSearchReqId) results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;">Search failed.</div>'; }
+        const chars = await window.searchCharacters(q);
+        if (reqId !== _bracketSearchReqId) return;
+        window._bracketSearchItems = chars.map(c => ({ name: c.name, img: c.image, mal_id: `wb_${c.name}`, anime: c.anime }));
+        if (!chars.length) {
+            results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;">No results.</div>';
+            return;
+        }
+        results.innerHTML = chars.map((c, i) =>
+            `<div onclick="window.addAnimeToBracket(${i})" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;" onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background=''">
+                <img src="${c.image}" style="width:32px;height:44px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.background='var(--bg-gray-darker)'">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:600;">${c.name}</div>
+                    ${c.anime ? `<div style="font-size:11px;color:var(--text-muted);">${c.anime}</div>` : ''}
+                </div>
+            </div>`).join('');
     }, 300);
 };
 
@@ -5099,9 +5192,9 @@ window._bracketSearchItems = [];
 window.addAnimeToBracket = function(idx) {
     const a = window._bracketSearchItems[idx];
     if (!a) return;
-    const mal_id = a._bw ? a.mal_id : a.mal_id;
+    const mal_id = a.mal_id;
     const title = a.name;
-    const image = a._bw ? a.img : (a.images?.jpg?.image_url || '');
+    const image = a.img || a.image || '';
     if (window._bracketAnimePool.some(x => x.mal_id === mal_id)) return;
     window._bracketAnimePool.push({ mal_id, title, image });
     document.getElementById('bracket-anime-search').value = '';
@@ -5145,41 +5238,68 @@ window.switchBracketTab = function(event, tab) {
 
 window._getBracketTemplates = function() {
     if (window._bracketTemplateCache) return window._bracketTemplateCache;
-    const bwc = (arr, id, pfx) => { const c = arr.find(x => x.id === id); return c ? { title: c.name, image: c.img, mal_id: `bwbt_${pfx}_${id}` } : null; };
-    const nrt = id => bwc(BW_NRT_CHARS, id, 'nrt');
-    const op  = id => bwc(BW_OP_CHARS,  id, 'op');
-    const blc = id => bwc(BW_BLC_CHARS, id, 'blc');
-    const db  = id => bwc(BW_DB_CHARS,  id, 'db');
+    const wb = (name, hint) => {
+        if (!window.WB_CHARACTERS) return null;
+        const nl = name.toLowerCase(), hl = hint ? hint.toLowerCase() : null;
+        const c = (hl ? window.WB_CHARACTERS.find(c => c.name.toLowerCase().includes(nl) && c.anime.toLowerCase().includes(hl)) : null)
+            || window.WB_CHARACTERS.find(c => c.name.toLowerCase().includes(nl));
+        return c ? { title: c.name, image: c.image, mal_id: `wb_${c.name}` } : null;
+    };
     window._bracketTemplateCache = [
+        {
+            id: 'bwbt_aura',
+            title: 'Top Aura Farmer',
+            description: 'Who has the most drip and undeniable presence?',
+            items: [
+                wb('Itachi', 'Naruto'), wb('Shanks', 'Piece'), wb('Gojo', 'Jujutsu'), wb('Sukuna', 'Jujutsu'),
+                wb('Levi Ackerman', 'Titan'), wb('Aizen', 'Bleach'), wb('Madara', 'Naruto'), wb('Lelouch', 'Geass'),
+                wb('Minato', 'Naruto'), wb('Mihawk', 'Piece'), wb('Byakuya', 'Bleach'), wb('Meruem', 'Hunter'),
+                wb('Erwin', 'Titan'), wb('Askeladd', 'Vinland'), wb('Thorfinn', 'Vinland'), wb('Netero', 'Hunter')
+            ].filter(Boolean)
+        },
         {
             id: 'bwbt_goat',
             title: 'The GOAT Debate',
             description: 'Who is the greatest anime character of all time?',
-            items: [db('goku'), op('luffy'), nrt('naruto'), blc('ichigo'), db('vegeta'), op('zoro'), nrt('madara'), blc('aizen')].filter(Boolean)
+            items: [
+                wb('Naruto Uzumaki', 'Naruto'), wb('Monkey D. Luffy', 'Piece'), wb('Ichigo Kurosaki', 'Bleach'), wb('Levi Ackerman', 'Titan'),
+                wb('Gojo', 'Jujutsu'), wb('Killua', 'Hunter'), wb('Edward Elric', 'Fullmetal'), wb('Lelouch', 'Geass'),
+                wb('Itachi', 'Naruto'), wb('Gon Freecss', 'Hunter'), wb('Eren Yeager', 'Titan'), wb('Tanjiro', 'Demon Slayer'),
+                wb('Izuku Midoriya', 'Hero'), wb('Roronoa Zoro', 'Piece'), wb('Light Yagami', 'Death Note'), wb('Denji', 'Chainsaw')
+            ].filter(Boolean)
         },
         {
             id: 'bwbt_villains',
             title: 'Greatest Villain',
             description: 'The most iconic antagonists in anime.',
-            items: [nrt('madara'), blc('aizen'), db('frieza'), op('blackbeard'), nrt('orochimaru'), db('cell'), op('doflamingo'), blc('ulquiorra')].filter(Boolean)
+            items: [
+                wb('Madara', 'Naruto'), wb('Aizen', 'Bleach'), wb('Muzan', 'Demon Slayer'), wb('Light Yagami', 'Death Note'),
+                wb('Meruem', 'Hunter'), wb('Makima', 'Chainsaw'), wb('Doflamingo', 'Piece'), wb('Shigaraki', 'Hero'),
+                wb('Pain', 'Naruto'), wb('Ulquiorra', 'Bleach'), wb('Hisoka', 'Hunter'), wb('Blackbeard', 'Piece'),
+                wb('Johan', 'Monster'), wb('Orochimaru', 'Naruto'), wb('Frieza'), wb('Akaza', 'Demon Slayer')
+            ].filter(Boolean)
         },
         {
-            id: 'bwbt_rivals',
-            title: 'Best Rival',
-            description: 'The most iconic rivals and foils.',
-            items: [nrt('sasuke'), op('zoro'), db('vegeta'), blc('byakuya'), nrt('itachi'), op('mihawk'), db('frieza'), blc('grimmjow')].filter(Boolean)
-        },
-        {
-            id: 'bwbt_aura',
-            title: 'Top Aura Farmer',
-            description: 'Who has the most drip and presence?',
-            items: [op('shanks'), nrt('itachi'), blc('aizen'), nrt('minato'), op('roger'), db('beerus'), blc('ulquiorra'), nrt('madara')].filter(Boolean)
+            id: 'bwbt_swords',
+            title: 'Best Swordsman',
+            description: 'The greatest blade wielders across all anime.',
+            items: [
+                wb('Roronoa Zoro', 'Piece'), wb('Dracule Mihawk', 'Piece'), wb('Levi Ackerman', 'Titan'), wb('Ichigo Kurosaki', 'Bleach'),
+                wb('Kenpachi', 'Bleach'), wb('Yoriichi', 'Demon Slayer'), wb('Giyu', 'Demon Slayer'), wb('Akame', 'Akame ga Kill'),
+                wb('Byakuya', 'Bleach'), wb('Thorfinn', 'Vinland'), wb('Askeladd', 'Vinland'), wb('Himura Kenshin'),
+                wb('Erza', 'Fairy Tail'), wb('Sanji', 'Piece'), wb('Shanks', 'Piece'), wb('Mugen')
+            ].filter(Boolean)
         },
         {
             id: 'bwbt_sensei',
-            title: 'Best Mentor',
-            description: 'The greatest teachers and guides in anime.',
-            items: [nrt('jiraiya'), op('rayleigh'), db('roshi'), blc('urahara'), nrt('kakashi'), op('shanks'), db('piccolo'), blc('yoruichi')].filter(Boolean)
+            title: 'Best Sensei',
+            description: 'The greatest teachers and mentors in anime.',
+            items: [
+                wb('Kakashi', 'Naruto'), wb('Jiraiya', 'Naruto'), wb('Koro', 'Assassination'), wb('All Might', 'Hero'),
+                wb('Whitebeard', 'Piece'), wb('Urahara', 'Bleach'), wb('Netero', 'Hunter'), wb('Gojo', 'Jujutsu'),
+                wb('Minato', 'Naruto'), wb('Rayleigh', 'Piece'), wb('Yoruichi', 'Bleach'), wb('Erwin', 'Titan'),
+                wb('Piccolo'), wb('Roshi'), wb('Aizawa', 'Hero'), wb('Reigen', 'Mob Psycho')
+            ].filter(Boolean)
         }
     ];
     return window._bracketTemplateCache;
@@ -7314,8 +7434,9 @@ window.toggleBwPostReaction = async function(event, postId, postCollection, type
         const actionsDiv = btn.closest('.review-actions');
         const likeBtn = actionsDiv?.children[1]?.querySelector('button');
         const dislikeBtn = actionsDiv?.children[2]?.querySelector('button');
-        const likesEl = document.getElementById(`bw-likes-${postId}`);
-        const dislikesEl = document.getElementById(`bw-dislikes-${postId}`);
+        const card = btn.closest('.review-card, .feed-post-card, .bw-post-card');
+        const likesEl = card ? card.querySelector(`[id="bw-likes-${postId}"]`) : document.getElementById(`bw-likes-${postId}`);
+        const dislikesEl = card ? card.querySelector(`[id="bw-dislikes-${postId}"]`) : document.getElementById(`bw-dislikes-${postId}`);
         let newLikeCount = (snap.exists() ? (snap.data().likes||[]).length : 0);
         let newDislikeCount = (snap.exists() ? (snap.data().dislikes||[]).length : 0);
 
@@ -9202,4 +9323,137 @@ window.loadSeasonAnime = async function(year, season) {
         gridEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px;grid-column:1/-1;">Could not load season. Try again later.</div>';
         console.error(e);
     }
+};
+// ─── Character Database ───────────────────────────────────────────────────────
+// WB_CHARACTERS is loaded from characters.js (global, 800+ entries from top 50 anime)
+// Search order: local bundle → Firestore cache → AniList API → auto-cache result
+
+const ANILIST_URL = 'https://graphql.anilist.co';
+
+async function _anilistGql(query, variables = {}) {
+    const res = await fetch(ANILIST_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ query, variables })
+    });
+    const json = await res.json();
+    if (json.errors) throw new Error(json.errors[0].message);
+    return json.data;
+}
+
+const _isMetaChar = name => /^(narrator|singer|announcer|voice actor)$/i.test(name.trim());
+
+// Search WB_CHARACTERS bundle by name (fuzzy prefix match)
+function _searchLocalChars(q) {
+    if (!window.WB_CHARACTERS || !q) return [];
+    const lower = q.toLowerCase();
+    return window.WB_CHARACTERS.filter(c =>
+        !_isMetaChar(c.name) && c.name.toLowerCase().includes(lower)
+    ).slice(0, 20);
+}
+
+// Search Firestore character cache
+async function _searchCachedChars(q) {
+    if (!q) return [];
+    const lower = q.toLowerCase();
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'characters'),
+            where('nameLower', '>=', lower),
+            where('nameLower', '<=', lower + ''),
+            limit(10)
+        ));
+        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+        return [];
+    }
+}
+
+// Search AniList for characters and cache any new results
+async function _searchAnilistChars(q) {
+    if (!q) return [];
+    try {
+        const data = await _anilistGql(`
+            query ($search: String) {
+                Page(perPage: 10) {
+                    characters(search: $search, sort: FAVOURITES_DESC) {
+                        name { full }
+                        image { large }
+                        media(perPage: 1, sort: POPULARITY_DESC, type: ANIME) {
+                            nodes { title { english romaji } }
+                        }
+                    }
+                }
+            }
+        `, { search: q });
+
+        const results = (data?.Page?.characters || [])
+            .filter(c => c.name?.full && c.image?.large && !_isMetaChar(c.name.full))
+            .map(c => ({
+                name: c.name.full,
+                image: c.image.large,
+                anime: c.media?.nodes?.[0]?.title?.english || c.media?.nodes?.[0]?.title?.romaji || ''
+            }));
+
+        // Auto-cache results not already in local bundle
+        const localNames = new Set((window.WB_CHARACTERS || []).map(c => c.name.toLowerCase()));
+        for (const r of results) {
+            if (!localNames.has(r.name.toLowerCase())) {
+                _cacheCharacter(r).catch(() => {});
+            }
+        }
+
+        return results;
+    } catch (e) {
+        console.warn('AniList character search failed:', e.message);
+        return [];
+    }
+}
+
+// Save a character to Firestore cache (fire-and-forget)
+async function _cacheCharacter(char) {
+    try {
+        const nameLower = char.name.toLowerCase();
+        const snap = await getDocs(query(
+            collection(db, 'characters'),
+            where('nameLower', '==', nameLower),
+            limit(1)
+        ));
+        if (snap.empty) {
+            await addDoc(collection(db, 'characters'), {
+                name: char.name,
+                nameLower,
+                image: char.image,
+                anime: char.anime,
+                cachedAt: serverTimestamp()
+            });
+        }
+    } catch (e) { /* non-critical */ }
+}
+
+// Main character search — used by bracket/tier list character pickers
+// Returns { name, image, anime } objects
+window.searchCharacters = async function(q) {
+    if (!q || q.length < 2) return [];
+
+    // 1. Local bundle (instant)
+    const local = _searchLocalChars(q);
+    if (local.length >= 8) return local;
+
+    // 2. Firestore cache + AniList in parallel for gaps
+    const [cached, remote] = await Promise.all([
+        _searchCachedChars(q),
+        _searchAnilistChars(q)
+    ]);
+
+    // Merge: local first, then remote, dedup by name
+    const seen = new Set(local.map(c => c.name.toLowerCase()));
+    const merged = [...local];
+    for (const c of [...cached, ...remote]) {
+        if (!seen.has(c.name.toLowerCase())) {
+            seen.add(c.name.toLowerCase());
+            merged.push(c);
+        }
+    }
+    return merged.slice(0, 20);
 };

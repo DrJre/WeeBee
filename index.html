@@ -681,8 +681,8 @@
 
                                 <!-- Templates panel -->
                                 <div id="bracket-tab-templates">
-                                    <div style="display:none;font-size:10px;font-weight:800;color:var(--accent-yellow);letter-spacing:1.2px;margin-bottom:10px;">⭐ WEEBEE ORIGINALS</div>
-                                    <div id="bracket-builtin-grid" style="display:none;"></div>
+                                    <div style="font-size:10px;font-weight:800;color:var(--accent-yellow);letter-spacing:1.2px;margin-bottom:10px;">⭐ WEEBEE ORIGINALS</div>
+                                    <div id="bracket-builtin-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px;"></div>
                                     <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1.2px;margin-bottom:8px;">👥 COMMUNITY</div>
                                     <input type="text" id="bracket-template-search" placeholder="Search community templates..." oninput="window.filterBracketTemplates(this.value)" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;box-sizing:border-box;margin-bottom:10px;">
                                     <div id="bracket-community-grid" style="max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;"></div>
@@ -738,12 +738,11 @@
                     </div>
                 </div>
                 <div style="margin-top:32px;">
+                    <div style="font-size:10px;font-weight:800;color:var(--accent-yellow);letter-spacing:1.2px;margin-bottom:10px;">⭐ WEEBEE ORIGINALS</div>
+                    <div id="tl-builtin-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin-bottom:24px;"></div>
                     <div style="font-weight:700; font-size:15px; margin-bottom:12px;">Community Templates</div>
                     <input type="text" id="tl-template-search" placeholder="Search templates..." oninput="filterCommunityTemplates(this.value)" style="width:100%; max-width:480px; padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark); font-size:14px; box-sizing:border-box; margin-bottom:12px;">
                     <div id="tl-template-results" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; max-height:420px; overflow-y:auto;"></div>
-                </div>
-                <div style="margin-top:20px;">
-                    <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
                 </div>
             </div>
 
@@ -1807,6 +1806,7 @@
 
     <canvas id="bee-trail-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99999;display:none;"></canvas>
 
-    <script type="module" src="app.js?v=155"></script>
+    <script src="characters.js"></script>
+    <script type="module" src="app.js?v=166"></script>
 </body>
 </html>
