@@ -742,7 +742,9 @@ window.fetchNotifications = function() {
             }
 
             let onClickAction;
-            if ((n.type === 'suggestion' || n.type === 'review') && n.linkRef) {
+            if (n.type === 'review' && n.linkRef) {
+                onClickAction = `onclick="loadAnimeDetails(${n.linkRef}, false, 'tab-reviews')"`;
+            } else if (n.type === 'suggestion' && n.linkRef) {
                 onClickAction = `onclick="loadAnimeDetails(${n.linkRef})"`;
             } else if (n.type === 'dm') {
                 const safeAvatar = (n.senderAvatar || '').replace(/'/g, "\\'");
@@ -2046,12 +2048,20 @@ window.toggleReviewMenu = function(reviewId) {
     const menu = document.getElementById(`review-menu-${reviewId}`);
     if (!menu) return;
     const isOpen = menu.style.display !== 'none';
-    document.querySelectorAll('[id^="review-menu-"]').forEach(m => m.style.display = 'none');
+    document.querySelectorAll('[id^="review-menu-"],[id^="post-menu-"]').forEach(m => m.style.display = 'none');
+    menu.style.display = isOpen ? 'none' : 'block';
+};
+
+window.togglePostMenu = function(postId) {
+    const menu = document.getElementById(`post-menu-${postId}`);
+    if (!menu) return;
+    const isOpen = menu.style.display !== 'none';
+    document.querySelectorAll('[id^="review-menu-"],[id^="post-menu-"]').forEach(m => m.style.display = 'none');
     menu.style.display = isOpen ? 'none' : 'block';
 };
 
 document.addEventListener('click', () => {
-    document.querySelectorAll('[id^="review-menu-"]').forEach(m => m.style.display = 'none');
+    document.querySelectorAll('[id^="review-menu-"],[id^="post-menu-"]').forEach(m => m.style.display = 'none');
 });
 
 window.toggleReaction = async function(event, reviewId, type, btn) {
@@ -3295,12 +3305,20 @@ function renderTierListFeedCard(id, tl) {
     const typeLabel = _animeTitles.length ? (_animeTitles.length <= 2 ? _animeTitles.join(', ') : `${_animeTitles.slice(0,2).join(', ')} +${_animeTitles.length-2} more`) : null;
     const thumbHTML = coverImage ? `<img class="review-anime-thumb" src="${coverImage}" onclick="event.stopPropagation();window.openTierListViewer('${id}')" onerror="this.style.display='none'">` : '';
     const padRight = coverImage ? 'padding-right:195px;' : '';
+    const tlIsOwner = auth.currentUser && tl.uid === auth.currentUser.uid;
     return `<div class="review-card tl-post-card feed-post-card">
         ${thumbHTML}
         <div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
-            <button onclick="window.useAsTemplate('${id}')" style="background:rgba(0,0,0,0.35);border:none;border-radius:20px;padding:5px 10px;cursor:pointer;color:white;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;">
-                <span class="material-symbols-outlined" style="font-size:13px;">content_copy</span> Make One
-            </button>
+            ${tlIsOwner ? `<div style="position:relative;">
+                <button onclick="window.togglePostMenu('${id}')" style="background:rgba(0,0,0,0.35);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:white;"><span class="material-symbols-outlined" style="font-size:16px;">more_vert</span></button>
+                <div id="post-menu-${id}" style="display:none;position:absolute;top:32px;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:160px;overflow:hidden;z-index:20;">
+                    <button onclick="event.stopPropagation();window.useAsTemplate('${id}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:var(--text-dark);font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">content_copy</span> Make One</button>
+                    <div style="height:1px;background:var(--border-color);"></div>
+                    <button onclick="event.stopPropagation();window.editTierList('${id}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:var(--text-dark);font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">edit</span> Edit</button>
+                    <div style="height:1px;background:var(--border-color);"></div>
+                    <button onclick="event.stopPropagation();window.deleteTierList('${id}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
+                </div>
+            </div>` : `<button onclick="event.stopPropagation();window.useAsTemplate('${id}')" style="background:rgba(0,0,0,0.35);border:none;border-radius:20px;padding:5px 10px;cursor:pointer;color:white;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;"><span class="material-symbols-outlined" style="font-size:13px;">content_copy</span> Make One</button>`}
         </div>
         <div class="review-header" style="margin-bottom:10px;position:relative;z-index:2;${padRight}">
             <img src="${avatar}" class="avatar" onclick="event.stopPropagation();viewUserProfile('${tl.uid}')" style="cursor:pointer;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(tl.authorName||'U')}&backgroundColor=ffc107&fontColor=333333'">
@@ -3814,7 +3832,7 @@ window._getTierListTemplates = function() {
             items: [
                 wb('Gojo', 'Jujutsu'), wb('Sukuna', 'Jujutsu'), wb('Saitama', 'Punch'), wb('Garou', 'Punch'),
                 wb('Meruem', 'Hunter'), wb('Netero', 'Hunter'), wb('Madara', 'Naruto'), wb('Aizen', 'Bleach'),
-                wb('Tatsumaki', 'Punch'), wb('Escanor', 'Seven'), wb('Eren Yeager', 'Titan'), wb('Levi Ackerman', 'Titan'),
+                wb('Tatsumaki', 'Punch'), wb('Escanor', 'Seven'), wb('Eren Yeager', 'Titan'), wb('Levi', 'Titan'),
                 wb('Muzan', 'Demon Slayer'), wb('All Might', 'Hero'), wb('Pain', 'Naruto'), wb('Itachi', 'Naruto'),
                 wb('Shanks', 'Piece'), wb('Whitebeard', 'Piece'), wb('Meliodas', 'Seven'), wb('Ban', 'Seven'),
                 wb('Kenpachi', 'Bleach'), wb('Lelouch', 'Geass'), wb('Killua', 'Hunter'), wb('Kakashi', 'Naruto'),
@@ -3823,7 +3841,7 @@ window._getTierListTemplates = function() {
         {
             id: 'tlt_protagonists', title: 'Shonen Protagonists', type: 'characters',
             items: [
-                wb('Naruto Uzumaki', 'Naruto'), wb('Monkey D. Luffy', 'Piece'), wb('Ichigo Kurosaki', 'Bleach'),
+                wb('Naruto Uzumaki', 'Naruto'), wb('Luffy', 'Piece'), wb('Ichigo Kurosaki', 'Bleach'),
                 wb('Izuku Midoriya', 'Hero'), wb('Eren Yeager', 'Titan'), wb('Tanjiro Kamado', 'Demon Slayer'),
                 wb('Gon Freecss', 'Hunter'), wb('Yuji Itadori', 'Jujutsu'), wb('Denji', 'Chainsaw'),
                 wb('Asta', 'Black Clover'), wb('Edward Elric', 'Fullmetal'), wb('Lelouch', 'Geass'),
@@ -3834,10 +3852,10 @@ window._getTierListTemplates = function() {
         {
             id: 'tlt_rivals', title: 'Best Rivals', type: 'characters',
             items: [
-                wb('Sasuke Uchiha', 'Naruto'), wb('Roronoa Zoro', 'Piece'), wb('Katsuki Bakugo', 'Hero'),
+                wb('Sasuke Uchiha', 'Naruto'), wb('Zoro', 'Piece'), wb('Katsuki Bakugo', 'Hero'),
                 wb('Killua', 'Hunter'), wb('Byakuya', 'Bleach'), wb('Todoroki', 'Hero'),
                 wb('Hisoka', 'Hunter'), wb('Itachi', 'Naruto'), wb('Grimmjow', 'Bleach'),
-                wb('Reiner', 'Titan'), wb('Askeladd', 'Vinland'), wb('Levi Ackerman', 'Titan'),
+                wb('Reiner', 'Titan'), wb('Askeladd', 'Vinland'), wb('Levi', 'Titan'),
                 wb('Meruem', 'Hunter'), wb('Pain', 'Naruto'), wb('Sukuna', 'Jujutsu'), wb('Doflamingo', 'Piece'),
                 wb('Garou', 'Punch'), wb('Ban', 'Seven'), wb('Erwin', 'Titan'), wb('Kenpachi', 'Bleach'),
             ].filter(Boolean)
@@ -4504,7 +4522,12 @@ window._renderHotTakeCard = function(ht, uid) {
                 <span style="font-weight:700;font-size:14px;">${ht.authorName||'Anonymous'}</span>
                 <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">${ago}</span>
             </div>
-            ${isOwner ? `<button onclick="window.deleteHotTake('${ht.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></button>` : ''}
+            ${isOwner ? `<div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation();">
+                <button onclick="window.togglePostMenu('${ht.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;display:flex;align-items:center;"><span class="material-symbols-outlined" style="font-size:20px;">more_vert</span></button>
+                <div id="post-menu-${ht.id}" style="display:none;position:absolute;top:100%;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:140px;overflow:hidden;z-index:20;">
+                    <button onclick="event.stopPropagation();window.deleteHotTake('${ht.id}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
+                </div>
+            </div>` : ''}
         </div>
         <p style="font-size:15px;line-height:1.55;margin:0 0 14px;color:var(--text-dark);white-space:pre-wrap;">${ht.text}</p>
         <div style="display:flex;gap:8px;margin-bottom:14px;">
@@ -4722,7 +4745,12 @@ window._renderPollCard = function(poll, uid) {
                 <span style="font-weight:700;font-size:14px;">${poll.authorName||'Anonymous'}</span>
                 <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">${ago}</span>
             </div>
-            ${isOwner ? `<button onclick="window.deletePoll('${poll.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></button>` : ''}
+            ${isOwner ? `<div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation();">
+                <button onclick="window.togglePostMenu('${poll.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;display:flex;align-items:center;"><span class="material-symbols-outlined" style="font-size:20px;">more_vert</span></button>
+                <div id="post-menu-${poll.id}" style="display:none;position:absolute;top:100%;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:140px;overflow:hidden;z-index:20;">
+                    <button onclick="event.stopPropagation();window.deletePoll('${poll.id}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
+                </div>
+            </div>` : ''}
         </div>
         <div style="font-weight:700;font-size:16px;margin-bottom:12px;line-height:1.4;">${poll.question}</div>
         ${optionsHTML}
@@ -4851,6 +4879,9 @@ window.selectBracketVote = function(bracketId, round, matchIdx, side) {
 window.loadBrackets = async function() {
     const feed = document.getElementById('brackets-feed');
     if (!feed) return;
+    window.switchBracketTab({ currentTarget: document.getElementById('bracket-tab-btn-templates') }, 'templates');
+    window.renderBuiltinBracketTemplates();
+    window.loadBracketCommunityTemplates();
     feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">Loading...</div>';
     window._bracketsList = [];
     try {
@@ -4862,10 +4893,44 @@ window.loadBrackets = async function() {
 
 window._renderBracketsFeed = function() {
     const feed = document.getElementById('brackets-feed');
-    if (!feed) return;
-    const uid = auth.currentUser?.uid;
-    if (!window._bracketsList.length) { feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">No brackets yet — create the first one!</div>'; return; }
-    feed.innerHTML = window._bracketsList.map(b => window._renderBracketCard(b, uid)).join('');
+    if (feed) {
+        const uid = auth.currentUser?.uid;
+        if (!window._bracketsList.length) { feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">No brackets yet — create the first one!</div>'; }
+        else feed.innerHTML = window._bracketsList.map(b => window._renderBracketFeedCard(b)).join('');
+    }
+    // Also refresh play modal if open
+    const content = document.getElementById('bracket-play-modal-content');
+    if (content && window._bracketPlayModalId) {
+        const b = window._bracketsList.find(x => x.id === window._bracketPlayModalId);
+        if (b) content.innerHTML = window._renderBracketCard(b, auth.currentUser?.uid, true);
+    }
+};
+
+window.openBracketPlayModal = function(bracketId) {
+    window._bracketPlayModalId = bracketId;
+    const existing = document.getElementById('bracket-play-modal');
+    if (existing) existing.remove();
+    const b = window._bracketsList.find(x => x.id === bracketId);
+    const isOwner = b && auth.currentUser && b.uid === auth.currentUser.uid;
+    const modal = document.createElement('div');
+    modal.id = 'bracket-play-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;';
+    modal.innerHTML = `<div style="background:var(--bg-card);border-radius:16px;width:100%;max-width:440px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:12px 16px 0;flex-shrink:0;">
+            ${isOwner ? `<button onclick="window.deleteBracket('${bracketId}');window.closeBracketPlayModal();" style="background:none;border:none;cursor:pointer;color:var(--text-muted);display:flex;align-items:center;" title="Delete"><span class="material-symbols-outlined" style="font-size:20px;">delete</span></button>` : ''}
+            <button onclick="window.closeBracketPlayModal()" class="cancel-btn">Close</button>
+        </div>
+        <div id="bracket-play-modal-content" style="overflow-y:auto;padding:0 16px 16px;"></div>
+    </div>`;
+    modal.addEventListener('click', e => { if (e.target === modal) window.closeBracketPlayModal(); });
+    document.body.appendChild(modal);
+    window._renderBracketsFeed();
+};
+
+window.closeBracketPlayModal = function() {
+    const modal = document.getElementById('bracket-play-modal');
+    if (modal) modal.remove();
+    window._bracketPlayModalId = null;
 };
 
 window._renderBracketFeedCard = function(b) {
@@ -4887,18 +4952,25 @@ window._renderBracketFeedCard = function(b) {
     const likes = b.likes || [];
     const dislikes = b.dislikes || [];
     const bUid = auth.currentUser?.uid;
+    const isOwner = bUid && b.uid === bUid;
     const isLiked = bUid && likes.includes(bUid);
     const isDisliked = bUid && dislikes.includes(bUid);
     return `<div class="feed-post-card" style="background:rgba(255,193,7,0.06);border:1px solid rgba(255,193,7,0.25);border-radius:14px;padding:16px;margin-bottom:12px;position:relative;overflow:hidden;">
         ${bgImg ? `<img src="${bgImg}" style="position:absolute;top:0;right:0;height:100%;width:185px;object-fit:cover;opacity:0.7;-webkit-mask-image:linear-gradient(to right,transparent 0%,black 55%);mask-image:linear-gradient(to right,transparent 0%,black 55%);border-radius:0 14px 14px 0;pointer-events:none;z-index:0;" onerror="this.style.display='none'">` : ''}
-        <div style="position:relative;z-index:1;padding-right:${bgImg ? '105px' : '0'};">
+        <div style="position:relative;z-index:1;padding-right:${bgImg ? '195px' : '0'};">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
                 <img src="${b.authorAvatar||''}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">
                 <div style="flex:1;min-width:0;">
                     <span style="font-weight:700;font-size:13px;">${b.authorName||'Anonymous'}</span>
-                    <span style="font-size:12px;color:var(--text-muted);margin-left:6px;">${ago}</span>
+                    <span style="display:inline-block;background:rgba(255,193,7,0.18);color:var(--accent-yellow);border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;letter-spacing:.5px;margin-left:6px;vertical-align:middle;">🏆 Bracket</span><br>
+                    <span style="font-size:12px;color:var(--text-muted);">${ago}</span>
                 </div>
-                <div style="background:rgba(255,193,7,0.18);color:var(--accent-yellow);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:800;letter-spacing:.5px;flex-shrink:0;">🏆 Bracket</div>
+                ${isOwner ? `<div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation();">
+                    <button onclick="window.togglePostMenu('${b.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;display:flex;align-items:center;"><span class="material-symbols-outlined" style="font-size:20px;">more_vert</span></button>
+                    <div id="post-menu-${b.id}" style="display:none;position:absolute;top:100%;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:140px;overflow:hidden;z-index:20;">
+                        <button onclick="event.stopPropagation();window.deleteBracket('${b.id}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
+                    </div>
+                </div>` : ''}
             </div>
             <div style="font-weight:800;font-size:16px;margin-bottom:10px;">${b.title}</div>
             ${isCompleted && champion
@@ -4911,7 +4983,7 @@ window._renderBracketFeedCard = function(b) {
                 </div>`
                 : `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Round ${currentRound + 1} / ${totalRounds} · Active</div>
                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${thumbs}</div>`}
-            <div onclick="event.stopPropagation();window.showBracketModal('${b.id}')" style="margin-top:10px;font-size:12px;font-weight:700;color:var(--accent-yellow);cursor:pointer;">View Bracket →</div>
+            <div onclick="event.stopPropagation();${isCompleted ? `window.showBracketModal('${b.id}')` : `window.openBracketPlayModal('${b.id}')`}" style="margin-top:10px;font-size:12px;font-weight:700;color:var(--accent-yellow);cursor:pointer;">${isCompleted ? 'View Results →' : 'Vote Now →'}</div>
         </div>
         <div class="review-actions" style="margin-top:12px;" onclick="event.stopPropagation();">
             <div class="action-stat">
@@ -5052,7 +5124,7 @@ window.showBracketModal = async function(bracketId) {
     document.body.appendChild(modal);
 };
 
-window._renderBracketCard = function(b, uid) {
+window._renderBracketCard = function(b, uid, inModal = false) {
     const isOwner = uid && b.uid === uid;
     const ago = b.timestamp?.toDate ? formatTimeAgo(b.timestamp.toDate()) : '';
     const currentRound = b.currentRound || 0;
@@ -5154,7 +5226,7 @@ window._renderBracketCard = function(b, uid) {
                 <div style="font-weight:800;font-size:15px;">${b.title}</div>
                 <div style="font-size:12px;color:var(--text-muted);">${b.authorName} · ${ago} ${isCompleted?'· ✅ Completed':''}</div>
             </div>
-            ${isOwner ? `<button onclick="window.deleteBracket('${b.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></button>` : ''}
+            ${isOwner && !inModal ? `<button onclick="window.deleteBracket('${b.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></button>` : ''}
         </div>
         ${bodyHTML}
     </div>`;
@@ -5220,13 +5292,8 @@ window._renderBracketPool = function() {
 };
 
 window.toggleBracketCreate = function() {
-    const b = document.getElementById('bracket-create-body');
-    const opening = b.style.display === 'none';
-    b.style.display = opening ? 'block' : 'none';
-    if (opening) {
-        window.renderBuiltinBracketTemplates();
-        window.loadBracketCommunityTemplates();
-    }
+    // Body is always visible — just switch back to templates tab
+    window.switchBracketTab({ currentTarget: document.getElementById('bracket-tab-btn-templates') }, 'templates');
 };
 
 window.switchBracketTab = function(event, tab) {
@@ -5251,10 +5318,15 @@ window._getBracketTemplates = function() {
             title: 'Top Aura Farmer',
             description: 'Who has the most drip and undeniable presence?',
             items: [
-                wb('Itachi', 'Naruto'), wb('Shanks', 'Piece'), wb('Gojo', 'Jujutsu'), wb('Sukuna', 'Jujutsu'),
-                wb('Levi Ackerman', 'Titan'), wb('Aizen', 'Bleach'), wb('Madara', 'Naruto'), wb('Lelouch', 'Geass'),
-                wb('Minato', 'Naruto'), wb('Mihawk', 'Piece'), wb('Byakuya', 'Bleach'), wb('Meruem', 'Hunter'),
-                wb('Erwin', 'Titan'), wb('Askeladd', 'Vinland'), wb('Thorfinn', 'Vinland'), wb('Netero', 'Hunter')
+                { title: 'Sung Jin-Woo', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b129928-BCEjVaP0AQSw.png', mal_id: 'wb_Sung Jin-Woo' },
+                wb('Levi', 'Titan'), wb('Gojo', 'Jujutsu'), wb('Madara', 'Naruto'),
+                { title: 'Piccolo', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b914-KuS8AWjqBrqa.jpg', mal_id: 'wb_Piccolo' },
+                wb('Aizen', 'Bleach'),
+                { title: 'Escanor', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b90202-1H7FIX2hDmYd.png', mal_id: 'wb_Escanor' },
+                wb('Zoro', 'Piece'), wb('Meruem', 'Hunter'), wb('Shanks', 'Piece'), wb('Sukuna', 'Jujutsu'),
+                { title: 'Dio Brando', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b4004-w0OtWuvjhftG.png', mal_id: 'wb_Dio Brando' },
+                wb('Killua', 'Hunter'), wb('Itachi', 'Naruto'), wb('Luffy', 'Piece'),
+                { title: 'Whitebeard', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b2751-NnzW0N2vCTjX.jpg', mal_id: 'wb_Whitebeard' },
             ].filter(Boolean)
         },
         {
@@ -5262,10 +5334,10 @@ window._getBracketTemplates = function() {
             title: 'The GOAT Debate',
             description: 'Who is the greatest anime character of all time?',
             items: [
-                wb('Naruto Uzumaki', 'Naruto'), wb('Monkey D. Luffy', 'Piece'), wb('Ichigo Kurosaki', 'Bleach'), wb('Levi Ackerman', 'Titan'),
+                wb('Naruto Uzumaki', 'Naruto'), wb('Luffy', 'Piece'), wb('Ichigo Kurosaki', 'Bleach'), wb('Levi', 'Titan'),
                 wb('Gojo', 'Jujutsu'), wb('Killua', 'Hunter'), wb('Edward Elric', 'Fullmetal'), wb('Lelouch', 'Geass'),
                 wb('Itachi', 'Naruto'), wb('Gon Freecss', 'Hunter'), wb('Eren Yeager', 'Titan'), wb('Tanjiro', 'Demon Slayer'),
-                wb('Izuku Midoriya', 'Hero'), wb('Roronoa Zoro', 'Piece'), wb('Light Yagami', 'Death Note'), wb('Denji', 'Chainsaw')
+                wb('Izuku Midoriya', 'Hero'), wb('Zoro', 'Piece'), wb('Light Yagami', 'Death Note'), wb('Denji', 'Chainsaw')
             ].filter(Boolean)
         },
         {
@@ -5273,10 +5345,15 @@ window._getBracketTemplates = function() {
             title: 'Greatest Villain',
             description: 'The most iconic antagonists in anime.',
             items: [
-                wb('Madara', 'Naruto'), wb('Aizen', 'Bleach'), wb('Muzan', 'Demon Slayer'), wb('Light Yagami', 'Death Note'),
-                wb('Meruem', 'Hunter'), wb('Makima', 'Chainsaw'), wb('Doflamingo', 'Piece'), wb('Shigaraki', 'Hero'),
-                wb('Pain', 'Naruto'), wb('Ulquiorra', 'Bleach'), wb('Hisoka', 'Hunter'), wb('Blackbeard', 'Piece'),
-                wb('Johan', 'Monster'), wb('Orochimaru', 'Naruto'), wb('Frieza'), wb('Akaza', 'Demon Slayer')
+                { title: 'Johan Liebert', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b719-y984mDWyGf5n.jpg', mal_id: 'wb_Johan Liebert' },
+                wb('Aizen', 'Bleach'), wb('Meruem', 'Hunter'), wb('Askeladd', 'Vinland'),
+                wb('Doflamingo', 'Piece'),
+                { title: 'Dio Brando', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b4004-w0OtWuvjhftG.png', mal_id: 'wb_Dio Brando' },
+                { title: 'Vicious', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b2734-aglO8RKNVxnn.jpg', mal_id: 'wb_Vicious' },
+                { title: 'Griffith', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b424-Jfrsf8I7zBps.png', mal_id: 'wb_Griffith' },
+                wb('Light Yagami', 'Death Note'), wb('Pain', 'Naruto'), wb('Muzan', 'Demon'),
+                { title: 'Frieza', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b3694-bDfOdSSdFfPv.png', mal_id: 'wb_Frieza' },
+                wb('Eren', 'Titan'), wb('Mahito', 'Jujutsu'), wb('Boros', 'Punch'), wb('Shigaraki', 'Hero'),
             ].filter(Boolean)
         },
         {
@@ -5284,10 +5361,13 @@ window._getBracketTemplates = function() {
             title: 'Best Swordsman',
             description: 'The greatest blade wielders across all anime.',
             items: [
-                wb('Roronoa Zoro', 'Piece'), wb('Dracule Mihawk', 'Piece'), wb('Levi Ackerman', 'Titan'), wb('Ichigo Kurosaki', 'Bleach'),
-                wb('Kenpachi', 'Bleach'), wb('Yoriichi', 'Demon Slayer'), wb('Giyu', 'Demon Slayer'), wb('Akame', 'Akame ga Kill'),
-                wb('Byakuya', 'Bleach'), wb('Thorfinn', 'Vinland'), wb('Askeladd', 'Vinland'), wb('Himura Kenshin'),
-                wb('Erza', 'Fairy Tail'), wb('Sanji', 'Piece'), wb('Shanks', 'Piece'), wb('Mugen')
+                wb('Zoro', 'Piece'), wb('Ichigo Kurosaki', 'Bleach'), wb('Levi', 'Titan'), wb('Rengoku', 'Demon'),
+                wb('Yami', 'Black Clover'), wb('Byakuya', 'Bleach'), wb('Kenpachi', 'Bleach'), wb('Akame', 'Akame ga Kill'),
+                wb('Grimmjow', 'Bleach'), wb('Shanks', 'Piece'), wb('Kamikaze', 'Punch'), wb('Kazuto', 'Sword Art'),
+                { title: 'Dracule Mihawk', image: 'https://s4.anilist.co/file/anilistcdn/character/large/n2064-OpnF4nLi6bvL.png', mal_id: 'wb_Dracule Mihawk' },
+                { title: 'Guts', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b422-XTaiTuvRohsV.png', mal_id: 'wb_Guts' },
+                { title: 'Inuyasha', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b1353-xsZhvfi7IFzT.png', mal_id: 'wb_Inuyasha' },
+                { title: 'Jin', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b391-f9fHDJEEFzn1.png', mal_id: 'wb_Jin' },
             ].filter(Boolean)
         },
         {
@@ -5295,10 +5375,10 @@ window._getBracketTemplates = function() {
             title: 'Best Sensei',
             description: 'The greatest teachers and mentors in anime.',
             items: [
-                wb('Kakashi', 'Naruto'), wb('Jiraiya', 'Naruto'), wb('Koro', 'Assassination'), wb('All Might', 'Hero'),
-                wb('Whitebeard', 'Piece'), wb('Urahara', 'Bleach'), wb('Netero', 'Hunter'), wb('Gojo', 'Jujutsu'),
-                wb('Minato', 'Naruto'), wb('Rayleigh', 'Piece'), wb('Yoruichi', 'Bleach'), wb('Erwin', 'Titan'),
-                wb('Piccolo'), wb('Roshi'), wb('Aizawa', 'Hero'), wb('Reigen', 'Mob Psycho')
+                wb('Kakashi', 'Naruto'), wb('Jiraiya', 'Naruto'), wb('Koro', 'Assassination'), wb('Hange', 'Titan'),
+                wb('Nanami', 'Jujutsu'), wb('Urahara', 'Bleach'), wb('Netero', 'Hunter'), wb('Gojo', 'Jujutsu'),
+                wb('Minato', 'Naruto'), wb('Tsunade', 'Naruto'), wb('Yoruichi', 'Bleach'), wb('Erwin', 'Titan'),
+                wb('Itachi', 'Naruto'), wb('Roy Mustang', 'Fullmetal'), wb('Aizawa', 'Hero'), wb('Reigen', 'Mob Psycho')
             ].filter(Boolean)
         }
     ];
@@ -5397,9 +5477,10 @@ window.createBracket = async function() {
         document.getElementById('bracket-save-template').checked = false;
         window._bracketAnimePool = [];
         window._renderBracketPool();
-        document.getElementById('bracket-create-body').style.display = 'none';
+        window.switchBracketTab({ currentTarget: document.getElementById('bracket-tab-btn-templates') }, 'templates');
         window._bracketsList.unshift({ id: ref.id, ...data, timestamp: { toDate: () => new Date() } });
         window._renderBracketsFeed();
+        window.openBracketPlayModal(ref.id);
     } catch(e) { console.error('Bracket create failed:', e); alert('Failed to create bracket: ' + e.message); }
 };
 
@@ -5414,15 +5495,11 @@ window.voteInBracket = async function(bracketId, round, matchIdx, side) {
     if (!b.votes) b.votes = {};
     const key = side === 'A' ? keyA : keyB;
     b.votes[key] = [...(b.votes[key]||[]), uid];
-    window._renderBracketsFeed();
-    // Auto-advance to next matchup after a short pause so the result is visible
     const totalMatchups = (b.rounds?.[String(round)] || []).length;
     if (matchIdx < totalMatchups - 1) {
-        setTimeout(() => {
-            window._bracketMatchupIdx[bracketId] = matchIdx + 1;
-            window._renderBracketsFeed();
-        }, 1400);
+        window._bracketMatchupIdx[bracketId] = matchIdx + 1;
     }
+    window._renderBracketsFeed();
     try {
         await updateDoc(doc(db, 'brackets', bracketId), { [`votes.${key}`]: arrayUnion(uid) });
     } catch(e) {
@@ -6347,7 +6424,7 @@ function getSeasonLabel(anime) {
 }
 
 // --- ANIME DETAIL SYSTEM ---
-window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
+window.loadAnimeDetails = async function(mal_id, skipHistory = false, defaultTab = null) {
     window.currentAnimeId = mal_id;
     switchView('anime-detail-view', false, skipHistory);
     if (!skipHistory) history.replaceState({}, '', `?anime=${mal_id}`);
@@ -6544,6 +6621,8 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false) {
     const seriesSection = document.getElementById('detail-series-section');
     if (seriesSection) seriesSection.style.display = hasSeriesReviews ? 'block' : 'none';
 
+    if (defaultTab) window.switchDetailTabById(defaultTab);
+
     // Async Fetchers
     window.jikanFetch(`https://api.jikan.moe/v4/anime/${mal_id}/characters`, `chars_${mal_id}`).then(d => {
         const cContainer = document.getElementById('detail-chars-container'); if(!cContainer) return;
@@ -6587,6 +6666,17 @@ window.closeMobileSearch = function() {
 };
 
 // --- Detail Page Tabs ---
+window.switchDetailTabById = function(tabId) {
+    const detailMain = document.querySelector('.detail-main');
+    if (!detailMain) return;
+    detailMain.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
+    detailMain.querySelectorAll('.detail-tab-content').forEach(c => c.style.display = 'none');
+    const tabBtn = detailMain.querySelector(`.detail-tab[onclick*="${tabId}"]`);
+    if (tabBtn) tabBtn.classList.add('active');
+    const content = document.getElementById(tabId);
+    if (content) content.style.display = 'block';
+};
+
 window.switchDetailTab = function(event, tabId) {
     const detailMain = event.target.closest('.detail-main');
     detailMain.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
@@ -7358,16 +7448,36 @@ window.bwNrtPostToFeed = async function(btn) {
 };
 
 // --- BuzzWord Post Cards ---
+window.deleteBwPost = async function(postId, col) {
+    if (!auth.currentUser) return;
+    if (!confirm('Delete this post?')) return;
+    try {
+        await deleteDoc(doc(db, col, postId));
+        window._activityItems = (window._activityItems || []).filter(x => x.id !== postId);
+        window._refreshHomeFeedItem && document.getElementById(`feed-item-${postId}`)?.remove();
+        window.fetchBwCommunityFeed && window.fetchBwCommunityFeed();
+    } catch(e) { alert('Failed to delete.'); }
+};
+
 window.generateBwPostCardHTML = function(post) {
     const game = BW_GAMES[post.game] || BW_GAMES.op;
     const safeId = post.id;
     const col = post._col || 'bw_posts';
+    const isOwner = auth.currentUser && post.uid === auth.currentUser.uid;
     const likes = post.likes || [];
     const dislikes = post.dislikes || [];
     const isLiked = auth.currentUser && likes.includes(auth.currentUser.uid);
     const isDisliked = auth.currentUser && dislikes.includes(auth.currentUser.uid);
     return `
         <div class="review-card bw-post-card feed-post-card">
+            ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
+                <div style="position:relative;">
+                    <button onclick="window.togglePostMenu('${safeId}')" style="background:rgba(0,0,0,0.35);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:white;"><span class="material-symbols-outlined" style="font-size:16px;">more_vert</span></button>
+                    <div id="post-menu-${safeId}" style="display:none;position:absolute;top:32px;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:140px;overflow:hidden;z-index:20;">
+                        <button onclick="event.stopPropagation();window.deleteBwPost('${safeId}','${col}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
+                    </div>
+                </div>
+            </div>` : ''}
             <div class="bw-thumb-wrapper">
                 <img src="${game.cover}" class="bw-thumb-img" alt="${game.badge}">
                 <div class="bw-play-overlay">
