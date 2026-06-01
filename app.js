@@ -2754,9 +2754,14 @@ window.loadProfileStats = async function(uid) {
     container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading stats...</div>';
 
     try {
-        const [revSnap, listSnap] = await Promise.all([
+        const [revSnap, listSnap, bwSnap, bracketSnap, tlSnap, htSnap, pollSnap] = await Promise.all([
             getDocs(query(collection(db, 'reviews'), where('uid', '==', uid))),
-            getDocs(query(collection(db, 'anime_lists'), where('uid', '==', uid)))
+            getDocs(query(collection(db, 'anime_lists'), where('uid', '==', uid))),
+            getDocs(query(collection(db, 'bw_posts'), where('uid', '==', uid))),
+            getDocs(query(collection(db, 'brackets'), where('uid', '==', uid))),
+            getDocs(query(collection(db, 'tier_lists'), where('uid', '==', uid))),
+            getDocs(query(collection(db, 'hot_takes'), where('uid', '==', uid))),
+            getDocs(query(collection(db, 'polls'), where('uid', '==', uid)))
         ]);
 
         const reviews = revSnap.docs.map(d => d.data()).filter(r => r.type !== 'suggestion' && r.type !== 'series');
@@ -2850,12 +2855,24 @@ window.loadProfileStats = async function(uid) {
                 </div>
             </div>` : ''}
 
-            ${topStudios.length ? `<div style="background:var(--bg-gray);border-radius:12px;padding:16px;">
+            ${topStudios.length ? `<div style="background:var(--bg-gray);border-radius:12px;padding:16px;margin-bottom:16px;">
                 <div style="font-weight:700;font-size:14px;margin-bottom:12px;">Top Studios</div>
                 <div style="display:flex;flex-wrap:wrap;gap:8px;">
                     ${topStudios.map(([s,c]) => `<span style="background:var(--bg-gray-darker);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;">${s} <span style="color:var(--text-muted);font-weight:400;">${c}</span></span>`).join('')}
                 </div>
             </div>` : ''}
+
+            <div style="background:var(--bg-gray);border-radius:12px;padding:16px;">
+                <div style="font-weight:700;font-size:14px;margin-bottom:12px;">Community Activity</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;">
+                    ${_statCard('BuzzWord Games', bwSnap.size, 'grid_view')}
+                    ${_statCard('Brackets', bracketSnap.size, 'emoji_events')}
+                    ${_statCard('Tier Lists', tlSnap.size, 'leaderboard')}
+                    ${_statCard('Hot Takes', htSnap.size, 'local_fire_department')}
+                    ${_statCard('Polls', pollSnap.size, 'bar_chart')}
+                    ${isMe ? _statCard('Trivia Played', (() => { let c=0; for(let i=0;i<localStorage.length;i++){if(localStorage.key(i)?.startsWith('weebee_trivia_'))c++;} return c; })(), 'quiz') : ''}
+                </div>
+            </div>
         `;
     } catch(e) {
         console.error(e);
