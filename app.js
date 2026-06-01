@@ -132,36 +132,48 @@ const ACHIEVEMENTS = [
     { id: 'first_follow', name: 'Making Friends',         desc: 'Followed your first user on WeeBee',         icon: 'person_add',        cat: 'Special',   color: '#E91E63' },
     { id: 'suggestor_5',  name: 'The Recommender',        desc: 'Made 5 anime suggestions to the community',  icon: 'lightbulb',         cat: 'Special',   color: '#FF9800' },
     // Community: BuzzWord — One Piece
-    { id: 'bwop_first',      name: "Devil's Luck",    desc: 'Solved your first One Piece BuzzWord puzzle',          icon: 'casino',                cat: 'Community', color: '#8B0000' },
-    { id: 'bwop_1guess',     name: 'First Mate',      desc: 'Solved the One Piece puzzle in just 1 guess',          icon: 'anchor',                cat: 'Community', color: '#8B0000' },
-    { id: 'bwop_streak_7',   name: 'Straw Hat',       desc: 'Solved the One Piece puzzle 7 days in a row',          icon: 'wb_sunny',              cat: 'Community', color: '#8B0000' },
-    { id: 'bwop_total_30',   name: 'Grand Line',      desc: 'Solved the One Piece puzzle 30 times total',           icon: 'explore',               cat: 'Community', color: '#8B0000' },
-    { id: 'bwop_streak_100', name: 'The One Piece',   desc: 'Solved the One Piece puzzle 100 days in a row',        icon: 'diamond',               cat: 'Community', color: '#FFD700' },
+    { id: 'bwop_first',       name: "Devil's Luck",       desc: 'Solved your first One Piece BuzzWord puzzle',        icon: 'casino',                cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000' },
+    { id: 'bwop_1guess',      name: 'First Mate',          desc: 'Solved the One Piece puzzle in just 1 guess',        icon: 'anchor',                cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000' },
+    { id: 'bwop_streak_7',    name: 'Straw Hat',           desc: 'Solved the One Piece puzzle 7 days in a row',        icon: 'wb_sunny',              cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000' },
+    { id: 'bwop_total_30',    name: 'Grand Line',          desc: 'Solved the One Piece puzzle 30 times total',         icon: 'explore',               cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000' },
+    { id: 'bwop_streak_100',  name: 'The One Piece',       desc: 'Solved the One Piece puzzle 100 days in a row',      icon: 'diamond',               cat: 'Community', subcat: 'BuzzWord',   color: '#FFD700' },
     // Community: BuzzWord — Naruto
-    { id: 'bwnrt_first',     name: 'Genin',           desc: 'Solved your first Naruto BuzzWord puzzle',             icon: 'star',                  cat: 'Community', color: '#FF6B00' },
-    { id: 'bwnrt_1guess',    name: 'Dattebayo!',      desc: 'Solved the Naruto puzzle in just 1 guess',             icon: 'bolt',                  cat: 'Community', color: '#FF6B00' },
-    { id: 'bwnrt_streak_7',  name: 'Shinobi Way',     desc: 'Solved the Naruto puzzle 7 days in a row',             icon: 'local_fire_department', cat: 'Community', color: '#FF6B00' },
-    { id: 'bwnrt_total_30',  name: "Hokage's Path",   desc: 'Solved the Naruto puzzle 30 times total',              icon: 'military_tech',         cat: 'Community', color: '#FF6B00' },
+    { id: 'bwnrt_first',      name: 'Genin',               desc: 'Solved your first Naruto BuzzWord puzzle',           icon: 'star',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00' },
+    { id: 'bwnrt_1guess',     name: 'Dattebayo!',          desc: 'Solved the Naruto puzzle in just 1 guess',           icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00' },
+    { id: 'bwnrt_streak_7',   name: 'Shinobi Way',         desc: 'Solved the Naruto puzzle 7 days in a row',           icon: 'local_fire_department', cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00' },
+    { id: 'bwnrt_total_30',   name: "Hokage's Path",       desc: 'Solved the Naruto puzzle 30 times total',            icon: 'military_tech',         cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00' },
     // Community: BuzzWord — Bleach
-    { id: 'bwblc_first',     name: 'Soul Reaper',     desc: 'Solved your first Bleach BuzzWord puzzle',             icon: 'star',                  cat: 'Community', color: '#00BCD4' },
-    { id: 'bwblc_1guess',    name: 'Bankai!',         desc: 'Solved the Bleach puzzle in just 1 guess',             icon: 'bolt',                  cat: 'Community', color: '#00BCD4' },
-    { id: 'bwblc_streak_7',  name: 'Gotei 13',        desc: 'Solved the Bleach puzzle 7 days in a row',             icon: 'local_fire_department', cat: 'Community', color: '#00BCD4' },
-    { id: 'bwblc_total_30',  name: "Captain's Path",  desc: 'Solved the Bleach puzzle 30 times total',              icon: 'military_tech',         cat: 'Community', color: '#00BCD4' },
+    { id: 'bwblc_first',      name: 'Soul Reaper',         desc: 'Solved your first Bleach BuzzWord puzzle',           icon: 'star',                  cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4' },
+    { id: 'bwblc_1guess',     name: 'Bankai!',             desc: 'Solved the Bleach puzzle in just 1 guess',           icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4' },
+    { id: 'bwblc_streak_7',   name: 'Gotei 13',            desc: 'Solved the Bleach puzzle 7 days in a row',           icon: 'local_fire_department', cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4' },
+    { id: 'bwblc_total_30',   name: "Captain's Path",      desc: 'Solved the Bleach puzzle 30 times total',            icon: 'military_tech',         cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4' },
     // Community: BuzzWord — Dragon Ball
-    { id: 'bwdb_first',      name: 'Power Level',     desc: 'Solved your first Dragon Ball BuzzWord puzzle',         icon: 'star',                  cat: 'Community', color: '#FF6F00' },
-    { id: 'bwdb_1guess',     name: 'Over 9000!',      desc: 'Solved the Dragon Ball puzzle in just 1 guess',         icon: 'bolt',                  cat: 'Community', color: '#FF6F00' },
-    { id: 'bwdb_streak_7',   name: 'Super Saiyan',    desc: 'Solved the Dragon Ball puzzle 7 days in a row',         icon: 'local_fire_department', cat: 'Community', color: '#FF6F00' },
-    { id: 'bwdb_total_30',   name: "Limit Breaker",   desc: 'Solved the Dragon Ball puzzle 30 times total',          icon: 'military_tech',         cat: 'Community', color: '#FF6F00' },
-    // Community: BuzzWord — General
-    { id: 'bw_double_agent', name: 'Double Agent',    desc: 'Solved both BuzzWord puzzles on the same day',         icon: 'join_inner',            cat: 'Community', color: '#6A1B9A' },
-    { id: 'bw_multiverse',   name: 'Multiverse',      desc: 'Solved a puzzle from every available BuzzWord game',   icon: 'public',                cat: 'Community', color: '#6A1B9A' },
+    { id: 'bwdb_first',       name: 'Power Level',         desc: 'Solved your first Dragon Ball BuzzWord puzzle',      icon: 'star',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00' },
+    { id: 'bwdb_1guess',      name: 'Over 9000!',          desc: 'Solved the Dragon Ball puzzle in just 1 guess',      icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00' },
+    { id: 'bwdb_streak_7',    name: 'Super Saiyan',        desc: 'Solved the Dragon Ball puzzle 7 days in a row',      icon: 'local_fire_department', cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00' },
+    { id: 'bwdb_total_30',    name: 'Limit Breaker',       desc: 'Solved the Dragon Ball puzzle 30 times total',       icon: 'military_tech',         cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00' },
+    // Community: BuzzWord — General + Feed
+    { id: 'bw_double_agent',  name: 'Double Agent',        desc: 'Solved both BuzzWord puzzles on the same day',       icon: 'join_inner',            cat: 'Community', subcat: 'BuzzWord',   color: '#6A1B9A' },
+    { id: 'bw_multiverse',    name: 'Multiverse',          desc: 'Solved a puzzle from every available BuzzWord game', icon: 'public',                cat: 'Community', subcat: 'BuzzWord',   color: '#6A1B9A' },
+    { id: 'feed_showtime',    name: 'Showtime',            desc: 'Posted your first BuzzWord result to the feed',      icon: 'campaign',              cat: 'Community', subcat: 'BuzzWord',   color: '#2E7D32' },
+    { id: 'feed_trending',    name: 'Trending',            desc: 'Received 25 likes across all your BuzzWord posts',   icon: 'trending_up',           cat: 'Community', subcat: 'BuzzWord',   color: '#2E7D32' },
     // Community: Tier Lists
-    { id: 'tl_first',        name: 'Ranked Up',       desc: 'Created your first tier list',                         icon: 'format_list_numbered',  cat: 'Community', color: '#1565C0' },
-    { id: 'tl_10',           name: 'Tier Lord',        desc: 'Created 10 tier lists',                               icon: 'leaderboard',           cat: 'Community', color: '#1565C0' },
-    { id: 'tl_crowd_pleaser',name: 'Crowd Pleaser',   desc: 'Received 10 likes on a single tier list',              icon: 'favorite',              cat: 'Community', color: '#1565C0' },
-    // Community: Feed
-    { id: 'feed_showtime',   name: 'Showtime',        desc: 'Posted your first BuzzWord result to the feed',        icon: 'campaign',              cat: 'Community', color: '#2E7D32' },
-    { id: 'feed_trending',   name: 'Trending',        desc: 'Received 25 likes across all your BuzzWord posts',     icon: 'trending_up',           cat: 'Community', color: '#2E7D32' },
+    { id: 'tl_first',         name: 'Ranked Up',           desc: 'Created your first tier list',                       icon: 'format_list_numbered',  cat: 'Community', subcat: 'Tier Lists', color: '#1565C0' },
+    { id: 'tl_10',            name: 'Tier Lord',           desc: 'Created 10 tier lists',                              icon: 'leaderboard',           cat: 'Community', subcat: 'Tier Lists', color: '#1565C0' },
+    { id: 'tl_crowd_pleaser', name: 'Crowd Pleaser',       desc: 'Received 10 likes on a single tier list',            icon: 'favorite',              cat: 'Community', subcat: 'Tier Lists', color: '#1565C0' },
+    // Community: Trivia
+    { id: 'trivia_first',     name: 'Daily Quizzer',       desc: 'Completed your first daily trivia',                  icon: 'quiz',                  cat: 'Community', subcat: 'Trivia',     color: '#9C27B0' },
+    { id: 'trivia_perfect',   name: 'Full Marks',          desc: 'Aced a trivia round with a perfect 5/5',             icon: 'workspace_premium',     cat: 'Community', subcat: 'Trivia',     color: '#9C27B0' },
+    { id: 'trivia_7',         name: 'Trivia Regular',      desc: 'Played daily trivia 7 days total',                   icon: 'calendar_month',        cat: 'Community', subcat: 'Trivia',     color: '#9C27B0' },
+    { id: 'trivia_30',        name: 'Trivia Veteran',      desc: 'Played daily trivia 30 days total',                  icon: 'military_tech',         cat: 'Community', subcat: 'Trivia',     color: '#9C27B0' },
+    // Community: Hot Takes
+    { id: 'ht_first',         name: 'First Take',          desc: 'Posted your first hot take',                         icon: 'local_fire_department', cat: 'Community', subcat: 'Hot Takes',  color: '#FF5722' },
+    { id: 'ht_10',            name: 'Big Mouth',           desc: 'Posted 10 hot takes',                                icon: 'mic',                   cat: 'Community', subcat: 'Hot Takes',  color: '#FF5722' },
+    { id: 'ht_popular',       name: 'Crowd Favorite',      desc: 'Got 25+ agrees on a single hot take',                icon: 'favorite',              cat: 'Community', subcat: 'Hot Takes',  color: '#FF5722' },
+    { id: 'ht_controversial', name: 'Stirring the Pot',    desc: 'Got 10+ disagrees on a single hot take',             icon: 'whatshot',              cat: 'Community', subcat: 'Hot Takes',  color: '#FF5722' },
+    // Community: Polls
+    { id: 'poll_first',       name: 'Pollster',            desc: 'Created your first poll',                            icon: 'bar_chart',             cat: 'Community', subcat: 'Polls',      color: '#2196F3' },
+    { id: 'poll_popular',     name: 'The People Have Spoken', desc: 'Got 20+ total votes on a single poll',            icon: 'how_to_vote',           cat: 'Community', subcat: 'Polls',      color: '#2196F3' },
 ];
 
 window.awardAchievements = async function(ids) {
@@ -278,6 +290,22 @@ window.checkCommunityAchievements = async function() {
             if ((d.currentStreak||0) >= 7)  ids.push('bwnrt_streak_7');
             if ((d.totalWins||0) >= 30) ids.push('bwnrt_total_30');
         }
+        // Hot Takes achievements
+        const htSnap = await getDocs(query(collection(db, 'hot_takes'), where('uid', '==', uid)));
+        if (htSnap.size >= 1)  ids.push('ht_first');
+        if (htSnap.size >= 10) ids.push('ht_10');
+        htSnap.forEach(d => {
+            const data = d.data();
+            if ((data.agreeUids||[]).length >= 25) ids.push('ht_popular');
+            if ((data.disagreeUids||[]).length >= 10) ids.push('ht_controversial');
+        });
+        // Polls achievements
+        const pollsSnap = await getDocs(query(collection(db, 'polls'), where('uid', '==', uid)));
+        if (pollsSnap.size >= 1) ids.push('poll_first');
+        pollsSnap.forEach(d => {
+            const totalVotes = (d.data().options||[]).reduce((sum, o) => sum + (o.voters||[]).length, 0);
+            if (totalVotes >= 20) ids.push('poll_popular');
+        });
     } catch(e) {}
     if (ids.length) window.awardAchievements(ids).catch(() => {});
 };
@@ -291,6 +319,16 @@ window.loadProfileAchievements = async function(uid) {
         const earned = achDoc.exists() ? achDoc.data() : {};
         const cats = ['Critic', 'Social', 'Collector', 'Special', 'Community'];
         const fmtDate = ts => { try { const d = ts?.toDate ? ts.toDate() : new Date(ts); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch(e) { return null; }};
+        const achCard = (ach) => {
+            const isEarned = !!earned[ach.id];
+            const date = isEarned ? fmtDate(earned[ach.id]?.earnedAt) : null;
+            return `<div class="achievement-card ${isEarned ? 'earned' : 'locked'}" title="${ach.name}: ${ach.desc}">
+                <span class="material-symbols-outlined ach-icon" style="${isEarned ? `color:${ach.color}` : ''}">${ach.icon}</span>
+                <div class="ach-name">${ach.name}</div>
+                <div class="ach-desc">${ach.desc}</div>
+                ${date ? `<div class="ach-date">${date}</div>` : ''}
+            </div>`;
+        };
         let html = '';
         cats.forEach(cat => {
             const catAchs = ACHIEVEMENTS.filter(a => a.cat === cat);
@@ -299,19 +337,24 @@ window.loadProfileAchievements = async function(uid) {
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
                     <h4 style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--text-muted);">${cat}</h4>
                     <span style="font-size:11px; color:var(--text-muted);">${earnedCount} / ${catAchs.length}</span>
-                </div>
-                <div class="achievement-grid">`;
-            catAchs.forEach(ach => {
-                const isEarned = !!earned[ach.id];
-                const date = isEarned ? fmtDate(earned[ach.id]?.earnedAt) : null;
-                html += `<div class="achievement-card ${isEarned ? 'earned' : 'locked'}" title="${ach.name}: ${ach.desc}">
-                    <span class="material-symbols-outlined ach-icon" style="${isEarned ? `color:${ach.color}` : ''}">${ach.icon}</span>
-                    <div class="ach-name">${ach.name}</div>
-                    <div class="ach-desc">${ach.desc}</div>
-                    ${date ? `<div class="ach-date">${date}</div>` : ''}
                 </div>`;
-            });
-            html += `</div></div>`;
+            if (cat === 'Community') {
+                const subcats = [...new Set(catAchs.map(a => a.subcat || 'General'))];
+                subcats.forEach(sc => {
+                    const scAchs = catAchs.filter(a => (a.subcat || 'General') === sc);
+                    const scEarned = scAchs.filter(a => earned[a.id]).length;
+                    html += `<div style="margin-bottom:22px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border-color);">
+                            <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted);">${sc}</span>
+                            <span style="font-size:11px; color:var(--text-muted);">${scEarned} / ${scAchs.length}</span>
+                        </div>
+                        <div class="achievement-grid">${scAchs.map(achCard).join('')}</div>
+                    </div>`;
+                });
+            } else {
+                html += `<div class="achievement-grid">${catAchs.map(achCard).join('')}</div>`;
+            }
+            html += `</div>`;
         });
         container.innerHTML = html;
     } catch(e) { container.innerHTML = '<p style="color:var(--text-muted); font-size:13px; text-align:center;">Failed to load achievements.</p>'; }
@@ -461,6 +504,8 @@ onAuthStateChanged(auth, (user) => {
             window.fetchHomepageTierLists();
             const adminPanel = document.getElementById('patch-notes-admin');
             if (adminPanel) adminPanel.style.display = window.isAdmin ? 'block' : 'none';
+            const obAdminControls = document.getElementById('ob-admin-controls');
+            if (obAdminControls) obAdminControls.style.display = window.isAdmin ? 'block' : 'none';
         });
         // Handle shared URL params
         const _urlParams = new URLSearchParams(window.location.search);
@@ -974,6 +1019,8 @@ window.openInDepthModal = function() {
         </div>
     `).join('');
     if (existing?.fanService) document.getElementById('in-depth-fanservice-value').value = existing.fanService;
+    const _summaryEl = document.getElementById('in-depth-summary-text');
+    if (_summaryEl) _summaryEl.value = existing?.text || '';
     document.getElementById('in-depth-modal').style.display = 'flex';
 };
 
@@ -993,7 +1040,7 @@ window.previewInDepthReview = function() {
     const fanService = _fsVal !== '' ? parseFloat(_fsVal) : null;
     if (fanService !== null && (fanService < 0 || fanService > 10)) return alert('Fan Service score must be between 0 and 10.');
     const overallScore = (scored.reduce((sum, c) => sum + c.score, 0) / scored.length).toFixed(1);
-    window.pendingInDepthData = { categories, overallScore, fanService };
+    window.pendingInDepthData = { categories, overallScore, fanService, text: document.getElementById('in-depth-summary-text')?.value.trim() || '' };
 
     const catBadges = scored.map(c => `
         <div style="display:flex;flex-direction:column;align-items:center;width:75px;">
@@ -1029,13 +1076,14 @@ window.previewInDepthReview = function() {
 
 window.submitInDepthReview = async function() {
     if (!auth.currentUser) return window.openAuthModal();
-    const { categories, overallScore, fanService } = window.pendingInDepthData;
+    const { categories, overallScore, fanService, text: _pendingText } = window.pendingInDepthData;
     const catTexts = (categories || []).map(c => c.text || '');
     if (window.checkTextContent(...catTexts)) return alert('Your review contains language that isn\'t allowed on WeeBee.');
     try {
         if (window.existingReviewId) {
             await updateDoc(doc(db, "reviews", window.existingReviewId), {
                 score: parseFloat(overallScore), categories, fanService: fanService !== null ? fanService : null,
+                text: _pendingText || '',
                 animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
                 animeImage: window.currentAnime?.images?.jpg?.image_url,
                 username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
@@ -1043,12 +1091,13 @@ window.submitInDepthReview = async function() {
             });
         } else {
             const reviewType = window.isSeriesReview ? 'series' : 'in-depth';
+            const _indepthSummary = window.pendingInDepthData?.text || '';
             await addDoc(collection(db, "reviews"), {
                 mal_id: window.currentAnimeId,
                 animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
                 animeImage: window.currentAnime?.images?.jpg?.image_url,
                 type: reviewType, score: parseFloat(overallScore), categories,
-                fanService: fanService !== null ? fanService : null, text: '',
+                fanService: fanService !== null ? fanService : null, text: _indepthSummary,
                 username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
                 uid: auth.currentUser.uid, timestamp: new Date(),
                 likes: [], dislikes: [], commentCount: 0
@@ -2361,7 +2410,8 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             });
             badgesHTML += `</div>`;
 
-            fullHTML = `<div class="full-review-content" style="display:none; margin-top: 25px; padding-right: 170px; position: relative; z-index: 2;">`;
+            fullHTML = `${rev.text ? `<div style="padding-right:195px;position:relative;z-index:2;margin-top:12px;"><p class="review-text" style="font-size:14px;color:var(--text-dark);margin:0;">${rev.text}</p></div>` : ''}
+            <div class="full-review-content" style="display:none; margin-top: 25px; padding-right: 170px; position: relative; z-index: 2;">`;
             rev.categories.filter(cat => cat.score).forEach(cat => {
                 fullHTML += `<div style="background: var(--bg-white); padding: 12px; border-radius: 10px; border: 1px solid #E0E0E0; margin-bottom: 10px;"><div style="display: flex; justify-content: space-between; align-items: center;"><strong>${cat.label}</strong><div class="rating-badge ${window.getScoreTier(cat.score)}" style="width: 32px; height: 32px; font-size: 11px;">${cat.score}</div></div>${cat.text ? `<p style="font-size: 13px; margin-top: 8px; border-top: 1px solid #F0F0F0; padding-top: 8px;">${cat.text}</p>` : ''}</div>`;
             });
@@ -2895,13 +2945,16 @@ window.loadProfileFeed = async function(uid) {
         const tlFilter = isMe
             ? query(collection(db, 'tier_lists'), where('uid', '==', uid), limit(30))
             : query(collection(db, 'tier_lists'), where('uid', '==', uid), where('public', '==', true), limit(30));
-        const [revSnap, tlSnap, htSnap, pollSnap, bracketSnap, bwSnap] = await Promise.all([
-            getDocs(query(collection(db, 'reviews'), where('uid', '==', uid), limit(60))),
-            getDocs(tlFilter),
-            getDocs(query(collection(db, 'hot_takes'), where('uid', '==', uid), limit(30))),
-            getDocs(query(collection(db, 'polls'), where('uid', '==', uid), limit(30))),
-            getDocs(query(collection(db, 'brackets'), where('uid', '==', uid), limit(20))),
-            getDocs(query(collection(db, 'bw_posts'), where('uid', '==', uid), limit(30))),
+        const _empty = { forEach: () => {}, docs: [] };
+        const [revSnap, tlSnap, htSnap, pollSnap, bracketSnap, bwSnap, triviaSnap, mbSnap] = await Promise.all([
+            getDocs(query(collection(db, 'reviews'), where('uid', '==', uid), limit(60))).catch(() => _empty),
+            getDocs(tlFilter).catch(() => _empty),
+            getDocs(query(collection(db, 'hot_takes'), where('uid', '==', uid), limit(30))).catch(() => _empty),
+            getDocs(query(collection(db, 'polls'), where('uid', '==', uid), limit(30))).catch(() => _empty),
+            getDocs(query(collection(db, 'brackets'), where('uid', '==', uid), limit(20))).catch(() => _empty),
+            getDocs(query(collection(db, 'bw_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
+            getDocs(query(collection(db, 'trivia_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
+            getDocs(query(collection(db, 'melobee_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
         ]);
         const items = [];
         revSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'review', _ts: d.data().timestamp?.toMillis?.() || 0 }));
@@ -2910,6 +2963,8 @@ window.loadProfileFeed = async function(uid) {
         pollSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'poll', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         bracketSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'bracket', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         bwSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'bw', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+        triviaSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'trivia', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+        mbSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'melobee', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         items.sort((a, b) => b._ts - a._ts);
         if (!items.length) {
             container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:32px;">No posts yet.</p>';
@@ -2927,6 +2982,8 @@ window.loadProfileFeed = async function(uid) {
                 else if (item._type === 'hot_take') html = window._renderHotTakeCard(item, curUid);
                 else if (item._type === 'poll') html = window._renderPollCard(item, curUid);
                 else if (item._type === 'bracket') html = window._renderBracketFeedCard(item);
+                else if (item._type === 'trivia') html = window.generateTriviaPostCardHTML(item);
+                else if (item._type === 'melobee') html = window.generateMeloBeePostCardHTML(item);
             } catch(e) { console.error('Profile feed render error:', item._type, e); }
             if (html) container.innerHTML += `<div>${html}</div>`;
         });
@@ -3506,7 +3563,8 @@ function renderTierListFeedCard(id, tl) {
                 ${typeLabel ? `<span style="font-size:12px;color:var(--text-muted);"> · ${typeLabel}</span>` : ''}
             </div>
         </div>
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:var(--text-dark);cursor:pointer;position:relative;z-index:2;${padRight}" onclick="window.openTierListViewer('${id}')">${tl.title || 'Untitled Tier List'}</div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:4px;color:var(--text-dark);cursor:pointer;position:relative;z-index:2;${padRight}" onclick="window.openTierListViewer('${id}')">${tl.title || 'Untitled Tier List'}</div>
+        ${tl.caption ? `<p style="font-size:14px;color:var(--text-dark);margin:4px 0 6px;position:relative;z-index:2;${padRight}">${tl.caption}</p>` : ''}
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;position:relative;z-index:2;${padRight}">${tl.tiers.length} tiers · ${itemCount} item${itemCount !== 1 ? 's' : ''} ranked</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;cursor:pointer;position:relative;z-index:2;${padRight}" onclick="window.openTierListViewer('${id}')">${tierPreview}</div>
         <div class="review-actions" style="position:relative;z-index:2;">
@@ -3560,6 +3618,7 @@ function renderActivityBatch() {
             else if (item._type === 'hot_take') html = window._renderHotTakeCard(item, uid);
             else if (item._type === 'poll') html = window._renderPollCard(item, uid);
             else if (item._type === 'bracket') html = window._renderBracketFeedCard(item);
+            else if (item._type === 'trivia') html = window.generateTriviaPostCardHTML(item);
             if (html) feed.innerHTML += `<div data-fid="${item.id}">${html}</div>`;
         } catch(e) { console.error('Feed render error:', item._type, e); }
     });
@@ -3591,13 +3650,16 @@ window.fetchHomeActivityFeed = async function() {
     window._activityIndex = 0;
     try {
         const today = bwGetDate();
-        const [reviewSnap, tlSnap, bwSnap, htSnap, pollSnap, bracketSnap] = await Promise.all([
-            getDocs(query(collection(db, 'reviews'), orderBy('timestamp', 'desc'), limit(60))),
-            getDocs(query(collection(db, 'tier_lists'), where('public', '==', true))),
-            getDocs(query(collection(db, 'bw_posts'), orderBy('timestamp', 'desc'), limit(50))),
-            getDocs(query(collection(db, 'hot_takes'), orderBy('timestamp', 'desc'), limit(30))),
-            getDocs(query(collection(db, 'polls'), orderBy('timestamp', 'desc'), limit(20))),
-            getDocs(query(collection(db, 'brackets'), orderBy('timestamp', 'desc'), limit(20)))
+        const _empty = { forEach: () => {}, docs: [] };
+        const [reviewSnap, tlSnap, bwSnap, htSnap, pollSnap, bracketSnap, triviaSnap] = await Promise.all([
+            getDocs(query(collection(db, 'reviews'), orderBy('timestamp', 'desc'), limit(60))).catch(() => _empty),
+            getDocs(query(collection(db, 'tier_lists'), where('public', '==', true))).catch(() => _empty),
+            getDocs(query(collection(db, 'bw_posts'), orderBy('timestamp', 'desc'), limit(50))).catch(() => _empty),
+            getDocs(query(collection(db, 'hot_takes'), orderBy('timestamp', 'desc'), limit(30))).catch(() => _empty),
+            getDocs(query(collection(db, 'polls'), orderBy('timestamp', 'desc'), limit(20))).catch(() => _empty),
+            getDocs(query(collection(db, 'brackets'), orderBy('timestamp', 'desc'), limit(20))).catch(() => _empty),
+            getDocs(query(collection(db, 'trivia_posts'), orderBy('timestamp', 'desc'), limit(30))).catch(() => _empty),
+            getDocs(query(collection(db, 'melobee_posts'), orderBy('timestamp', 'desc'), limit(30))).catch(() => _empty)
         ]);
 
         // Build set of social UIDs (follows + friends)
@@ -3643,6 +3705,15 @@ window.fetchHomeActivityFeed = async function() {
         bracketSnap.forEach(d => {
             const data = d.data();
             items.push({ ...data, id: d.id, _type: 'bracket', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) });
+        });
+        triviaSnap.forEach(d => {
+            const data = d.data();
+            items.push({ ...data, id: d.id, _type: 'trivia', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) });
+        });
+        const mbHomSnap = await getDocs(query(collection(db,'melobee_posts'), orderBy('timestamp','desc'), limit(30))).catch(()=>({forEach:()=>{}}));
+        mbHomSnap.forEach(d => {
+            const data = d.data();
+            items.push({ ...data, id: d.id, _type: 'melobee', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) });
         });
 
         await window.prefetchRankCache([...new Set(items.map(i => i.uid).filter(Boolean))]);
@@ -4050,9 +4121,14 @@ window._getTierListTemplates = function() {
             items: [
                 wb('Kakashi', 'Naruto'), wb('Jiraiya', 'Naruto'), wb('Koro', 'Assassination'), wb('All Might', 'Hero'),
                 wb('Whitebeard', 'Piece'), wb('Urahara', 'Bleach'), wb('Netero', 'Hunter'), wb('Gojo', 'Jujutsu'),
-                wb('Minato', 'Naruto'), wb('Rayleigh', 'Piece'), wb('Yoruichi', 'Bleach'), wb('Erwin', 'Titan'),
-                wb('Reigen', 'Mob Psycho'), wb('Aizawa', 'Hero'), wb('Shanks', 'Piece'), wb('Piccolo'),
-                wb('Tsunade', 'Naruto'), wb('Silvers Rayleigh', 'Piece'), wb('Bang', 'Punch'), wb('Nanami', 'Jujutsu'),
+                wb('Rayleigh', 'Piece'), wb('Yoruichi', 'Bleach'), wb('Reigen', 'Mob Psycho'), wb('Aizawa', 'Hero'),
+                wb('Shanks', 'Piece'), wb('Bang', 'Punch'), wb('Nanami', 'Jujutsu'),
+                { id: 'wb_Piccolo',         title: 'Piccolo',         image: 'https://s4.anilist.co/file/anilistcdn/character/large/b914-KuS8AWjqBrqa.jpg',   animeTitle: 'Dragon Ball Z' },
+                { id: 'wb_Biscuit',         title: 'Biscuit Krueger', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b13898-nHq3fRmp9uPD.png', animeTitle: 'Hunter x Hunter' },
+                { id: 'wb_Ukai',            title: 'Keishin Ukai',    image: 'https://s4.anilist.co/file/anilistcdn/character/large/b70861-mW9IE5G9Ov8J.jpg', animeTitle: 'Haikyuu!!' },
+                { id: 'wb_Yami',            title: 'Yami Sukehiro',   image: 'https://s4.anilist.co/file/anilistcdn/character/large/b124440-Lpdo6y8cljV6.png',animeTitle: 'Black Clover' },
+                { id: 'wb_Garp',            title: 'Monkey D. Garp',  image: 'https://s4.anilist.co/file/anilistcdn/character/large/b8064-dPltKaZ8RAsj.jpg',  animeTitle: 'One Piece' },
+                { id: 'wb_Onizuka',         title: 'Eikichi Onizuka', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b434-Q0K9e4HukawA.png',   animeTitle: 'Great Teacher Onizuka' },
             ].filter(Boolean)
         },
     ];
@@ -4390,15 +4466,16 @@ window.saveTierList = async function() {
     if (!title) return alert('Please give your tier list a title.');
     const isPublic = document.getElementById('tl-public-toggle').checked;
     const isTemplate = document.getElementById('tl-template-toggle').checked;
+    const caption = document.getElementById('tl-caption-input')?.value.trim() || '';
     const pd = await getDoc(doc(db,"profiles",auth.currentUser.uid)).catch(()=>null);
     const displayName = pd?.data()?.displayName || auth.currentUser.displayName;
     const myAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
     const _allItems = [...(st.tiers||[]).flatMap(t => t.items||[]), ...(st.unranked||[])];
     const topTierItem = (st.tiers || []).find(t => (t.items||[]).length > 0)?.items?.[0];
     const coverImage = topTierItem?.image || _allItems.find(i => i.image)?.image || null;
-    const rankedItems = (st.tiers||[]).flatMap(t => t.items||[]);
-    const sourceAnimeTitles = [...new Set(rankedItems.map(i => i.animeTitle).filter(Boolean))];
-    const data = { uid:auth.currentUser.uid, authorName:displayName, authorAvatar:myAvatar, title, type:st.type, sourceAnimeId:st.sourceAnimeId||null, sourceAnimeTitle:st.sourceAnimeTitle||null, sourceAnimeTitles, coverImage, tiers:st.tiers, unranked:st.unranked, public:isPublic, isTemplate, updatedAt:new Date() };
+    const allItems = [...(st.tiers||[]).flatMap(t => t.items||[]), ...(st.unranked||[])];
+    const sourceAnimeTitles = [...new Set(allItems.map(i => i.animeTitle).filter(Boolean))];
+    const data = { uid:auth.currentUser.uid, authorName:displayName, authorAvatar:myAvatar, title, caption, type:st.type, sourceAnimeId:st.sourceAnimeId||null, sourceAnimeTitle:st.sourceAnimeTitle||null, sourceAnimeTitles, coverImage, tiers:st.tiers, unranked:st.unranked, public:isPublic, isTemplate, updatedAt:new Date() };
     try {
         if (st.editingId) { await updateDoc(doc(db,"tier_lists",st.editingId), data); }
         else { await addDoc(collection(db,"tier_lists"), { ...data, likes:[], dislikes:[], commentCount:0, templateLikes:[], templateDislikes:[], timestamp:new Date() }); }
@@ -4552,7 +4629,17 @@ window.switchCommunityTab = function(event, tabId) {
     document.querySelectorAll('#community-view .community-tab-content').forEach(el => el.style.display = 'none');
     document.querySelectorAll('#community-view .community-tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(tabId).style.display = 'block';
-    event.currentTarget.classList.add('active');
+    if (event?.currentTarget) event.currentTarget.classList.add('active');
+};
+
+window.goToTriviaTab = function() {
+    window.switchView('community-view');
+    document.querySelectorAll('#community-view .community-tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('#community-view .community-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('community-tab-trivia').style.display = 'block';
+    const triviaBtn = document.querySelector('[onclick*="community-tab-trivia"]');
+    if (triviaBtn) triviaBtn.classList.add('active');
+    window.loadTriviaFeed();
 };
 
 // ─── Leaderboards ────────────────────────────────────────────────────────────
@@ -4829,6 +4916,7 @@ window.editTierList = async function(id) {
     document.getElementById('tier-list-creator').style.display='flex';
     window.showTierStep('editor');
     document.getElementById('tl-title-input').value=tl.title;
+    const _tlCapEl = document.getElementById('tl-caption-input'); if (_tlCapEl) _tlCapEl.value = tl.caption || '';
     document.getElementById('tl-public-toggle').checked=tl.public;
     document.getElementById('tl-template-toggle').checked=!!tl.isTemplate;
     document.getElementById('tl-source-label').innerText=tl.type==='characters'?`Characters from: ${tl.sourceAnimeTitle}`:'Anime tier list';
@@ -4893,24 +4981,29 @@ window._renderHotTakeCard = function(ht, uid) {
     const agreed = uid && (ht.agreeUids||[]).includes(uid);
     const disagreed = uid && (ht.disagreeUids||[]).includes(uid);
     const isOwner = uid && ht.uid === uid;
-    const ago = ht.timestamp?.toDate ? formatTimeAgo(ht.timestamp.toDate()) : '';
+    const ago = formatTimeAgo(ht.timestamp);
     const likes = ht.likes || [];
     const dislikes = ht.dislikes || [];
     const isLiked = uid && likes.includes(uid);
     const isDisliked = uid && dislikes.includes(uid);
-    return `<div class="feed-post-card" style="background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.22);border-radius:14px;padding:16px;margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-            <img src="${ht.authorAvatar||''}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">
-            <div style="flex:1;min-width:0;">
-                <span style="font-weight:700;font-size:14px;">${ht.authorName||'Anonymous'}</span>
-                <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">${ago}</span>
-            </div>
-            ${isOwner ? `<div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation();">
-                <button onclick="window.togglePostMenu('${ht.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;display:flex;align-items:center;"><span class="material-symbols-outlined" style="font-size:20px;">more_vert</span></button>
+    return `<div class="feed-post-card" style="background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.22);border-radius:14px;padding:16px;margin-bottom:12px;position:relative;">
+        ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
+            <div style="position:relative;">
+                <button onclick="window.togglePostMenu('${ht.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined" style="font-size:20px;">more_vert</span></button>
                 <div id="post-menu-${ht.id}" style="display:none;position:absolute;top:100%;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:140px;overflow:hidden;z-index:20;">
                     <button onclick="event.stopPropagation();window.deleteHotTake('${ht.id}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
                 </div>
-            </div>` : ''}
+            </div>
+        </div>` : ''}
+        <div class="review-header" style="margin-bottom:12px;">
+            <img src="${ht.authorAvatar||''}" class="avatar" onclick="event.stopPropagation();viewUserProfile('${ht.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(ht.authorName||'U')}&backgroundColor=ffc107&fontColor=333333'" style="cursor:pointer;">
+            <div style="min-width:0;">
+                <strong style="color:var(--text-dark);">${ht.authorName||'Anonymous'}</strong>
+                ${window.getRankBadgeHTML ? window.getRankBadgeHTML(window.userRankCache[ht.uid]||0,14) : ''}
+                ${window.getPinnedBadgesHTML ? window.getPinnedBadgesHTML(ht.uid) : ''}
+                <span style="display:inline-block;background:#FF5722;color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">🔥 Hot Take</span><br>
+                <span style="font-size:12px;color:var(--text-muted);">${ago}</span>
+            </div>
         </div>
         <p style="font-size:15px;line-height:1.55;margin:0 0 14px;color:var(--text-dark);white-space:pre-wrap;">${ht.text}</p>
         <div style="display:flex;gap:8px;margin-bottom:14px;">
@@ -4970,6 +5063,9 @@ window.postHotTake = async function() {
         document.getElementById('ht-char-count').innerText = '0';
         window._hotTakesList.unshift({ id: ref.id, uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar, text, agreeUids: [], disagreeUids: [], timestamp: { toDate: () => new Date() }, commentCount: 0 });
         window._renderHotTakesFeed();
+        window.awardAchievements(['ht_first']).catch(() => {});
+        const htCount = window._hotTakesList.filter(h => h.uid === auth.currentUser?.uid).length;
+        if (htCount >= 10) window.awardAchievements(['ht_10']).catch(() => {});
     } catch(e) { console.error('Hot take post failed:', e); alert('Failed to post hot take: ' + e.message); }
 };
 
@@ -5121,19 +5217,24 @@ window._renderPollCard = function(poll, uid) {
     const dislikes = poll.dislikes || [];
     const isLiked = uid && likes.includes(uid);
     const isDisliked = uid && dislikes.includes(uid);
-    return `<div class="feed-post-card" style="background:rgba(33,150,243,0.06);border:1px solid rgba(33,150,243,0.22);border-radius:14px;padding:16px;margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-            <img src="${poll.authorAvatar||''}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">
-            <div style="flex:1;min-width:0;">
-                <span style="font-weight:700;font-size:14px;">${poll.authorName||'Anonymous'}</span>
-                <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">${ago}</span>
-            </div>
-            ${isOwner ? `<div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation();">
-                <button onclick="window.togglePostMenu('${poll.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;display:flex;align-items:center;"><span class="material-symbols-outlined" style="font-size:20px;">more_vert</span></button>
+    return `<div class="feed-post-card" style="background:rgba(33,150,243,0.06);border:1px solid rgba(33,150,243,0.22);border-radius:14px;padding:16px;margin-bottom:12px;position:relative;">
+        ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
+            <div style="position:relative;">
+                <button onclick="window.togglePostMenu('${poll.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined" style="font-size:20px;">more_vert</span></button>
                 <div id="post-menu-${poll.id}" style="display:none;position:absolute;top:100%;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:140px;overflow:hidden;z-index:20;">
                     <button onclick="event.stopPropagation();window.deletePoll('${poll.id}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
                 </div>
-            </div>` : ''}
+            </div>
+        </div>` : ''}
+        <div class="review-header" style="margin-bottom:12px;">
+            <img src="${poll.authorAvatar||''}" class="avatar" onclick="event.stopPropagation();viewUserProfile('${poll.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(poll.authorName||'U')}&backgroundColor=ffc107&fontColor=333333'" style="cursor:pointer;">
+            <div style="min-width:0;">
+                <strong style="color:var(--text-dark);">${poll.authorName||'Anonymous'}</strong>
+                ${window.getRankBadgeHTML ? window.getRankBadgeHTML(window.userRankCache[poll.uid]||0,14) : ''}
+                ${window.getPinnedBadgesHTML ? window.getPinnedBadgesHTML(poll.uid) : ''}
+                <span style="display:inline-block;background:#2196F3;color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">🗳️ Poll</span><br>
+                <span style="font-size:12px;color:var(--text-muted);">${ago}</span>
+            </div>
         </div>
         <div style="font-weight:700;font-size:16px;margin-bottom:12px;line-height:1.4;">${poll.question}</div>
         ${optionsHTML}
@@ -5196,6 +5297,7 @@ window.createPoll = async function() {
         document.getElementById('poll-add-option-btn').style.display = '';
         window._pollsList.unshift({ id: ref.id, ...data, timestamp: { toDate: () => new Date() } });
         window._renderPollsFeed();
+        window.awardAchievements(['poll_first']).catch(() => {});
     } catch(e) { console.error('Poll create failed:', e); alert('Failed to create poll: ' + e.message); }
 };
 
@@ -5341,19 +5443,23 @@ window._renderBracketFeedCard = function(b) {
     return `<div class="feed-post-card" style="background:rgba(255,193,7,0.06);border:1px solid rgba(255,193,7,0.25);border-radius:14px;padding:16px;margin-bottom:12px;position:relative;overflow:hidden;">
         ${bgImg ? `<img src="${bgImg}" style="position:absolute;top:0;right:0;height:100%;width:185px;object-fit:cover;opacity:0.7;-webkit-mask-image:linear-gradient(to right,transparent 0%,black 55%);mask-image:linear-gradient(to right,transparent 0%,black 55%);border-radius:0 14px 14px 0;pointer-events:none;z-index:0;" onerror="this.style.display='none'">` : ''}
         <div style="position:relative;z-index:1;padding-right:${bgImg ? '195px' : '0'};">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-                <img src="${b.authorAvatar||''}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">
-                <div style="flex:1;min-width:0;">
-                    <span style="font-weight:700;font-size:13px;">${b.authorName||'Anonymous'}</span>
-                    <span style="display:inline-block;background:rgba(255,193,7,0.18);color:var(--accent-yellow);border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;letter-spacing:.5px;margin-left:6px;vertical-align:middle;">🏆 Bracket</span><br>
-                    <span style="font-size:12px;color:var(--text-muted);">${ago}</span>
-                </div>
-                ${isOwner ? `<div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation();">
-                    <button onclick="window.togglePostMenu('${b.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;display:flex;align-items:center;"><span class="material-symbols-outlined" style="font-size:20px;">more_vert</span></button>
+            ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
+                <div style="position:relative;">
+                    <button onclick="window.togglePostMenu('${b.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined" style="font-size:20px;">more_vert</span></button>
                     <div id="post-menu-${b.id}" style="display:none;position:absolute;top:100%;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:140px;overflow:hidden;z-index:20;">
                         <button onclick="event.stopPropagation();window.deleteBracket('${b.id}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
                     </div>
-                </div>` : ''}
+                </div>
+            </div>` : ''}
+            <div class="review-header" style="margin-bottom:10px;">
+                <img src="${b.authorAvatar||''}" class="avatar" onclick="event.stopPropagation();viewUserProfile('${b.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(b.authorName||'U')}&backgroundColor=ffc107&fontColor=333333'" style="cursor:pointer;">
+                <div style="min-width:0;">
+                    <strong style="color:var(--text-dark);">${b.authorName||'Anonymous'}</strong>
+                    ${window.getRankBadgeHTML ? window.getRankBadgeHTML(window.userRankCache[b.uid]||0,14) : ''}
+                    ${window.getPinnedBadgesHTML ? window.getPinnedBadgesHTML(b.uid) : ''}
+                    <span style="display:inline-block;background:rgba(255,193,7,0.85);color:#111;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">🏆 Bracket</span><br>
+                    <span style="font-size:12px;color:var(--text-muted);">${ago}</span>
+                </div>
             </div>
             <div style="font-weight:800;font-size:16px;margin-bottom:10px;">${b.title}</div>
             ${isCompleted && champion
@@ -5758,10 +5864,15 @@ window._getBracketTemplates = function() {
             title: 'Best Sensei',
             description: 'The greatest teachers and mentors in anime.',
             items: [
-                wb('Kakashi', 'Naruto'), wb('Jiraiya', 'Naruto'), wb('Koro', 'Assassination'), wb('Hange', 'Titan'),
-                wb('Nanami', 'Jujutsu'), wb('Urahara', 'Bleach'), wb('Netero', 'Hunter'), wb('Gojo', 'Jujutsu'),
-                wb('Minato', 'Naruto'), wb('Tsunade', 'Naruto'), wb('Yoruichi', 'Bleach'), wb('Erwin', 'Titan'),
-                wb('Itachi', 'Naruto'), wb('Roy Mustang', 'Fullmetal'), wb('Aizawa', 'Hero'), wb('Reigen', 'Mob Psycho')
+                wb('Kakashi', 'Naruto'), wb('Jiraiya', 'Naruto'), wb('Koro', 'Assassination'), wb('Nanami', 'Jujutsu'),
+                wb('Urahara', 'Bleach'), wb('Netero', 'Hunter'), wb('Gojo', 'Jujutsu'), wb('Yoruichi', 'Bleach'),
+                wb('Aizawa', 'Hero'), wb('Reigen', 'Mob Psycho'),
+                { title: 'Piccolo',         image: 'https://s4.anilist.co/file/anilistcdn/character/large/b914-KuS8AWjqBrqa.jpg',   mal_id: 'wb_Piccolo' },
+                { title: 'Biscuit Krueger', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b13898-nHq3fRmp9uPD.png', mal_id: 'wb_Biscuit' },
+                { title: 'Keishin Ukai',    image: 'https://s4.anilist.co/file/anilistcdn/character/large/b70861-mW9IE5G9Ov8J.jpg', mal_id: 'wb_Ukai' },
+                { title: 'Yami Sukehiro',   image: 'https://s4.anilist.co/file/anilistcdn/character/large/b124440-Lpdo6y8cljV6.png',mal_id: 'wb_Yami' },
+                { title: 'Monkey D. Garp',  image: 'https://s4.anilist.co/file/anilistcdn/character/large/b8064-dPltKaZ8RAsj.jpg',  mal_id: 'wb_Garp' },
+                { title: 'Eikichi Onizuka', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b434-Q0K9e4HukawA.png',   mal_id: 'wb_Onizuka' },
             ].filter(Boolean)
         }
     ];
@@ -7847,9 +7958,12 @@ function bwNrtShowResult() {
             <div id="ninitials-answer" style="width:100px;height:100px;border-radius:50%;background:var(--accent-yellow);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;color:#111;">${initials}</div>
             <div style="font-size:20px;font-weight:800;color:#FF8C00;">${answer.name}</div>
             <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
-            <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
-                <button onclick="window.bwNrtShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);"><span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result</button>
-                <button id="bwnrt-post-btn" onclick="window.bwNrtPostToFeed(this)" class="action-btn" style="background:#FF8C00;color:#111;font-size:13px;"><span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed</button>
+            <div style="width:100%;margin-top:10px;">
+                <textarea id="bwnrt-feed-caption" placeholder="Add a caption to your post... (optional)" maxlength="200" rows="2" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:white;font-size:13px;resize:none;box-sizing:border-box;font-family:inherit;margin-bottom:8px;" oninput="this.style.borderColor=this.value?'rgba(255,140,0,0.6)':'rgba(255,255,255,0.2)'"></textarea>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+                    <button onclick="window.bwNrtShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);"><span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result</button>
+                    <button id="bwnrt-post-btn" onclick="window.bwNrtPostToFeed(this)" class="action-btn" style="background:#FF8C00;color:#111;font-size:13px;"><span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed</button>
+                </div>
             </div>
         </div>`;
         if (inputArea) inputArea.style.display = 'none';
@@ -8052,8 +8166,22 @@ window.bwNrtPostToFeed = async function(btn) {
     const { answer, guesses, solved } = window.bwNrtState;
     if (!solved) return;
     const today = bwGetDate();
+    if (btn.dataset.updateId) {
+        const caption = document.getElementById('bwnrt-feed-caption')?.value.trim() || '';
+        btn.disabled = true; btn.innerText = 'Saving...';
+        try {
+            await updateDoc(doc(db,'bw_posts',btn.dataset.updateId), { caption });
+            btn.innerText = '✓ Updated!';
+            window.fetchBwCommunityFeed(); window.fetchHomeBwFeed();
+        } catch(e) { btn.disabled = false; btn.innerText = 'Update Caption'; alert('Failed to update.'); }
+        return;
+    }
     const existing = await getDocs(query(collection(db,'bw_posts'), where('uid','==',auth.currentUser.uid), where('date','==',today), where('game','==','naruto')));
-    if (!existing.empty) { btn.innerText='Already posted!'; btn.disabled=true; return; }
+    if (!existing.empty) {
+        const captionEl = document.getElementById('bwnrt-feed-caption');
+        if (captionEl) captionEl.value = existing.docs[0].data().caption || '';
+        btn.innerText = 'Update Caption'; btn.dataset.updateId = existing.docs[0].id; return;
+    }
     const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
     const emojiGrid = guesses.map(g => {
         const c = bwNrtCalcColors(g, answer);
@@ -8064,7 +8192,7 @@ window.bwNrtPostToFeed = async function(btn) {
         const av = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
         await addDoc(collection(db,'bw_posts'),{
             uid:auth.currentUser.uid, displayName:auth.currentUser.displayName, avatar:av,
-            game:'naruto', guessCount:guesses.length, emojiGrid, date:today, timestamp:new Date(), likes:[], dislikes:[], commentCount:0
+            game:'naruto', guessCount:guesses.length, emojiGrid, caption:document.getElementById('bwnrt-feed-caption')?.value.trim()||'', date:today, timestamp:new Date(), likes:[], dislikes:[], commentCount:0
         });
         btn.innerText='✓ Posted!';
         window.awardAchievements(['feed_showtime']).catch(() => {});
@@ -8111,16 +8239,16 @@ window.generateBwPostCardHTML = function(post) {
                 </div>
             </div>
             <div class="review-header" style="position:relative; z-index:3; padding-right:195px;">
-                <div style="display:flex; gap:12px; align-items:center;">
-                    <img src="${post.avatar}" class="avatar" style="cursor:pointer;" onclick="event.stopPropagation(); viewUserProfile('${post.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.displayName)}&backgroundColor=ffc107&fontColor=333333'">
-                    <div>
-                        <strong style="color:var(--text-dark); font-size:14px;">${post.displayName}</strong>
-                        <span class="bw-game-badge" style="background:${game.badgeBg}; color:${game.badgeColor};">${game.badge}</span>
-                        ${window.getPinnedBadgesHTML(post.uid)}<br>
-                        <span style="font-size:12px; color:var(--text-muted);">Solved in <strong style="color:var(--text-dark);">${post.guessCount} ${post.guessCount===1?'guess':'guesses'}</strong> · ${formatTimeAgo(post.timestamp)}</span>
-                    </div>
+                <img src="${post.avatar}" class="avatar" style="cursor:pointer;" onclick="event.stopPropagation(); viewUserProfile('${post.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.displayName)}&backgroundColor=ffc107&fontColor=333333'">
+                <div style="min-width:0;">
+                    <strong style="color:var(--text-dark);">${post.displayName}</strong>
+                    ${window.getRankBadgeHTML(window.userRankCache[post.uid]||0,14)}
+                    ${window.getPinnedBadgesHTML(post.uid)}
+                    <span style="display:inline-block;background:${game.badgeBg};color:${game.badgeColor};font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">${game.badge}</span><br>
+                    <span style="font-size:12px;color:var(--text-muted);">Solved in <strong style="color:var(--text-dark);">${post.guessCount} ${post.guessCount===1?'guess':'guesses'}</strong> · ${formatTimeAgo(post.timestamp)}</span>
                 </div>
             </div>
+            ${post.caption ? `<p style="font-size:14px;color:var(--text-dark);margin:10px 0 2px;position:relative;z-index:2;padding-right:195px;">${post.caption}</p>` : ''}
             <div class="bw-emoji-grid" style="font-family:monospace; font-size:17px; letter-spacing:3px; line-height:2.2; margin:14px 0 4px; position:relative; z-index:2; padding-right:195px;">${post.emojiGrid.split('\n').join('<br>')}</div>
             <div class="review-actions">
                 <div class="action-stat">
@@ -8557,12 +8685,17 @@ function bwOpShowResult() {
             <div style="font-size:20px;font-weight:800;color:#FFD700;">${answer.name}</div>
             <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
             <div style="display:flex; gap:10px; margin-top:8px; flex-wrap:wrap; justify-content:center;">
-                <button onclick="window.bwOpShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);">
-                    <span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result
-                </button>
-                <button id="bwop-post-btn" onclick="window.bwOpPostToFeed(this)" class="action-btn" style="background:var(--accent-yellow);color:#111;font-size:13px;" ${!auth.currentUser ? 'style="display:none;"' : ''}>
-                    <span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed
-                </button>
+            </div>
+            <div style="width:100%;margin-top:10px;">
+                <textarea id="bwop-feed-caption" placeholder="Add a caption to your post... (optional)" maxlength="200" rows="2" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:white;font-size:13px;resize:none;box-sizing:border-box;font-family:inherit;margin-bottom:8px;" oninput="this.style.borderColor=this.value?'rgba(255,213,0,0.6)':'rgba(255,255,255,0.2)'"></textarea>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+                    <button onclick="window.bwOpShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);">
+                        <span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result
+                    </button>
+                    <button id="bwop-post-btn" onclick="window.bwOpPostToFeed(this)" class="action-btn" style="background:var(--accent-yellow);color:#111;font-size:13px;" ${!auth.currentUser ? 'style="display:none;"' : ''}>
+                        <span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed
+                    </button>
+                </div>
             </div>
         </div>`;
         if (inputArea) inputArea.style.display = 'none';
@@ -8770,12 +8903,30 @@ window.bwOpPostToFeed = async function(btn) {
     const { answer, guesses, solved } = window.bwOpState;
     if (!solved) return;
     const today = bwGetDate();
+    if (btn.dataset.updateId) {
+        const caption = document.getElementById('bwop-feed-caption')?.value.trim() || '';
+        btn.disabled = true; btn.innerText = 'Saving...';
+        try {
+            await updateDoc(doc(db,'bw_posts',btn.dataset.updateId), { caption });
+            btn.innerText = '✓ Updated!';
+            window.fetchBwCommunityFeed(); window.fetchHomeBwFeed();
+        } catch(e) { btn.disabled = false; btn.innerText = 'Update Caption'; alert('Failed to update.'); }
+        return;
+    }
     // Check if already posted today (check both new and old collections)
+    const _emptySnap = { empty: true, docs: [] };
     const [existingNew, existingOld] = await Promise.all([
-        getDocs(query(collection(db, 'bw_posts'), where('uid', '==', auth.currentUser.uid), where('date', '==', today), where('game', '==', 'op'))),
-        getDocs(query(collection(db, 'bw_op_posts'), where('uid', '==', auth.currentUser.uid), where('date', '==', today))),
+        getDocs(query(collection(db, 'bw_posts'), where('uid', '==', auth.currentUser.uid), where('date', '==', today), where('game', '==', 'op'))).catch(() => _emptySnap),
+        getDocs(query(collection(db, 'bw_op_posts'), where('uid', '==', auth.currentUser.uid), where('date', '==', today))).catch(() => _emptySnap),
     ]);
-    if (!existingNew.empty || !existingOld.empty) { btn.innerText = 'Already posted!'; btn.disabled = true; return; }
+    if (!existingNew.empty || !existingOld.empty) {
+        const existingDoc = existingNew.docs[0] || existingOld.docs[0];
+        const captionEl = document.getElementById('bwop-feed-caption');
+        if (captionEl && existingDoc) captionEl.value = existingDoc.data().caption || '';
+        btn.innerText = 'Update Caption';
+        if (existingDoc) btn.dataset.updateId = existingDoc.id;
+        return;
+    }
     const map = { green:'🟩', yellow:'🟨', red:'🟥' };
     const emojiGrid = guesses.map(g => {
         const c = bwOpCalcColors(g, answer);
@@ -8791,6 +8942,7 @@ window.bwOpPostToFeed = async function(btn) {
             game: 'op',
             guessCount: guesses.length,
             emojiGrid,
+            caption: document.getElementById('bwop-feed-caption')?.value.trim() || '',
             date: today,
             timestamp: new Date(),
             likes: [],
@@ -9091,8 +9243,13 @@ function bwBlcShowResult() {
             <div style="font-size:20px;font-weight:800;color:#00BCD4;">${answer.name}</div>
             <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
             <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
-                <button onclick="window.bwBlcShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);"><span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result</button>
-                <button id="bwblc-post-btn" onclick="window.bwBlcPostToFeed(this)" class="action-btn" style="background:#00BCD4;color:#111;font-size:13px;"><span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed</button>
+            </div>
+            <div style="width:100%;margin-top:10px;">
+                <textarea id="bwblc-feed-caption" placeholder="Add a caption to your post... (optional)" maxlength="200" rows="2" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:white;font-size:13px;resize:none;box-sizing:border-box;font-family:inherit;margin-bottom:8px;" oninput="this.style.borderColor=this.value?'rgba(0,188,212,0.6)':'rgba(255,255,255,0.2)'"></textarea>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+                    <button onclick="window.bwBlcShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);"><span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result</button>
+                    <button id="bwblc-post-btn" onclick="window.bwBlcPostToFeed(this)" class="action-btn" style="background:#00BCD4;color:#111;font-size:13px;"><span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed</button>
+                </div>
             </div>
         </div>`;
         if (inputArea) inputArea.style.display = 'none';
@@ -9282,8 +9439,22 @@ window.bwBlcPostToFeed = async function(btn) {
     const { answer, guesses, solved } = window.bwBlcState;
     if (!solved) return;
     const today = bwGetDate();
+    if (btn.dataset.updateId) {
+        const caption = document.getElementById('bwblc-feed-caption')?.value.trim() || '';
+        btn.disabled = true; btn.innerText = 'Saving...';
+        try {
+            await updateDoc(doc(db,'bw_posts',btn.dataset.updateId), { caption });
+            btn.innerText = '✓ Updated!';
+            window.fetchBwCommunityFeed(); window.fetchHomeBwFeed();
+        } catch(e) { btn.disabled = false; btn.innerText = 'Update Caption'; alert('Failed to update.'); }
+        return;
+    }
     const existing = await getDocs(query(collection(db,'bw_posts'), where('uid','==',auth.currentUser.uid), where('date','==',today), where('game','==','bleach')));
-    if (!existing.empty) { btn.innerText='Already posted!'; btn.disabled=true; return; }
+    if (!existing.empty) {
+        const captionEl = document.getElementById('bwblc-feed-caption');
+        if (captionEl) captionEl.value = existing.docs[0].data().caption || '';
+        btn.innerText = 'Update Caption'; btn.dataset.updateId = existing.docs[0].id; return;
+    }
     const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
     const emojiGrid = guesses.map(g => {
         const c = bwBlcCalcColors(g, answer);
@@ -9294,7 +9465,7 @@ window.bwBlcPostToFeed = async function(btn) {
         const av = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
         await addDoc(collection(db,'bw_posts'),{
             uid:auth.currentUser.uid, displayName:auth.currentUser.displayName, avatar:av,
-            game:'bleach', guessCount:guesses.length, emojiGrid, date:today, timestamp:new Date(), likes:[], dislikes:[], commentCount:0
+            game:'bleach', guessCount:guesses.length, emojiGrid, caption:document.getElementById('bwblc-feed-caption')?.value.trim()||'', date:today, timestamp:new Date(), likes:[], dislikes:[], commentCount:0
         });
         btn.innerText='✓ Posted!';
         window.awardAchievements(['feed_showtime']).catch(() => {});
@@ -9495,8 +9666,13 @@ function bwDbShowResult() {
             <div style="font-size:20px;font-weight:800;color:#FF6F00;">${answer.name}</div>
             <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
             <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
-                <button onclick="window.bwDbShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);"><span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result</button>
-                <button id="bwdb-post-btn" onclick="window.bwDbPostToFeed(this)" class="action-btn" style="background:#FF6F00;color:#111;font-size:13px;"><span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed</button>
+            </div>
+            <div style="width:100%;margin-top:10px;">
+                <textarea id="bwdb-feed-caption" placeholder="Add a caption to your post... (optional)" maxlength="200" rows="2" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:white;font-size:13px;resize:none;box-sizing:border-box;font-family:inherit;margin-bottom:8px;" oninput="this.style.borderColor=this.value?'rgba(255,111,0,0.6)':'rgba(255,255,255,0.2)'"></textarea>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+                    <button onclick="window.bwDbShare()" class="action-btn" style="background:rgba(255,255,255,0.15);color:white;font-size:13px;border:1px solid rgba(255,255,255,0.4);"><span class="material-symbols-outlined" style="font-size:15px;">share</span> Share Result</button>
+                    <button id="bwdb-post-btn" onclick="window.bwDbPostToFeed(this)" class="action-btn" style="background:#FF6F00;color:#111;font-size:13px;"><span class="material-symbols-outlined" style="font-size:15px;">post_add</span> Post to Feed</button>
+                </div>
             </div>
         </div>`;
         if (inputArea) inputArea.style.display = 'none';
@@ -9681,8 +9857,22 @@ window.bwDbPostToFeed = async function(btn) {
     const { answer, guesses, solved } = window.bwDbState;
     if (!solved) return;
     const today = new Date().toISOString().split('T')[0];
+    if (btn.dataset.updateId) {
+        const caption = document.getElementById('bwdb-feed-caption')?.value.trim() || '';
+        btn.disabled = true; btn.innerText = 'Saving...';
+        try {
+            await updateDoc(doc(db,'bw_posts',btn.dataset.updateId), { caption });
+            btn.innerText = '✓ Updated!';
+            window.fetchBwCommunityFeed(); window.fetchHomeBwFeed();
+        } catch(e) { btn.disabled = false; btn.innerText = 'Update Caption'; alert('Failed to update.'); }
+        return;
+    }
     const existing = await getDocs(query(collection(db,'bw_posts'), where('uid','==',auth.currentUser.uid), where('date','==',today), where('game','==','dragonball')));
-    if (!existing.empty) { btn.innerText='Already posted!'; btn.disabled=true; return; }
+    if (!existing.empty) {
+        const captionEl = document.getElementById('bwdb-feed-caption');
+        if (captionEl) captionEl.value = existing.docs[0].data().caption || '';
+        btn.innerText = 'Update Caption'; btn.dataset.updateId = existing.docs[0].id; return;
+    }
     const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
     const emojiGrid = guesses.map(g => {
         const c = bwDbCalcColors(g, answer);
@@ -9693,7 +9883,7 @@ window.bwDbPostToFeed = async function(btn) {
         const av = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
         await addDoc(collection(db,'bw_posts'),{
             uid:auth.currentUser.uid, displayName:auth.currentUser.displayName, avatar:av,
-            game:'dragonball', guessCount:guesses.length, emojiGrid, date:today, timestamp:new Date(), likes:[], dislikes:[], commentCount:0
+            game:'dragonball', guessCount:guesses.length, emojiGrid, caption:document.getElementById('bwdb-feed-caption')?.value.trim()||'', date:today, timestamp:new Date(), likes:[], dislikes:[], commentCount:0
         });
         btn.innerText='✓ Posted!';
         window.awardAchievements(['feed_showtime']).catch(() => {});
@@ -10364,8 +10554,6 @@ window.triviaAnswer = function(idx) {
         if (st.current >= st.questions.length) {
             const today = new Date().toISOString().split('T')[0];
             localStorage.setItem(`weebee_trivia_${today}`, JSON.stringify({ score: st.score }));
-            const statusEl = document.getElementById('trivia-status-text');
-            if (statusEl) statusEl.textContent = `Today: ${st.score}/5 ✓`;
             _triviaShowResult(st.score, false);
         } else {
             _triviaRender();
@@ -10378,7 +10566,9 @@ function _triviaShowResult(score, alreadyDone) {
     if (!container) return;
     const emoji = score === 5 ? '🏆' : score >= 4 ? '🌟' : score >= 3 ? '👍' : score >= 2 ? '📚' : '💪';
     const msg = score === 5 ? 'Perfect score! You really know your anime!' : score >= 4 ? 'Excellent! Almost perfect!' : score >= 3 ? 'Not bad! Pretty solid anime knowledge!' : score >= 2 ? 'Keep watching and you\'ll get there!' : 'Time to hit the anime queue!';
-    const shareText = '🧠 Anime Trivia — ' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '\n' + emoji + ' ' + score + '/5 on WeeBee Daily Trivia!';
+    window._triviaShareText = '🧠 Anime Trivia — ' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '\n' + emoji + ' ' + score + '/5 on WeeBee Daily Trivia!';
+    const today = new Date().toISOString().split('T')[0];
+    const alreadyPosted = (() => { try { return JSON.parse(localStorage.getItem('weebee_trivia_' + today) || '{}').posted; } catch(e) { return false; } })();
     container.innerHTML = `
         <div style="background:var(--bg-gray);border-radius:16px;padding:24px;margin-bottom:16px;border:1px solid rgba(156,39,176,0.3);text-align:center;">
             <div style="font-size:52px;margin-bottom:12px;">${emoji}</div>
@@ -10386,13 +10576,586 @@ function _triviaShowResult(score, alreadyDone) {
             <div style="font-size:14px;color:var(--text-muted);margin-bottom:${alreadyDone?'8':'20'}px;">${msg}</div>
             ${alreadyDone ? '<div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">You already played today — come back tomorrow!</div>' : ''}
             <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-                <button onclick="navigator.clipboard.writeText(${JSON.stringify(shareText)}).then(()=>alert('Copied to clipboard!'))" class="action-btn" style="background:#9C27B0;color:white;">
+                <button onclick="navigator.clipboard.writeText(window._triviaShareText).then(()=>alert('Copied to clipboard!')).catch(()=>alert('Could not copy'))" class="action-btn" style="background:#9C27B0;color:white;">
                     <span class="material-symbols-outlined" style="font-size:16px;">share</span> Share Score
                 </button>
+                ${auth.currentUser && !alreadyPosted ? `<button id="trivia-feed-btn" onclick="window.postTriviaToFeed(this,${score})" class="action-btn" style="background:#7B1FA2;color:white;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">campaign</span> Post to Feed
+                </button>` : auth.currentUser && alreadyPosted ? `<button class="action-btn" disabled style="background:#7B1FA2;color:white;opacity:0.6;"><span class="material-symbols-outlined" style="font-size:16px;">campaign</span> ✓ Posted!</button>` : ''}
                 <button onclick="document.getElementById('trivia-game-container').innerHTML='';const b=document.getElementById('trivia-play-btn');if(b)b.style.display='';" class="cancel-btn">Close</button>
             </div>
         </div>`;
+    if (!alreadyDone && auth.currentUser && !alreadyPosted) {
+        const captionEl = document.createElement('textarea');
+        captionEl.id = 'trivia-feed-caption';
+        captionEl.placeholder = 'Add a caption to your post... (optional)';
+        captionEl.maxLength = 200;
+        captionEl.rows = 2;
+        captionEl.style.cssText = 'width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(156,39,176,0.3);background:var(--bg-gray);color:var(--text-dark);font-size:13px;resize:none;margin-top:10px;box-sizing:border-box;font-family:inherit;';
+        captionEl.addEventListener('input', function() { this.style.borderColor = this.value ? '#9C27B0' : 'rgba(156,39,176,0.3)'; });
+        container.querySelector('div').appendChild(captionEl);
+    }
+    if (!alreadyDone && auth.currentUser) {
+        let totalPlays = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+            if (localStorage.key(i)?.startsWith('weebee_trivia_')) totalPlays++;
+        }
+        const toAward = ['trivia_first'];
+        if (score === 5) toAward.push('trivia_perfect');
+        if (totalPlays >= 7) toAward.push('trivia_7');
+        if (totalPlays >= 30) toAward.push('trivia_30');
+        window.awardAchievements(toAward).catch(() => {});
+    }
 }
+
+// --- Trivia Feed ---
+function _triviaHexMeter(score) {
+    const isPerfect = score === 5;
+    const hexPath = 'M12,2 L21,7 L21,17 L12,22 L3,17 L3,7 Z';
+    const filledColor = isPerfect ? '#FFD700' : '#CE93D8';
+    const filledStroke = isPerfect ? '#FF9800' : '#9C27B0';
+    const hexes = Array.from({length: 5}, (_, i) => {
+        const filled = i < score;
+        const glow = filled && isPerfect ? 'filter:drop-shadow(0 0 5px rgba(255,215,0,0.7));' : '';
+        return `<svg width="34" height="34" viewBox="0 0 24 24" style="${glow}">
+            <path d="${hexPath}" fill="${filled ? filledColor : 'transparent'}" stroke="${filled ? filledStroke : 'var(--border-color)'}" stroke-width="1.5"/>
+        </svg>`;
+    });
+    const badge = isPerfect
+        ? `<span style="font-size:11px;font-weight:800;color:#FF9800;letter-spacing:1px;text-transform:uppercase;padding:2px 10px;background:rgba(255,152,0,0.15);border-radius:20px;border:1px solid rgba(255,152,0,0.5);margin-left:6px;">★ PERFECT</span>`
+        : '';
+    return `<div style="display:flex;align-items:center;gap:3px;margin:10px 0;">${hexes.join('')}${badge}</div>`;
+}
+
+window.generateTriviaPostCardHTML = function(post) {
+    const uid = auth.currentUser?.uid;
+    const isOwner = uid && post.uid === uid;
+    const likes = post.likes || [];
+    const dislikes = post.dislikes || [];
+    const isLiked = uid && likes.includes(uid);
+    const isDisliked = uid && dislikes.includes(uid);
+    const safeId = post.id;
+    const emoji = post.score === 5 ? '🏆' : post.score >= 4 ? '🌟' : post.score >= 3 ? '👍' : post.score >= 2 ? '📚' : '💪';
+    const scoreLabel = post.score === 5 ? 'Perfect Score! 🎉' : `${post.score} / 5`;
+    return `<div class="review-card feed-post-card" style="position:relative;">
+        ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
+            <div style="position:relative;">
+                <button onclick="window.togglePostMenu('${safeId}')" style="background:rgba(0,0,0,0.35);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:white;"><span class="material-symbols-outlined" style="font-size:16px;">more_vert</span></button>
+                <div id="post-menu-${safeId}" style="display:none;position:absolute;top:32px;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:140px;overflow:hidden;z-index:20;">
+                    <button onclick="event.stopPropagation();window.deleteTriviaPost('${safeId}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
+                </div>
+            </div>
+        </div>` : ''}
+        <div class="review-header">
+            <img src="${post.avatar}" class="avatar" style="cursor:pointer;" onclick="event.stopPropagation();viewUserProfile('${post.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.displayName)}&backgroundColor=ffc107&fontColor=333333'">
+            <div style="min-width:0;">
+                <strong style="color:var(--text-dark);">${post.displayName}</strong>
+                ${window.getRankBadgeHTML ? window.getRankBadgeHTML(window.userRankCache[post.uid]||0,14) : ''}
+                ${window.getPinnedBadgesHTML ? window.getPinnedBadgesHTML(post.uid) : ''}
+                <span style="display:inline-block;background:#9C27B0;color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">🧠 Trivia</span><br>
+                <span style="font-size:12px;color:var(--text-muted);">${formatTimeAgo(post.timestamp)} · <span onclick="event.stopPropagation();window.goToTriviaTab()" style="color:#CE93D8;cursor:pointer;font-weight:700;">Play today's →</span></span>
+            </div>
+        </div>
+        <div style="margin:14px 0 8px;">
+            ${post.caption ? `<p style="font-size:14px;color:var(--text-dark);margin:0 0 8px;">${post.caption}</p>` : ''}
+            ${_triviaHexMeter(post.score)}
+            <div style="font-size:15px;font-weight:700;color:var(--text-dark);">${emoji} ${scoreLabel}</div>
+        </div>
+        <div class="review-actions">
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostComments(event,this,'${safeId}')"><span class="material-symbols-outlined">chat_bubble</span></button>
+                <span class="action-label bw-comment-count">${post.commentCount || 0} Comments</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${safeId}','trivia_posts','like',this)" style="${isLiked?'color:var(--accent-yellow);':''}"><span class="material-symbols-outlined">thumb_up</span></button>
+                <span class="action-label" id="bw-likes-${safeId}">${likes.length} Likes</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${safeId}','trivia_posts','dislike',this)" style="${isDisliked?'color:red;':''}"><span class="material-symbols-outlined">thumb_down</span></button>
+                <span class="action-label" id="bw-dislikes-${safeId}">${dislikes.length} Dislikes</span>
+            </div>
+        </div>
+        <div class="bw-post-comments" data-post-collection="trivia_posts" style="display:none;margin-top:15px;padding-top:15px;border-top:1px solid var(--border-color);" onclick="event.stopPropagation();">
+            <div class="bw-comments-list"></div>
+            <div style="display:flex;gap:10px;margin-top:10px;">
+                <input type="text" class="bw-comment-input" placeholder="Add a comment..." style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
+                <button class="action-btn" onclick="window.submitBwPostComment(event,this,'${safeId}','trivia_posts')">Send</button>
+            </div>
+        </div>
+    </div>`;
+};
+
+window.deleteTriviaPost = async function(postId) {
+    if (!auth.currentUser) return;
+    if (!confirm('Delete this post?')) return;
+    try {
+        await deleteDoc(doc(db, 'trivia_posts', postId));
+        document.getElementById(`feed-item-${postId}`)?.remove();
+        window._activityItems = (window._activityItems || []).filter(x => x.id !== postId);
+        window.loadTriviaFeed();
+    } catch(e) { alert('Failed to delete.'); }
+};
+
+window.postTriviaToFeed = async function(btn, score) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const today = new Date().toISOString().split('T')[0];
+    btn.disabled = true; btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">campaign</span> Posting...';
+    try {
+        const existing = await getDocs(query(collection(db,'trivia_posts'), where('uid','==',auth.currentUser.uid), where('date','==',today)));
+        if (!existing.empty) { btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">campaign</span> ✓ Posted!'; return; }
+        const pd = await getDoc(doc(db,'profiles',auth.currentUser.uid)).catch(() => null);
+        const displayName = pd?.data()?.displayName || auth.currentUser.displayName;
+        const avatar = pd?.data()?.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        const caption = document.getElementById('trivia-feed-caption')?.value.trim() || '';
+        await addDoc(collection(db,'trivia_posts'), {
+            uid: auth.currentUser.uid, displayName, avatar,
+            score, caption, date: today, timestamp: new Date(), likes: [], dislikes: [], commentCount: 0
+        });
+        // Mark posted in localStorage
+        try {
+            const saved = JSON.parse(localStorage.getItem('weebee_trivia_' + today) || '{}');
+            localStorage.setItem('weebee_trivia_' + today, JSON.stringify({ ...saved, posted: true }));
+        } catch(e) {}
+        btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">campaign</span> ✓ Posted!';
+        window.loadTriviaFeed();
+        window.fetchHomeActivityFeed?.();
+    } catch(e) { btn.disabled = false; btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">campaign</span> Post to Feed'; alert('Failed to post: ' + e.message); }
+};
+
+window.loadTriviaFeed = async function() {
+    const feed = document.getElementById('trivia-posts-feed');
+    if (!feed) return;
+    try {
+        const snap = await getDocs(query(collection(db,'trivia_posts'), orderBy('timestamp','desc'), limit(30)));
+        if (snap.empty) { feed.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:24px;font-size:14px;">No scores posted yet — be the first!</p>'; return; }
+        const uid = auth.currentUser?.uid;
+        feed.innerHTML = snap.docs.map(d => window.generateTriviaPostCardHTML({ id: d.id, ...d.data() })).join('');
+    } catch(e) { console.error('loadTriviaFeed', e); feed.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:24px;">Failed to load scores.</p>'; }
+};
+
+// --- OPENING BEE (admin test) ---
+const OB_POOL = [
+    { anime: 'Attack on Titan',                  audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/93/e3/f7/93e3f754-61f0-11ec-25f6-38fea3cc719b/mzaf_10699107844703231183.plus.aac.p.m4a' },
+    { anime: 'Demon Slayer',                     audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/6d/55/33/6d5533a1-0947-bfd6-6317-c7fc6b084e5d/mzaf_6967022353274433301.plus.aac.p.m4a' },
+    { anime: 'Death Note',                       audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/b2/9f/03/b29f03d2-354c-3965-9647-745ec02a3500/mzaf_16649518632422994862.plus.aac.p.m4a' },
+    { anime: 'Jujutsu Kaisen',                   audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/e3/91/7c/e3917cd3-f7c6-8633-4bc3-f0e7c043659a/mzaf_18390406683329626552.plus.aac.p.m4a' },
+    { anime: 'Bleach',                           audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/53/01/2c/53012c39-bfee-704a-963a-5cd5fcb6f71d/mzaf_4934888872465923075.plus.aac.p.m4a' },
+    { anime: 'My Hero Academia',                 audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/c9/35/73/c9357389-f49f-e47f-c526-94a06c818d5c/mzaf_2688372770152528916.plus.aac.p.m4a' },
+    { anime: 'Hunter x Hunter',                  audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/6f/ca/e4/6fcae48b-e599-410f-db69-1a57c30b98c0/mzaf_12856558150017492115.plus.aac.p.m4a' },
+    { anime: 'Code Geass',                       audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview112/v4/e9/a4/05/e9a405bb-2768-9d4e-8edc-3b6fba51559f/mzaf_5662133858033957093.plus.aac.p.m4a' },
+    { anime: 'Mob Psycho 100',                   audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/79/2c/0a/792c0ae6-790e-8ce7-389f-8903fbb0c455/mzaf_13032179992518146811.plus.aac.p.m4a' },
+    { anime: 'One Piece',                        audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/8f/24/81/8f24812e-465c-4499-bf29-bdd6c0bd13ff/mzaf_17985712931854519957.plus.aac.p.m4a' },
+    { anime: 'Sword Art Online',                 audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/50/6b/02/506b0252-7aa0-4a39-7ab8-85b6938bd1d8/mzaf_347938657043485553.plus.aac.p.m4a' },
+    { anime: 'Tokyo Ghoul',                      audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/35/f4/2d/35f42dd9-abe9-161c-8eac-99dd348f99e6/mzaf_5386318182593403976.plus.aac.p.m4a' },
+    { anime: 'No Game No Life',                  audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/c2/5e/cf/c25ecf66-92e0-43c9-0f44-e196bc1902f4/mzaf_12131846250930889341.plus.aac.p.m4a' },
+    { anime: 'Fullmetal Alchemist: Brotherhood', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/1f/21/ec/1f21ecdb-ba0f-96d1-e093-a5aff4237a1b/mzaf_4641373840541399313.plus.aac.p.m4a' },
+    { anime: 'Steins;Gate',                      audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/0a/ef/37/0aef37f1-33cf-9709-a915-c6eefbaca10e/mzaf_2439740660429779137.plus.aac.p.m4a' },
+];
+
+const OB_CLIPS = [1, 2, 4, 8, 16, 30];
+
+function _obSeed() {
+    const d = new Date();
+    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
+
+function _obDaily() {
+    const today = new Date().toISOString().split('T')[0];
+    const offset = parseInt(localStorage.getItem('weebee_ob_offset_' + today) || '0');
+    let s = _obSeed();
+    s = Math.imul(s ^ (s >>> 16), 0x45d9f3b) ^ (s >>> 11);
+    s = Math.imul(s ^ (s >>> 16), 0x45d9f3b) ^ (s >>> 16);
+    return OB_POOL[(Math.abs(s) + offset) % OB_POOL.length];
+}
+
+window._obAudio = null;
+window._obPlayTimer = null;
+
+window.openOpeningBee = function() {
+    const today = new Date().toISOString().split('T')[0];
+    const saved = JSON.parse(localStorage.getItem('weebee_ob_' + today) || 'null');
+    window._obState = {
+        song: _obDaily(),
+        guesses: saved?.guesses || [],
+        solved: saved?.solved || false,
+        failed: saved?.failed || false,
+        clipIdx: 0
+    };
+    window._obState.clipIdx = Math.min(window._obState.guesses.length, OB_CLIPS.length - 1);
+    _obRender();
+};
+
+function _obSave() {
+    const today = new Date().toISOString().split('T')[0];
+    const st = window._obState;
+    localStorage.setItem('weebee_ob_' + today, JSON.stringify({ guesses: st.guesses, solved: st.solved, failed: st.failed }));
+}
+
+function _obRender() {
+    const container = document.getElementById('ob-game-container');
+    const st = window._obState;
+    if (!container || !st) return;
+
+    const clipDur = OB_CLIPS[st.clipIdx];
+    const done = st.solved || st.failed;
+
+    const dots = OB_CLIPS.map((_, i) => {
+        const used = i < st.guesses.length;
+        const correct = used && st.solved && i === st.guesses.length - 1;
+        const color = correct ? '#4ade80' : used ? '#f87171' : 'var(--border-color)';
+        return `<div style="width:14px;height:14px;border-radius:50%;background:${color};transition:background .3s;"></div>`;
+    }).join('');
+
+    const guessList = st.guesses.map((g, i) => {
+        const correct = st.solved && i === st.guesses.length - 1;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:${correct ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)'};border:1px solid ${correct ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'};margin-bottom:6px;">
+            <span style="font-size:16px;">${correct ? '✅' : '❌'}</span>
+            <span style="font-size:14px;color:var(--text-dark);">${g || '<em style="color:var(--text-muted)">Skipped</em>'}</span>
+        </div>`;
+    }).join('');
+
+    const today = new Date().toISOString().split('T')[0];
+    const alreadyPosted = !!localStorage.getItem('weebee_melobee_posted_' + today);
+    const resultPanel = done ? `<div style="background:${st.solved ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)'};border:1px solid ${st.solved ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'};border-radius:12px;padding:20px;text-align:center;margin-top:16px;">
+        <div style="font-size:28px;margin-bottom:8px;">${st.solved ? '🎉' : '😔'}</div>
+        <div style="font-weight:800;font-size:18px;color:var(--text-dark);margin-bottom:4px;">${st.solved ? 'Nice one!' : 'Better luck tomorrow!'}</div>
+        <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;">The answer was <strong style="color:var(--text-dark);">${st.song.anime}</strong></div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+            <button onclick="window._obPlayFull()" class="action-btn" style="background:#a78bfa;color:white;">▶ Play Full Opening</button>
+            ${auth.currentUser ? `<button id="melobee-post-btn" onclick="window.postMeloBeeToFeed(this)" class="action-btn" style="background:#7c3aed;color:white;" ${alreadyPosted ? 'disabled' : ''}>
+                <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">campaign</span> ${alreadyPosted ? '✓ Posted!' : 'Post to Feed'}
+            </button>` : ''}
+        </div>
+    </div>` : '';
+
+    const inputPanel = !done ? `
+        <div id="ob-search-wrap" style="position:relative;margin-top:16px;">
+            <input type="text" id="ob-guess-input" placeholder="Type an anime name..." maxlength="100"
+                style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:15px;box-sizing:border-box;"
+                oninput="window._obSearch(this.value)"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();window._obPickTopOrSubmit();}">
+            <div id="ob-search-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:50;max-height:200px;overflow-y:auto;margin-top:4px;"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+            <button onclick="window._obSkip()" class="cancel-btn" style="flex:1;">Skip (+${clipDur >= 30 ? '—' : OB_CLIPS[Math.min(st.clipIdx+1,OB_CLIPS.length-1)] + 's'})</button>
+            <button onclick="window._obSubmitGuess()" class="submit-btn" style="flex:2;">Submit Guess</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
+            <span class="material-symbols-outlined" style="font-size:18px;color:var(--text-muted);">volume_down</span>
+            <input type="range" id="ob-volume" min="0" max="1" step="0.05" value="0.8" oninput="if(window._obAudio)window._obAudio.volume=parseFloat(this.value);" style="flex:1;accent-color:#a78bfa;cursor:pointer;">
+            <span class="material-symbols-outlined" style="font-size:18px;color:var(--text-muted);">volume_up</span>
+        </div>` : '';
+
+    container.innerHTML = `
+        <div style="max-width:520px;margin:0 auto;">
+            <div style="display:flex;justify-content:center;gap:10px;margin-bottom:20px;">${dots}</div>
+            <button id="ob-play-btn" onclick="window._obPlay()" style="width:100%;padding:20px;border-radius:14px;border:none;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;font-size:18px;font-weight:800;cursor:pointer;letter-spacing:0.5px;transition:opacity .15s;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+                ▶ Play ${clipDur >= 30 ? '30s' : clipDur + 's'} clip
+            </button>
+            <div id="ob-audio-bar" style="height:4px;background:var(--border-color);border-radius:2px;margin-top:10px;overflow:hidden;">
+                <div id="ob-audio-progress" style="height:100%;width:0%;background:#a78bfa;transition:width linear;"></div>
+            </div>
+            <div style="margin-top:16px;">${guessList}</div>
+            ${inputPanel}
+            ${resultPanel}
+        </div>`;
+}
+
+window._obPlay = function() {
+    const st = window._obState;
+    if (!st) return;
+    const btn = document.getElementById('ob-play-btn');
+    const progress = document.getElementById('ob-audio-progress');
+    const clipDur = OB_CLIPS[st.clipIdx];
+
+    // If already playing, stop it
+    if (window._obPlaying) {
+        if (window._obPlayTimer) { clearTimeout(window._obPlayTimer); window._obPlayTimer = null; }
+        if (window._obAudio) { window._obAudio.pause(); window._obAudio.currentTime = 0; }
+        window._obPlaying = false;
+        if (btn) btn.textContent = `▶ Play ${clipDur >= 30 ? '30s' : clipDur + 's'} clip`;
+        if (progress) { progress.style.transition = 'none'; progress.style.width = '0%'; }
+        return;
+    }
+
+    if (window._obPlayTimer) { clearTimeout(window._obPlayTimer); window._obPlayTimer = null; }
+    if (window._obAudio) { window._obAudio.pause(); }
+
+    const audio = new Audio(st.song.audio);
+    audio.volume = parseFloat(document.getElementById('ob-volume')?.value || '0.8');
+    window._obAudio = audio;
+    window._obPlaying = false;
+
+    audio.play().then(() => {
+        window._obPlaying = true;
+        if (btn) btn.textContent = '⏹ Stop';
+        if (progress) { progress.style.transition = `width ${clipDur}s linear`; progress.style.width = '100%'; }
+        window._obPlayTimer = setTimeout(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            window._obPlaying = false;
+            if (btn) btn.textContent = `▶ Play ${clipDur >= 30 ? '30s' : clipDur + 's'} clip`;
+            if (progress) { progress.style.transition = 'none'; progress.style.width = '0%'; }
+        }, clipDur * 1000);
+    }).catch(() => {
+        window._obPlaying = false;
+        if (btn) btn.textContent = '⚠ Could not load audio';
+    });
+};
+
+window._obPlayFull = function() {
+    const st = window._obState;
+    if (!st) return;
+    if (window._obAudio) window._obAudio.pause();
+    const audio = new Audio(st.song.audio);
+    window._obAudio = audio;
+    audio.play().catch(() => {});
+};
+
+// Strip season suffixes to get the base series title
+function _obBaseTitle(t) {
+    return (t || '')
+        .replace(/\s*(Season|Part|Cour)\s*\d+/gi, '')
+        .replace(/\s*\d+(st|nd|rd|th)\s*(Season|Cour)/gi, '')
+        .replace(/:\s*(The\s+)?(Final|Second|Third|Fourth|Fifth)\s+Season/gi, '')
+        .replace(/\s*[-–]\s*(The\s+)?Final\s+Season/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+let _obSearchTimer = null;
+let _obSearchController = null;
+
+window._obSearch = function(q) {
+    const results = document.getElementById('ob-search-results');
+    if (!results) return;
+    if (q.length < 2) { results.style.display = 'none'; return; }
+    clearTimeout(_obSearchTimer);
+    _obSearchTimer = setTimeout(async () => {
+        if (_obSearchController) _obSearchController.abort();
+        _obSearchController = new AbortController();
+        try {
+            results.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px;">Searching...</div>';
+            results.style.display = 'block';
+            const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=12&type=tv`, { signal: _obSearchController.signal });
+            const data = await res.json();
+            const seen = new Set();
+            const items = [];
+            for (const a of (data.data || [])) {
+                const base = _obBaseTitle(a.title_english || a.title);
+                if (base && !seen.has(base.toLowerCase())) {
+                    seen.add(base.toLowerCase());
+                    items.push(base);
+                }
+            }
+            if (!items.length) {
+                results.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px;">No results</div>';
+            } else {
+                results.innerHTML = items.map(title =>
+                    `<div onclick="window._obSelectAnime(${JSON.stringify(title)})" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:1px solid var(--border-color);" onmouseover="this.style.background='var(--bg-gray)'" onmouseout="this.style.background=''">${title}</div>`
+                ).join('');
+            }
+        } catch(e) { if (e.name !== 'AbortError') results.style.display = 'none'; }
+    }, 320);
+};
+
+window._obSelectAnime = function(title) {
+    const input = document.getElementById('ob-guess-input');
+    const results = document.getElementById('ob-search-results');
+    if (input) { input.value = title; input.focus(); }
+    if (results) results.style.display = 'none';
+};
+
+window._obPickTopOrSubmit = function() {
+    const results = document.getElementById('ob-search-results');
+    if (results && results.style.display !== 'none' && results.children.length > 0 && results.children[0].onclick) {
+        results.children[0].click();
+    } else {
+        window._obSubmitGuess();
+    }
+};
+
+window._obSubmitGuess = function() {
+    const st = window._obState;
+    const input = document.getElementById('ob-guess-input');
+    if (!st || !input) return;
+    const guess = input.value.trim();
+    if (!guess) return;
+
+    const normGuess = _obBaseTitle(guess).toLowerCase();
+    const normAnswer = _obBaseTitle(st.song.anime).toLowerCase();
+    const correct = normGuess.includes(normAnswer) || normAnswer.includes(normGuess);
+    st.guesses.push(guess);
+
+    if (correct) {
+        st.solved = true;
+    } else if (st.guesses.length >= OB_CLIPS.length) {
+        st.failed = true;
+    } else {
+        st.clipIdx = Math.min(st.clipIdx + 1, OB_CLIPS.length - 1);
+    }
+
+    if (window._obAudio) { window._obAudio.pause(); window._obAudio = null; }
+    if (window._obPlayTimer) { clearTimeout(window._obPlayTimer); window._obPlayTimer = null; }
+
+    _obSave();
+    _obRender();
+
+};
+
+window._obAdminReset = function() {
+    if (!window.isAdmin) return;
+    const today = new Date().toISOString().split('T')[0];
+    localStorage.removeItem('weebee_ob_' + today);
+    localStorage.removeItem('weebee_melobee_posted_' + today);
+    // Pick a random offset so each reset lands on a different song
+    const offset = Math.floor(Math.random() * OB_POOL.length);
+    localStorage.setItem('weebee_ob_offset_' + today, offset);
+    if (window._obAudio) { window._obAudio.pause(); window._obAudio = null; }
+    if (window._obPlayTimer) { clearTimeout(window._obPlayTimer); window._obPlayTimer = null; }
+    window._obPlaying = false;
+    window.openOpeningBee();
+};
+
+window._obSkip = function() {
+    const st = window._obState;
+    if (!st) return;
+    st.guesses.push('');
+    if (st.guesses.length >= OB_CLIPS.length) {
+        st.failed = true;
+    } else {
+        st.clipIdx = Math.min(st.clipIdx + 1, OB_CLIPS.length - 1);
+    }
+    if (window._obAudio) { window._obAudio.pause(); window._obAudio = null; }
+    if (window._obPlayTimer) { clearTimeout(window._obPlayTimer); window._obPlayTimer = null; }
+    window._obPlaying = false;
+    _obSave();
+    _obRender();
+};
+
+// --- MeloBee Post to Feed ---
+function _mbEmojiRow(guesses, solved) {
+    const icons = guesses.map((g, i) => {
+        if (!g) return '⏭️';
+        if (solved && i === guesses.length - 1) return '🎵';
+        return '❌';
+    });
+    for (let i = guesses.length; i < OB_CLIPS.length; i++) icons.push('⬜');
+    return icons.join(' ');
+}
+
+window.postMeloBeeToFeed = async function(btn) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const st = window._obState;
+    if (!st || (!st.solved && !st.failed)) return;
+    const today = new Date().toISOString().split('T')[0];
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">campaign</span> Posting...';
+    try {
+        const existing = await getDocs(query(collection(db,'melobee_posts'), where('uid','==',auth.currentUser.uid), where('date','==',today)));
+        if (!existing.empty) { btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">campaign</span> ✓ Posted!'; return; }
+        const pd = await getDoc(doc(db,'profiles',auth.currentUser.uid)).catch(()=>null);
+        const displayName = pd?.data()?.displayName || auth.currentUser.displayName;
+        const avatar = pd?.data()?.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        await addDoc(collection(db,'melobee_posts'), {
+            uid: auth.currentUser.uid, displayName, avatar,
+            anime: st.song.anime, guesses: st.guesses, solved: st.solved,
+            emojiRow: _mbEmojiRow(st.guesses, st.solved),
+            date: today, timestamp: new Date(), likes: [], dislikes: [], commentCount: 0
+        });
+        localStorage.setItem('weebee_melobee_posted_' + today, '1');
+        btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">campaign</span> ✓ Posted!';
+        window.loadMeloBeeFeed?.();
+        window.fetchHomeActivityFeed?.();
+    } catch(e) { btn.disabled = false; btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">campaign</span> Post to Feed'; alert('Failed: ' + e.message); }
+};
+
+window.deleteMeloBeePost = async function(postId) {
+    if (!auth.currentUser) return;
+    if (!confirm('Delete this post?')) return;
+    try {
+        await deleteDoc(doc(db, 'melobee_posts', postId));
+        document.getElementById(`feed-item-${postId}`)?.remove();
+        window._activityItems = (window._activityItems || []).filter(x => x.id !== postId);
+    } catch(e) { alert('Failed to delete.'); }
+};
+
+window.generateMeloBeePostCardHTML = function(post) {
+    const uid = auth.currentUser?.uid;
+    const isOwner = uid && post.uid === uid;
+    const likes = post.likes || [];
+    const dislikes = post.dislikes || [];
+    const isLiked = uid && likes.includes(uid);
+    const isDisliked = uid && dislikes.includes(uid);
+    const safeId = post.id;
+    const guessCount = (post.guesses || []).filter(g => g).length;
+    const label = post.solved ? `Solved in ${guessCount} guess${guessCount !== 1 ? 'es' : ''}` : 'Not solved today';
+    return `<div class="review-card melobee-post-card feed-post-card" style="position:relative;">
+        ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
+            <div style="position:relative;">
+                <button onclick="window.togglePostMenu('${safeId}')" style="background:rgba(0,0,0,0.35);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:white;"><span class="material-symbols-outlined" style="font-size:16px;">more_vert</span></button>
+                <div id="post-menu-${safeId}" style="display:none;position:absolute;top:32px;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:140px;overflow:hidden;z-index:20;">
+                    <button onclick="event.stopPropagation();window.deleteMeloBeePost('${safeId}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
+                </div>
+            </div>
+        </div>` : ''}
+        <div class="review-header">
+            <img src="${post.avatar}" class="avatar" style="cursor:pointer;" onclick="event.stopPropagation();viewUserProfile('${post.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.displayName)}&backgroundColor=ffc107&fontColor=333333'">
+            <div style="min-width:0;">
+                <strong style="color:var(--text-dark);">${post.displayName}</strong>
+                ${window.getRankBadgeHTML ? window.getRankBadgeHTML(window.userRankCache[post.uid]||0,14) : ''}
+                ${window.getPinnedBadgesHTML ? window.getPinnedBadgesHTML(post.uid) : ''}
+                <span style="display:inline-block;background:#22c55e;color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">🎵 MeloBee</span><br>
+                <span style="font-size:12px;color:var(--text-muted);">${formatTimeAgo(post.timestamp)} · <span onclick="event.stopPropagation();window.goToMeloBeeTab()" style="color:#4ade80;cursor:pointer;font-weight:700;">Play today's →</span></span>
+            </div>
+        </div>
+        <div style="margin:14px 0 8px;">
+            <div style="font-size:22px;letter-spacing:4px;margin-bottom:8px;">${post.emojiRow || _mbEmojiRow(post.guesses||[], post.solved)}</div>
+            <div style="font-size:15px;font-weight:700;color:var(--text-dark);">${post.solved ? '🎵' : '😔'} ${label}</div>
+        </div>
+        <div class="review-actions">
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostComments(event,this,'${safeId}')"><span class="material-symbols-outlined">chat_bubble</span></button>
+                <span class="action-label bw-comment-count">${post.commentCount || 0} Comments</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${safeId}','melobee_posts','like',this)" style="${isLiked?'color:var(--accent-yellow);':''}"><span class="material-symbols-outlined">thumb_up</span></button>
+                <span class="action-label" id="bw-likes-${safeId}">${likes.length} Likes</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${safeId}','melobee_posts','dislike',this)" style="${isDisliked?'color:red;':''}"><span class="material-symbols-outlined">thumb_down</span></button>
+                <span class="action-label" id="bw-dislikes-${safeId}">${dislikes.length} Dislikes</span>
+            </div>
+        </div>
+        <div class="bw-post-comments" data-post-collection="melobee_posts" style="display:none;margin-top:15px;padding-top:15px;border-top:1px solid var(--border-color);" onclick="event.stopPropagation();">
+            <div class="bw-comments-list"></div>
+            <div style="display:flex;gap:10px;margin-top:10px;">
+                <input type="text" class="bw-comment-input" placeholder="Add a comment..." style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
+                <button class="action-btn" onclick="window.submitBwPostComment(event,this,'${safeId}','melobee_posts')">Send</button>
+            </div>
+        </div>
+    </div>`;
+};
+
+window.loadMeloBeeFeed = async function() {
+    const feed = document.getElementById('melobee-posts-feed');
+    if (!feed) return;
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        const snap = await getDocs(query(collection(db,'melobee_posts'), where('date','==',today), limit(30)));
+        if (snap.empty) { feed.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:24px;font-size:14px;">No results yet — be the first to post!</p>'; return; }
+        feed.innerHTML = snap.docs.map(d => window.generateMeloBeePostCardHTML({ id: d.id, ...d.data() })).join('');
+    } catch(e) { console.error('loadMeloBeeFeed', e); feed.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:24px;">Failed to load results.</p>'; }
+};
+
+window.goToMeloBeeTab = function() {
+    window.switchView('community-view');
+    document.querySelectorAll('#community-view .community-tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('#community-view .community-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('community-tab-opening').style.display = 'block';
+    document.getElementById('ob-tab-btn')?.classList.add('active');
+    window.openOpeningBee();
+};
 
 // Mark today as done on load if already played
 (function _triviaInitStatus() {
@@ -10400,7 +11163,5 @@ function _triviaShowResult(score, alreadyDone) {
     const saved = localStorage.getItem('weebee_trivia_' + today);
     if (saved) {
         const { score } = JSON.parse(saved);
-        const el = document.getElementById('trivia-status-text');
-        if (el) el.textContent = 'Today: ' + score + '/5 ✓';
     }
 })();

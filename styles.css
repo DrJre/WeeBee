@@ -360,10 +360,12 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 /* Review Cards */
 .review-card { position: relative; overflow: hidden; background-color: var(--bg-gray); padding: 20px; border-radius: var(--border-radius); margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.03); border: 1px solid transparent; }
 .review-card.weebee-review { background-color: var(--accent-yellow-light); border: 1px solid var(--accent-yellow); }
-.review-card.bw-post-card { background-color: rgba(76,175,80,0.05); border: 1px solid rgba(76,175,80,0.55); }
+.review-card.bw-post-card { background-color: rgba(0,188,212,0.05); border: 1px solid rgba(0,188,212,0.5); }
 .review-card.tl-post-card { background-color: rgba(103,58,183,0.05); border: 1px solid rgba(103,58,183,0.45); }
-[data-theme="dark"] .review-card.bw-post-card { background-color: rgba(76,175,80,0.09); }
+.review-card.melobee-post-card { background-color: rgba(34,197,94,0.05); border: 1px solid rgba(34,197,94,0.5); }
+[data-theme="dark"] .review-card.bw-post-card { background-color: rgba(0,188,212,0.09); }
 [data-theme="dark"] .review-card.tl-post-card { background-color: rgba(103,58,183,0.1); }
+[data-theme="dark"] .review-card.melobee-post-card { background-color: rgba(34,197,94,0.09); }
 .review-card.interactive { cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
 .review-card.interactive:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.08); }
 

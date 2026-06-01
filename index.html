@@ -442,7 +442,10 @@
                         <button class="detail-tab active community-tab-btn" onclick="switchCommunityTab(event,'community-tab-buzzword')">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">grid_view</span> BuzzWord
                         </button>
-                        <button class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-trivia')">
+                        <button id="ob-tab-btn" class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-opening'); window.openOpeningBee(); window.loadMeloBeeFeed();">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">music_note</span> MeloBee
+                        </button>
+                        <button class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-trivia'); window.loadTriviaFeed();">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">quiz</span> Trivia
                         </button>
                         <button class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-tierlists')">
@@ -470,7 +473,7 @@
                         <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%, rgba(139,0,0,0.25) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(0,96,128,0.2) 0%, transparent 60%); pointer-events:none;"></div>
                         <div style="position:relative; z-index:1;">
                             <div style="font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:8px;">WeeBee</div>
-                            <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">BuzzWord</div>
+                            <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">🟨 BuzzWord 🟨</div>
                             <div style="font-size:15px; color:rgba(255,255,255,0.55); margin-top:10px;">Guess the daily anime characters — new puzzles every day</div>
                         </div>
                     </div>
@@ -549,14 +552,20 @@
 
                     <!-- TRIVIA TAB -->
                     <div id="community-tab-trivia" class="community-tab-content" style="display:none;">
-                        <div style="border-radius:20px;padding:36px 32px;margin-bottom:20px;text-align:center;border:1px solid rgba(156,39,176,0.3);background:linear-gradient(135deg,rgba(156,39,176,0.15) 0%,rgba(103,58,183,0.1) 100%);">
-                            <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
-                            <div style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🧠 Daily Trivia</div>
-                            <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;">5 questions · New quiz every day · How much do you know?</div>
-                            <div id="trivia-status-text" style="font-size:13px;color:#CE93D8;margin-top:8px;font-weight:700;"></div>
+                        <div style="border-radius:20px;padding:36px 32px;margin-bottom:20px;text-align:center;border:1px solid rgba(255,255,255,0.08);position:relative;overflow:hidden;background:linear-gradient(135deg,#1a0533 0%,#110d2e 100%);">
+                            <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(156,39,176,0.35) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(103,58,183,0.25) 0%,transparent 60%);pointer-events:none;"></div>
+                            <div style="position:relative;z-index:1;">
+                                <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
+                                <div style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🧠 Daily Trivia 🧠</div>
+                                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;">5 questions · New quiz every day · How much do you know?</div>
+                            </div>
                         </div>
                         <button onclick="window.openTriviaGame()" id="trivia-play-btn" class="action-btn" style="width:100%;justify-content:center;padding:16px;font-size:16px;font-weight:800;background:#9C27B0;color:white;border-radius:12px;margin-bottom:20px;">Play Today's Trivia →</button>
                         <div id="trivia-game-container"></div>
+                        <div style="margin-top:28px;padding-top:24px;border-top:1px solid var(--border-color);">
+                            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:14px;">Today's Scores</div>
+                            <div id="trivia-posts-feed"><div class="loading">Loading scores...</div></div>
+                        </div>
                     </div><!-- /community-tab-trivia -->
 
                     <!-- TIER LISTS TAB -->
@@ -567,7 +576,7 @@
                         <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%, rgba(74,20,140,0.25) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(255,193,7,0.15) 0%, transparent 60%); pointer-events:none;"></div>
                         <div style="position:relative; z-index:1;">
                             <div style="font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:8px;">WeeBee</div>
-                            <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">Tier Lists</div>
+                            <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">📊 Tier Lists 📊</div>
                             <div style="font-size:15px; color:rgba(255,255,255,0.55); margin-top:10px;">Rank your favorites and share with the community</div>
                         </div>
                     </div>
@@ -615,7 +624,7 @@
                             <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%, rgba(255,69,0,0.25) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(255,140,0,0.2) 0%, transparent 60%); pointer-events:none;"></div>
                             <div style="position:relative; z-index:1;">
                                 <div style="font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:8px;">WeeBee</div>
-                                <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">Hot Takes</div>
+                                <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">🔥 Hot Takes 🔥</div>
                                 <div style="font-size:15px; color:rgba(255,255,255,0.55); margin-top:10px;">Drop your spiciest anime opinions — the community will let you know</div>
                             </div>
                         </div>
@@ -651,7 +660,7 @@
                             <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%, rgba(33,150,243,0.25) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(156,39,176,0.2) 0%, transparent 60%); pointer-events:none;"></div>
                             <div style="position:relative; z-index:1;">
                                 <div style="font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:8px;">WeeBee</div>
-                                <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">Polls</div>
+                                <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">🗳️ Polls 🗳️</div>
                                 <div style="font-size:15px; color:rgba(255,255,255,0.55); margin-top:10px;">Vote on the community's biggest anime debates</div>
                             </div>
                         </div>
@@ -694,7 +703,7 @@
                             <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%, rgba(255,193,7,0.3) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(255,152,0,0.2) 0%, transparent 60%); pointer-events:none;"></div>
                             <div style="position:relative; z-index:1;">
                                 <div style="font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:8px;">WeeBee</div>
-                                <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">Brackets</div>
+                                <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">🏆 Brackets 🏆</div>
                                 <div style="font-size:15px; color:rgba(255,255,255,0.55); margin-top:10px;">Tournament-style anime showdowns — vote for your champion</div>
                             </div>
                         </div>
@@ -752,6 +761,27 @@
                         <div id="leaderboard-container"></div>
                     </div><!-- /community-tab-leaderboard -->
 
+                    <!-- OPENING BEE TAB (admin test) -->
+                    <div id="community-tab-opening" class="community-tab-content" style="display:none;">
+                        <!-- Banner -->
+                        <div style="border-radius:20px;padding:36px 32px;margin-bottom:24px;text-align:center;border:1px solid rgba(255,255,255,0.08);position:relative;overflow:hidden;background:linear-gradient(135deg,#0a2e1a 0%,#0d2b14 100%);">
+                            <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(34,197,94,0.35) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(16,185,129,0.25) 0%,transparent 60%);pointer-events:none;"></div>
+                            <div style="position:relative;z-index:1;">
+                                <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
+                                <div style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🎵 MeloBee 🎵</div>
+                                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;">Guess the anime by its opening — new puzzle every day</div>
+                            </div>
+                        </div>
+                        <div id="ob-game-container"></div>
+                        <div id="ob-admin-controls" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid var(--border-color);text-align:center;">
+                            <button onclick="window._obAdminReset()" class="cancel-btn" style="font-size:12px;opacity:0.6;">🔄 Reset Today's Attempt (Admin)</button>
+                        </div>
+                        <div style="margin-top:28px;padding-top:24px;border-top:1px solid var(--border-color);">
+                            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:14px;">Today's Results</div>
+                            <div id="melobee-posts-feed"><div class="loading">Loading results...</div></div>
+                        </div>
+                    </div><!-- /community-tab-opening -->
+
                 </div><!-- /community-view -->
 
     <!-- Tier List Creator Modal -->
@@ -802,7 +832,8 @@
                 <!-- Header bar -->
                 <div style="display:flex; gap:12px; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap;">
                     <div style="flex:1; min-width:200px;">
-                        <input type="text" id="tl-title-input" placeholder="Give your tier list a title..." style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark); font-size:16px; font-weight:600; box-sizing:border-box; margin-bottom:4px;">
+                        <input type="text" id="tl-title-input" placeholder="Give your tier list a title..." style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark); font-size:16px; font-weight:600; box-sizing:border-box; margin-bottom:6px;">
+                        <textarea id="tl-caption-input" placeholder="Add a caption... (optional)" maxlength="200" rows="2" style="width:100%; padding:9px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark); font-size:13px; resize:none; box-sizing:border-box; font-family:inherit; margin-bottom:4px;"></textarea>
                         <div id="tl-source-label" style="font-size:12px; color:var(--text-muted); padding-left:4px;"></div>
                     </div>
                     <div style="display:flex; gap:8px; align-items:center; flex-shrink:0; flex-wrap:wrap;">
@@ -1131,6 +1162,12 @@
             <h3>In-Depth Review</h3>
             <div id="in-depth-categories"></div>
             
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed #E0E0E0;">
+                <label>Overall Summary (Optional)</label>
+                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; margin-top: -5px;">A one-line caption that appears on your post in the feed.</p>
+                <textarea id="in-depth-summary-text" rows="2" maxlength="200" placeholder='e.g. "Animation was next level, but the plot isn\'t the best."' style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-gray); color:var(--text-dark); font-size:13px; resize:none; box-sizing:border-box; font-family:inherit;"></textarea>
+            </div>
+
             <div style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed #E0E0E0;">
                 <label>Fan Service Scale (Optional)</label>
                 <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; margin-top: -5px;">This background stat won't affect your overall score.</p>

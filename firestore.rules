@@ -6,23 +6,26 @@ service cloud.firestore {
     function isAuth() { return request.auth != null; }
     function isOwner(uid) { return isAuth() && request.auth.uid == uid; }
 
-    // ── Public read, auth write (feeds, reviews, community) ──────────────────
+    // ── Reviews ───────────────────────────────────────────────────────────────
     match /reviews/{doc} {
       allow read: if true;
       allow create: if isAuth();
       allow update, delete: if isOwner(resource.data.uid);
     }
 
+    // ── Community content (likes/votes require update by any auth user) ───────
     match /tier_lists/{doc} {
       allow read: if true;
       allow create: if isAuth();
-      allow update, delete: if isOwner(resource.data.uid);
+      allow update: if isAuth();
+      allow delete: if isOwner(resource.data.uid);
     }
 
     match /hot_takes/{doc} {
       allow read: if true;
       allow create: if isAuth();
-      allow update, delete: if isOwner(resource.data.uid);
+      allow update: if isAuth();
+      allow delete: if isOwner(resource.data.uid);
     }
 
     match /polls/{doc} {
@@ -52,6 +55,26 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.uid);
     }
 
+    match /trivia_posts/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if isOwner(resource.data.uid);
+    }
+
+    match /melobee_posts/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if isOwner(resource.data.uid);
+    }
+
+    match /patch_notes/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    // ── Comments ──────────────────────────────────────────────────────────────
     match /bw_post_comments/{doc} {
       allow read: if true;
       allow create: if isAuth();
@@ -76,12 +99,7 @@ service cloud.firestore {
       allow update, delete: if isOwner(resource.data.uid);
     }
 
-    match /patch_notes/{doc} {
-      allow read: if true;
-      allow write: if isAuth();
-    }
-
-    // ── Profiles ─────────────────────────────────────────────────────────────
+    // ── Profiles ──────────────────────────────────────────────────────────────
     match /profiles/{uid} {
       allow read: if true;
       allow write: if isOwner(uid);
@@ -128,14 +146,14 @@ service cloud.firestore {
       }
     }
 
-    // ── Notifications ────────────────────────────────────────────────────────
+    // ── Notifications ─────────────────────────────────────────────────────────
     match /notifications/{doc} {
       allow read: if isOwner(resource.data.targetUid);
       allow create: if isAuth();
       allow update, delete: if isAuth();
     }
 
-    // ── Achievements & ranks ─────────────────────────────────────────────────
+    // ── Achievements & ranks ──────────────────────────────────────────────────
     match /achievements/{doc} {
       allow read: if true;
       allow write: if isAuth();
