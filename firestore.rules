@@ -1,0 +1,210 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function isAuth() { return request.auth != null; }
+    function isOwner(uid) { return isAuth() && request.auth.uid == uid; }
+
+    // ── Public read, auth write (feeds, reviews, community) ──────────────────
+    match /reviews/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    match /tier_lists/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    match /hot_takes/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    match /polls/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if isOwner(resource.data.uid);
+    }
+
+    match /brackets/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if isOwner(resource.data.uid);
+    }
+
+    match /bracket_templates/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    match /bw_posts/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if isOwner(resource.data.uid);
+    }
+
+    match /bw_post_comments/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    match /episode_comments/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    match /comments/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    match /profile_comments/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    match /patch_notes/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    // ── Profiles ─────────────────────────────────────────────────────────────
+    match /profiles/{uid} {
+      allow read: if true;
+      allow write: if isOwner(uid);
+    }
+
+    // ── Anime lists & top lists ───────────────────────────────────────────────
+    match /anime_lists/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    match /top_anime_lists/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    // ── Social (follows, friends, DMs) ───────────────────────────────────────
+    match /follows/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    match /friends/{doc} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+
+    match /friend_requests/{doc} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+
+    match /conversations/{doc} {
+      allow read: if isAuth() && (resource.data.participants[request.auth.uid] == true);
+      allow create: if isAuth();
+      allow update: if isAuth() && (resource.data.participants[request.auth.uid] == true);
+
+      match /messages/{msg} {
+        allow read: if isAuth();
+        allow create: if isAuth();
+        allow update, delete: if isOwner(resource.data.uid);
+      }
+    }
+
+    // ── Notifications ────────────────────────────────────────────────────────
+    match /notifications/{doc} {
+      allow read: if isOwner(resource.data.targetUid);
+      allow create: if isAuth();
+      allow update, delete: if isAuth();
+    }
+
+    // ── Achievements & ranks ─────────────────────────────────────────────────
+    match /achievements/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    match /rankHistory/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    match /meta/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    // ── Seasonal voting ───────────────────────────────────────────────────────
+    match /seasonal_votes/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    match /seasonal_vote_records/{doc} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+
+    match /seasonal_winners/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    match /seasonal_badges/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    // ── Cache & character DB ──────────────────────────────────────────────────
+    match /anime_cache/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    match /characters/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    // ── Feedback ──────────────────────────────────────────────────────────────
+    match /bug_reports/{doc} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    match /feature_suggestions/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    match /direct_suggestions/{doc} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+    }
+
+    // ── Founders ─────────────────────────────────────────────────────────────
+    match /founders/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+  }
+}

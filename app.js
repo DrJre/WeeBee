@@ -824,6 +824,8 @@ window.openSettingsModal = function() {
             const listT = document.getElementById('list-private-toggle');
             if (dmT) dmT.checked = data.dmOpenToFollowers === true;
             if (listT) listT.checked = data.listPrivate === true;
+            const statsT = document.getElementById('stats-private-toggle');
+            if (statsT) statsT.checked = data.statsPrivate === true;
         }).catch(() => {});
     }
 };
@@ -2714,9 +2716,157 @@ window.switchProfileTab = function(event, tabId) {
     event.currentTarget.classList.add('active');
     if (tabId === 'p-feed') window.loadProfileFeed(window.currentProfileUid);
     if (tabId === 'p-reviews') window.loadProfileReviews(window.currentProfileUid);
+    if (tabId === 'p-stats') window.loadProfileStats(window.currentProfileUid);
     if (tabId === 'p-achievements') window.loadProfileAchievements(window.currentProfileUid);
     if (tabId === 'p-friends') window.loadFriendsTab(window.currentProfileUid);
     if (tabId === 'p-followers') window.loadFollowersTab(window.currentProfileUid);
+};
+
+function _statCard(label, value, icon) {
+    return `<div style="background:var(--bg-gray);border-radius:12px;padding:14px;text-align:center;">
+        <span class="material-symbols-outlined" style="font-size:22px;color:var(--accent-yellow);margin-bottom:6px;display:block;">${icon}</span>
+        <div style="font-size:22px;font-weight:900;margin-bottom:4px;">${value}</div>
+        <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">${label}</div>
+    </div>`;
+}
+
+window.loadProfileStats = async function(uid) {
+    const container = document.getElementById('user-stats-container');
+    if (!container || container.dataset.loaded === uid) return;
+    container.dataset.loaded = uid;
+    const isMe = uid === auth.currentUser?.uid;
+
+    // Privacy check
+    if (!isMe) {
+        const profileDoc = await getDoc(doc(db, 'profiles', uid));
+        if (profileDoc.exists() && profileDoc.data().statsPrivate === true) {
+            const isFriend = window.myFriendIds?.has(uid);
+            if (!isFriend) {
+                container.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--text-muted);">
+                    <span class="material-symbols-outlined" style="font-size:48px;margin-bottom:12px;display:block;">lock</span>
+                    <div style="font-size:14px;font-weight:600;">This user's stats are private.</div>
+                </div>`;
+                return;
+            }
+        }
+    }
+
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading stats...</div>';
+
+    try {
+        const [revSnap, listSnap] = await Promise.all([
+            getDocs(query(collection(db, 'reviews'), where('uid', '==', uid))),
+            getDocs(query(collection(db, 'anime_lists'), where('uid', '==', uid)))
+        ]);
+
+        const reviews = revSnap.docs.map(d => d.data()).filter(r => r.type !== 'suggestion' && r.type !== 'series');
+        const listEntries = listSnap.docs.map(d => d.data());
+
+        const scoredReviews = reviews.filter(r => parseFloat(r.score) > 0);
+        const avgScore = scoredReviews.length > 0
+            ? (scoredReviews.reduce((s, r) => s + parseFloat(r.score), 0) / scoredReviews.length).toFixed(1)
+            : null;
+
+        // Score distribution 1–10
+        const dist = {};
+        for (let i = 1; i <= 10; i++) dist[i] = 0;
+        scoredReviews.forEach(r => {
+            const v = Math.round(parseFloat(r.score));
+            if (v >= 1 && v <= 10) dist[v]++;
+        });
+        const maxDist = Math.max(...Object.values(dist), 1);
+
+        const completed = listEntries.filter(e => e.status === 'completed').length;
+        const watching  = listEntries.filter(e => e.status === 'watching').length;
+        const planToWatch = listEntries.filter(e => e.status === 'plan-to-watch').length;
+
+        const now = new Date();
+        const thisMonth = reviews.filter(r => {
+            const ts = r.timestamp?.toDate ? r.timestamp.toDate() : null;
+            return ts && ts.getMonth() === now.getMonth() && ts.getFullYear() === now.getFullYear();
+        }).length;
+
+        // Rank progress
+        const rankInfo = window.getRankInfo(reviews.length);
+        const rankProgressHTML = rankInfo.next
+            ? `<div style="background:var(--bg-gray);border-radius:12px;padding:16px;margin-bottom:16px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-weight:700;font-size:14px;">Rank Progress</span>
+                    <span style="font-size:12px;color:var(--text-muted);">${rankInfo.name} → next rank</span>
+                </div>
+                <div style="height:8px;border-radius:4px;background:var(--bg-gray-darker);overflow:hidden;">
+                    <div style="height:100%;background:var(--accent-yellow);border-radius:4px;width:${Math.min(100, Math.round(((reviews.length - rankInfo.min) / (rankInfo.next - rankInfo.min)) * 100))}%;"></div>
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">${rankInfo.next - reviews.length} more review${rankInfo.next - reviews.length !== 1 ? 's' : ''} to next rank</div>
+            </div>`
+            : `<div style="background:var(--bg-gray);border-radius:12px;padding:16px;margin-bottom:16px;text-align:center;">
+                <div style="font-size:16px;font-weight:800;color:var(--accent-yellow);">💎 Diamond Rank — Max Level</div>
+            </div>`;
+
+        // Genre + studio from anime_cache
+        const malIds = [...new Set(scoredReviews.map(r => r.mal_id).filter(Boolean))].slice(0, 20);
+        const genreCounts = {}, studioCounts = {};
+        await Promise.allSettled(malIds.map(async malId => {
+            try {
+                const snap = await getDoc(doc(db, 'anime_cache', `full_${malId}`));
+                if (!snap.exists()) return;
+                const anime = snap.data().payload?.data;
+                if (!anime) return;
+                (anime.genres || []).forEach(g => { genreCounts[g.name] = (genreCounts[g.name] || 0) + 1; });
+                (anime.studios || []).forEach(s => { studioCounts[s.name] = (studioCounts[s.name] || 0) + 1; });
+            } catch(_) {}
+        }));
+        const topGenres  = Object.entries(genreCounts).sort((a,b) => b[1]-a[1]).slice(0, 6);
+        const topStudios = Object.entries(studioCounts).sort((a,b) => b[1]-a[1]).slice(0, 5);
+
+        container.innerHTML = `
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:20px;">
+                ${_statCard('Reviews', reviews.length, 'rate_review')}
+                ${_statCard('Avg Score', avgScore ?? '—', 'star')}
+                ${_statCard('Completed', completed, 'check_circle')}
+                ${_statCard('Watching', watching, 'play_circle')}
+                ${_statCard('Plan to Watch', planToWatch, 'bookmark')}
+                ${_statCard('This Month', thisMonth, 'calendar_month')}
+            </div>
+
+            ${rankProgressHTML}
+
+            <div style="background:var(--bg-gray);border-radius:12px;padding:16px;margin-bottom:16px;">
+                <div style="font-weight:700;font-size:14px;margin-bottom:14px;">Score Distribution</div>
+                <div style="display:flex;align-items:flex-end;gap:4px;height:90px;">
+                    ${Object.entries(dist).map(([score, count]) => `
+                        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;">
+                            <div style="font-size:9px;color:var(--text-muted);font-weight:700;">${count || ''}</div>
+                            <div style="width:100%;background:var(--accent-yellow);border-radius:3px 3px 0 0;height:${Math.round((count/maxDist)*64)}px;min-height:${count>0?3:0}px;opacity:${count>0?1:0.15};transition:height .3s;"></div>
+                            <div style="font-size:10px;font-weight:700;color:var(--text-muted);">${score}</div>
+                        </div>`).join('')}
+                </div>
+            </div>
+
+            ${topGenres.length ? `<div style="background:var(--bg-gray);border-radius:12px;padding:16px;margin-bottom:16px;">
+                <div style="font-weight:700;font-size:14px;margin-bottom:12px;">Top Genres</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    ${topGenres.map(([g,c]) => `<span style="background:var(--bg-gray-darker);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;">${g} <span style="color:var(--text-muted);font-weight:400;">${c}</span></span>`).join('')}
+                </div>
+            </div>` : ''}
+
+            ${topStudios.length ? `<div style="background:var(--bg-gray);border-radius:12px;padding:16px;">
+                <div style="font-weight:700;font-size:14px;margin-bottom:12px;">Top Studios</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    ${topStudios.map(([s,c]) => `<span style="background:var(--bg-gray-darker);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;">${s} <span style="color:var(--text-muted);font-weight:400;">${c}</span></span>`).join('')}
+                </div>
+            </div>` : ''}
+        `;
+    } catch(e) {
+        console.error(e);
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Could not load stats.</div>';
+    }
+};
+
+window.toggleStatsPrivacy = function() {
+    if (!auth.currentUser) return;
+    const checked = document.getElementById('stats-private-toggle').checked;
+    setDoc(doc(db, 'profiles', auth.currentUser.uid), { statsPrivate: checked }, { merge: true }).catch(() => {});
 };
 
 window.loadProfileFeed = async function(uid) {
@@ -2941,7 +3091,13 @@ window.fetchUserProfile = async function(targetUid = null) {
         <div class="profile-stat-row"><strong>Average Rating</strong> <span>${avg}</span></div>
         <div class="profile-stat-row"><strong>Completed</strong> <span>${completedCount}</span></div>
         <div class="profile-stat-row"><strong>Watch List</strong> <span id="watch-list-count">${watchAnimes.length}</span></div>
+        <div id="compatibility-score-row"></div>
     `;
+
+    // Compute compatibility score asynchronously for other users' profiles
+    if (auth.currentUser && uidToFetch !== auth.currentUser.uid) {
+        window.computeCompatibilityScore(uidToFetch);
+    }
 
     const watchContainer = document.getElementById('currently-watching-list'); watchContainer.innerHTML = '';
     if(watchAnimes.length === 0) { watchContainer.innerHTML = '<p class="empty-msg" style="color:var(--text-muted); font-size:13px;">Not tracking anything yet.</p>'; } 
@@ -2983,6 +3139,8 @@ window.fetchUserProfile = async function(targetUid = null) {
     // Clear reviews cache for this profile
     const reviewsFeedEl = document.getElementById('user-reviews-feed');
     if (reviewsFeedEl) { reviewsFeedEl.innerHTML = ''; delete reviewsFeedEl.dataset.loaded; }
+    const statsEl = document.getElementById('user-stats-container');
+    if (statsEl) { statsEl.innerHTML = ''; delete statsEl.dataset.loaded; }
     window.loadProfileFeed(uidToFetch);
 
     // Follower / Following counts
@@ -4378,6 +4536,214 @@ window.switchCommunityTab = function(event, tabId) {
     document.querySelectorAll('#community-view .community-tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(tabId).style.display = 'block';
     event.currentTarget.classList.add('active');
+};
+
+// ─── Leaderboards ────────────────────────────────────────────────────────────
+window._lbCache = {};
+window._lbActiveTab = null;
+
+const _lbTabs = [
+    { id: 'reviewers',  label: 'Top Reviewers',  icon: 'rate_review' },
+    { id: 'week',       label: 'This Week',       icon: 'trending_up' },
+    { id: 'rated',      label: 'Top Rated',       icon: 'star' },
+    { id: 'buzzword',   label: 'BuzzWord',        icon: 'grid_view' },
+    { id: 'completed',  label: 'Completed Anime', icon: 'check_circle' },
+    { id: 'hottakes',   label: 'Hot Takes',       icon: 'local_fire_department' },
+];
+
+function _lbRow(i, uid, displayName, avatar, reviewCount, stat, statLabel) {
+    const medals = ['🥇','🥈','🥉'];
+    const rank = i < 3
+        ? `<span style="font-size:20px;line-height:1;flex-shrink:0;">${medals[i]}</span>`
+        : `<span style="font-size:12px;font-weight:800;color:var(--text-muted);width:22px;text-align:center;flex-shrink:0;">#${i+1}</span>`;
+    const bg = i === 0 ? 'background:rgba(255,193,7,0.08);border:1px solid rgba(255,193,7,0.2);' : 'background:var(--bg-gray);';
+    const safeAvatar = (avatar || '').replace(/'/g, '%27');
+    const safeName = encodeURIComponent(displayName || 'U');
+    return `<div onclick="viewUserProfile('${uid}')" style="${bg}border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:6px;transition:opacity .15s;" onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
+        ${rank}
+        <img src="${safeAvatar || `https://api.dicebear.com/9.x/initials/svg?seed=${safeName}&backgroundColor=ffc107&fontColor=333333`}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${safeName}&backgroundColor=ffc107&fontColor=333333'">
+        <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displayName || 'User'}</div>
+            <div>${window.getRankBadgeHTML(reviewCount || 0, 13)}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:16px;font-weight:900;color:var(--accent-yellow);">${stat}</div>
+            <div style="font-size:10px;color:var(--text-muted);">${statLabel}</div>
+        </div>
+    </div>`;
+}
+
+window._lbFetchers = {
+    reviewers: async () => {
+        const snap = await getDocs(query(collection(db, 'profiles'), orderBy('reviewCount', 'desc'), limit(10)));
+        return snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(p => (p.reviewCount || 0) > 0)
+            .map((p, i) => _lbRow(i, p.uid, p.displayName, p.avatar, p.reviewCount, p.reviewCount, 'reviews'));
+    },
+    week: async () => {
+        const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+        const snap = await getDocs(query(collection(db, 'reviews'), where('timestamp', '>=', weekAgo), limit(300)));
+        const map = {};
+        snap.docs.forEach(d => {
+            const r = d.data(); if (!r.uid) return;
+            if (!map[r.uid]) map[r.uid] = { uid: r.uid, displayName: r.username || r.authorName || '', avatar: r.avatar || '', count: 0 };
+            map[r.uid].count++;
+        });
+        const top = Object.values(map).sort((a,b) => b.count - a.count).slice(0, 10);
+        await Promise.allSettled(top.map(async u => {
+            const pd = await getDoc(doc(db, 'profiles', u.uid));
+            if (pd.exists()) { u.displayName = pd.data().displayName || u.displayName; u.avatar = pd.data().avatar || u.avatar; u.reviewCount = pd.data().reviewCount || 0; }
+        }));
+        return top.map((u, i) => _lbRow(i, u.uid, u.displayName, u.avatar, u.reviewCount || 0, u.count, 'this week'));
+    },
+    rated: async () => {
+        const profSnap = await getDocs(query(collection(db, 'profiles'), orderBy('reviewCount', 'desc'), limit(10)));
+        const profs = profSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
+        const uids = profs.map(p => p.uid);
+        const ratingMap = {};
+        if (uids.length) {
+            const rSnap = await getDocs(query(collection(db, 'reviews'), where('uid', 'in', uids)));
+            rSnap.docs.forEach(d => {
+                const r = d.data();
+                if (!r.uid || !r.score || r.type === 'series' || r.type === 'suggestion') return;
+                if (!ratingMap[r.uid]) ratingMap[r.uid] = { sum: 0, count: 0 };
+                ratingMap[r.uid].sum += parseFloat(r.score); ratingMap[r.uid].count++;
+            });
+        }
+        return profs.filter(p => ratingMap[p.uid]?.count >= 5)
+            .map(p => ({ ...p, avg: (ratingMap[p.uid].sum / ratingMap[p.uid].count).toFixed(1) }))
+            .sort((a,b) => parseFloat(b.avg) - parseFloat(a.avg)).slice(0, 10)
+            .map((p, i) => _lbRow(i, p.uid, p.displayName, p.avatar, p.reviewCount, p.avg, 'avg score'));
+    },
+    buzzword: async () => {
+        const snap = await getDocs(query(collection(db, 'bw_posts'), limit(1000)));
+        const map = {};
+        snap.docs.forEach(d => {
+            const p = d.data(); if (!p.uid) return;
+            if (!map[p.uid]) map[p.uid] = { uid: p.uid, displayName: p.displayName || '', avatar: p.avatar || '', totalGuesses: 0, count: 0, dates: new Set() };
+            map[p.uid].totalGuesses += (p.guessCount || 7);
+            map[p.uid].count++;
+            if (p.date) map[p.uid].dates.add(p.date);
+        });
+
+        const allUsers = Object.values(map);
+
+        // Fetch profiles for all unique users
+        await Promise.allSettled(allUsers.map(async u => {
+            const pd = await getDoc(doc(db, 'profiles', u.uid));
+            if (pd.exists()) { u.displayName = pd.data().displayName || u.displayName; u.avatar = pd.data().avatar || u.avatar; u.reviewCount = pd.data().reviewCount || 0; }
+        }));
+
+        // Streak calculator
+        const longestStreak = (dates) => {
+            const sorted = [...dates].sort();
+            if (!sorted.length) return 0;
+            let max = 1, cur = 1;
+            for (let i = 1; i < sorted.length; i++) {
+                const diff = (new Date(sorted[i]) - new Date(sorted[i-1])) / 86400000;
+                cur = diff === 1 ? cur + 1 : 1;
+                if (cur > max) max = cur;
+            }
+            return max;
+        };
+
+        // Best Solvers (lowest avg guesses, min 3 games)
+        const bestSolvers = allUsers.filter(u => u.count >= 3)
+            .map(u => ({ ...u, avg: (u.totalGuesses / u.count).toFixed(1) }))
+            .sort((a,b) => parseFloat(a.avg) - parseFloat(b.avg)).slice(0, 10);
+
+        // Most Games Played
+        const mostPlayed = [...allUsers].sort((a,b) => b.count - a.count).slice(0, 10);
+
+        // Longest Streak
+        const streaks = allUsers.map(u => ({ ...u, streak: longestStreak(u.dates) }))
+            .sort((a,b) => b.streak - a.streak).slice(0, 10).filter(u => u.streak > 0);
+
+        const sectionHeader = (title, icon) =>
+            `<div style="display:flex;align-items:center;gap:8px;margin:24px 0 12px;"><span class="material-symbols-outlined" style="font-size:18px;color:var(--accent-yellow);">${icon}</span><span style="font-weight:800;font-size:15px;">${title}</span></div>`;
+
+        const rows = (arr, statFn, labelFn) => arr.length
+            ? arr.map((u, i) => _lbRow(i, u.uid, u.displayName, u.avatar, u.reviewCount || 0, statFn(u), labelFn(u))).join('')
+            : '<div style="color:var(--text-muted);font-size:13px;padding:8px 0;">Not enough data yet.</div>';
+
+        // Return full HTML string directly
+        return [
+            sectionHeader('Best Solvers', 'emoji_events') +
+            rows(bestSolvers, u => u.avg + ' ✏️', () => 'avg guesses'),
+            sectionHeader('Most Games Played', 'videogame_asset') +
+            rows(mostPlayed, u => u.count, () => 'games played'),
+            sectionHeader('Longest Streak', 'local_fire_department') +
+            rows(streaks, u => u.streak + ' 🔥', () => 'day streak'),
+        ].join('');
+    },
+    completed: async () => {
+        const snap = await getDocs(query(collection(db, 'anime_lists'), where('status', '==', 'completed'), limit(500)));
+        const map = {};
+        snap.docs.forEach(d => {
+            const e = d.data(); if (!e.uid) return;
+            map[e.uid] = (map[e.uid] || 0) + 1;
+        });
+        const top = Object.entries(map).sort((a,b) => b[1]-a[1]).slice(0, 10);
+        const rows = await Promise.all(top.map(async ([uid, count], i) => {
+            const pd = await getDoc(doc(db, 'profiles', uid));
+            const p = pd.exists() ? pd.data() : {};
+            return _lbRow(i, uid, p.displayName || 'User', p.avatar, p.reviewCount || 0, count, 'completed');
+        }));
+        return rows;
+    },
+    hottakes: async () => {
+        const snap = await getDocs(query(collection(db, 'hot_takes'), limit(300)));
+        const map = {};
+        snap.docs.forEach(d => {
+            const h = d.data(); if (!h.uid) return;
+            if (!map[h.uid]) map[h.uid] = { uid: h.uid, displayName: h.authorName || '', avatar: h.authorAvatar || '', agrees: 0, count: 0 };
+            map[h.uid].agrees += (h.agreeUids || []).length;
+            map[h.uid].count++;
+        });
+        const top = Object.values(map).sort((a,b) => b.agrees - a.agrees).slice(0, 10);
+        await Promise.allSettled(top.map(async u => {
+            const pd = await getDoc(doc(db, 'profiles', u.uid));
+            if (pd.exists()) { u.displayName = pd.data().displayName || u.displayName; u.avatar = pd.data().avatar || u.avatar; u.reviewCount = pd.data().reviewCount || 0; }
+        }));
+        return top.map((u, i) => _lbRow(i, u.uid, u.displayName, u.avatar, u.reviewCount || 0, u.agrees, 'total agrees'));
+    },
+};
+
+window.loadLeaderboards = function() {
+    const container = document.getElementById('leaderboard-container');
+    if (!container || container.dataset.built) return;
+    container.dataset.built = '1';
+    const tabBar = _lbTabs.map(t =>
+        `<button id="lbtn-${t.id}" onclick="window.switchLbTab('${t.id}')" style="padding:8px 14px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:700;color:var(--text-muted);white-space:nowrap;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;" onmouseover="this.style.color='var(--text-dark)'" onmouseout="if(window._lbActiveTab!=='${t.id}')this.style.color='var(--text-muted)'">${t.label}</button>`
+    ).join('');
+    container.innerHTML = `
+        <div style="display:flex;overflow-x:auto;border-bottom:1px solid var(--border-color);margin-bottom:20px;gap:2px;">${tabBar}</div>
+        <div id="lb-content"><div style="text-align:center;padding:40px;color:var(--text-muted);">Select a category above.</div></div>`;
+    window.switchLbTab('reviewers');
+};
+
+window.switchLbTab = async function(tabId) {
+    window._lbActiveTab = tabId;
+    _lbTabs.forEach(t => {
+        const btn = document.getElementById(`lbtn-${t.id}`);
+        if (!btn) return;
+        btn.style.color = t.id === tabId ? 'var(--accent-yellow)' : 'var(--text-muted)';
+        btn.style.borderBottomColor = t.id === tabId ? 'var(--accent-yellow)' : 'transparent';
+    });
+    const content = document.getElementById('lb-content');
+    if (!content) return;
+    if (window._lbCache[tabId]) { content.innerHTML = window._lbCache[tabId]; return; }
+    content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading...</div>';
+    try {
+        const result = await window._lbFetchers[tabId]();
+        const html = typeof result === 'string'
+            ? result
+            : (result.length ? result.join('') : '<div style="text-align:center;padding:40px;color:var(--text-muted);">Not enough data yet.</div>');
+        window._lbCache[tabId] = html;
+        if (window._lbActiveTab === tabId) content.innerHTML = html;
+    } catch(e) {
+        console.error(e);
+        if (window._lbActiveTab === tabId) content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Could not load. Try again later.</div>';
+    }
 };
 
 window.allCommunityTierLists = [];
@@ -5776,6 +6142,87 @@ window.fetchGlobalNews = async function() {
     window.renderSeasonalVoting();
 };
 
+// ─── Compatibility Score ──────────────────────────────────────────────────────
+window.computeCompatibilityScore = async function(otherUid) {
+    const row = document.getElementById('compatibility-score-row');
+    if (!row || !auth.currentUser) return;
+    try {
+        const [mySnap, theirSnap] = await Promise.all([
+            getDocs(query(collection(db, 'reviews'), where('uid', '==', auth.currentUser.uid))),
+            getDocs(query(collection(db, 'reviews'), where('uid', '==', otherUid)))
+        ]);
+        const myMap = {};
+        mySnap.docs.forEach(d => { const r = d.data(); if (r.mal_id && r.score && r.type !== 'suggestion' && r.type !== 'series') myMap[r.mal_id] = parseFloat(r.score); });
+        const theirMap = {};
+        theirSnap.docs.forEach(d => { const r = d.data(); if (r.mal_id && r.score && r.type !== 'suggestion' && r.type !== 'series') theirMap[r.mal_id] = parseFloat(r.score); });
+        const shared = Object.keys(myMap).filter(id => theirMap[id]);
+        if (shared.length < 3) { row.innerHTML = ''; return; }
+        const avgDiff = shared.reduce((s, id) => s + Math.abs(myMap[id] - theirMap[id]), 0) / shared.length;
+        const score = Math.round(100 - (avgDiff / 9 * 100));
+        const color = score >= 80 ? '#4CAF50' : score >= 60 ? 'var(--accent-yellow)' : '#FF9800';
+        row.innerHTML = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--bg-gray);">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+                <strong style="font-size:13px;">Taste Match</strong>
+                <span style="font-size:18px;font-weight:900;color:${color};">${score}%</span>
+            </div>
+            <div style="height:6px;border-radius:3px;background:var(--bg-gray);overflow:hidden;margin-top:6px;">
+                <div style="width:${score}%;height:100%;background:${color};border-radius:3px;transition:width .5s;"></div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Based on ${shared.length} shared anime</div>
+        </div>`;
+    } catch(e) { row.innerHTML = ''; }
+};
+
+// ─── Because You Liked X ─────────────────────────────────────────────────────
+window.loadRecommendedForYou = async function() {
+    if (!auth.currentUser) return;
+    const section = document.getElementById('discover-recommended-section');
+    const carousel = document.getElementById('recommended-carousel');
+    const titleEl = document.getElementById('discover-recommended-title');
+    if (!section || !carousel) return;
+
+    try {
+        // Fetch reviews client-side sorted to avoid needing composite index
+        const revSnap = await getDocs(query(
+            collection(db, 'reviews'),
+            where('uid', '==', auth.currentUser.uid),
+            limit(100)
+        ));
+        const topReviews = revSnap.docs.map(d => d.data())
+            .filter(r => r.mal_id && parseFloat(r.score) >= 8 && r.type !== 'suggestion' && r.type !== 'series')
+            .sort((a, b) => parseFloat(b.score) - parseFloat(a.score));
+        if (!topReviews.length) return;
+
+        // Pick seed anime (highest rated, shuffle top 3 for variety)
+        const seed = topReviews[Math.floor(Math.random() * Math.min(3, topReviews.length))];
+
+        // Fetch recommendations from Jikan (cached)
+        const data = await window.jikanFetch(
+            `https://api.jikan.moe/v4/anime/${seed.mal_id}/recommendations`,
+            `recs_${seed.mal_id}`
+        );
+        const recs = data?.data || [];
+        if (!recs.length) return;
+
+        // Get user's existing list to filter out
+        const listSnap = await getDocs(query(collection(db, 'anime_lists'), where('uid', '==', auth.currentUser.uid)));
+        const myMalIds = new Set(listSnap.docs.map(d => d.data().mal_id));
+        myMalIds.add(seed.mal_id); // exclude the seed itself
+
+        const filtered = recs.filter(r => !myMalIds.has(r.entry.mal_id)).slice(0, 12);
+        if (!filtered.length) return;
+
+        if (titleEl) titleEl.textContent = `Because You Liked ${seed.title || seed.animeTitle || 'This'}`;
+        carousel.innerHTML = filtered.map(r =>
+            `<div class="anime-card" onclick="loadAnimeDetails(${r.entry.mal_id})" style="min-width:140px;">
+                <img src="${r.entry.images.jpg.image_url}" style="width:120px;height:170px;object-fit:cover;border-radius:8px;">
+                <p style="max-width:120px;font-size:12px;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.entry.title}</p>
+            </div>`
+        ).join('');
+        section.style.display = 'block';
+    } catch(e) { console.error('loadRecommendedForYou', e); }
+};
+
 // --- NEW DISCOVER PAGE LOGIC (PODIUM UPDATE) ---
 window.fetchDiscoverPage = async function() {
     const top10Container = document.getElementById('weebee-top10-container');
@@ -6393,6 +6840,7 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
          'discover-scifi-section','discover-fantasy-section','discover-sol-section',
          'discover-sports-section','discover-mecha-section'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'block'; });
         fetchDiscoverPage();
+        window.loadRecommendedForYou();
         window.renderSeasonalVoting();
     }
 };
@@ -6810,8 +7258,10 @@ async function fetchDetailEpisodes(mal_id, page = 1) {
                 <div class="ep-score-area">
                     ${avg ? `<span class="ep-avg">WeeBee ${avg}</span>` : ''}
                     <button class="ep-score-btn${userScore ? ' scored' : ''}" onclick="openEpisodeScoreModal(${mal_id}, ${ep.mal_id})">${userScore ? `${userScore} ✓` : 'Score'}</button>
+                    <button class="ep-score-btn" id="ep-discuss-btn-${ep.mal_id}" onclick="window.toggleEpisodeDiscussion(${mal_id}, ${ep.mal_id})">💬</button>
                 </div>
-            </div>`;
+            </div>
+            <div id="ep-discuss-${ep.mal_id}" style="display:none;"></div>`;
         }).join('');
         if (page === 1) { container.innerHTML = `<div class="episode-list">${renderRows(episodes)}</div>`; }
         else { const list = container.querySelector('.episode-list'); if (list) list.insertAdjacentHTML('beforeend', renderRows(episodes)); }
@@ -6830,6 +7280,147 @@ async function fetchDetailEpisodes(mal_id, page = 1) {
         console.error(e);
     }
 }
+
+// ─── Episode Discussion ───────────────────────────────────────────────────────
+function renderEpisodeComment(commentId, c, malId, epNum) {
+    const isOwner = auth.currentUser && c.uid === auth.currentUser.uid;
+    const ownerBtns = isOwner ? `
+        <button onclick="window.editEpisodeComment('${commentId}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;display:flex;align-items:center;" title="Edit"><span class="material-symbols-outlined" style="font-size:14px;">edit</span></button>
+        <button onclick="window.deleteEpisodeComment('${commentId}',${malId},${epNum})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;display:flex;align-items:center;" title="Delete"><span class="material-symbols-outlined" style="font-size:14px;">delete</span></button>` : '';
+    const replyBtn = `<button onclick="window.replyToEpisodeComment(this,'${encodeURIComponent(c.displayName)}',${epNum})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;display:flex;align-items:center;" title="Reply"><span class="material-symbols-outlined" style="font-size:14px;">reply</span></button>`;
+    const isReply = !!c.replyTo;
+    const replyBadge = isReply ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;display:flex;align-items:center;gap:3px;"><span class="material-symbols-outlined" style="font-size:12px;">subdirectory_arrow_right</span> replying to <strong style="color:var(--accent-yellow);">@${c.replyTo}</strong></div>` : '';
+    const replyStyle = isReply ? 'margin-left:20px;border-left:3px solid var(--accent-yellow);' : '';
+    return `<div id="ep-comment-doc-${commentId}" style="display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;background:var(--bg-white);padding:10px;border-radius:8px;border:1px solid var(--border-color);${replyStyle}">
+        <img src="${c.avatar || ''}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(c.displayName)}&backgroundColor=ffc107&fontColor=333333'">
+        <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                <strong style="font-size:13px;color:var(--text-dark);">${c.displayName}</strong>
+                <div style="display:flex;gap:4px;">${replyBtn}${ownerBtns}</div>
+            </div>
+            ${replyBadge}
+            <p id="ep-comment-text-${commentId}" style="font-size:13px;margin:2px 0 0;color:var(--text-dark);word-break:break-word;">${c.text}${c.edited ? ' <span style="font-size:10px;color:var(--text-muted);font-style:italic;">(edited)</span>' : ''}</p>
+        </div>
+    </div>`;
+}
+
+window.replyToEpisodeComment = function(btn, encodedName, epNum) {
+    const name = decodeURIComponent(encodedName);
+    const input = document.getElementById(`ep-comment-input-${epNum}`);
+    if (!input) return;
+    input.dataset.replyTo = name;
+    input.value = `@${name} `;
+    input.focus();
+    input.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
+
+window.toggleEpisodeDiscussion = async function(malId, epNum) {
+    const panel = document.getElementById(`ep-discuss-${epNum}`);
+    const btn = document.getElementById(`ep-discuss-btn-${epNum}`);
+    if (!panel) return;
+
+    const isOpen = panel.style.display !== 'none';
+    panel.style.display = isOpen ? 'none' : 'block';
+    if (btn) btn.style.color = isOpen ? '' : 'var(--accent-yellow)';
+    if (isOpen || panel.dataset.loaded) return;
+
+    panel.dataset.loaded = '1';
+    panel.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:13px;">Loading discussion...</div>';
+    panel.style.cssText = 'display:block;background:var(--bg-gray);border-radius:0 0 10px 10px;padding:14px;margin-bottom:2px;';
+
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'episode_comments'),
+            where('mal_id', '==', malId),
+            where('episode', '==', epNum)
+        ));
+        const comments = snap.docs.map(d => ({ _id: d.id, ...d.data() }))
+            .sort((a, b) => (a.timestamp?.toMillis?.() || 0) - (b.timestamp?.toMillis?.() || 0));
+
+        panel.innerHTML = `
+            <div id="ep-comment-list-${epNum}" style="margin-bottom:12px;">
+                ${comments.length
+                    ? comments.map(c => renderEpisodeComment(c._id, c, malId, epNum)).join('')
+                    : '<p style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">No comments yet — start the discussion!</p>'}
+            </div>
+            <div style="display:flex;gap:8px;">
+                <input type="text" id="ep-comment-input-${epNum}" placeholder="Discuss this episode..." maxlength="500"
+                    style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();window.submitEpisodeComment(${malId},${epNum});}">
+                <button class="action-btn" onclick="window.submitEpisodeComment(${malId},${epNum})">Post</button>
+            </div>`;
+
+        if (btn) btn.textContent = `💬 ${comments.length || ''}`.trim();
+    } catch(e) {
+        console.error('Episode discussion error:', e);
+        delete panel.dataset.loaded;
+        panel.innerHTML = `<div style="padding:8px;font-size:13px;color:var(--text-muted);">Error: ${e.message}</div>`;
+    }
+};
+
+window.submitEpisodeComment = async function(malId, epNum) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const input = document.getElementById(`ep-comment-input-${epNum}`);
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+    const replyTo = input.dataset.replyTo || null;
+    delete input.dataset.replyTo;
+    input.value = '';
+
+    const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid)).catch(() => null);
+    const displayName = pd?.data()?.displayName || auth.currentUser.displayName || 'User';
+    const avatar = pd?.data()?.avatar || auth.currentUser.photoURL || '';
+
+    const commentData = { mal_id: malId, episode: epNum, uid: auth.currentUser.uid, displayName, avatar, text, timestamp: serverTimestamp(), edited: false, ...(replyTo && { replyTo }) };
+    try {
+        const ref = await addDoc(collection(db, 'episode_comments'), commentData);
+        const listEl = document.getElementById(`ep-comment-list-${epNum}`);
+        if (listEl) {
+            listEl.querySelector('p')?.remove();
+            listEl.innerHTML += renderEpisodeComment(ref.id, { ...commentData, timestamp: null }, malId, epNum);
+        }
+        const btn = document.getElementById(`ep-discuss-btn-${epNum}`);
+        if (btn) {
+            const cur = parseInt(btn.textContent.replace('💬','').trim()) || 0;
+            btn.textContent = `💬 ${cur + 1}`;
+        }
+    } catch(e) { console.error(e); alert('Failed to post comment.'); }
+};
+
+window.deleteEpisodeComment = async function(commentId, malId, epNum) {
+    if (!auth.currentUser || !confirm('Delete this comment?')) return;
+    try {
+        await deleteDoc(doc(db, 'episode_comments', commentId));
+        document.getElementById(`ep-comment-doc-${commentId}`)?.remove();
+        const btn = document.getElementById(`ep-discuss-btn-${epNum}`);
+        if (btn) {
+            const cur = parseInt(btn.textContent.replace('💬','').trim()) || 1;
+            btn.textContent = cur - 1 > 0 ? `💬 ${cur - 1}` : '💬';
+        }
+    } catch(e) { alert('Failed to delete comment.'); }
+};
+
+window.editEpisodeComment = function(commentId) {
+    const p = document.getElementById(`ep-comment-text-${commentId}`);
+    if (!p) return;
+    const current = p.textContent.replace(' (edited)', '').trim();
+    const input = document.createElement('input');
+    input.type = 'text'; input.value = current;
+    input.style.cssText = 'width:100%;padding:4px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;';
+    const save = async () => {
+        const newText = input.value.trim();
+        if (!newText || newText === current) { p.style.display = ''; input.replaceWith(p); return; }
+        try {
+            await updateDoc(doc(db, 'episode_comments', commentId), { text: newText, edited: true });
+            p.innerHTML = `${newText} <span style="font-size:10px;color:var(--text-muted);font-style:italic;">(edited)</span>`;
+        } catch(e) { alert('Failed to edit.'); }
+        p.style.display = ''; input.replaceWith(p);
+    };
+    input.onblur = save;
+    input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); save(); } if (e.key === 'Escape') { input.replaceWith(p); p.style.display = ''; } };
+    p.style.display = 'none'; p.after(input); input.focus(); input.select();
+};
 
 window.openEpisodeScoreModal = function(mal_id, ep_number) {
     if (!auth.currentUser) return window.openAuthModal();
@@ -9607,3 +10198,192 @@ window.searchCharacters = async function(q) {
     }
     return merged.slice(0, 20);
 };
+
+// ─── Anime Trivia ─────────────────────────────────────────────────────────────
+const TRIVIA_QUESTIONS = [
+    {q:"Which anime does Levi Ackerman appear in?",opts:["Attack on Titan","Demon Slayer","Jujutsu Kaisen","One Piece"],a:0},
+    {q:"Which anime does Gojo Satoru appear in?",opts:["Bleach","Jujutsu Kaisen","Chainsaw Man","My Hero Academia"],a:1},
+    {q:"Which anime does Roronoa Zoro appear in?",opts:["Bleach","Fairy Tail","One Piece","Naruto"],a:2},
+    {q:"Which anime does Killua Zoldyck appear in?",opts:["Naruto","Hunter x Hunter","Fullmetal Alchemist","Black Clover"],a:1},
+    {q:"Which anime does Edward Elric appear in?",opts:["Fullmetal Alchemist: Brotherhood","Soul Eater","Fairy Tail","Blue Exorcist"],a:0},
+    {q:"Which anime does Light Yagami appear in?",opts:["Code Geass","Psycho-Pass","Death Note","Steins;Gate"],a:2},
+    {q:"Which anime does Rem appear in?",opts:["No Game No Life","Re:ZERO","Sword Art Online","Overlord"],a:1},
+    {q:"Which anime does Lelouch Lamperouge appear in?",opts:["Death Note","Code Geass","Guilty Crown","Aldnoah.Zero"],a:1},
+    {q:"Which anime does Saitama appear in?",opts:["Dragon Ball Super","Mob Psycho 100","One-Punch Man","Bleach"],a:2},
+    {q:"Which anime does Meruem appear in?",opts:["Fullmetal Alchemist","Hunter x Hunter","Tokyo Ghoul","Overlord"],a:1},
+    {q:"Which anime does Makima appear in?",opts:["Jujutsu Kaisen","Spy x Family","Chainsaw Man","Tokyo Ghoul"],a:2},
+    {q:"Which anime does Tanjiro Kamado appear in?",opts:["Demon Slayer","Jujutsu Kaisen","Black Clover","Bleach"],a:0},
+    {q:"Which anime does Yuji Itadori appear in?",opts:["Tokyo Ghoul","Chainsaw Man","Jujutsu Kaisen","Bleach"],a:2},
+    {q:"Which anime does Senku Ishigami appear in?",opts:["Dr. Stone","Steins;Gate","No Game No Life","Classroom of the Elite"],a:0},
+    {q:"Which anime does Itachi Uchiha appear in?",opts:["Bleach","Dragon Ball Z","Naruto","One Piece"],a:2},
+    {q:"Which anime does Shinji Ikari appear in?",opts:["Gurren Lagann","Code Geass","Neon Genesis Evangelion","Darling in the FranXX"],a:2},
+    {q:"Which anime does Izuku Midoriya appear in?",opts:["Black Clover","Fairy Tail","My Hero Academia","Naruto"],a:2},
+    {q:"Which anime does Monkey D. Luffy appear in?",opts:["Fairy Tail","One Piece","Dragon Ball","Naruto"],a:1},
+    {q:"Which anime does Ryuk appear in?",opts:["Overlord","Death Parade","Death Note","Noragami"],a:2},
+    {q:"Which anime does Denji appear in?",opts:["Fire Punch","Dorohedoro","Chainsaw Man","Jujutsu Kaisen"],a:2},
+    {q:"Which anime does Yor Forger appear in?",opts:["Kaguya-sama","Spy x Family","Horimiya","Toradora"],a:1},
+    {q:"Which anime does Subaru Natsuki appear in?",opts:["Sword Art Online","Overlord","Re:ZERO","Konosuba"],a:2},
+    {q:"Which anime does Thorfinn appear in?",opts:["Berserk","Dororo","Vinland Saga","Kingdom"],a:2},
+    {q:"Which anime does Mikasa Ackerman appear in?",opts:["Demon Slayer","Attack on Titan","Jujutsu Kaisen","Tokyo Ghoul"],a:1},
+    {q:"Which anime does Asuka Langley appear in?",opts:["Sword Art Online","Neon Genesis Evangelion","Darling in the FranXX","No Game No Life"],a:1},
+    {q:"Which studio produced Demon Slayer: Kimetsu no Yaiba?",opts:["A-1 Pictures","Bones","ufotable","Madhouse"],a:2},
+    {q:"Which studio produced One Piece?",opts:["Toei Animation","Pierrot","Sunrise","Studio Deen"],a:0},
+    {q:"Which studio produced Naruto?",opts:["Bones","Madhouse","Pierrot","Sunrise"],a:2},
+    {q:"Which studio produced Fullmetal Alchemist: Brotherhood?",opts:["Madhouse","A-1 Pictures","ufotable","Bones"],a:3},
+    {q:"Which studio produced My Hero Academia?",opts:["A-1 Pictures","Bones","Trigger","Wit Studio"],a:1},
+    {q:"Which studio produced Death Note?",opts:["Bones","Madhouse","Wit Studio","MAPPA"],a:1},
+    {q:"Which studio produced Hunter x Hunter (2011)?",opts:["Pierrot","Madhouse","Bones","Sunrise"],a:1},
+    {q:"Which studio produced Attack on Titan Season 1?",opts:["MAPPA","Bones","Wit Studio","A-1 Pictures"],a:2},
+    {q:"Which studio produced Jujutsu Kaisen Season 1?",opts:["Wit Studio","ufotable","Bones","MAPPA"],a:3},
+    {q:"Which studio produced Spy x Family?",opts:["Wit Studio & CloverWorks","Bones","A-1 Pictures","Madhouse"],a:0},
+    {q:"What type of fruit gives One Piece characters their powers?",opts:["Dragon Fruits","Star Fruits","Devil Fruits","Cursed Fruits"],a:2},
+    {q:"What are the three types of Haki in One Piece?",opts:["Fire, Ice, Lightning","Observation, Armament, Conqueror's","Mind, Body, Soul","Sky, Sea, Earth"],a:1},
+    {q:"In Attack on Titan, what are the giant humanoids called?",opts:["Colossi","Goliaths","Titans","Giants"],a:2},
+    {q:"In Death Note, what is the notebook called that kills?",opts:["Death Note","Book of Death","Dark Diary","Shinigami Log"],a:0},
+    {q:"What is the name of the organization Itachi joins in Naruto?",opts:["Anbu","Akatsuki","Seven Swords","Root"],a:1},
+    {q:"In Fullmetal Alchemist, what forbidden art involves creating human life?",opts:["The Alchemy Code","Human Transmutation","The First Law","Philosopher's Alchemy"],a:1},
+    {q:"In Demon Slayer, what organization do the demon slayers belong to?",opts:["Demon Corps","The Order","Demon Slayer Corps","Hashira Guild"],a:2},
+    {q:"In Jujutsu Kaisen, what is Gojo Satoru's signature technique?",opts:["Black Flash","Hollow Purple","Limitless / Infinity","Divergent Fist"],a:2},
+    {q:"What is the name of the academy in My Hero Academia?",opts:["U.A. High School","Shiketsu High","Hero Academy","Plus Ultra High"],a:0},
+    {q:"In Hunter x Hunter, what is the name of the energy system characters use?",opts:["Chakra","Reiatsu","Nen","Ki"],a:2},
+    {q:"In Re:ZERO, what is Subaru's special ability?",opts:["Time Stop","Return by Death","Future Vision","Parallel Worlds"],a:1},
+    {q:"What is the sword style Zoro uses in One Piece?",opts:["Two-Sword Style","Dragon Fang Style","Three-Sword Style","Void Style"],a:2},
+    {q:"In Bleach, what are soul reaper swords called?",opts:["Zanpakuto","Zangetsu","Soul Blade","Spirit Sword"],a:0},
+    {q:"In Code Geass, what power does Lelouch possess?",opts:["Sharingan","Geass","Philosopher's Stone","Absolute Command"],a:1},
+    {q:"What does 'Shonen' mean in anime terminology?",opts:["Young boys (target 12-18)","Young girls","Young men (18-40)","Children under 12"],a:0},
+    {q:"What does 'Seinen' mean in anime terminology?",opts:["Young boys","Young girls","Young men (18-40)","Children"],a:2},
+    {q:"Which of these is NOT a shonen series?",opts:["Naruto","One Piece","Neon Genesis Evangelion","My Hero Academia"],a:2},
+    {q:"In Chainsaw Man, what does Denji transform into?",opts:["A demon","A chainsaw hybrid","A devil hunter","A fiend"],a:1},
+    {q:"What is the name of the virtual game world in Sword Art Online season 1?",opts:["ALfheim Online","Gun Gale Online","Aincrad","New Aincrad"],a:2},
+    {q:"In Vinland Saga, what is the name of Thorfinn's father?",opts:["Askeladd","Bjorn","Thors","Sigurd"],a:2},
+    {q:"In Dr. Stone, what element does Senku use to revive petrified humans?",opts:["Sulfuric Acid","Nital","Miracle Water","Revival Fluid"],a:1},
+    {q:"What is Tanjiro's final breathing style in Demon Slayer?",opts:["Thunder Breathing","Sun Breathing","Flame Breathing","Wind Breathing"],a:1},
+    {q:"In Spy x Family, what is Anya's secret ability?",opts:["She can see the future","She can read minds","She can control people","She is a robot"],a:1},
+    {q:"In No Game No Life, how many pledges govern the world of Disboard?",opts:["Seven","Eight","Ten","Twelve"],a:2},
+    {q:"What is the name of Naruto's signature technique?",opts:["Rasengan","Chidori","Shadow Clone Jutsu","Eight Gates"],a:2},
+    {q:"In Attack on Titan, which country is behind the wall?",opts:["Eldia","Marley","Hizuru","Liberio"],a:0},
+    {q:"What powers Gurren Lagann in the anime of the same name?",opts:["Solar energy","Spiral Power","Quantum energy","Willpower"],a:1},
+];
+
+function _triviaDateSeed() {
+    const d = new Date();
+    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
+
+function _triviaGetDaily() {
+    let s = _triviaDateSeed();
+    const lcg = () => {
+        s = (Math.imul(s ^ (s >>> 16), 0x45d9f3b) ^ (s >>> 11));
+        s = (Math.imul(s ^ (s >>> 14), 0x119de1f3));
+        return Math.abs(s);
+    };
+    const indices = []; const used = new Set();
+    while (indices.length < 5) {
+        const i = Math.abs(lcg()) % TRIVIA_QUESTIONS.length;
+        if (!used.has(i)) { used.add(i); indices.push(i); }
+    }
+    return indices.map(i => TRIVIA_QUESTIONS[i]);
+}
+
+window._triviaState = null;
+
+window.openTriviaGame = function() {
+    const container = document.getElementById('trivia-game-container');
+    const playBtn = document.getElementById('trivia-play-btn');
+    if (!container) return;
+    if (playBtn) playBtn.style.display = 'none';
+    const today = new Date().toISOString().split('T')[0];
+    const saved = localStorage.getItem(`weebee_trivia_${today}`);
+    if (saved) {
+        const { score } = JSON.parse(saved);
+        _triviaShowResult(score, true);
+        return;
+    }
+    window._triviaState = { questions: _triviaGetDaily(), current: 0, score: 0 };
+    _triviaRender();
+};
+
+function _triviaRender() {
+    const container = document.getElementById('trivia-game-container');
+    const st = window._triviaState;
+    if (!st || !container) return;
+    const q = st.questions[st.current];
+    const pct = Math.round((st.current / st.questions.length) * 100);
+    container.innerHTML = `
+        <div style="background:var(--bg-gray);border-radius:16px;padding:20px;margin-bottom:16px;border:1px solid rgba(156,39,176,0.3);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <span style="font-size:12px;font-weight:700;color:var(--text-muted);">Question ${st.current + 1} / ${st.questions.length}</span>
+                <span style="font-size:12px;font-weight:700;color:#CE93D8;">Score: ${st.score} / ${st.current}</span>
+            </div>
+            <div style="height:4px;border-radius:2px;background:var(--bg-gray-darker);overflow:hidden;margin-bottom:16px;">
+                <div style="width:${pct}%;height:100%;background:#9C27B0;border-radius:2px;"></div>
+            </div>
+            <div style="font-size:16px;font-weight:700;margin-bottom:16px;line-height:1.4;">${q.q}</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                ${q.opts.map((opt, i) => `
+                    <button id="trivia-opt-${i}" onclick="window.triviaAnswer(${i})" style="text-align:left;padding:12px 16px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-white);cursor:pointer;color:var(--text-dark);font-size:14px;transition:all .15s;" onmouseover="this.style.borderColor='#9C27B0';this.style.background='rgba(156,39,176,0.08)'" onmouseout="this.style.borderColor='var(--border-color)';this.style.background='var(--bg-white)'">
+                        <span style="font-weight:700;color:#9C27B0;margin-right:8px;">${String.fromCharCode(65+i)}.</span>${opt}
+                    </button>`).join('')}
+            </div>
+        </div>`;
+}
+
+window.triviaAnswer = function(idx) {
+    const st = window._triviaState;
+    if (!st) return;
+    const q = st.questions[st.current];
+    const correct = idx === q.a;
+    if (correct) st.score++;
+
+    const container = document.getElementById('trivia-game-container');
+    container.querySelectorAll('button').forEach((btn, i) => {
+        btn.onclick = null; btn.onmouseover = null; btn.onmouseout = null;
+        if (i === q.a) { btn.style.background='rgba(76,175,80,0.2)'; btn.style.borderColor='#4CAF50'; btn.style.color='#4CAF50'; }
+        else if (i === idx && !correct) { btn.style.background='rgba(244,67,54,0.15)'; btn.style.borderColor='#f44336'; btn.style.color='#f44336'; }
+    });
+
+    setTimeout(() => {
+        st.current++;
+        if (st.current >= st.questions.length) {
+            const today = new Date().toISOString().split('T')[0];
+            localStorage.setItem(`weebee_trivia_${today}`, JSON.stringify({ score: st.score }));
+            const statusEl = document.getElementById('trivia-status-text');
+            if (statusEl) statusEl.textContent = `Today: ${st.score}/5 ✓`;
+            _triviaShowResult(st.score, false);
+        } else {
+            _triviaRender();
+        }
+    }, 900);
+};
+
+function _triviaShowResult(score, alreadyDone) {
+    const container = document.getElementById('trivia-game-container');
+    if (!container) return;
+    const emoji = score === 5 ? '🏆' : score >= 4 ? '🌟' : score >= 3 ? '👍' : score >= 2 ? '📚' : '💪';
+    const msg = score === 5 ? 'Perfect score! You really know your anime!' : score >= 4 ? 'Excellent! Almost perfect!' : score >= 3 ? 'Not bad! Pretty solid anime knowledge!' : score >= 2 ? 'Keep watching and you\'ll get there!' : 'Time to hit the anime queue!';
+    const shareText = '🧠 Anime Trivia — ' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '\n' + emoji + ' ' + score + '/5 on WeeBee Daily Trivia!';
+    container.innerHTML = `
+        <div style="background:var(--bg-gray);border-radius:16px;padding:24px;margin-bottom:16px;border:1px solid rgba(156,39,176,0.3);text-align:center;">
+            <div style="font-size:52px;margin-bottom:12px;">${emoji}</div>
+            <div style="font-size:32px;font-weight:900;color:#CE93D8;margin-bottom:6px;">${score} / 5</div>
+            <div style="font-size:14px;color:var(--text-muted);margin-bottom:${alreadyDone?'8':'20'}px;">${msg}</div>
+            ${alreadyDone ? '<div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">You already played today — come back tomorrow!</div>' : ''}
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                <button onclick="navigator.clipboard.writeText(${JSON.stringify(shareText)}).then(()=>alert('Copied to clipboard!'))" class="action-btn" style="background:#9C27B0;color:white;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">share</span> Share Score
+                </button>
+                <button onclick="document.getElementById('trivia-game-container').innerHTML='';const b=document.getElementById('trivia-play-btn');if(b)b.style.display='';" class="cancel-btn">Close</button>
+            </div>
+        </div>`;
+}
+
+// Mark today as done on load if already played
+(function _triviaInitStatus() {
+    const today = new Date().toISOString().split('T')[0];
+    const saved = localStorage.getItem('weebee_trivia_' + today);
+    if (saved) {
+        const { score } = JSON.parse(saved);
+        const el = document.getElementById('trivia-status-text');
+        if (el) el.textContent = 'Today: ' + score + '/5 ✓';
+    }
+})();
