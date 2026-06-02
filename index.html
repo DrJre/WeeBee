@@ -411,6 +411,12 @@
                     </div>
                     <!-- Admin: Post Patch Notes -->
                     <div id="patch-notes-admin" style="display:none; margin-bottom:32px; padding:20px; background:var(--bg-gray); border-radius:12px; border:2px solid #FF9800;">
+                        <h3 style="margin-bottom:12px; color:#FF9800;">Seasonal Vote</h3>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+                            <button onclick="startSeasonalVote(false)" class="action-btn" style="background:#FF9800; color:white;"><span class="material-symbols-outlined">how_to_vote</span> Start Seasonal Vote</button>
+                            <button onclick="startSeasonalVote(true)" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">science</span> Start Test Vote (5 min)</button>
+                        </div>
+                        <div id="discover-seasonal-admin"></div>
                         <h3 style="margin-bottom:16px; color:#FF9800;">Post Patch Notes</h3>
                         <input id="patch-notes-title" type="text" placeholder="Title (e.g. WeeBee Update — May 2026)" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; margin-bottom:10px; box-sizing:border-box;">
                         <textarea id="patch-notes-body" rows="10" placeholder="Paste patch notes here..." style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; resize:vertical; box-sizing:border-box;"></textarea>
@@ -552,7 +558,7 @@
 
                     <!-- TRIVIA TAB -->
                     <div id="community-tab-trivia" class="community-tab-content" style="display:none;">
-                        <div style="border-radius:20px;padding:36px 32px;margin-bottom:20px;text-align:center;border:1px solid rgba(255,255,255,0.08);position:relative;overflow:hidden;background:linear-gradient(135deg,#1a0533 0%,#110d2e 100%);">
+                        <div class="trivia-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:20px;text-align:center;position:relative;overflow:hidden;">
                             <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(156,39,176,0.35) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(103,58,183,0.25) 0%,transparent 60%);pointer-events:none;"></div>
                             <div style="position:relative;z-index:1;">
                                 <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
@@ -764,7 +770,7 @@
                     <!-- OPENING BEE TAB (admin test) -->
                     <div id="community-tab-opening" class="community-tab-content" style="display:none;">
                         <!-- Banner -->
-                        <div style="border-radius:20px;padding:36px 32px;margin-bottom:24px;text-align:center;border:1px solid rgba(255,255,255,0.08);position:relative;overflow:hidden;background:linear-gradient(135deg,#0a2e1a 0%,#0d2b14 100%);">
+                        <div class="melobee-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:24px;text-align:center;position:relative;overflow:hidden;">
                             <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(34,197,94,0.35) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(16,185,129,0.25) 0%,transparent 60%);pointer-events:none;"></div>
                             <div style="position:relative;z-index:1;">
                                 <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>

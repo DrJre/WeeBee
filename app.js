@@ -174,6 +174,11 @@ const ACHIEVEMENTS = [
     // Community: Polls
     { id: 'poll_first',       name: 'Pollster',            desc: 'Created your first poll',                            icon: 'bar_chart',             cat: 'Community', subcat: 'Polls',      color: '#2196F3' },
     { id: 'poll_popular',     name: 'The People Have Spoken', desc: 'Got 20+ total votes on a single poll',            icon: 'how_to_vote',           cat: 'Community', subcat: 'Polls',      color: '#2196F3' },
+    // Community: MeloBee
+    { id: 'mb_first',         name: 'First Note',          desc: 'Solved your first MeloBee puzzle',                   icon: 'music_note',            cat: 'Community', subcat: 'MeloBee',    color: '#22c55e' },
+    { id: 'mb_perfect_pitch', name: 'Perfect Pitch',       desc: 'Solved the MeloBee puzzle on the very first clip',   icon: 'bolt',                  cat: 'Community', subcat: 'MeloBee',    color: '#22c55e' },
+    { id: 'mb_streak_7',      name: 'On the Charts',       desc: 'Solved MeloBee 7 days in a row',                     icon: 'local_fire_department', cat: 'Community', subcat: 'MeloBee',    color: '#22c55e' },
+    { id: 'mb_total_30',      name: 'Music Junkie',        desc: 'Solved MeloBee 30 times total',                      icon: 'military_tech',         cat: 'Community', subcat: 'MeloBee',    color: '#22c55e' },
 ];
 
 window.awardAchievements = async function(ids) {
@@ -3876,8 +3881,8 @@ window.renderSeasonalVoting = function() {
             }
         }
         if (!vote) {
+            section.style.display = 'none';
             if (window.isAdmin && adminId) {
-                section.style.display = 'block';
                 const adminEl = document.getElementById(adminId);
                 if (adminEl) {
                     adminEl.style.cssText = 'display:flex; gap:10px; flex-wrap:wrap;';
@@ -3885,9 +3890,6 @@ window.renderSeasonalVoting = function() {
                         <button id="admin-start-vote-btn" onclick="startSeasonalVote(false)" class="action-btn" style="background:#FF9800; color:white;"><span class="material-symbols-outlined">how_to_vote</span> Start Seasonal Vote</button>
                         <button onclick="startSeasonalVote(true)" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">science</span> Start Test Vote (5 min)</button>`;
                 }
-                if (contentId) { const c = document.getElementById(contentId); if (c) c.innerHTML = '<p style="color:var(--text-muted); font-size:14px;">No active vote. Use the buttons above to start one.</p>'; }
-            } else {
-                section.style.display = 'none';
             }
             return;
         }
@@ -7796,7 +7798,7 @@ const BW_NRT_CHARS = [
     // ── Leaf ──
     {id:'naruto',    name:'Naruto Uzumaki',     img:'https://cdn.myanimelist.net/images/characters/2/284121.jpg',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Senjutsu','Fuinjutsu'],                                nature:['Wind','Fire','Earth','Water','Lightning'],       kekkeiGenkai:false, attribute:['Jinchuriki','Sage'],  debutArc:'Introduction'},
     {id:'sasuke',    name:'Sasuke Uchiha',       img:'https://cdn.myanimelist.net/images/characters/9/131317.jpg',  gender:'Male',   affiliation:['Leaf','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu'],                                 nature:['Lightning','Fire','Wind','Earth','Water'],       kekkeiGenkai:true,  attribute:[],                    debutArc:'Introduction'},
-    {id:'sakura',    name:'Sakura Haruno',       img:'https://cdn.myanimelist.net/images/characters/9/69275.jpg',   gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu','Genjutsu'],                          nature:['Earth','Water','Fire'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
+    {id:'sakura',    name:'Sakura Haruno',       img:'https://cdn.myanimelist.net/images/characters/9/69275.jpg',   gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Medical Ninjutsu'],                                     nature:['Earth','Water','Fire'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
     {id:'kakashi',   name:'Kakashi Hatake',      img:'https://cdn.myanimelist.net/images/characters/7/284129.jpg',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Genjutsu','Kenjutsu','Fuinjutsu'],                      nature:['Lightning','Earth','Water','Fire','Wind'],       kekkeiGenkai:false, attribute:['Anbu'],              debutArc:'Introduction'},
     {id:'iruka',     name:'Iruka Umino',         img:'https://cdn.myanimelist.net/images/characters/10/100216.jpg', gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Water','Earth'],                                kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
     {id:'gai',       name:'Might Guy',           img:'https://cdn.myanimelist.net/images/characters/16/103576.jpg', gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Taijutsu','Ninjutsu'],                                                        nature:['Lightning'],                                    kekkeiGenkai:false, attribute:[],                    debutArc:'Introduction'},
@@ -10470,26 +10472,83 @@ const TRIVIA_QUESTIONS = [
     {q:"What is the name of Naruto's signature technique?",opts:["Rasengan","Chidori","Shadow Clone Jutsu","Eight Gates"],a:2},
     {q:"In Attack on Titan, which country is behind the wall?",opts:["Eldia","Marley","Hizuru","Liberio"],a:0},
     {q:"What powers Gurren Lagann in the anime of the same name?",opts:["Solar energy","Spiral Power","Quantum energy","Willpower"],a:1},
+    // Batch 2
+    {q:"Who created the One Piece manga?",opts:["Masashi Kishimoto","Akira Toriyama","Eiichiro Oda","Yoshihiro Togashi"],a:2},
+    {q:"What is the name of the cat in Sailor Moon?",opts:["Luna","Artemis","Diana","Nala"],a:0},
+    {q:"What is the name of the powerful group that Guts faces in Berserk?",opts:["The Skull Knight","The God Hand","The Apostles","The Kushan Empire"],a:1},
+    {q:"Who is the main antagonist in My Hero Academia Season 1?",opts:["All For One","Tomura Shigaraki","Stain","Muscular"],a:0},
+    {q:"What type of magic does Natsu Dragneel use in Fairy Tail?",opts:["Ice-Make Magic","Lightning Magic","Wind Dragon Slayer Magic","Fire Dragon Slayer Magic"],a:3},
+    {q:"What is the gear called that the protagonists use in Attack on Titan?",opts:["Rapid Assault Gear","Vertical Strike Equipment","Omnidirectional Mobility Gear","Survey Corps Battle Harness"],a:2},
+    {q:"In Soul Eater, what must characters collect to create a Death Scythe?",opts:["Witch souls","Evil human souls","Monster eggs","Dark matter crystals"],a:1},
+    {q:"What are the giant robots called in Neon Genesis Evangelion?",opts:["Evas","Gundams","Jaegers","Titans"],a:0},
+    {q:"Who is the protagonist of Tokyo Ghoul?",opts:["Rize Kamishiro","Touka Kirishima","Ken Kaneki","Kishou Arima"],a:2},
+    {q:"How many Dragon Balls must be collected to summon the dragon and make a wish?",opts:["7","4","6","8"],a:0},
+    {q:"Which Shinigami in Death Note has an obsession with apples?",opts:["Rem","Ryuk","Gelus","Sidoh"],a:1},
+    {q:"Who was the first character in Dragon Ball Z to achieve Super Saiyan 2?",opts:["Goku","Vegeta","Gohan","Future Trunks"],a:2},
+    {q:"Who did Vegeta marry in Dragon Ball Z?",opts:["Chi-Chi","Android 18","Videl","Bulma"],a:3},
+    {q:"In Spirited Away, what name does Yubaba give to Chihiro?",opts:["Sen","Rin","Haku","Lin"],a:0},
+    {q:"In Howl's Moving Castle, Calcifer was bonded with Howl's _____.",opts:["Soul","Heart","Power","Magic"],a:1},
+    {q:"Who is responsible for protecting the Silver Crystal in Sailor Moon?",opts:["Sailor Moon","Sailor Mars","Sailor Mercury","Sailor Venus"],a:0},
+    {q:"Who was Spike Spiegel's love interest in Cowboy Bebop?",opts:["Faye Valentine","Ed","Julia","Katerina"],a:2},
+    {q:"In Claymore, who was the most powerful Awakened Being?",opts:["Isley","Priscilla","Rigaldo","Riful"],a:1},
+    {q:"What was Naruto's very first opening theme song?",opts:["\"GO!!!\" by Flow","\"Wind\" by Akeboshi","\"Haruka Kanata\" by Asian Kung-Fu Generation","\"Rocks\" by Hound Dog"],a:3},
+    {q:"Who was the first member of Levi's Squad to die in Attack on Titan?",opts:["Gunther","Petra","Oluo","Eld"],a:0},
+    {q:"Where did Goku transform into a Super Saiyan for the first time in Dragon Ball Z?",opts:["Planet Vegeta","Earth","Planet Namek","Planet Yardrat"],a:2},
+    {q:"Which anime follows a family whose members are possessed by Chinese zodiac animals?",opts:["Ouran High School Host Club","Fruits Basket","Clannad","Wolf Children"],a:1},
+    {q:"Who is known as the One Punch Man?",opts:["Garou","Genos","Saitama","Mumen Rider"],a:2},
+    {q:"What is the name of Speed Racer's girlfriend?",opts:["Trixie","Mia","Kiera","Racer X"],a:0},
+    {q:"What is the longest-running anime series of all time?",opts:["One Piece","Doraemon","Dragon Ball Z","Sazae-san"],a:3},
+    {q:"What kind of prodigy is Ryoma Echizen in The Prince of Tennis?",opts:["Soccer","Tennis","Baseball","Boxing"],a:1},
+    {q:"In Fairy Tail, what does Lucy Heartfilia dream of becoming?",opts:["Wizard","Knight","Guild Master","Dragon Slayer"],a:0},
+    {q:"What date will Edward Elric never forget in Fullmetal Alchemist?",opts:["March 15th","January 1st","October 3rd","September 9th"],a:2},
+    {q:"Who was Spike Spiegel's nemesis in Cowboy Bebop?",opts:["Tongpu","Abdul Hakim","Gren","Vicious"],a:3},
+    {q:"In Death Note, who was Misa Amane's Shinigami?",opts:["Rem","Gelus","Ryuk","Sidoh"],a:0},
+    {q:"What are the names of the twins in Ouran High School Host Club?",opts:["Tamaki and Kyoya","Hikaru and Kaoru","Mori and Honey","Kasanoda and Ritsu"],a:1},
+    {q:"Which Hunter x Hunter character wants to become a doctor?",opts:["Gon","Killua","Leorio","Kurapika"],a:2},
+    {q:"Who did Gon and Killua befriend at Heaven's Arena in Hunter x Hunter?",opts:["Hisoka and Machi","Netero and Morel","Biscuit and Kite","Zushi and Wing"],a:3},
+    {q:"Why did Sasuke leave the Hidden Leaf Village in Naruto?",opts:["To seek revenge on Itachi","To become the Hokage","To master the Sharingan","To protect Sakura"],a:0},
+    {q:"What was the name of the alpaca killed in the first episode of Beastars?",opts:["Louis","Tem","Legosi","Els"],a:1},
+    {q:"What are the six Nen types in Hunter x Hunter?",opts:["Surge, Flow, Channel, Control, Force, Void","Aura, Ki, Chi, Spirit, Power, Soul","Enhancement, Transmutation, Conjuration, Emission, Manipulation, Specialization","Focus, Expand, Contract, Release, Redirect, Transform"],a:2},
+    {q:"In Hunter x Hunter, what substance has the properties of both rubber and gum?",opts:["Bungee Gum","Nen Rubber","Gum-Gum Fruit","Spider Silk"],a:0},
+    {q:"Who solved the Millennium Puzzle in Yu-Gi-Oh?",opts:["Joey Wheeler","Seto Kaiba","Ryou Bakura","Yugi Muto"],a:3},
+    {q:"Which classic anime character was sold to the circus as a child?",opts:["Kimba","Gigantor","Astro Boy","Speed Racer"],a:2},
+    {q:"In Hunter x Hunter, which family is famous for being assassins?",opts:["Kurta family","Zoldyck family","Nostrade family","Freecss family"],a:1},
+    {q:"What item restores a Z fighter to full health in Dragon Ball Z?",opts:["Senzu Bean","Dragon Ball","Energy Pill","Spirit Seed"],a:0},
+    {q:"Which anime features a corgi named Einstein?",opts:["Trigun","Space Dandy","Outlaw Star","Cowboy Bebop"],a:3},
+    {q:"Which anime follows a gunslinger with a $60 billion bounty on his head?",opts:["Outlaw Star","Cowboy Bebop","Trigun","Black Lagoon"],a:2},
+    {q:"What was the name of Edward and Alphonse's alchemy teacher in Fullmetal Alchemist?",opts:["Roy Mustang","Maes Hughes","Alex Louis Armstrong","Izumi Curtis"],a:3},
+    {q:"Which wall did the Titans breach first in Attack on Titan?",opts:["Wall Rose","Wall Maria","Wall Sina","Wall Trost"],a:1},
+    {q:"Who was the first child shown to die in The Promised Neverland?",opts:["Conny","Emma","Norman","Ray"],a:0},
+    {q:"How many of Sukuna's fingers had Yuji consumed by the end of Jujutsu Kaisen Season 1?",opts:["2","10","4","7"],a:2},
+    {q:"In Hunter x Hunter, which clan was hunted nearly to extinction for their rare crimson eyes?",opts:["Zoldyck","Nostrade","Freecss","Kurta"],a:3},
+    {q:"In Attack on Titan, what does ODM stand for?",opts:["Over-Dimensional Maneuver","Omni-Directional Mobility","Operative Defense Mechanism","Omniflex Dynamic Movement"],a:1},
+    {q:"What was the name of the deadly card game Gon and Killua were trapped inside in Hunter x Hunter?",opts:["Greed Island","Hunter's Game","Devil's Gambit","Phantom Island"],a:0},
+    {q:"Who is the leader of the Phantom Troupe in Hunter x Hunter?",opts:["Hisoka","Feitan","Chrollo","Uvogin"],a:2},
+    {q:"What is the name of Zenitsu's first Thunder Breathing form in Demon Slayer?",opts:["Thunder Breath First Form","Lightning Strike","God Speed","Thunderclap and Flash"],a:3},
+    {q:"What was the name of Luffy's first ship in One Piece?",opts:["The Red Force","The Going Merry","The Thousand Sunny","The Moby Dick"],a:1},
+    {q:"Who is the Upper Rank 3 demon in Demon Slayer?",opts:["Akaza","Doma","Kokushibo","Gyokko"],a:0},
+    {q:"Who are the Upper Rank 6 demons in Demon Slayer?",opts:["Nakime & Hairo","Rui & Kamanue","Gyutaro & Daki","Enmu & Rokuro"],a:2},
+    {q:"Who is the Upper Rank 4 demon in Demon Slayer?",opts:["Gyokko","Hantengu","Doma","Nakime"],a:1},
 ];
 
-function _triviaDateSeed() {
-    const d = new Date();
-    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-}
-
 function _triviaGetDaily() {
-    let s = _triviaDateSeed();
-    const lcg = () => {
-        s = (Math.imul(s ^ (s >>> 16), 0x45d9f3b) ^ (s >>> 11));
-        s = (Math.imul(s ^ (s >>> 14), 0x119de1f3));
-        return Math.abs(s);
-    };
-    const indices = []; const used = new Set();
-    while (indices.length < 5) {
-        const i = Math.abs(lcg()) % TRIVIA_QUESTIONS.length;
-        if (!used.has(i)) { used.add(i); indices.push(i); }
+    const total = TRIVIA_QUESTIONS.length;
+    const PER_DAY = 5;
+    const CYCLE_DAYS = Math.floor(total / PER_DAY);
+    const dayIndex = Math.floor(Date.now() / 86400000);
+    const cycleNum = Math.floor(dayIndex / CYCLE_DAYS);
+    const dayInCycle = dayIndex % CYCLE_DAYS;
+
+    // Fisher-Yates shuffle seeded by cycleNum — same shuffle all day, new shuffle each cycle
+    const order = [...Array(total).keys()];
+    let s = (cycleNum ^ 0x9e3779b9) >>> 0;
+    for (let i = order.length - 1; i > 0; i--) {
+        s = (Math.imul(s ^ (s >>> 16), 0x45d9f3b) ^ (s >>> 11)) >>> 0;
+        const j = s % (i + 1);
+        [order[i], order[j]] = [order[j], order[i]];
     }
-    return indices.map(i => TRIVIA_QUESTIONS[i]);
+
+    return order.slice(dayInCycle * PER_DAY, dayInCycle * PER_DAY + PER_DAY).map(i => TRIVIA_QUESTIONS[i]);
 }
 
 window._triviaState = null;
@@ -10637,7 +10696,7 @@ window.generateTriviaPostCardHTML = function(post) {
     const safeId = post.id;
     const emoji = post.score === 5 ? '🏆' : post.score >= 4 ? '🌟' : post.score >= 3 ? '👍' : post.score >= 2 ? '📚' : '💪';
     const scoreLabel = post.score === 5 ? 'Perfect Score! 🎉' : `${post.score} / 5`;
-    return `<div class="review-card feed-post-card" style="position:relative;">
+    return `<div class="review-card trivia-post-card feed-post-card" style="position:relative;">
         ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
             <div style="position:relative;">
                 <button onclick="window.togglePostMenu('${safeId}')" style="background:rgba(0,0,0,0.35);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:white;"><span class="material-symbols-outlined" style="font-size:16px;">more_vert</span></button>
@@ -10989,6 +11048,14 @@ window._obSubmitGuess = function() {
 
     if (correct) {
         st.solved = true;
+        if (auth.currentUser) {
+            const mbStats = _mbRecordWin(st.guesses.length);
+            const toAward = ['mb_first'];
+            if (st.guesses.length === 1) toAward.push('mb_perfect_pitch');
+            if (mbStats.streak >= 7) toAward.push('mb_streak_7');
+            if (mbStats.totalWins >= 30) toAward.push('mb_total_30');
+            window.awardAchievements(toAward).catch(() => {});
+        }
     } else if (st.guesses.length >= OB_CLIPS.length) {
         st.failed = true;
     } else {
@@ -11032,6 +11099,18 @@ window._obSkip = function() {
     _obSave();
     _obRender();
 };
+
+// --- MeloBee Stats & Achievements ---
+function _mbRecordWin(guessCount) {
+    const stats = JSON.parse(localStorage.getItem('weebee_mb_stats') || '{"totalWins":0,"streak":0,"lastWinDate":""}');
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    stats.totalWins = (stats.totalWins || 0) + 1;
+    stats.streak = stats.lastWinDate === yesterday ? (stats.streak || 0) + 1 : 1;
+    stats.lastWinDate = today;
+    localStorage.setItem('weebee_mb_stats', JSON.stringify(stats));
+    return stats;
+}
 
 // --- MeloBee Post to Feed ---
 function _mbEmojiRow(guesses, solved) {
