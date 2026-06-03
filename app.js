@@ -6598,12 +6598,12 @@ window.fetchDiscoverPage = async function() {
                                 </div>
                                 <p style="font-size:12px; color:var(--text-muted);">${anime.count} WeeBee Review${anime.count !== 1 ? 's' : ''}</p>
                             </div>
-                            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                            <div class="top10-scores">
                                 <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
-                                    <div class="rating-badge ${window.getScoreTier(anime.avgScore)}" style="width:50px;height:50px;font-size:13px;">${anime.avgScore}</div>
+                                    <div class="rating-badge ${window.getScoreTier(anime.avgScore)} top10-wb-badge" style="width:50px;height:50px;font-size:13px;">${anime.avgScore}</div>
                                     <span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">WeeBee</span>
                                 </div>
-                                ${malScoreMap[anime.mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="rating-badge blue" style="width:48px;height:48px;font-size:13px;">${malScoreMap[anime.mal_id]}</div><span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">MAL</span></div>` : ''}
+                                ${malScoreMap[anime.mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="rating-badge blue top10-mal-badge" style="width:48px;height:48px;font-size:13px;">${malScoreMap[anime.mal_id]}</div><span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">MAL</span></div>` : ''}
                             </div>
                         </div>
                     `;
@@ -10794,21 +10794,81 @@ window.loadTriviaFeed = async function() {
 
 // --- OPENING BEE (admin test) ---
 const OB_POOL = [
-    { anime: 'Attack on Titan',                  audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/93/e3/f7/93e3f754-61f0-11ec-25f6-38fea3cc719b/mzaf_10699107844703231183.plus.aac.p.m4a' },
-    { anime: 'Demon Slayer',                     audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/6d/55/33/6d5533a1-0947-bfd6-6317-c7fc6b084e5d/mzaf_6967022353274433301.plus.aac.p.m4a' },
-    { anime: 'Death Note',                       audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/b2/9f/03/b29f03d2-354c-3965-9647-745ec02a3500/mzaf_16649518632422994862.plus.aac.p.m4a' },
-    { anime: 'Jujutsu Kaisen',                   audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/e3/91/7c/e3917cd3-f7c6-8633-4bc3-f0e7c043659a/mzaf_18390406683329626552.plus.aac.p.m4a' },
-    { anime: 'Bleach',                           audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/53/01/2c/53012c39-bfee-704a-963a-5cd5fcb6f71d/mzaf_4934888872465923075.plus.aac.p.m4a' },
-    { anime: 'My Hero Academia',                 audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/c9/35/73/c9357389-f49f-e47f-c526-94a06c818d5c/mzaf_2688372770152528916.plus.aac.p.m4a' },
-    { anime: 'Hunter x Hunter',                  audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/6f/ca/e4/6fcae48b-e599-410f-db69-1a57c30b98c0/mzaf_12856558150017492115.plus.aac.p.m4a' },
-    { anime: 'Code Geass',                       audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview112/v4/e9/a4/05/e9a405bb-2768-9d4e-8edc-3b6fba51559f/mzaf_5662133858033957093.plus.aac.p.m4a' },
-    { anime: 'Mob Psycho 100',                   audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/79/2c/0a/792c0ae6-790e-8ce7-389f-8903fbb0c455/mzaf_13032179992518146811.plus.aac.p.m4a' },
-    { anime: 'One Piece',                        audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/8f/24/81/8f24812e-465c-4499-bf29-bdd6c0bd13ff/mzaf_17985712931854519957.plus.aac.p.m4a' },
     { anime: 'Sword Art Online',                 audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/50/6b/02/506b0252-7aa0-4a39-7ab8-85b6938bd1d8/mzaf_347938657043485553.plus.aac.p.m4a' },
+    { anime: 'Vinland Saga', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/b0/d1/5c/b0d15cf5-67ac-8545-ec2c-c272a2dd507a/mzaf_5064133999070512218.plus.aac.p.m4a' },
     { anime: 'Tokyo Ghoul',                      audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/35/f4/2d/35f42dd9-abe9-161c-8eac-99dd348f99e6/mzaf_5386318182593403976.plus.aac.p.m4a' },
+    { anime: 'Pokemon', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/84/52/c1/8452c1cb-f507-e9fc-ff4d-08fbe16cf568/mzaf_930996474611003179.plus.aac.p.m4a' },
+    { anime: 'The Seven Deadly Sins', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview113/v4/b6/6b/f2/b66bf274-b58f-e640-4a48-8570ea736b35/mzaf_8313661425810131098.plus.aac.p.m4a' },
+    { anime: 'Fire Force', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/ac/95/27/ac9527be-d3b0-8dfb-0fc2-6f7cbdacc59f/mzaf_3936072242439036959.plus.aac.p.m4a' },
+    { anime: 'Dandadan', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/a6/87/cc/a687cc4f-3d76-b365-a9fa-ad9e87dcd1ad/mzaf_7415432600208223124.plus.aac.p.m4a' },
+    { anime: 'One Piece',                        audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/8f/24/81/8f24812e-465c-4499-bf29-bdd6c0bd13ff/mzaf_17985712931854519957.plus.aac.p.m4a' },
+    { anime: 'Chainsaw Man', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview112/v4/ef/35/15/ef3515d7-ec49-a0d5-5941-b312a31d89f9/mzaf_6584056106462089749.plus.aac.p.m4a' },
+    { anime: 'Rent-A-Girlfriend', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/c1/b8/30/c1b83008-7a68-18e4-badf-123a13340797/mzaf_2389754337292350216.plus.aac.p.m4a' },
+    { anime: 'Beastars', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/1e/44/0e/1e440e47-679c-3d3b-ed0d-0a0afd90851a/mzaf_13732518623443303361.plus.aac.p.m4a' },
+    { anime: 'The Promised Neverland', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/32/7c/03/327c0324-7638-0063-cd05-3050332e2455/mzaf_8380398046077007414.plus.aac.p.m4a' },
+    { anime: 'Naruto', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/a1/49/f2/a149f2f0-9f8f-b7aa-3064-2bb95968e525/mzaf_7575583354470334071.plus.aac.p.m4a' },
+    { anime: 'Spy x Family', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview112/v4/47/2a/9a/472a9a71-10f5-2160-a8ff-1bc0435ee67b/mzaf_5766951245830909046.plus.aac.p.m4a' },
+    { anime: 'Cowboy Bebop', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/fa/41/04/fa41047a-2eba-7b11-1ca5-74bbbc709bd8/mzaf_11134654358432867890.plus.aac.p.m4a' },
+    { anime: 'Naruto', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/09/78/25/0978253b-13b5-5b6f-daf1-239f96c0c65e/mzaf_11869608775753345997.plus.aac.p.m4a' },
+    { anime: 'Ranking of Kings', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/48/28/e6/4828e6fd-0a30-f1bf-6a3a-2666b8b4adb4/mzaf_17116046975841247402.plus.aac.p.m4a' },
+    { anime: 'Haikyu!!', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/68/a0/7c/68a07ce2-a36d-e372-bb9b-ca3ada6d31e6/mzaf_13087701515837972405.plus.aac.p.m4a' },
     { anime: 'No Game No Life',                  audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/c2/5e/cf/c25ecf66-92e0-43c9-0f44-e196bc1902f4/mzaf_12131846250930889341.plus.aac.p.m4a' },
+    { anime: 'My Hero Academia',                 audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/c9/35/73/c9357389-f49f-e47f-c526-94a06c818d5c/mzaf_2688372770152528916.plus.aac.p.m4a' },
+    { anime: 'Parasyte', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/30/fe/5a/30fe5af6-e9ef-bdb7-5134-635840a5e4f5/mzaf_14699472282993608610.plus.aac.p.m4a' },
     { anime: 'Fullmetal Alchemist: Brotherhood', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/1f/21/ec/1f21ecdb-ba0f-96d1-e093-a5aff4237a1b/mzaf_4641373840541399313.plus.aac.p.m4a' },
+    { anime: 'Attack on Titan',                  audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/93/e3/f7/93e3f754-61f0-11ec-25f6-38fea3cc719b/mzaf_10699107844703231183.plus.aac.p.m4a' },
+    { anime: 'Dandadan', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/8e/34/70/8e3470cd-bf6a-e7b1-8450-1393926cb425/mzaf_18201838929653010561.plus.aac.p.m4a' },
+    { anime: 'Tokyo Ghoul:re', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/a8/3f/31/a83f31c3-ecca-135f-42c9-421266be1809/mzaf_16335270369485376948.plus.aac.p.m4a' },
+    { anime: 'Attack on Titan', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/d6/a4/11/d6a411db-7be8-5dcf-1a32-63898c89a724/mzaf_8962357708499511048.plus.aac.p.m4a' },
+    { anime: 'The Apothecary Diaries', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/22/d1/ce/22d1ce0b-c092-ec36-044b-ca6ba4fb78a0/mzaf_8721490852146388869.plus.aac.p.m4a' },
+    { anime: 'Call of the Night', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview122/v4/97/d4/01/97d40111-537c-8a5d-a654-96d0cf6c7ee2/mzaf_10399915211547383189.plus.aac.p.m4a' },
+    { anime: 'Fate/Zero', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/5c/85/c9/5c85c93c-3ee1-7aef-f4f9-819d51656cf7/mzaf_1223029426080025300.plus.aac.p.m4a' },
+    { anime: 'Haikyu!!', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/bb/db/3d/bbdb3d77-b430-bdd5-bfa3-bc3092481db8/mzaf_17168933599642171081.plus.aac.p.m4a' },
+    { anime: 'Mashle', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/ab/ee/99/abee99ed-b939-5d0f-43cb-11dfbdba00b5/mzaf_9186164617284703862.plus.aac.p.m4a' },
+    { anime: 'My Hero Academia', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/c9/35/73/c9357389-f49f-e47f-c526-94a06c818d5c/mzaf_2688372770152528916.plus.aac.p.m4a' },
+    { anime: 'Gintama', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/5c/d5/82/5cd582ed-c976-c0b5-a139-d63ede983619/mzaf_1959068096818435068.plus.aac.p.m4a' },
+    { anime: 'Mobile Suit Gundam: The Witch from Mercury', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview113/v4/57/ba/7f/57ba7f08-8bd3-accf-7c39-064c688c8cc8/mzaf_10173235336780466834.plus.aac.p.m4a' },
+    { anime: 'Black Clover', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/3c/bc/83/3cbc830e-40d5-eff4-ccbc-16a1a5e00c6f/mzaf_3512713935281740318.plus.aac.p.m4a' },
+    { anime: 'Hunter x Hunter',                  audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/6f/ca/e4/6fcae48b-e599-410f-db69-1a57c30b98c0/mzaf_12856558150017492115.plus.aac.p.m4a' },
+    { anime: 'Black Clover', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/7e/3a/e9/7e3ae9fd-1532-3615-d820-342c90bdc436/mzaf_8562434105821761808.plus.aac.p.m4a' },
+    { anime: 'Death Note',                       audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/b2/9f/03/b29f03d2-354c-3965-9647-745ec02a3500/mzaf_16649518632422994862.plus.aac.p.m4a' },
+    { anime: 'Haikyu!!', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/8a/da/5c/8ada5c71-ab03-d7bd-166f-e8076b895105/mzaf_3736904935171753067.plus.aac.p.m4a' },
+    { anime: 'Naruto', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/9d/2f/e9/9d2fe949-6e1d-5696-1697-bde3c261d9f6/mzaf_14944891394308785610.plus.aac.p.m4a' },
+    { anime: 'Demon Slayer',                     audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/6d/55/33/6d5533a1-0947-bfd6-6317-c7fc6b084e5d/mzaf_6967022353274433301.plus.aac.p.m4a' },
+    { anime: 'Attack on Titan', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/93/e3/f7/93e3f754-61f0-11ec-25f6-38fea3cc719b/mzaf_10699107844703231183.plus.aac.p.m4a' },
+    { anime: 'My Hero Academia', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/c9/53/81/c9538196-8fa1-66fa-7917-a5c0cae93d67/mzaf_8697749334269404112.plus.aac.p.m4a' },
+    { anime: 'Domestic Girlfriend', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/63/b8/8d/63b88d4e-d80a-696a-5f40-1fb3c5505a42/mzaf_16552028558620826461.plus.aac.p.m4a' },
+    { anime: 'Sword Art Online', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/65/84/3a/65843a4c-cb66-5fb2-313a-3dbde37eb756/mzaf_16847027844263278105.plus.aac.p.m4a' },
+    { anime: 'My Hero Academia', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/6d/56/d5/6d56d517-1ce2-6f76-4c86-5254c074386f/mzaf_12112124953543147673.plus.aac.p.m4a' },
+    { anime: 'Haikyu!!', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/94/fe/98/94fe9867-ab2f-b7e5-3baf-c5492bcf5ff5/mzaf_5415239222710196393.plus.aac.p.m4a' },
+    { anime: 'Your Lie in April', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/2b/aa/78/2baa786f-e129-c2be-b4b7-2945ce8907ed/mzaf_13993833141522136841.plus.aac.p.m4a' },
+    { anime: 'Noragami Aragoto', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/02/da/c8/02dac8e6-70b5-fc0a-d31d-bf4cab7bc4c2/mzaf_4998254113717568575.plus.aac.p.m4a' },
+    { anime: 'Code Geass',                       audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview112/v4/e9/a4/05/e9a405bb-2768-9d4e-8edc-3b6fba51559f/mzaf_5662133858033957093.plus.aac.p.m4a' },
+    { anime: 'Tokyo Ghoul', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/35/f4/2d/35f42dd9-abe9-161c-8eac-99dd348f99e6/mzaf_5386318182593403976.plus.aac.p.m4a' },
+    { anime: 'Fire Force', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/76/88/ad/7688adcc-1f2c-9ce9-0194-8732f3d032b5/mzaf_13701141767651121916.plus.aac.p.m4a' },
+    { anime: 'The Irregular at Magic High School', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/3d/c5/e2/3dc5e22f-efdd-5e49-c3eb-8116a0e91a62/mzaf_7807881356253021839.plus.aac.p.m4a' },
+    { anime: 'The Rising of the Shield Hero', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview113/v4/7c/4d/e2/7c4de258-1e82-338b-b6ef-325f3d811213/mzaf_3525037198055567486.plus.aac.p.m4a' },
+    { anime: 'Jujutsu Kaisen',                   audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/e3/91/7c/e3917cd3-f7c6-8633-4bc3-f0e7c043659a/mzaf_18390406683329626552.plus.aac.p.m4a' },
     { anime: 'Steins;Gate',                      audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/0a/ef/37/0aef37f1-33cf-9709-a915-c6eefbaca10e/mzaf_2439740660429779137.plus.aac.p.m4a' },
+    { anime: 'Bleach',                           audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/53/01/2c/53012c39-bfee-704a-963a-5cd5fcb6f71d/mzaf_4934888872465923075.plus.aac.p.m4a' },
+    { anime: 'Ranking of Kings', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/fc/57/10/fc57103b-0143-0dd4-83c8-9e3b466df435/mzaf_2515218987825903913.plus.aac.p.m4a' },
+    { anime: 'One Piece', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/1e/19/ca/1e19caa5-a201-779e-9a9d-090fff612d71/mzaf_7229537610876556793.plus.aac.p.m4a' },
+    { anime: 'Jujutsu Kaisen', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/4a/3f/94/4a3f9475-1bc3-4964-bdf5-87abed4c9ec6/mzaf_686713054598122997.plus.aac.p.m4a' },
+    { anime: 'Naruto Shippuden', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/f5/d3/9b/f5d39bb5-7e74-9621-0640-cd7a960ef5ae/mzaf_14074503008958851392.plus.aac.p.m4a' },
+    { anime: 'Demon Slayer', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/ea/01/50/ea015094-9415-5721-9ef5-bd6a170486bc/mzaf_15372845195769630511.plus.aac.p.m4a' },
+    { anime: 'Mob Psycho 100',                   audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/79/2c/0a/792c0ae6-790e-8ce7-389f-8903fbb0c455/mzaf_13032179992518146811.plus.aac.p.m4a' },
+    { anime: 'Jujutsu Kaisen', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/e2/cb/6c/e2cb6cc0-b2fa-026d-8da2-14fdecffe3cd/mzaf_1825969135080684288.plus.aac.p.m4a' },
+    { anime: 'Dororo', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview112/v4/80/fd/14/80fd1446-3373-f577-7464-39e20fc1922d/mzaf_5921979007404961292.plus.aac.p.m4a' },
+    { anime: 'My Hero Academia', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/c6/a9/7f/c6a97fb3-9a12-7e41-d1bf-c652248be06d/mzaf_16245731111825422555.plus.aac.p.m4a' },
+    { anime: 'Tokyo Revengers', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/5a/d6/1c/5ad61ccb-9e93-b4b9-1417-097a4554eb50/mzaf_15525228484842426895.plus.aac.p.m4a' },
+    { anime: 'Oshi no Ko', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/c4/66/2b/c4662bbf-877c-d684-5a1c-f47d1e01cbc8/mzaf_2094216344108530658.plus.aac.p.m4a' },
+    { anime: 'Demon Slayer', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/9b/d3/e8/9bd3e8dc-737c-2520-86f7-b03c58402eb6/mzaf_12548339828828871903.plus.aac.p.m4a' },
+    { anime: 'Demon Slayer', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/fd/70/ed/fd70ed18-26c8-d87d-5566-aba43d4e1e44/mzaf_17485391139406105082.plus.aac.p.m4a' },
+    { anime: 'Sword Art Online', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview113/v4/cb/cc/bd/cbccbd68-2247-9580-bc36-e3757debd116/mzaf_16869144394025933999.plus.aac.p.m4a' },
+    { anime: 'Black Clover', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview113/v4/08/1e/24/081e2437-bbf9-f46f-45a9-6085b9cfa0d5/mzaf_298811879130035286.plus.aac.p.m4a' },
+    { anime: 'Naruto', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/38/f6/08/38f60857-a83d-06d8-1aad-e5195f7b8ff3/mzaf_13354875683007523390.plus.aac.p.m4a' },
+    { anime: 'Naruto', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/31/76/a3/3176a3c8-0465-b1fb-9a06-faf9f2423fbc/mzaf_892689947062240155.plus.aac.p.m4a' },
+    { anime: 'Serial Experiments Lain', audio: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/1e/46/1b/1e461bd9-87fe-46e8-a4a5-e921e83ddf54/mzaf_9890527819711465833.plus.aac.p.m4a' },
 ];
 
 const OB_CLIPS = [1, 2, 4, 8, 16, 30];
