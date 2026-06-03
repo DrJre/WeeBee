@@ -490,6 +490,11 @@ onAuthStateChanged(auth, (user) => {
         fetchMyFollows();
         window.fetchFriendData();
         window.updateTopbarRank();
+        // Apply saved custom cursor
+        getDoc(doc(db, 'profiles', user.uid)).then(pd => {
+            const cursor = pd.exists() ? pd.data().customCursor : null;
+            if (cursor) window.applyCursor(cursor);
+        }).catch(() => {});
         // Backfill displayNameLower for case-insensitive search
         if (user.displayName) {
             setDoc(doc(db, "profiles", user.uid), { displayNameLower: user.displayName.toLowerCase() }, { merge: true }).catch(() => {});
@@ -539,6 +544,7 @@ onAuthStateChanged(auth, (user) => {
         authSection.innerHTML = `<button class="action-btn" onclick="openAuthModal()"><span class="material-symbols-outlined">login</span> Sign In</button>`;
         if(window.currentActiveViewId === 'profile-view' || window.currentActiveViewId === 'my-list-view') switchView('home-view');
         window.myAnimeList = [];
+        window.applyCursor('default');
     }
     if(window.currentActiveViewId === 'home-view') fetchHomepageReviews();
 });
@@ -867,6 +873,7 @@ window.openSettingsModal = function() {
     document.getElementById('dark-mode-toggle').checked = document.body.getAttribute('data-theme') === 'dark';
     const beeT = document.getElementById('bee-trail-toggle');
     if (beeT) beeT.checked = localStorage.getItem('wb_bee_trail') === '1';
+    window.renderCursorPicker();
     if (auth.currentUser) {
         getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
             const data = pd.exists() ? pd.data() : {};
@@ -906,11 +913,11 @@ window.toggleDarkMode = function() {
 
     if (localStorage.getItem('wb_bee_trail') === '1') canvas.style.display = 'block';
 
-    const dots = []; // { x, y, born }
-    let lastDotX = null, lastDotY = null;
-    const DOT_SPACING = 10;  // px between dots
-    const DOT_LIFETIME = 600; // ms each dot lives
-    const DOT_RADIUS = 3;
+    const pts = []; // { x, y, born, idx }
+    let lastX = null, lastY = null, ptIdx = 0;
+    const SPACING  = 6;     // px between ribbon points — lower = smoother curves
+    const LIFETIME = 750;   // ms
+    const HALF_W   = 1.5;   // half of 3px ribbon width
 
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     resize();
@@ -918,12 +925,18 @@ window.toggleDarkMode = function() {
 
     document.addEventListener('mousemove', e => {
         if (canvas.style.display === 'none') return;
-        const dx = lastDotX === null ? DOT_SPACING : e.clientX - lastDotX;
-        const dy = lastDotY === null ? DOT_SPACING : e.clientY - lastDotY;
-        if (Math.sqrt(dx * dx + dy * dy) >= DOT_SPACING) {
-            dots.push({ x: e.clientX, y: e.clientY, born: Date.now() });
-            lastDotX = e.clientX; lastDotY = e.clientY;
+        if (lastX === null) { lastX = e.clientX; lastY = e.clientY; return; }
+        const dx = e.clientX - lastX, dy = e.clientY - lastY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < SPACING) return;
+        // Interpolate evenly-spaced points along the path so dashes stay consistent
+        const nx = dx / dist, ny = dy / dist;
+        let traveled = 0;
+        while (traveled + SPACING <= dist) {
+            traveled += SPACING;
+            pts.push({ x: lastX + nx * traveled, y: lastY + ny * traveled, born: Date.now(), idx: ptIdx++ });
         }
+        lastX = e.clientX; lastY = e.clientY;
     });
 
     (function draw() {
@@ -931,17 +944,190 @@ window.toggleDarkMode = function() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         if (canvas.style.display === 'none') return;
         const now = Date.now();
-        for (let i = dots.length - 1; i >= 0; i--) {
-            const age = now - dots[i].born;
-            if (age > DOT_LIFETIME) { dots.splice(0, i + 1); break; }
-            const ratio = 1 - age / DOT_LIFETIME;
+        // Trim expired points from the tail
+        while (pts.length && now - pts[0].born > LIFETIME) pts.shift();
+        if (pts.length < 2) return;
+
+        const DASH_ON  = 3; // segments to draw
+        const DASH_OFF = 3; // segments to skip (gap)
+        for (let i = 0; i < pts.length - 1; i++) {
+            if (pts[i].idx % (DASH_ON + DASH_OFF) >= DASH_ON) continue;
+            const p0 = pts[i], p1 = pts[i + 1];
+            const ratio0 = Math.max(0, 1 - (now - p0.born) / LIFETIME);
+            const ratio1 = Math.max(0, 1 - (now - p1.born) / LIFETIME);
+
+            // Perpendicular to the segment direction
+            const dx = p1.x - p0.x, dy = p1.y - p0.y;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            const nx = (-dy / len) * HALF_W;
+            const ny = ( dx / len) * HALF_W;
+
+            // Draw a quad connecting the two ribbon edges
             ctx.beginPath();
-            ctx.arc(dots[i].x, dots[i].y, DOT_RADIUS * (0.5 + ratio * 0.5), 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(255, 193, 7, ${ratio * 0.85})`;
+            ctx.moveTo(p0.x + nx, p0.y + ny);
+            ctx.lineTo(p0.x - nx, p0.y - ny);
+            ctx.lineTo(p1.x - nx, p1.y - ny);
+            ctx.lineTo(p1.x + nx, p1.y + ny);
+            ctx.closePath();
+
+            // Gradient so the tail fades out naturally
+            const grad = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
+            grad.addColorStop(0, `rgba(255, 193, 7, ${ratio0 * 0.9})`);
+            grad.addColorStop(1, `rgba(255, 193, 7, ${ratio1 * 0.9})`);
+            ctx.fillStyle = grad;
             ctx.fill();
         }
     })();
 })();
+
+// --- CUSTOM CURSORS ---
+const BASE = 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/cursors%2F';
+const cu = name => `${BASE}${name}.png?alt=media`;
+
+const CURSOR_SETS = [
+    {
+        id: 'naruto-kunai',
+        label: 'Naruto',
+        anime: 'Naruto',
+        unlock: 'bwnrt_first',
+        unlockLabel: 'Solve Naruto BuzzWord once',
+        preview: cu('naruto-kunai-cursor'),
+        cursor: cu('naruto-kunai-cursor'),
+        pointer: cu('naruto-kunai-pointer'),
+    },
+    {
+        id: 'naruto-akatsuki',
+        label: 'Akatsuki',
+        anime: 'Naruto',
+        unlock: 'bwnrt_streak_7',
+        unlockLabel: '7-day Naruto BuzzWord streak',
+        preview: cu('naruto-akatsuki-cursor'),
+        cursor: cu('naruto-akatsuki-cursor'),
+        pointer: cu('naruto-akatsuki-pointer'),
+    },
+    {
+        id: 'bleach-hollow',
+        label: 'Ichigo (Hollow)',
+        anime: 'Bleach',
+        unlock: 'bwblc_first',
+        unlockLabel: 'Solve Bleach BuzzWord once',
+        preview: cu('bleach-ichigo-hollow-cursor'),
+        cursor: cu('bleach-ichigo-hollow-cursor'),
+        pointer: cu('bleach-ichigo-hollow-pointer'),
+    },
+    {
+        id: 'bleach-zangetsu',
+        label: 'Ichigo (Zangetsu)',
+        anime: 'Bleach',
+        unlock: 'bwblc_streak_7',
+        unlockLabel: '7-day Bleach BuzzWord streak',
+        preview: cu('bleach-ichigo-zangetsu-cursor'),
+        cursor: cu('bleach-ichigo-zangetsu-cursor'),
+        pointer: cu('bleach-ichigo-zangetsu-pointer'),
+    },
+    {
+        id: 'op-luffy',
+        label: 'Luffy (Gear 5)',
+        anime: 'One Piece',
+        unlock: 'bwop_first',
+        unlockLabel: 'Solve One Piece BuzzWord once',
+        preview: cu('op-luffy-cursor'),
+        cursor: cu('op-luffy-cursor'),
+        pointer: cu('op-luffy-pointer'),
+    },
+    {
+        id: 'op-chopper',
+        label: 'Chopper',
+        anime: 'One Piece',
+        unlock: 'bwop_streak_7',
+        unlockLabel: '7-day One Piece BuzzWord streak',
+        preview: cu('op-chopper-cursor'),
+        cursor: cu('op-chopper-cursor'),
+        pointer: cu('op-chopper-pointer'),
+    },
+    {
+        id: 'db-goku',
+        label: 'Goku',
+        anime: 'Dragon Ball',
+        unlock: 'bwdb_first',
+        unlockLabel: 'Solve Dragon Ball BuzzWord once',
+        preview: cu('db-goku-cursor'),
+        cursor: cu('db-goku-cursor'),
+        pointer: cu('db-goku-pointer'),
+    },
+    {
+        id: 'db-broly',
+        label: 'Broly',
+        anime: 'Dragon Ball',
+        unlock: 'bwdb_streak_7',
+        unlockLabel: '7-day Dragon Ball BuzzWord streak',
+        preview: cu('db-broly-cursor'),
+        cursor: cu('db-broly-cursor'),
+        pointer: cu('db-broly-pointer'),
+    },
+];
+
+window.applyCursor = function(cursorId) {
+    // Remove any existing cursor style tag
+    const existing = document.getElementById('wb-cursor-style');
+    if (existing) existing.remove();
+    if (!cursorId || cursorId === 'default') {
+        document.body.style.cursor = '';
+        return;
+    }
+    const set = CURSOR_SETS.find(s => s.id === cursorId);
+    if (!set) return;
+    const style = document.createElement('style');
+    style.id = 'wb-cursor-style';
+    style.textContent = `
+        body { cursor: url('${set.cursor}') 0 0, auto !important; }
+        a, button, [onclick], [style*="cursor:pointer"], .cursor-pointer, label[for] {
+            cursor: url('${set.pointer}') 0 0, pointer !important;
+        }`;
+    document.head.appendChild(style);
+};
+
+window.selectCursor = async function(cursorId) {
+    if (!auth.currentUser) return;
+    await updateDoc(doc(db, 'profiles', auth.currentUser.uid), { customCursor: cursorId }).catch(() => {});
+    window.applyCursor(cursorId);
+    // Update selected state in picker
+    document.querySelectorAll('.cursor-option').forEach(el => {
+        el.style.borderColor = el.dataset.id === cursorId ? 'var(--accent-yellow)' : 'var(--border-color)';
+    });
+};
+
+window.renderCursorPicker = async function() {
+    const grid = document.getElementById('cursor-picker-grid');
+    if (!grid || !auth.currentUser) return;
+    const [achDoc, profileDoc] = await Promise.all([
+        getDoc(doc(db, 'achievements', auth.currentUser.uid)),
+        getDoc(doc(db, 'profiles', auth.currentUser.uid)),
+    ]);
+    const earned = achDoc.exists() ? achDoc.data() : {};
+    const activeCursor = profileDoc.exists() ? (profileDoc.data().customCursor || 'default') : 'default';
+
+    // Default option
+    let html = `<div class="cursor-option" data-id="default" onclick="window.selectCursor('default')"
+        style="border:2px solid ${activeCursor==='default'?'var(--accent-yellow)':'var(--border-color)'};border-radius:10px;padding:10px;text-align:center;cursor:pointer;background:var(--bg-gray);">
+        <div style="font-size:20px;margin-bottom:4px;">🖱️</div>
+        <div style="font-size:11px;font-weight:700;">Default</div>
+    </div>`;
+
+    for (const set of CURSOR_SETS) {
+        const unlocked = !!earned[set.unlock];
+        const isActive = activeCursor === set.id;
+        html += `<div class="cursor-option" data-id="${set.id}" onclick="${unlocked ? `window.selectCursor('${set.id}')` : ''}"
+            style="border:2px solid ${isActive?'var(--accent-yellow)':'var(--border-color)'};border-radius:10px;padding:10px;text-align:center;cursor:${unlocked?'pointer':'default'};background:var(--bg-gray);position:relative;${!unlocked?'opacity:0.5':''}">
+            ${!unlocked ? `<span class="material-symbols-outlined" style="position:absolute;top:6px;right:6px;font-size:14px;color:var(--text-muted);">lock</span>` : ''}
+            <img src="${set.preview}" style="width:28px;height:28px;image-rendering:pixelated;margin-bottom:4px;" onerror="this.style.display='none'">
+            <div style="font-size:11px;font-weight:700;line-height:1.2;">${set.label}</div>
+            <div style="font-size:10px;color:var(--text-muted);">${set.anime}</div>
+            ${!unlocked ? `<div style="font-size:9px;color:var(--text-muted);margin-top:3px;line-height:1.2;">${set.unlockLabel}</div>` : ''}
+        </div>`;
+    }
+    grid.innerHTML = html;
+};
 
 window.toggleBeeTrail = function() {
     const on = document.getElementById('bee-trail-toggle').checked;
