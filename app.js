@@ -10961,7 +10961,7 @@ function _obRender() {
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
             <span class="material-symbols-outlined" style="font-size:18px;color:var(--text-muted);">volume_down</span>
-            <input type="range" id="ob-volume" min="0" max="1" step="0.05" value="0.8" oninput="if(window._obAudio)window._obAudio.volume=parseFloat(this.value);" style="flex:1;accent-color:#a78bfa;cursor:pointer;">
+            <input type="range" id="ob-volume" min="0" max="1" step="0.05" value="0.25" oninput="if(window._obAudio)window._obAudio.volume=parseFloat(this.value);" style="flex:1;accent-color:#a78bfa;cursor:pointer;">
             <span class="material-symbols-outlined" style="font-size:18px;color:var(--text-muted);">volume_up</span>
         </div>` : '';
 
@@ -11001,7 +11001,7 @@ window._obPlay = function() {
     if (window._obAudio) { window._obAudio.pause(); }
 
     const audio = new Audio(st.song.audio);
-    audio.volume = parseFloat(document.getElementById('ob-volume')?.value || '0.8');
+    audio.volume = parseFloat(document.getElementById('ob-volume')?.value || '0.25');
     window._obAudio = audio;
     window._obPlaying = false;
 
@@ -11027,6 +11027,7 @@ window._obPlayFull = function() {
     if (!st) return;
     if (window._obAudio) window._obAudio.pause();
     const audio = new Audio(st.song.audio);
+    audio.volume = parseFloat(document.getElementById('ob-volume')?.value || '0.25');
     window._obAudio = audio;
     audio.play().catch(() => {});
 };
