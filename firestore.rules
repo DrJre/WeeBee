@@ -55,6 +55,51 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.uid);
     }
 
+    match /bw_op_posts/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if isOwner(resource.data.uid);
+    }
+
+    // ── BuzzWord game records & leaderboards ──────────────────────────────────
+    match /bw_op_games/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isOwner(resource.data.uid);
+    }
+    match /bw_op_leaderboard/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+    match /bw_nrt_games/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isOwner(resource.data.uid);
+    }
+    match /bw_nrt_leaderboard/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+    match /bw_blc_games/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isOwner(resource.data.uid);
+    }
+    match /bw_blc_leaderboard/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+    match /bw_db_games/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isOwner(resource.data.uid);
+    }
+    match /bw_db_leaderboard/{doc} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
     match /trivia_posts/{doc} {
       allow read: if true;
       allow create: if isAuth();
