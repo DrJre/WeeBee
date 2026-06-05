@@ -5671,14 +5671,16 @@ window.openListViewer = async function(listId) {
     const modal = document.getElementById('list-viewer-modal');
     if (!modal) return;
     modal.style.display = 'flex';
-    document.getElementById('lv-body').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">Loading...</div>';
+    document.getElementById('lv-header').innerHTML = '';
+    document.getElementById('lv-search-section').style.display = 'none';
+    document.getElementById('lv-entries').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">Loading...</div>';
     try {
         const snap = await getDoc(doc(db, 'custom_lists', listId));
-        if (!snap.exists()) { document.getElementById('lv-body').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">List not found.</div>'; return; }
+        if (!snap.exists()) { document.getElementById('lv-entries').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">List not found.</div>'; return; }
         window._currentListId   = listId;
         window._currentListData = { id: listId, ...snap.data() };
         window._renderListViewer();
-    } catch(e) { console.error('openListViewer:', e); document.getElementById('lv-body').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">Could not load list.</div>'; }
+    } catch(e) { console.error('openListViewer:', e); document.getElementById('lv-entries').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">Could not load list.</div>'; }
 };
 window.closeListViewer = function() {
     const modal = document.getElementById('list-viewer-modal');
