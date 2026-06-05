@@ -5668,6 +5668,9 @@ window.openListViewer = async function(listId) {
     document.getElementById('lv-header').innerHTML = '';
     document.getElementById('lv-search-section').style.display = 'none';
     document.getElementById('lv-entries').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">Loading...</div>';
+    // Wire search input every time modal opens — most reliable approach
+    const searchInp = document.getElementById('list-search-input');
+    if (searchInp) searchInp.oninput = () => window.searchAnimeForList(searchInp.value);
     try {
         const snap = await getDoc(doc(db, 'custom_lists', listId));
         if (!snap.exists()) { document.getElementById('lv-entries').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">List not found.</div>'; return; }
