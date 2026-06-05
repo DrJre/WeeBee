@@ -2,6 +2,12 @@
 
 ## Pending Features
 - [ ] **Upload WeeBee logo/fonts** — branding assets to replace the plain text logo
+- [ ] **Text/Image post** — general-purpose community post with text body, optional image upload, likes/dislikes/comments
+- [ ] **User Stats page** — permanent "Your Stats" profile tab: total episodes watched, top genres, top studios, rank progression, review streaks (like Spotify Wrapped but always available)
+- [ ] **Recommended Users** — surface users with similar taste based on overlapping high review scores
+- [ ] **Custom Lists** — let users create named curated anime lists beyond the watch list, shareable on their profile
+- [ ] **Shared Intro List** — create a list, share with a friend by username/link, track their watch progress in real time
+- [ ] **Connections-style game** — daily: group 16 anime characters into 4 categories, shareable results (ON HOLD)
 
 ## Next Patch Notes
 

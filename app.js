@@ -7819,7 +7819,11 @@ window.onload = function() {
     loadTrending(); fetchHomepageReviews();
 
     const _hashToView = { 'discover': 'discover-view', 'mylist': 'my-list-view', 'news': 'news-view', 'community': 'community-view' };
-    if (_initHash && _hashToView[_initHash]) {
+    if (_initHash === 'trivia') {
+        window.goToTriviaTab();
+    } else if (_initHash === 'melobee') {
+        window.goToMeloBeeTab();
+    } else if (_initHash && _hashToView[_initHash]) {
         switchView(_hashToView[_initHash]);
     }
 };
@@ -10811,7 +10815,7 @@ function _triviaShowResult(score, alreadyDone) {
     if (!container) return;
     const emoji = score === 5 ? '🏆' : score >= 4 ? '🌟' : score >= 3 ? '👍' : score >= 2 ? '📚' : '💪';
     const msg = score === 5 ? 'Perfect score! You really know your anime!' : score >= 4 ? 'Excellent! Almost perfect!' : score >= 3 ? 'Not bad! Pretty solid anime knowledge!' : score >= 2 ? 'Keep watching and you\'ll get there!' : 'Time to hit the anime queue!';
-    window._triviaShareText = '🧠 Anime Trivia — ' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '\n' + emoji + ' ' + score + '/5 on WeeBee Daily Trivia!';
+    window._triviaShareText = '🧠 Anime Trivia — ' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '\n' + emoji + ' ' + score + '/5 on WeeBee Daily Trivia!\n\nPlay it here: https://weebee.buzz/#trivia';
     const today = new Date().toISOString().split('T')[0];
     const alreadyPosted = (() => { try { return JSON.parse(localStorage.getItem('weebee_trivia_' + today) || '{}').posted; } catch(e) { return false; } })();
     container.innerHTML = `
@@ -11137,6 +11141,7 @@ function _obRender() {
         <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;">The answer was <strong style="color:var(--text-dark);">${st.song.anime}</strong></div>
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
             <button onclick="window._obPlayFull()" class="action-btn" style="background:#a78bfa;color:white;">▶ Play Full Opening</button>
+            <button onclick="window.shareMeloBee()" class="action-btn" style="background:#22c55e;color:white;"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">share</span> Share Score</button>
             ${auth.currentUser ? `<button id="melobee-post-btn" onclick="window.postMeloBeeToFeed(this)" class="action-btn" style="background:#7c3aed;color:white;" ${alreadyPosted ? 'disabled' : ''}>
                 <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">campaign</span> ${alreadyPosted ? '✓ Posted!' : 'Post to Feed'}
             </button>` : ''}
@@ -11268,7 +11273,7 @@ window._obSearch = function(q) {
                 results.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px;">No results</div>';
             } else {
                 results.innerHTML = items.map(title =>
-                    `<div onclick="window._obSelectAnime(${JSON.stringify(title)})" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:1px solid var(--border-color);" onmouseover="this.style.background='var(--bg-gray)'" onmouseout="this.style.background=''">${title}</div>`
+                    `<div onmousedown="event.preventDefault();window._obSelectAnime(this.dataset.t)" data-t="${title.replace(/"/g,'&quot;').replace(/'/g,'&#39;')}" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:1px solid var(--border-color);" onmouseover="this.style.background='var(--bg-gray)'" onmouseout="this.style.background=''">${title}</div>`
                 ).join('');
             }
         } catch(e) { if (e.name !== 'AbortError') results.style.display = 'none'; }
@@ -11284,8 +11289,9 @@ window._obSelectAnime = function(title) {
 
 window._obPickTopOrSubmit = function() {
     const results = document.getElementById('ob-search-results');
-    if (results && results.style.display !== 'none' && results.children.length > 0 && results.children[0].onclick) {
-        results.children[0].click();
+    if (results && results.style.display !== 'none' && results.children.length > 0 && results.children[0].dataset.t) {
+        window._obSelectAnime(results.children[0].dataset.t);
+        window._obSubmitGuess();
     } else {
         window._obSubmitGuess();
     }
@@ -11379,6 +11385,16 @@ function _mbEmojiRow(guesses, solved) {
     for (let i = guesses.length; i < OB_CLIPS.length; i++) icons.push('⬜');
     return icons.join(' ');
 }
+
+window.shareMeloBee = function() {
+    const st = window._obState;
+    if (!st) return;
+    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const guessCount = (st.guesses || []).filter(g => g).length;
+    const result = st.solved ? `Guessed it in ${guessCount} ${guessCount === 1 ? 'try' : 'tries'}!` : 'Didn\'t get it today';
+    const text = `🎵 MeloBee — ${today}\n${_mbEmojiRow(st.guesses, st.solved)}\n${result}\n\nPlay it here: https://weebee.buzz/#melobee`;
+    navigator.clipboard.writeText(text).then(() => alert('Copied to clipboard!')).catch(() => alert('Could not copy'));
+};
 
 window.postMeloBeeToFeed = async function(btn) {
     if (!auth.currentUser) return window.openAuthModal();
