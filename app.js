@@ -6853,6 +6853,93 @@ window.loadRecommendedForYou = async function() {
     } catch(e) { console.error('loadRecommendedForYou', e); }
 };
 
+// --- RECOMMENDED USERS ---
+window.loadRecommendedUsers = async function() {
+    if (!auth.currentUser) return;
+    const section = document.getElementById('discover-similar-users-section');
+    const container = document.getElementById('similar-users-container');
+    if (!section || !container) return;
+
+    try {
+        // Build my score map from my reviews
+        const mySnap = await getDocs(query(collection(db, 'reviews'), where('uid', '==', auth.currentUser.uid)));
+        const myMap = {};
+        mySnap.docs.forEach(d => {
+            const r = d.data();
+            if (r.mal_id && r.score && r.type !== 'suggestion' && r.type !== 'series') {
+                myMap[r.mal_id] = parseFloat(r.score);
+            }
+        });
+        const myIds = Object.keys(myMap);
+        if (myIds.length < 3) return;
+
+        // Take top-rated mal_ids as seeds (up to 30 for the `in` query)
+        const seedIds = myIds.sort((a, b) => myMap[b] - myMap[a]).slice(0, 30);
+
+        // Query reviews for these anime from all users
+        const otherSnap = await getDocs(query(
+            collection(db, 'reviews'),
+            where('mal_id', 'in', seedIds)
+        ));
+
+        // Group by uid and build score maps
+        const userMaps = {};
+        const userMeta = {};
+        otherSnap.docs.forEach(d => {
+            const r = d.data();
+            if (!r.uid || r.uid === auth.currentUser.uid) return;
+            if (!r.mal_id || !r.score || r.type === 'suggestion' || r.type === 'series') return;
+            if (!userMaps[r.uid]) { userMaps[r.uid] = {}; userMeta[r.uid] = { uid: r.uid, displayName: r.username || 'Anonymous', avatar: r.avatar }; }
+            userMaps[r.uid][r.mal_id] = parseFloat(r.score);
+        });
+
+        // Compute taste match for each user
+        const scored = [];
+        for (const [uid, theirMap] of Object.entries(userMaps)) {
+            const shared = myIds.filter(id => theirMap[id] !== undefined);
+            if (shared.length < 3) continue;
+            const avgDiff = shared.reduce((s, id) => s + Math.abs(myMap[id] - theirMap[id]), 0) / shared.length;
+            const match = Math.round(100 - (avgDiff / 9 * 100));
+            scored.push({ ...userMeta[uid], match, shared: shared.length });
+        }
+
+        if (!scored.length) return;
+        scored.sort((a, b) => b.match - a.match);
+        const top = scored.slice(0, 6);
+
+        // Fetch richer profile data (displayName, avatar) from profiles collection
+        const profileDocs = await Promise.allSettled(top.map(u => getDoc(doc(db, 'profiles', u.uid))));
+        profileDocs.forEach((res, i) => {
+            if (res.status === 'fulfilled' && res.value.exists()) {
+                const pd = res.value.data();
+                if (pd.displayName) top[i].displayName = pd.displayName;
+                if (pd.avatar) top[i].avatar = pd.avatar;
+            }
+        });
+
+        await window.prefetchRankCache(top.map(u => u.uid));
+
+        const matchColor = pct => pct >= 85 ? '#4CAF50' : pct >= 70 ? '#FFC107' : '#FF9800';
+
+        container.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;">
+            ${top.map(u => {
+                const av = u.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(u.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+                const color = matchColor(u.match);
+                const rc = window.userRankCache[u.uid] || 0;
+                return `<div onclick="viewUserProfile('${u.uid}')" style="background:var(--bg-gray);border-radius:16px;padding:18px 14px;text-align:center;cursor:pointer;transition:transform .15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+                    <img src="${av}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;margin:0 auto 10px;display:block;border:2px solid ${color};" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(u.displayName)}&backgroundColor=ffc107&fontColor=333333'">
+                    <div style="font-size:13px;font-weight:700;color:var(--text-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;">${u.displayName} ${window.getRankBadgeHTML(rc, 13)}</div>
+                    <div style="font-size:26px;font-weight:900;color:${color};line-height:1.1;">${u.match}%</div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">match · ${u.shared} shared</div>
+                    <button onclick="event.stopPropagation();viewUserProfile('${u.uid}')" style="width:100%;padding:7px 0;border-radius:8px;border:1px solid ${color};background:transparent;color:${color};font-size:12px;font-weight:700;cursor:pointer;">View Profile</button>
+                </div>`;
+            }).join('')}
+        </div>`;
+
+        section.style.display = 'block';
+    } catch(e) { console.error('loadRecommendedUsers', e); }
+};
+
 // --- NEW DISCOVER PAGE LOGIC (PODIUM UPDATE) ---
 window.fetchDiscoverPage = async function() {
     const top10Container = document.getElementById('weebee-top10-container');
@@ -7283,7 +7370,7 @@ window.searchAnime = async function(queryStr) {
     top10Container.innerHTML = '<div class="loading">Searching Anime Database...</div>';
     
     // Hide default discovery sections
-    ['discover-seasonal-section','discover-spotlight-section','discover-reviewers-section','discover-friends-section',
+    ['discover-seasonal-section','discover-spotlight-section','discover-reviewers-section','discover-similar-users-section','discover-friends-section',
      'discover-trending-section','discover-upcoming-section','discover-action-section',
      'discover-romance-section','discover-comedy-section','discover-horror-section',
      'discover-scifi-section','discover-fantasy-section','discover-sol-section',
@@ -7464,13 +7551,14 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     if(targetId === 'discover-view' && !isSearch) {
         document.querySelector('#discover-view h2').innerText = "WeeBee's Top 10 All Time";
         document.querySelector('#discover-view p').innerText = "Ranked purely by WeeBee community scores";
-        ['discover-seasonal-section','discover-spotlight-section','discover-reviewers-section','discover-friends-section',
+        ['discover-seasonal-section','discover-spotlight-section','discover-reviewers-section','discover-similar-users-section','discover-friends-section',
          'discover-trending-section','discover-upcoming-section','discover-action-section',
          'discover-romance-section','discover-comedy-section','discover-horror-section',
          'discover-scifi-section','discover-fantasy-section','discover-sol-section',
          'discover-sports-section','discover-mecha-section'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'block'; });
         fetchDiscoverPage();
         window.loadRecommendedForYou();
+        window.loadRecommendedUsers();
         window.renderSeasonalVoting();
     }
 };
