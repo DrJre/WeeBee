@@ -522,7 +522,9 @@ onAuthStateChanged(auth, (user) => {
         const _tlId = _urlParams.get('tl');
         const _animeId = _urlParams.get('anime');
         const _profileId = _urlParams.get('profile');
+        const _listId = _urlParams.get('list');
         if (_tlId) { history.replaceState({}, '', window.location.pathname); setTimeout(() => window.openTierListViewer(_tlId), 600); }
+        else if (_listId) { history.replaceState({}, '', window.location.pathname); setTimeout(() => window.openListViewer(_listId), 400); }
         else if (_animeId) { history.replaceState({}, '', window.location.pathname); setTimeout(() => window.loadAnimeDetails(parseInt(_animeId), true), 300); }
         else if (_profileId) { history.replaceState({}, '', window.location.pathname); setTimeout(() => window.viewUserProfile(_profileId), 300); }
         // Restore last view after login
@@ -2955,12 +2957,13 @@ window.switchProfileTab = function(event, tabId) {
     document.querySelectorAll('.profile-main-feed .p-tab').forEach(t => t.classList.remove('active'));
     document.getElementById(tabId).style.display = 'block';
     event.currentTarget.classList.add('active');
-    if (tabId === 'p-feed') window.loadProfileFeed(window.currentProfileUid);
-    if (tabId === 'p-reviews') window.loadProfileReviews(window.currentProfileUid);
-    if (tabId === 'p-stats') window.loadProfileStats(window.currentProfileUid);
+    if (tabId === 'p-feed')         window.loadProfileFeed(window.currentProfileUid);
+    if (tabId === 'p-reviews')      window.loadProfileReviews(window.currentProfileUid);
+    if (tabId === 'p-lists')        window.loadProfileLists(window.currentProfileUid);
+    if (tabId === 'p-stats')        window.loadProfileStats(window.currentProfileUid);
     if (tabId === 'p-achievements') window.loadProfileAchievements(window.currentProfileUid);
-    if (tabId === 'p-friends') window.loadFriendsTab(window.currentProfileUid);
-    if (tabId === 'p-followers') window.loadFollowersTab(window.currentProfileUid);
+    if (tabId === 'p-friends')      window.loadFriendsTab(window.currentProfileUid);
+    if (tabId === 'p-followers')    window.loadFollowersTab(window.currentProfileUid);
 };
 
 function _statCard(label, value, icon) {
@@ -5612,6 +5615,354 @@ window.deleteGeneralPost = async function(id) {
         window._generalPostsList = window._generalPostsList.filter(p => p.id !== id);
         window._renderGeneralPostFeed();
     } catch(e) { alert('Failed to delete.'); }
+};
+
+// ─── CUSTOM LISTS ────────────────────────────────────────────────────────────
+window._currentListId   = null;
+window._currentListData = null;
+let _listSearchTimer    = null;
+
+window.openCreateListModal = function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    const m = document.getElementById('create-list-modal');
+    if (m) { m.style.display = 'flex'; setTimeout(() => document.getElementById('cl-name-input')?.focus(), 100); }
+};
+window.closeCreateListModal = function() {
+    const m = document.getElementById('create-list-modal');
+    if (m) m.style.display = 'none';
+};
+
+window.createCustomList = async function() {
+    if (!auth.currentUser) return;
+    const name = document.getElementById('cl-name-input')?.value.trim();
+    if (!name) return;
+    const desc = document.getElementById('cl-desc-input')?.value.trim() || '';
+    const btn  = document.getElementById('cl-create-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+    try {
+        const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid)).catch(() => null);
+        const displayName = pd?.data()?.displayName || auth.currentUser.displayName || 'Anonymous';
+        const avatar      = pd?.data()?.avatar     || auth.currentUser.photoURL     || '';
+        const ref = await addDoc(collection(db, 'custom_lists'), {
+            uid: auth.currentUser.uid, creatorName: displayName, creatorAvatar: avatar,
+            name, description: desc,
+            memberUids: [auth.currentUser.uid],
+            memberInfo: { [auth.currentUser.uid]: { displayName, avatar } },
+            entries: [], timestamp: new Date(), updatedAt: new Date()
+        });
+        window.closeCreateListModal();
+        document.getElementById('cl-name-input').value = '';
+        document.getElementById('cl-desc-input').value = '';
+        // Invalidate profile lists cache so it reloads
+        const lc = document.getElementById('user-lists-container');
+        if (lc) lc.dataset.loaded = '';
+        window.openListViewer(ref.id);
+    } catch(e) { console.error('createCustomList:', e); alert('Failed to create list.'); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = 'Create List'; } }
+};
+
+window.openListViewer = async function(listId) {
+    const modal = document.getElementById('list-viewer-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    document.getElementById('lv-body').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">Loading...</div>';
+    try {
+        const snap = await getDoc(doc(db, 'custom_lists', listId));
+        if (!snap.exists()) { document.getElementById('lv-body').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">List not found.</div>'; return; }
+        window._currentListId   = listId;
+        window._currentListData = { id: listId, ...snap.data() };
+        window._renderListViewer();
+    } catch(e) { console.error('openListViewer:', e); document.getElementById('lv-body').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">Could not load list.</div>'; }
+};
+window.closeListViewer = function() {
+    const modal = document.getElementById('list-viewer-modal');
+    if (modal) modal.style.display = 'none';
+    window._currentListId = null; window._currentListData = null;
+};
+
+window._renderListViewer = function() {
+    const list = window._currentListData;
+    if (!list) return;
+    const uid      = auth.currentUser?.uid;
+    const isMember = uid && (list.memberUids || []).includes(uid);
+    const isOwner  = uid && list.uid === uid;
+    const entries  = list.entries || [];
+    const members  = Object.entries(list.memberInfo || {});
+
+    const memberAvatarsHTML = members.slice(0, 6).map(([muid, m], i) =>
+        `<img src="${m.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(m.displayName||'U')}&backgroundColor=ffc107&fontColor=333333`}"
+             style="width:28px;height:28px;border-radius:50%;border:2px solid var(--bg-white);margin-left:${i===0?'0':'-8px'};object-fit:cover;cursor:pointer;flex-shrink:0;"
+             title="${m.displayName||''}" onclick="event.stopPropagation();window.closeListViewer();viewUserProfile('${muid}')"
+             onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(m.displayName||'U')}&backgroundColor=ffc107&fontColor=333333'">`
+    ).join('');
+
+    document.getElementById('lv-header').innerHTML = `
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+            <div style="min-width:0;flex:1;">
+                <div style="font-size:20px;font-weight:900;color:var(--text-dark);">${list.name}</div>
+                ${list.description ? `<div style="font-size:13px;color:var(--text-muted);margin-top:3px;">${list.description}</div>` : ''}
+                <div style="display:flex;align-items:center;gap:6px;margin-top:10px;flex-wrap:wrap;">
+                    <div style="display:flex;">${memberAvatarsHTML}</div>
+                    <span style="font-size:12px;color:var(--text-muted);margin-left:4px;">${list.memberUids?.length||1} member${(list.memberUids?.length||1)!==1?'s':''}</span>
+                    <span style="color:var(--text-muted);">·</span>
+                    <span style="font-size:12px;color:var(--text-muted);">${entries.length} anime</span>
+                    ${!isMember&&uid ? `<button onclick="window.joinList('${list.id}')" class="submit-btn" style="font-size:12px;padding:5px 14px;margin-left:8px;">Join List</button>` : ''}
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+                ${isMember ? `<button onclick="window.toggleListSharePanel()" class="action-btn" style="font-size:12px;padding:6px 12px;display:flex;align-items:center;gap:5px;"><span class="material-symbols-outlined" style="font-size:15px;">share</span>Share</button>` : ''}
+                ${isOwner  ? `<button onclick="window.deleteCustomList('${list.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;" title="Delete list"><span class="material-symbols-outlined" style="font-size:20px;">delete</span></button>` : ''}
+                <button onclick="window.closeListViewer()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
+            </div>
+        </div>
+        <!-- Share panel -->
+        <div id="list-share-panel" style="display:none;margin-top:14px;background:var(--bg-gray);border-radius:10px;padding:14px;">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Share This List</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <input id="list-invite-username" type="text" placeholder="Add by username..." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;" onkeydown="if(event.key==='Enter')window.inviteToList('${list.id}')">
+                <button onclick="window.inviteToList('${list.id}')" class="action-btn" style="font-size:13px;padding:8px 14px;">Add</button>
+            </div>
+            <button id="lv-copy-btn" onclick="window.copyListLink('${list.id}')" class="action-btn" style="width:100%;display:flex;justify-content:center;align-items:center;gap:6px;font-size:13px;padding:9px;background:var(--bg-gray-darker);"><span class="material-symbols-outlined" style="font-size:15px;">link</span> Copy Join Link</button>
+        </div>
+    `;
+
+    const body = document.getElementById('lv-body');
+    body.innerHTML = `
+        ${isMember ? `<div style="padding:14px 20px;border-bottom:1px solid var(--border-color);">
+            <div style="display:flex;gap:8px;">
+                <input id="list-search-input" type="text" placeholder="Search anime to add to this list..." style="flex:1;padding:9px 14px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;" oninput="window.searchAnimeForList(this.value)">
+            </div>
+            <div id="list-search-results"></div>
+        </div>` : ''}
+        <div style="padding:16px 20px;" id="lv-entries">
+            ${!entries.length ? `<div style="text-align:center;padding:48px 20px;color:var(--text-muted);">
+                <span class="material-symbols-outlined" style="font-size:44px;display:block;margin-bottom:10px;opacity:.4;">playlist_add</span>
+                <div style="font-size:14px;">${isMember ? 'Search above to start building your list.' : 'This list is empty.'}</div>
+            </div>` : entries.map(e => window._renderListEntry(e, list, isMember)).join('')}
+        </div>
+    `;
+};
+
+window._renderListEntry = function(entry, list, isMember) {
+    const myStatus = window.myAnimeList?.find(a => a.mal_id === entry.mal_id)?.status;
+    const statusLabels = { watching: '👁 Watching', completed: '✓ Done', 'plan-to-watch': '🔖 Plan', 'on-hold': '⏸ On Hold', dropped: '✗ Dropped' };
+    const statusBadge = myStatus
+        ? `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(255,193,7,0.15);color:#FFC107;border:1px solid rgba(255,193,7,0.3);">${statusLabels[myStatus]||myStatus}</span>`
+        : '';
+    return `<div style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--border-color);">
+        <img src="${entry.image||''}" style="width:44px;height:62px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:pointer;" onclick="window.closeListViewer();window.loadAnimeDetails(${entry.mal_id})" onerror="this.style.background='var(--bg-gray-darker)'">
+        <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+                <span style="font-size:14px;font-weight:700;color:var(--text-dark);cursor:pointer;" onclick="window.closeListViewer();window.loadAnimeDetails(${entry.mal_id})">${entry.title}</span>
+                ${statusBadge}
+            </div>
+            ${entry.note ? `<div style="font-size:12px;color:var(--text-muted);font-style:italic;margin-bottom:6px;">"${entry.note}"</div>` : ''}
+            ${isMember ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+                <button onclick="window.quickAddToMyList(${entry.mal_id},'${(entry.title||'').replace(/'/g,"\\'")}','${entry.image||''}')" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;gap:3px;"><span class="material-symbols-outlined" style="font-size:13px;">bookmark_add</span>My List</button>
+                <button onclick="window.editListEntryNote('${list.id}',${entry.mal_id})" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;gap:3px;"><span class="material-symbols-outlined" style="font-size:13px;">edit_note</span>Note</button>
+                <button onclick="window.removeFromList('${list.id}',${entry.mal_id})" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1px solid rgba(255,82,82,0.25);background:transparent;color:rgba(255,82,82,0.75);cursor:pointer;display:flex;align-items:center;gap:3px;"><span class="material-symbols-outlined" style="font-size:13px;">remove</span></button>
+            </div>` : ''}
+        </div>
+    </div>`;
+};
+
+window.toggleListSharePanel = function() {
+    const p = document.getElementById('list-share-panel');
+    if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+};
+
+window.searchAnimeForList = function(query) {
+    clearTimeout(_listSearchTimer);
+    const results = document.getElementById('list-search-results');
+    if (!results) return;
+    if (!query.trim()) { results.innerHTML = ''; return; }
+    _listSearchTimer = setTimeout(async () => {
+        try {
+            const data = await window.jikanFetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=5`, `srch_list_${query}`);
+            const animes = data?.data || [];
+            if (!animes.length) { results.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No results.</div>'; return; }
+            const existing = new Set((window._currentListData?.entries||[]).map(e => e.mal_id));
+            results.innerHTML = `<div style="border:1px solid var(--border-color);border-radius:8px;overflow:hidden;margin-top:8px;">${animes.map(a => {
+                const already = existing.has(a.mal_id);
+                return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border-color);background:var(--bg-white);">
+                    <img src="${a.images?.jpg?.small_image_url||''}" style="width:30px;height:42px;border-radius:4px;object-fit:cover;flex-shrink:0;">
+                    <div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-dark);">${a.title}</div>
+                    <button onclick="window.addAnimeToList('${window._currentListId}',${a.mal_id},'${(a.title||'').replace(/'/g,"\\'")}','${a.images?.jpg?.small_image_url||''}')" ${already?'disabled':''} style="font-size:12px;padding:5px 12px;border-radius:6px;border:none;background:${already?'var(--bg-gray-darker)':'var(--accent-yellow)'};color:${already?'var(--text-muted)':'#111'};cursor:${already?'default':'pointer'};font-weight:700;flex-shrink:0;">${already?'Added':'+ Add'}</button>
+                </div>`;
+            }).join('')}</div>`;
+        } catch(e) {}
+    }, 400);
+};
+
+window.addAnimeToList = async function(listId, malId, title, image) {
+    if (!auth.currentUser) return window.openAuthModal();
+    try {
+        const listRef = doc(db, 'custom_lists', listId);
+        const snap    = await getDoc(listRef);
+        if (!snap.exists()) return;
+        const entries = snap.data().entries || [];
+        if (entries.find(e => e.mal_id === malId)) return;
+        entries.push({ mal_id: malId, title, image, note: '', addedBy: auth.currentUser.uid, order: entries.length });
+        await updateDoc(listRef, { entries, updatedAt: new Date() });
+        window._currentListData = { ...window._currentListData, entries };
+        // Clear search
+        const inp = document.getElementById('list-search-input');
+        if (inp) inp.value = '';
+        const res = document.getElementById('list-search-results');
+        if (res) res.innerHTML = '';
+        // Re-render just entries
+        const lv = document.getElementById('lv-entries');
+        if (lv) lv.innerHTML = entries.map(e => window._renderListEntry(e, window._currentListData, true)).join('');
+    } catch(e) { console.error('addAnimeToList:', e); }
+};
+
+window.removeFromList = async function(listId, malId) {
+    if (!auth.currentUser || !confirm('Remove this anime from the list?')) return;
+    try {
+        const listRef = doc(db, 'custom_lists', listId);
+        const snap    = await getDoc(listRef);
+        if (!snap.exists()) return;
+        const entries = (snap.data().entries || []).filter(e => e.mal_id !== malId);
+        await updateDoc(listRef, { entries, updatedAt: new Date() });
+        window._currentListData = { ...window._currentListData, entries };
+        const lv = document.getElementById('lv-entries');
+        if (lv) lv.innerHTML = entries.length ? entries.map(e => window._renderListEntry(e, window._currentListData, true)).join('') : '<div style="text-align:center;padding:48px;color:var(--text-muted);">List is empty.</div>';
+    } catch(e) { console.error('removeFromList:', e); }
+};
+
+window.editListEntryNote = async function(listId, malId) {
+    const entry   = window._currentListData?.entries?.find(e => e.mal_id === malId);
+    const current = entry?.note || '';
+    const note    = prompt('Add a note for this anime (e.g. "Start here", "Skip season 1"):', current);
+    if (note === null) return;
+    try {
+        const listRef = doc(db, 'custom_lists', listId);
+        const snap    = await getDoc(listRef);
+        if (!snap.exists()) return;
+        const entries = (snap.data().entries || []).map(e => e.mal_id === malId ? { ...e, note: note.trim() } : e);
+        await updateDoc(listRef, { entries, updatedAt: new Date() });
+        window._currentListData = { ...window._currentListData, entries };
+        const lv = document.getElementById('lv-entries');
+        if (lv) lv.innerHTML = entries.map(e => window._renderListEntry(e, window._currentListData, true)).join('');
+    } catch(e) { console.error('editListEntryNote:', e); }
+};
+
+window.quickAddToMyList = async function(malId, title, image) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const existing = window.myAnimeList?.find(a => a.mal_id === malId);
+    if (existing) { alert(`Already in your list as "${existing.status}".`); return; }
+    try {
+        await addDoc(collection(db, 'anime_lists'), {
+            uid: auth.currentUser.uid, mal_id: malId, animeTitle: title, animeImage: image,
+            status: 'plan-to-watch', score: null, timestamp: new Date()
+        });
+        if (!window.myAnimeList) window.myAnimeList = [];
+        window.myAnimeList.push({ mal_id: malId, animeTitle: title, animeImage: image, status: 'plan-to-watch' });
+        // Refresh entry row to show status badge
+        const lv = document.getElementById('lv-entries');
+        if (lv && window._currentListData) lv.innerHTML = window._currentListData.entries.map(e => window._renderListEntry(e, window._currentListData, true)).join('');
+        // Toast feedback
+        window.showToast?.(`Added "${title}" to your Plan to Watch list`);
+    } catch(e) { console.error('quickAddToMyList:', e); }
+};
+
+window.joinList = async function(listId) {
+    if (!auth.currentUser) return window.openAuthModal();
+    try {
+        const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid)).catch(() => null);
+        const displayName = pd?.data()?.displayName || auth.currentUser.displayName || 'Anonymous';
+        const avatar      = pd?.data()?.avatar      || auth.currentUser.photoURL     || '';
+        await updateDoc(doc(db, 'custom_lists', listId), {
+            memberUids: arrayUnion(auth.currentUser.uid),
+            [`memberInfo.${auth.currentUser.uid}`]: { displayName, avatar }
+        });
+        const snap = await getDoc(doc(db, 'custom_lists', listId));
+        window._currentListData = { id: listId, ...snap.data() };
+        window._renderListViewer();
+        // Invalidate profile lists cache
+        const lc = document.getElementById('user-lists-container');
+        if (lc) lc.dataset.loaded = '';
+    } catch(e) { console.error('joinList:', e); alert('Failed to join list.'); }
+};
+
+window.inviteToList = async function(listId) {
+    const input    = document.getElementById('list-invite-username');
+    const username = input?.value.trim();
+    if (!username) return;
+    try {
+        const userSnap = await getDocs(query(collection(db, 'profiles'), where('displayNameLower', '==', username.toLowerCase())));
+        if (userSnap.empty) { alert(`User "${username}" not found.`); return; }
+        const invitedUid = userSnap.docs[0].id;
+        const pd         = userSnap.docs[0].data();
+        if (invitedUid === auth.currentUser?.uid) { alert("That's you!"); return; }
+        if ((window._currentListData?.memberUids||[]).includes(invitedUid)) { alert(`${pd.displayName||username} is already on this list.`); return; }
+        await updateDoc(doc(db, 'custom_lists', listId), {
+            memberUids: arrayUnion(invitedUid),
+            [`memberInfo.${invitedUid}`]: { displayName: pd.displayName || username, avatar: pd.avatar || '' }
+        });
+        if (input) input.value = '';
+        const snap = await getDoc(doc(db, 'custom_lists', listId));
+        window._currentListData = { id: listId, ...snap.data() };
+        window._renderListViewer();
+        alert(`${pd.displayName||username} added to the list!`);
+    } catch(e) { console.error('inviteToList:', e); alert('Failed to add user.'); }
+};
+
+window.copyListLink = function(listId) {
+    const url = `${location.origin}${location.pathname}?list=${listId}`;
+    navigator.clipboard.writeText(url).then(() => {
+        const btn = document.getElementById('lv-copy-btn');
+        if (btn) { btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:15px;">check</span> Copied!'; setTimeout(() => { btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:15px;">link</span> Copy Join Link'; }, 2500); }
+    }).catch(() => prompt('Copy this link:', url));
+};
+
+window.deleteCustomList = async function(listId) {
+    if (!confirm('Delete this list? This cannot be undone.')) return;
+    try {
+        await deleteDoc(doc(db, 'custom_lists', listId));
+        window.closeListViewer();
+        const lc = document.getElementById('user-lists-container');
+        if (lc) { lc.dataset.loaded = ''; window.loadProfileLists(auth.currentUser?.uid); }
+    } catch(e) { alert('Failed to delete list.'); }
+};
+
+window.loadProfileLists = async function(uid) {
+    const container = document.getElementById('user-lists-container');
+    if (!container || container.dataset.loaded === uid) return;
+    container.dataset.loaded = uid;
+    container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);">Loading...</div>';
+    const isMe = uid === auth.currentUser?.uid;
+    try {
+        const snap  = await getDocs(query(collection(db, 'custom_lists'), where('memberUids', 'array-contains', uid)));
+        const lists = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.updatedAt?.toMillis?.()|| 0) - (a.updatedAt?.toMillis?.()|| 0));
+        const newBtn = isMe ? `<button onclick="window.openCreateListModal()" class="submit-btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;margin-bottom:16px;"><span class="material-symbols-outlined" style="font-size:18px;">add</span> New List</button>` : '';
+        if (!lists.length) {
+            container.innerHTML = `${newBtn}<div style="text-align:center;padding:40px;color:var(--text-muted);">
+                <span class="material-symbols-outlined" style="font-size:44px;display:block;margin-bottom:10px;opacity:.4;">format_list_bulleted</span>
+                <div style="font-size:14px;">No lists yet.</div>
+            </div>`; return;
+        }
+        container.innerHTML = newBtn + `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">
+            ${lists.map(list => {
+                const isOwner  = list.uid === uid;
+                const members  = list.memberUids?.length || 1;
+                const imgPreviews = (list.entries||[]).slice(0,3).map(e => e.image).filter(Boolean);
+                return `<div onclick="window.openListViewer('${list.id}')" style="background:var(--bg-gray);border-radius:14px;overflow:hidden;cursor:pointer;transition:transform .15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+                    <div style="height:80px;display:flex;background:var(--bg-gray-darker);overflow:hidden;">
+                        ${imgPreviews.length ? imgPreviews.map(img => `<img src="${img}" style="flex:1;object-fit:cover;min-width:0;" onerror="this.style.display='none'">`).join('') : '<div style="flex:1;display:flex;align-items:center;justify-content:center;opacity:.3;"><span class="material-symbols-outlined" style="font-size:32px;">format_list_bulleted</span></div>'}
+                    </div>
+                    <div style="padding:12px 14px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                            <div style="font-size:14px;font-weight:800;color:var(--text-dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${list.name}</div>
+                            <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;background:${isOwner?'rgba(99,102,241,0.2)':'rgba(16,185,129,0.15)'};color:${isOwner?'#a78bfa':'#34d399'};margin-left:6px;flex-shrink:0;">${isOwner?'Owner':'Member'}</span>
+                        </div>
+                        ${list.description ? `<div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px;">${list.description}</div>` : ''}
+                        <div style="font-size:11px;color:var(--text-muted);">${list.entries?.length||0} anime · ${members} member${members!==1?'s':''}</div>
+                    </div>
+                </div>`;
+            }).join('')}
+        </div>`;
+    } catch(e) { console.error('loadProfileLists:', e); container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);">Could not load lists.</div>'; }
 };
 
 // --- POLLS ---

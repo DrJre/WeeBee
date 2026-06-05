@@ -114,6 +114,18 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.uid);
     }
 
+    // ── Custom / Shared Lists ─────────────────────────────────────────────────
+    match /custom_lists/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      // Members can edit; anyone auth can join (their uid appears in new memberUids)
+      allow update: if isAuth() && (
+        resource.data.memberUids.hasAny([request.auth.uid]) ||
+        request.resource.data.memberUids.hasAny([request.auth.uid])
+      );
+      allow delete: if isOwner(resource.data.uid);
+    }
+
     match /melobee_posts/{doc} {
       allow read: if true;
       allow create: if isAuth();
