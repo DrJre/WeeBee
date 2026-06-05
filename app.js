@@ -451,12 +451,6 @@ window.scrollCarousel = function(containerId, direction) {
     }
 };
 
-// ES modules are deferred — DOM is ready by the time this runs, so attach directly
-setTimeout(() => {
-    const inp = document.getElementById('list-search-input');
-    if (inp) inp.addEventListener('input', e => window.searchAnimeForList(e.target.value));
-}, 0);
-
 onAuthStateChanged(auth, (user) => {
     const authSection = document.getElementById('user-auth-section');
     if (user) {
