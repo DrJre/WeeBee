@@ -4828,6 +4828,17 @@ window.switchCommunityTab = function(event, tabId) {
     if (event?.currentTarget) event.currentTarget.classList.add('active');
 };
 
+window.openCreatePost = function() {
+    window.switchView('community-view');
+    document.querySelectorAll('#community-view .community-tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('#community-view .community-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('community-tab-posts').style.display = 'block';
+    const btn = document.querySelector('[onclick*="community-tab-posts"]');
+    if (btn) btn.classList.add('active');
+    window.loadGeneralPosts();
+    setTimeout(() => document.getElementById('general-post-text')?.focus(), 150);
+};
+
 window.goToTriviaTab = function() {
     window.switchView('community-view');
     document.querySelectorAll('#community-view .community-tab-content').forEach(el => el.style.display = 'none');

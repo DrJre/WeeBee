@@ -121,7 +121,12 @@
                         </div>
                     </div>
 
-                    <h2 style="margin-top: 20px;">Your Feed</h2>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px; margin-bottom:0;">
+                        <h2 style="margin:0;">Your Feed</h2>
+                        <button onclick="window.openCreatePost()" style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.35);border-radius:20px;color:rgba(99,102,241,1);font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(99,102,241,0.25)'" onmouseout="this.style.background='rgba(99,102,241,0.15)'">
+                            <span class="material-symbols-outlined" style="font-size:16px;">edit_note</span> Create Post
+                        </button>
+                    </div>
                     <div id="home-activity-feed"></div>
                     <div id="home-activity-sentinel" style="display:none; text-align:center; padding:20px; color:var(--text-muted); font-size:13px;">
                         <div class="loading" style="display:inline-block; width:20px; height:20px;"></div> Loading more...
@@ -1963,6 +1968,6 @@
     <canvas id="bee-trail-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99999;display:none;"></canvas>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=204"></script>
+    <script type="module" src="app.js?v=205"></script>
 </body>
 </html>
