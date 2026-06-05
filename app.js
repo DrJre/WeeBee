@@ -451,11 +451,11 @@ window.scrollCarousel = function(containerId, direction) {
     }
 };
 
-// Attach list search listener once — stable because the input lives permanently in the modal HTML
-document.addEventListener('DOMContentLoaded', () => {
+// ES modules are deferred — DOM is ready by the time this runs, so attach directly
+setTimeout(() => {
     const inp = document.getElementById('list-search-input');
     if (inp) inp.addEventListener('input', e => window.searchAnimeForList(e.target.value));
-});
+}, 0);
 
 onAuthStateChanged(auth, (user) => {
     const authSection = document.getElementById('user-auth-section');
