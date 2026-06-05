@@ -5775,23 +5775,36 @@ window.searchAnimeForList = function(query) {
     clearTimeout(_listSearchTimer);
     const results = document.getElementById('list-search-results');
     if (!results) return;
-    if (!query.trim()) { results.innerHTML = ''; return; }
+    const q = query.trim();
+    if (!q) { results.innerHTML = ''; return; }
+    if (q.length < 2) { results.innerHTML = ''; return; }
+    results.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 4px;">Searching...</div>';
     _listSearchTimer = setTimeout(async () => {
         try {
-            const data = await window.jikanFetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=5`, `srch_list_${query}`);
-            const animes = data?.data || [];
-            if (!animes.length) { results.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No results.</div>'; return; }
+            const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8&sfw=false`);
+            if (!res.ok) throw new Error(`${res.status}`);
+            const json   = await res.json();
+            const animes = json?.data || [];
+            if (!animes.length) { results.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 4px;">No results found.</div>'; return; }
             const existing = new Set((window._currentListData?.entries||[]).map(e => e.mal_id));
             results.innerHTML = `<div style="border:1px solid var(--border-color);border-radius:8px;overflow:hidden;margin-top:8px;">${animes.map(a => {
                 const already = existing.has(a.mal_id);
+                const img     = a.images?.jpg?.small_image_url || a.images?.jpg?.image_url || '';
+                const safeTitle = (a.title||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+                const safeImg   = img.replace(/'/g,"\\'");
                 return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border-color);background:var(--bg-white);">
-                    <img src="${a.images?.jpg?.small_image_url||''}" style="width:30px;height:42px;border-radius:4px;object-fit:cover;flex-shrink:0;">
-                    <div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-dark);">${a.title}</div>
-                    <button onclick="window.addAnimeToList('${window._currentListId}',${a.mal_id},'${(a.title||'').replace(/'/g,"\\'")}','${a.images?.jpg?.small_image_url||''}')" ${already?'disabled':''} style="font-size:12px;padding:5px 12px;border-radius:6px;border:none;background:${already?'var(--bg-gray-darker)':'var(--accent-yellow)'};color:${already?'var(--text-muted)':'#111'};cursor:${already?'default':'pointer'};font-weight:700;flex-shrink:0;">${already?'Added':'+ Add'}</button>
+                    <img src="${img}" style="width:30px;height:42px;border-radius:4px;object-fit:cover;flex-shrink:0;" onerror="this.style.background='var(--bg-gray-darker)'">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-dark);">${a.title}</div>
+                        ${a.year ? `<div style="font-size:11px;color:var(--text-muted);">${a.type||''} · ${a.year}</div>` : ''}
+                    </div>
+                    <button onclick="window.addAnimeToList('${window._currentListId}',${a.mal_id},'${safeTitle}','${safeImg}')" ${already?'disabled':''} style="font-size:12px;padding:5px 12px;border-radius:6px;border:none;background:${already?'var(--bg-gray-darker)':'var(--accent-yellow)'};color:${already?'var(--text-muted)':'#111'};cursor:${already?'default':'pointer'};font-weight:700;flex-shrink:0;">${already?'Added':'+ Add'}</button>
                 </div>`;
             }).join('')}</div>`;
-        } catch(e) {}
-    }, 400);
+        } catch(e) {
+            results.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:8px 4px;">Search failed — try again in a moment.</div>`;
+        }
+    }, 450);
 };
 
 window.addAnimeToList = async function(listId, malId, title, image) {
