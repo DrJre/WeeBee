@@ -1944,7 +1944,7 @@
     <canvas id="bee-trail-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99999;display:none;"></canvas>
 
     <!-- CREATE LIST MODAL -->
-    <div id="create-list-modal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px;box-sizing:border-box;" onclick="if(event.target===this)window.closeCreateListModal()">
+    <div id="create-list-modal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.65);align-items:center;justify-content:center;padding:20px;box-sizing:border-box;" onclick="if(event.target===this)window.closeCreateListModal()">
         <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:460px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
                 <div style="font-size:17px;font-weight:800;color:var(--text-dark);">New List</div>
@@ -1957,7 +1957,7 @@
     </div>
 
     <!-- LIST VIEWER MODAL -->
-    <div id="list-viewer-modal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:16px;box-sizing:border-box;" onclick="if(event.target===this)window.closeListViewer()">
+    <div id="list-viewer-modal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.72);align-items:center;justify-content:center;padding:16px;box-sizing:border-box;" onclick="if(event.target===this)window.closeListViewer()">
         <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:620px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,0.5);overflow:hidden;">
             <div id="lv-header" style="padding:20px 20px 16px;border-bottom:1px solid var(--border-color);flex-shrink:0;"></div>
             <div id="lv-body" style="flex:1;overflow-y:auto;"></div>
@@ -1988,6 +1988,6 @@
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=211"></script>
+    <script type="module" src="app.js?v=212"></script>
 </body>
 </html>

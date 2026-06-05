@@ -5729,9 +5729,7 @@ window._renderListViewer = function() {
     const body = document.getElementById('lv-body');
     body.innerHTML = `
         ${isMember ? `<div style="padding:14px 20px;border-bottom:1px solid var(--border-color);">
-            <div style="display:flex;gap:8px;">
-                <input id="list-search-input" type="text" placeholder="Search anime to add to this list..." style="flex:1;padding:9px 14px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;" oninput="window.searchAnimeForList(this.value)">
-            </div>
+            <input id="list-search-input" type="text" placeholder="Search anime to add to this list..." style="width:100%;padding:9px 14px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;font-family:inherit;">
             <div id="list-search-results"></div>
         </div>` : ''}
         <div style="padding:16px 20px;" id="lv-entries">
@@ -5741,6 +5739,9 @@ window._renderListViewer = function() {
             </div>` : entries.map(e => window._renderListEntry(e, list, isMember)).join('')}
         </div>
     `;
+    // Attach search listener programmatically — oninput in innerHTML is unreliable
+    const searchEl = document.getElementById('list-search-input');
+    if (searchEl) searchEl.addEventListener('input', e => window.searchAnimeForList(e.target.value));
 };
 
 window._renderListEntry = function(entry, list, isMember) {
