@@ -451,6 +451,12 @@ window.scrollCarousel = function(containerId, direction) {
     }
 };
 
+// Attach list search listener once — stable because the input lives permanently in the modal HTML
+document.addEventListener('DOMContentLoaded', () => {
+    const inp = document.getElementById('list-search-input');
+    if (inp) inp.addEventListener('input', e => window.searchAnimeForList(e.target.value));
+});
+
 onAuthStateChanged(auth, (user) => {
     const authSection = document.getElementById('user-auth-section');
     if (user) {
@@ -5726,22 +5732,27 @@ window._renderListViewer = function() {
         </div>
     `;
 
-    const body = document.getElementById('lv-body');
-    body.innerHTML = `
-        ${isMember ? `<div style="padding:14px 20px;border-bottom:1px solid var(--border-color);">
-            <input id="list-search-input" type="text" placeholder="Search anime to add to this list..." style="width:100%;padding:9px 14px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;font-family:inherit;">
-            <div id="list-search-results"></div>
-        </div>` : ''}
-        <div style="padding:16px 20px;" id="lv-entries">
-            ${!entries.length ? `<div style="text-align:center;padding:48px 20px;color:var(--text-muted);">
+    // Show/hide the permanent search section
+    const searchSection = document.getElementById('lv-search-section');
+    if (searchSection) {
+        searchSection.style.display = isMember ? 'block' : 'none';
+        // Clear previous search state
+        const inp = document.getElementById('list-search-input');
+        if (inp) inp.value = '';
+        const res = document.getElementById('list-search-results');
+        if (res) res.innerHTML = '';
+    }
+
+    // Render entries into the permanent lv-entries div
+    const entriesEl = document.getElementById('lv-entries');
+    if (entriesEl) {
+        entriesEl.innerHTML = !entries.length
+            ? `<div style="text-align:center;padding:48px 20px;color:var(--text-muted);">
                 <span class="material-symbols-outlined" style="font-size:44px;display:block;margin-bottom:10px;opacity:.4;">playlist_add</span>
                 <div style="font-size:14px;">${isMember ? 'Search above to start building your list.' : 'This list is empty.'}</div>
-            </div>` : entries.map(e => window._renderListEntry(e, list, isMember)).join('')}
-        </div>
-    `;
-    // Attach search listener programmatically — oninput in innerHTML is unreliable
-    const searchEl = document.getElementById('list-search-input');
-    if (searchEl) searchEl.addEventListener('input', e => window.searchAnimeForList(e.target.value));
+               </div>`
+            : entries.map(e => window._renderListEntry(e, list, isMember)).join('');
+    }
 };
 
 window._renderListEntry = function(entry, list, isMember) {
