@@ -457,6 +457,9 @@
                         <button class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-tierlists')">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">leaderboard</span> Tier Lists
                         </button>
+                        <button class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-posts'); window.loadGeneralPosts();">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">edit_note</span> Posts
+                        </button>
                         <button class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-hottakes'); window.loadHotTakes();">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">local_fire_department</span> Hot Takes
                         </button>
@@ -621,6 +624,44 @@
                     </div>
 
                     </div><!-- /community-tab-tierlists -->
+
+                    <!-- POSTS TAB -->
+                    <div id="community-tab-posts" class="community-tab-content" style="display:none;">
+
+                        <!-- BANNER -->
+                        <div style="border-radius:20px; padding:36px 32px; margin-bottom:20px; text-align:center; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden; background:var(--bg-gray);">
+                            <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%, rgba(99,102,241,0.28) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(139,92,246,0.2) 0%, transparent 60%); pointer-events:none;"></div>
+                            <div style="position:relative; z-index:1;">
+                                <div style="font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:8px;">WeeBee</div>
+                                <div style="font-size:40px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">Community Posts</div>
+                                <div style="font-size:15px; color:rgba(255,255,255,0.55); margin-top:10px;">Share your anime thoughts, memes, moments, and more</div>
+                            </div>
+                        </div>
+
+                        <!-- POST FORM -->
+                        <div style="background:var(--bg-gray); border-radius:14px; padding:16px; margin-bottom:20px;">
+                            <textarea id="general-post-text" placeholder="What's on your mind? Anime thoughts, memes, moments..." maxlength="2000" rows="3" style="width:100%; background:var(--bg-white); border:1px solid var(--border-color); border-radius:8px; padding:12px; font-size:14px; color:var(--text-dark); resize:none; box-sizing:border-box; font-family:inherit;" oninput="document.getElementById('gp-char-count').innerText=this.value.length"></textarea>
+                            <div id="gp-image-preview" style="display:none; margin-top:10px; position:relative;">
+                                <img id="gp-preview-img" src="" style="max-width:100%; max-height:300px; border-radius:10px; object-fit:contain; display:block;">
+                                <button onclick="window.clearPostImage()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.6);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;color:white;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;">✕</button>
+                            </div>
+                            <input type="file" id="gp-image-input" accept="image/*" style="display:none;" onchange="window.previewPostImage(this)">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+                                <div style="display:flex; align-items:center; gap:12px;">
+                                    <button onclick="document.getElementById('gp-image-input').click()" class="action-btn" style="font-size:13px; padding:6px 14px; background:var(--bg-gray-darker); color:var(--text-dark); display:flex; align-items:center; gap:6px;"><span class="material-symbols-outlined" style="font-size:16px;">add_photo_alternate</span> Photo</button>
+                                    <span><span id="gp-char-count" style="font-size:12px; color:var(--text-muted);">0</span><span style="font-size:12px; color:var(--text-muted);">/2000</span></span>
+                                </div>
+                                <button id="gp-submit-btn" onclick="window.submitGeneralPost()" class="submit-btn" style="padding:8px 20px;">Post</button>
+                            </div>
+                        </div>
+
+                        <!-- FEED -->
+                        <div id="general-posts-feed"></div>
+                        <div id="general-posts-load-more" style="display:none; text-align:center; margin-top:16px;">
+                            <button onclick="window.loadMoreGeneralPosts()" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark);">Load More</button>
+                        </div>
+
+                    </div><!-- /community-tab-posts -->
 
                     <!-- HOT TAKES TAB -->
                     <div id="community-tab-hottakes" class="community-tab-content" style="display:none;">
@@ -1922,6 +1963,6 @@
     <canvas id="bee-trail-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99999;display:none;"></canvas>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=203"></script>
+    <script type="module" src="app.js?v=204"></script>
 </body>
 </html>

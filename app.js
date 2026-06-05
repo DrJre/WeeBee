@@ -3137,7 +3137,7 @@ window.loadProfileFeed = async function(uid) {
             ? query(collection(db, 'tier_lists'), where('uid', '==', uid), limit(30))
             : query(collection(db, 'tier_lists'), where('uid', '==', uid), where('public', '==', true), limit(30));
         const _empty = { forEach: () => {}, docs: [] };
-        const [revSnap, tlSnap, htSnap, pollSnap, bracketSnap, bwSnap, triviaSnap, mbSnap] = await Promise.all([
+        const [revSnap, tlSnap, htSnap, pollSnap, bracketSnap, bwSnap, triviaSnap, mbSnap, gpSnap] = await Promise.all([
             getDocs(query(collection(db, 'reviews'), where('uid', '==', uid), limit(60))).catch(() => _empty),
             getDocs(tlFilter).catch(() => _empty),
             getDocs(query(collection(db, 'hot_takes'), where('uid', '==', uid), limit(30))).catch(() => _empty),
@@ -3146,6 +3146,7 @@ window.loadProfileFeed = async function(uid) {
             getDocs(query(collection(db, 'bw_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
             getDocs(query(collection(db, 'trivia_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
             getDocs(query(collection(db, 'melobee_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
+            getDocs(query(collection(db, 'general_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
         ]);
         const items = [];
         revSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'review', _ts: d.data().timestamp?.toMillis?.() || 0 }));
@@ -3156,6 +3157,7 @@ window.loadProfileFeed = async function(uid) {
         bwSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'bw', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         triviaSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'trivia', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         mbSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'melobee', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+        gpSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'general_post', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         items.sort((a, b) => b._ts - a._ts);
         if (!items.length) {
             container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:32px;">No posts yet.</p>';
@@ -3175,6 +3177,7 @@ window.loadProfileFeed = async function(uid) {
                 else if (item._type === 'bracket') html = window._renderBracketFeedCard(item);
                 else if (item._type === 'trivia') html = window.generateTriviaPostCardHTML(item);
                 else if (item._type === 'melobee') html = window.generateMeloBeePostCardHTML(item);
+                else if (item._type === 'general_post') html = window._renderGeneralPostCard(item, curUid);
             } catch(e) { console.error('Profile feed render error:', item._type, e); }
             if (html) container.innerHTML += `<div>${html}</div>`;
         });
@@ -3810,6 +3813,7 @@ function renderActivityBatch() {
             else if (item._type === 'poll') html = window._renderPollCard(item, uid);
             else if (item._type === 'bracket') html = window._renderBracketFeedCard(item);
             else if (item._type === 'trivia') html = window.generateTriviaPostCardHTML(item);
+            else if (item._type === 'general_post') html = window._renderGeneralPostCard(item, uid);
             if (html) feed.innerHTML += `<div data-fid="${item.id}">${html}</div>`;
         } catch(e) { console.error('Feed render error:', item._type, e); }
     });
@@ -3842,7 +3846,7 @@ window.fetchHomeActivityFeed = async function() {
     try {
         const today = bwGetDate();
         const _empty = { forEach: () => {}, docs: [] };
-        const [reviewSnap, tlSnap, bwSnap, htSnap, pollSnap, bracketSnap, triviaSnap] = await Promise.all([
+        const [reviewSnap, tlSnap, bwSnap, htSnap, pollSnap, bracketSnap, triviaSnap, gpSnap] = await Promise.all([
             getDocs(query(collection(db, 'reviews'), orderBy('timestamp', 'desc'), limit(60))).catch(() => _empty),
             getDocs(query(collection(db, 'tier_lists'), where('public', '==', true))).catch(() => _empty),
             getDocs(query(collection(db, 'bw_posts'), orderBy('timestamp', 'desc'), limit(50))).catch(() => _empty),
@@ -3850,7 +3854,7 @@ window.fetchHomeActivityFeed = async function() {
             getDocs(query(collection(db, 'polls'), orderBy('timestamp', 'desc'), limit(20))).catch(() => _empty),
             getDocs(query(collection(db, 'brackets'), orderBy('timestamp', 'desc'), limit(20))).catch(() => _empty),
             getDocs(query(collection(db, 'trivia_posts'), orderBy('timestamp', 'desc'), limit(30))).catch(() => _empty),
-            getDocs(query(collection(db, 'melobee_posts'), orderBy('timestamp', 'desc'), limit(30))).catch(() => _empty)
+            getDocs(query(collection(db, 'general_posts'), orderBy('timestamp', 'desc'), limit(30))).catch(() => _empty)
         ]);
 
         // Build set of social UIDs (follows + friends)
@@ -3900,6 +3904,10 @@ window.fetchHomeActivityFeed = async function() {
         triviaSnap.forEach(d => {
             const data = d.data();
             items.push({ ...data, id: d.id, _type: 'trivia', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) });
+        });
+        gpSnap.forEach(d => {
+            const data = d.data();
+            items.push({ ...data, id: d.id, _type: 'general_post', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) });
         });
         const mbHomSnap = await getDocs(query(collection(db,'melobee_posts'), orderBy('timestamp','desc'), limit(30))).catch(()=>({forEach:()=>{}}));
         mbHomSnap.forEach(d => {
@@ -5297,6 +5305,181 @@ window.deleteHotTake = async function(id) {
         await deleteDoc(doc(db, 'hot_takes', id));
         window._hotTakesList = window._hotTakesList.filter(x => x.id !== id);
         window._renderHotTakesFeed();
+    } catch(e) { alert('Failed to delete.'); }
+};
+
+// --- GENERAL POSTS ---
+window._generalPostsList = [];
+window._generalPostsLastDoc = null;
+
+window.previewPostImage = function(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        document.getElementById('gp-preview-img').src = e.target.result;
+        document.getElementById('gp-image-preview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+};
+
+window.clearPostImage = function() {
+    const inp = document.getElementById('gp-image-input');
+    if (inp) inp.value = '';
+    const img = document.getElementById('gp-preview-img');
+    if (img) img.src = '';
+    const prev = document.getElementById('gp-image-preview');
+    if (prev) prev.style.display = 'none';
+};
+
+window.submitGeneralPost = async function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    const textEl = document.getElementById('general-post-text');
+    const text = textEl.value.trim();
+    if (!text) return;
+    if (window.checkTextContent(text)) return alert('Your post contains language that isn\'t allowed on WeeBee.');
+    const submitBtn = document.getElementById('gp-submit-btn');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Posting...'; }
+    try {
+        const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid)).catch(() => null);
+        const displayName = pd?.data()?.displayName || auth.currentUser.displayName || 'Anonymous';
+        const avatar = pd?.data()?.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        let imageUrl = null;
+        const fileInput = document.getElementById('gp-image-input');
+        if (fileInput?.files[0]) {
+            if (submitBtn) submitBtn.textContent = 'Uploading...';
+            const compressed = await compressBanner(fileInput.files[0], 1200, 0.88);
+            const sRef = storageRef(storage, `post_images/${auth.currentUser.uid}/${Date.now()}.jpg`);
+            await uploadBytes(sRef, compressed);
+            imageUrl = await getDownloadURL(sRef);
+        }
+        await addDoc(collection(db, 'general_posts'), {
+            uid: auth.currentUser.uid,
+            authorName: displayName,
+            authorAvatar: avatar,
+            text,
+            imageUrl,
+            likes: [],
+            dislikes: [],
+            commentCount: 0,
+            timestamp: new Date()
+        });
+        textEl.value = '';
+        document.getElementById('gp-char-count').innerText = '0';
+        window.clearPostImage();
+        window.loadGeneralPosts();
+    } catch(e) {
+        console.error('submitGeneralPost:', e);
+        alert('Failed to post: ' + e.message);
+    } finally {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Post'; }
+    }
+};
+
+window.loadGeneralPosts = async function() {
+    const feed = document.getElementById('general-posts-feed');
+    if (!feed) return;
+    feed.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:32px;">Loading...</div>';
+    window._generalPostsList = [];
+    window._generalPostsLastDoc = null;
+    try {
+        const snap = await getDocs(query(collection(db, 'general_posts'), orderBy('timestamp', 'desc'), limit(20)));
+        window._generalPostsLastDoc = snap.docs[snap.docs.length - 1] || null;
+        snap.docs.forEach(d => window._generalPostsList.push({ ...d.data(), id: d.id }));
+        window._renderGeneralPostFeed();
+        document.getElementById('general-posts-load-more').style.display = snap.docs.length === 20 ? 'block' : 'none';
+    } catch(e) {
+        feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">Could not load posts.</div>';
+    }
+};
+
+window.loadMoreGeneralPosts = async function() {
+    if (!window._generalPostsLastDoc) return;
+    try {
+        const snap = await getDocs(query(collection(db, 'general_posts'), orderBy('timestamp', 'desc'), startAfter(window._generalPostsLastDoc), limit(20)));
+        window._generalPostsLastDoc = snap.docs[snap.docs.length - 1] || null;
+        snap.docs.forEach(d => window._generalPostsList.push({ ...d.data(), id: d.id }));
+        window._renderGeneralPostFeed();
+        document.getElementById('general-posts-load-more').style.display = snap.docs.length === 20 ? 'block' : 'none';
+    } catch(e) { console.error('loadMoreGeneralPosts:', e); }
+};
+
+window._renderGeneralPostFeed = function() {
+    const feed = document.getElementById('general-posts-feed');
+    if (!feed) return;
+    const uid = auth.currentUser?.uid;
+    if (!window._generalPostsList.length) {
+        feed.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">No posts yet — be the first!</div>';
+        return;
+    }
+    feed.innerHTML = window._generalPostsList.map(p => window._renderGeneralPostCard(p, uid)).join('');
+};
+
+window._renderGeneralPostCard = function(post, uid) {
+    const isOwner = uid && post.uid === uid;
+    const ago = formatTimeAgo(post.timestamp);
+    const likes = post.likes || [];
+    const dislikes = post.dislikes || [];
+    const isLiked = uid && likes.includes(uid);
+    const isDisliked = uid && dislikes.includes(uid);
+    return `<div class="feed-post-card" style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.22);border-radius:14px;padding:16px;margin-bottom:12px;position:relative;">
+        ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
+            <div style="position:relative;">
+                <button onclick="window.togglePostMenu('${post.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined" style="font-size:20px;">more_vert</span></button>
+                <div id="post-menu-${post.id}" style="display:none;position:absolute;top:100%;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:140px;overflow:hidden;z-index:20;">
+                    <button onclick="event.stopPropagation();window.deleteGeneralPost('${post.id}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
+                </div>
+            </div>
+        </div>` : ''}
+        <div class="review-header" style="margin-bottom:12px;">
+            <img src="${post.authorAvatar||''}" class="avatar" onclick="event.stopPropagation();viewUserProfile('${post.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.authorName||'U')}&backgroundColor=ffc107&fontColor=333333'" style="cursor:pointer;">
+            <div style="min-width:0;">
+                <strong style="color:var(--text-dark);">${post.authorName||'Anonymous'}</strong>
+                ${window.getRankBadgeHTML ? window.getRankBadgeHTML(window.userRankCache[post.uid]||0,14) : ''}
+                ${window.getPinnedBadgesHTML ? window.getPinnedBadgesHTML(post.uid) : ''}
+                <span style="display:inline-block;background:rgba(99,102,241,0.85);color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">Post</span><br>
+                <span style="font-size:12px;color:var(--text-muted);">${ago}</span>
+            </div>
+        </div>
+        <p style="font-size:15px;line-height:1.55;margin:0 0 12px;color:var(--text-dark);white-space:pre-wrap;">${post.text}</p>
+        ${post.imageUrl ? `<img src="${post.imageUrl}" style="width:100%;max-height:400px;object-fit:contain;border-radius:10px;margin-bottom:12px;background:rgba(0,0,0,0.04);" loading="lazy">` : ''}
+        <div class="review-actions">
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostComments(event,this,'${post.id}')">
+                    <span class="material-symbols-outlined">chat_bubble</span>
+                </button>
+                <span class="action-label bw-comment-count">${post.commentCount || 0} Comments</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${post.id}','general_posts','like',this)" style="${isLiked?'color:var(--accent-yellow);':''}">
+                    <span class="material-symbols-outlined">thumb_up</span>
+                </button>
+                <span class="action-label" id="bw-likes-${post.id}">${likes.length} Likes</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${post.id}','general_posts','dislike',this)" style="${isDisliked?'color:red;':''}">
+                    <span class="material-symbols-outlined">thumb_down</span>
+                </button>
+                <span class="action-label" id="bw-dislikes-${post.id}">${dislikes.length} Dislikes</span>
+            </div>
+        </div>
+        <div class="bw-post-comments" data-post-collection="general_posts" style="display:none;margin-top:15px;padding-top:15px;border-top:1px solid var(--border-color);" onclick="event.stopPropagation();">
+            <div class="bw-comments-list"></div>
+            <div style="display:flex;gap:10px;margin-top:10px;">
+                <input type="text" class="bw-comment-input" placeholder="Add a comment..." style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
+                <button class="action-btn" onclick="window.submitBwPostComment(event,this,'${post.id}','general_posts')">Send</button>
+            </div>
+        </div>
+    </div>`;
+};
+
+window.deleteGeneralPost = async function(id) {
+    if (!auth.currentUser) return;
+    if (!confirm('Delete this post?')) return;
+    try {
+        await deleteDoc(doc(db, 'general_posts', id));
+        window._generalPostsList = window._generalPostsList.filter(p => p.id !== id);
+        window._renderGeneralPostFeed();
     } catch(e) { alert('Failed to delete.'); }
 };
 
