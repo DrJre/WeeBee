@@ -2977,12 +2977,10 @@ window.loadProfileStats = async function(uid) {
     container.dataset.loaded = uid;
     const isMe = uid === auth.currentUser?.uid;
 
-    // Privacy check
     if (!isMe) {
         const profileDoc = await getDoc(doc(db, 'profiles', uid));
         if (profileDoc.exists() && profileDoc.data().statsPrivate === true) {
-            const isFriend = window.myFriendIds?.has(uid);
-            if (!isFriend) {
+            if (!window.myFriendIds?.has(uid)) {
                 container.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--text-muted);">
                     <span class="material-symbols-outlined" style="font-size:48px;margin-bottom:12px;display:block;">lock</span>
                     <div style="font-size:14px;font-weight:600;">This user's stats are private.</div>
@@ -2995,125 +2993,245 @@ window.loadProfileStats = async function(uid) {
     container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading stats...</div>';
 
     try {
-        const [revSnap, listSnap, bwSnap, bracketSnap, tlSnap, htSnap, pollSnap] = await Promise.all([
+        const _empty = { size: 0, docs: [] };
+        const [revSnap, listSnap, bwSnap, bracketSnap, tlSnap, htSnap, pollSnap, gpSnap, triviaPostSnap] = await Promise.all([
             getDocs(query(collection(db, 'reviews'), where('uid', '==', uid))),
             getDocs(query(collection(db, 'anime_lists'), where('uid', '==', uid))),
             getDocs(query(collection(db, 'bw_posts'), where('uid', '==', uid))),
             getDocs(query(collection(db, 'brackets'), where('uid', '==', uid))),
             getDocs(query(collection(db, 'tier_lists'), where('uid', '==', uid))),
             getDocs(query(collection(db, 'hot_takes'), where('uid', '==', uid))),
-            getDocs(query(collection(db, 'polls'), where('uid', '==', uid)))
+            getDocs(query(collection(db, 'polls'), where('uid', '==', uid))),
+            getDocs(query(collection(db, 'general_posts'), where('uid', '==', uid))).catch(() => _empty),
+            getDocs(query(collection(db, 'trivia_posts'), where('uid', '==', uid))).catch(() => _empty),
         ]);
 
         const reviews = revSnap.docs.map(d => d.data()).filter(r => r.type !== 'suggestion' && r.type !== 'series');
         const listEntries = listSnap.docs.map(d => d.data());
-
         const scoredReviews = reviews.filter(r => parseFloat(r.score) > 0);
-        const avgScore = scoredReviews.length > 0
+
+        const avgScore = scoredReviews.length
             ? (scoredReviews.reduce((s, r) => s + parseFloat(r.score), 0) / scoredReviews.length).toFixed(1)
             : null;
 
-        // Score distribution 1–10
         const dist = {};
         for (let i = 1; i <= 10; i++) dist[i] = 0;
-        scoredReviews.forEach(r => {
-            const v = Math.round(parseFloat(r.score));
-            if (v >= 1 && v <= 10) dist[v]++;
-        });
+        scoredReviews.forEach(r => { const v = Math.round(parseFloat(r.score)); if (v >= 1 && v <= 10) dist[v]++; });
         const maxDist = Math.max(...Object.values(dist), 1);
+        const mostCommonScore = Object.entries(dist).sort((a,b) => b[1]-a[1])[0];
 
-        const completed = listEntries.filter(e => e.status === 'completed').length;
-        const watching  = listEntries.filter(e => e.status === 'watching').length;
+        const completed  = listEntries.filter(e => e.status === 'completed').length;
+        const watching   = listEntries.filter(e => e.status === 'watching').length;
         const planToWatch = listEntries.filter(e => e.status === 'plan-to-watch').length;
 
-        const now = new Date();
-        const thisMonth = reviews.filter(r => {
-            const ts = r.timestamp?.toDate ? r.timestamp.toDate() : null;
-            return ts && ts.getMonth() === now.getMonth() && ts.getFullYear() === now.getFullYear();
-        }).length;
+        // First review / member duration
+        const sortedByTime = [...reviews].sort((a,b) => (a.timestamp?.toMillis?.() || 0) - (b.timestamp?.toMillis?.() || 0));
+        const firstReview = sortedByTime[0]?.timestamp?.toDate?.();
+        const memberDays = firstReview ? Math.floor((Date.now() - firstReview.getTime()) / 86400000) : null;
+        const memberLabel = memberDays === null ? null
+            : memberDays >= 365 ? `${Math.floor(memberDays/365)} year${Math.floor(memberDays/365) > 1 ? 's' : ''}`
+            : memberDays >= 30  ? `${Math.floor(memberDays/30)} month${Math.floor(memberDays/30) > 1 ? 's' : ''}`
+            : `${memberDays} days`;
 
-        // Rank progress
-        const rankInfo = window.getRankInfo(reviews.length);
-        const rankProgressHTML = rankInfo.next
-            ? `<div style="background:var(--bg-gray);border-radius:12px;padding:16px;margin-bottom:16px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <span style="font-weight:700;font-size:14px;">Rank Progress</span>
-                    <span style="font-size:12px;color:var(--text-muted);">${rankInfo.name} → next rank</span>
-                </div>
-                <div style="height:8px;border-radius:4px;background:var(--bg-gray-darker);overflow:hidden;">
-                    <div style="height:100%;background:var(--accent-yellow);border-radius:4px;width:${Math.min(100, Math.round(((reviews.length - rankInfo.min) / (rankInfo.next - rankInfo.min)) * 100))}%;"></div>
-                </div>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">${rankInfo.next - reviews.length} more review${rankInfo.next - reviews.length !== 1 ? 's' : ''} to next rank</div>
-            </div>`
-            : `<div style="background:var(--bg-gray);border-radius:12px;padding:16px;margin-bottom:16px;text-align:center;">
-                <div style="font-size:16px;font-weight:800;color:var(--accent-yellow);">💎 Diamond Rank — Max Level</div>
-            </div>`;
+        // Most active month
+        const monthCounts = {};
+        reviews.forEach(r => {
+            const ts = r.timestamp?.toDate?.();
+            if (!ts) return;
+            const key = `${ts.getFullYear()}-${String(ts.getMonth()).padStart(2,'0')}`;
+            monthCounts[key] = (monthCounts[key] || 0) + 1;
+        });
+        const topMonthEntry = Object.entries(monthCounts).sort((a,b) => b[1]-a[1])[0];
+        let topMonthLabel = null;
+        if (topMonthEntry) {
+            const [y, m] = topMonthEntry[0].split('-');
+            topMonthLabel = new Date(parseInt(y), parseInt(m)).toLocaleString('default', { month: 'long', year: 'numeric' });
+        }
 
-        // Genre + studio from anime_cache
-        const malIds = [...new Set(scoredReviews.map(r => r.mal_id).filter(Boolean))].slice(0, 20);
+        // Genre + studio + episodes from anime_cache
+        const reviewMalIds = [...new Set(scoredReviews.map(r => r.mal_id).filter(Boolean))].slice(0, 30);
+        const completedMalIds = listEntries.filter(e => e.status === 'completed' && e.mal_id).map(e => e.mal_id).slice(0, 60);
+        const allFetchIds = [...new Set([...reviewMalIds, ...completedMalIds])];
         const genreCounts = {}, studioCounts = {};
-        await Promise.allSettled(malIds.map(async malId => {
+        let totalEpisodes = 0;
+        await Promise.allSettled(allFetchIds.map(async malId => {
             try {
                 const snap = await getDoc(doc(db, 'anime_cache', `full_${malId}`));
                 if (!snap.exists()) return;
                 const anime = snap.data().payload?.data;
                 if (!anime) return;
-                (anime.genres || []).forEach(g => { genreCounts[g.name] = (genreCounts[g.name] || 0) + 1; });
-                (anime.studios || []).forEach(s => { studioCounts[s.name] = (studioCounts[s.name] || 0) + 1; });
+                if (reviewMalIds.includes(malId)) {
+                    (anime.genres || []).forEach(g => { genreCounts[g.name] = (genreCounts[g.name] || 0) + 1; });
+                    (anime.studios || []).forEach(s => { studioCounts[s.name] = (studioCounts[s.name] || 0) + 1; });
+                }
+                if (completedMalIds.includes(malId) && anime.episodes) totalEpisodes += anime.episodes;
             } catch(_) {}
         }));
         const topGenres  = Object.entries(genreCounts).sort((a,b) => b[1]-a[1]).slice(0, 6);
         const topStudios = Object.entries(studioCounts).sort((a,b) => b[1]-a[1]).slice(0, 5);
+        const hoursWatched = Math.round(totalEpisodes * 24 / 60);
+        const daysWatched  = (hoursWatched / 24).toFixed(1);
+
+        // Rank
+        const rankInfo = window.getRankInfo(reviews.length);
+        const rankPct = rankInfo.next ? Math.min(100, Math.round(((reviews.length - rankInfo.min) / (rankInfo.next - rankInfo.min)) * 100)) : 100;
+
+        // Likes received
+        let likesReceived = 0;
+        htSnap.docs.forEach(d => { likesReceived += (d.data().likes || []).length; });
+        gpSnap.docs.forEach(d => { likesReceived += (d.data().likes || []).length; });
+        tlSnap.docs.forEach(d => { likesReceived += (d.data().likes || []).length; });
+
+        // Community counts
+        const postsCount = (htSnap.size || 0) + (gpSnap.size || 0);
+        const triviaPlayed = isMe
+            ? (() => { let c=0; for(let i=0;i<localStorage.length;i++){if(localStorage.key(i)?.startsWith('weebee_trivia_'))c++;} return c; })()
+            : triviaPostSnap.size;
+
+        // Highest / lowest reviewed
+        const highReview = scoredReviews.reduce((b,r) => (!b||parseFloat(r.score)>parseFloat(b.score))?r:b, null);
+        const lowReview  = scoredReviews.reduce((b,r) => (!b||parseFloat(r.score)<parseFloat(b.score))?r:b, null);
+
+        // Privacy toggle
+        const myProfileData = isMe ? (await getDoc(doc(db,'profiles',uid)).catch(()=>null))?.data() : null;
+        const privacyHTML = isMe ? `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--bg-gray);border-radius:12px;margin-top:12px;">
+                <div>
+                    <div style="font-size:13px;font-weight:700;">Private Stats</div>
+                    <div style="font-size:12px;color:var(--text-muted);">Only you and friends can see your stats</div>
+                </div>
+                <label class="toggle-switch"><input type="checkbox" id="stats-private-toggle" onchange="window.toggleStatsPrivacy()" ${myProfileData?.statsPrivate ? 'checked' : ''}><span class="toggle-slider"></span></label>
+            </div>` : '';
+
+        // Wrapped section helper
+        const wSection = (glow, content) =>
+            `<div style="border-radius:20px;padding:28px 22px;margin-bottom:14px;position:relative;overflow:hidden;background:var(--bg-gray);">
+                <div style="position:absolute;inset:0;${glow};pointer-events:none;"></div>
+                <div style="position:relative;z-index:1;">${content}</div>
+            </div>`;
+
+        const bigStat = (value, label, sub='') =>
+            `<div style="text-align:center;">
+                <div style="font-size:56px;font-weight:900;color:white;letter-spacing:-2px;line-height:1;">${value}</div>
+                <div style="font-size:15px;font-weight:700;color:rgba(255,255,255,0.65);margin-top:4px;">${label}</div>
+                ${sub ? `<div style="font-size:12px;color:rgba(255,255,255,0.38);margin-top:4px;">${sub}</div>` : ''}
+            </div>`;
+
+        const pill = (text, accent='var(--bg-gray-darker)') =>
+            `<span style="background:${accent};border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;color:white;">${text}</span>`;
 
         container.innerHTML = `
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:20px;">
-                ${_statCard('Reviews', reviews.length, 'rate_review')}
-                ${_statCard('Avg Score', avgScore ?? '—', 'star')}
-                ${_statCard('Completed', completed, 'check_circle')}
-                ${_statCard('Watching', watching, 'play_circle')}
-                ${_statCard('Plan to Watch', planToWatch, 'bookmark')}
-                ${_statCard('This Month', thisMonth, 'calendar_month')}
-            </div>
+            <!-- ── HERO ── -->
+            ${wSection('background:radial-gradient(ellipse at 25% 50%,rgba(99,102,241,0.4) 0%,transparent 55%),radial-gradient(ellipse at 75% 50%,rgba(139,92,246,0.3) 0%,transparent 55%)', `
+                <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.35);margin-bottom:14px;text-align:center;">Your WeeBee Stats</div>
+                <div style="display:flex;justify-content:center;gap:32px;flex-wrap:wrap;">
+                    ${bigStat(reviews.length, 'reviews written', memberLabel ? `member for ${memberLabel}` : '')}
+                    ${avgScore ? bigStat(avgScore, 'average score', 'out of 10') : ''}
+                </div>
+                ${topMonthLabel ? `<div style="text-align:center;margin-top:18px;font-size:13px;color:rgba(255,255,255,0.4);">Most active month: <strong style="color:rgba(255,255,255,0.75);">${topMonthLabel}</strong></div>` : ''}
+            `)}
 
-            ${rankProgressHTML}
+            <!-- ── WATCH TIME ── -->
+            ${wSection('background:radial-gradient(ellipse at 30% 50%,rgba(6,182,212,0.3) 0%,transparent 55%),radial-gradient(ellipse at 70% 50%,rgba(14,165,233,0.2) 0%,transparent 55%)', `
+                <div style="font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(6,182,212,0.7);margin-bottom:16px;">Watch Time</div>
+                <div style="display:flex;justify-content:center;gap:24px;flex-wrap:wrap;margin-bottom:20px;">
+                    ${totalEpisodes > 0 ? bigStat(totalEpisodes.toLocaleString(), 'episodes watched', `${hoursWatched.toLocaleString()} hours · ${daysWatched} days`) : ''}
+                    ${bigStat(completed, 'completed', 'anime finished')}
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:14px;text-align:center;">
+                        <div style="font-size:24px;font-weight:900;color:white;">${watching}</div>
+                        <div style="font-size:11px;color:rgba(255,255,255,0.45);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;">Watching</div>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:14px;text-align:center;">
+                        <div style="font-size:24px;font-weight:900;color:white;">${planToWatch}</div>
+                        <div style="font-size:11px;color:rgba(255,255,255,0.45);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;">Plan to Watch</div>
+                    </div>
+                </div>
+            `)}
 
-            <div style="background:var(--bg-gray);border-radius:12px;padding:16px;margin-bottom:16px;">
-                <div style="font-weight:700;font-size:14px;margin-bottom:14px;">Score Distribution</div>
-                <div style="display:flex;align-items:flex-end;gap:4px;height:90px;">
+            <!-- ── TASTE ── -->
+            ${topGenres.length ? wSection('background:radial-gradient(ellipse at 20% 50%,rgba(236,72,153,0.28) 0%,transparent 55%),radial-gradient(ellipse at 80% 50%,rgba(249,115,22,0.2) 0%,transparent 55%)', `
+                <div style="font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(249,115,22,0.75);margin-bottom:10px;">Your Taste</div>
+                <div style="font-size:28px;font-weight:900;color:white;margin-bottom:16px;">Your #1 genre is <span style="color:#f97316;">${topGenres[0][0]}</span></div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:${topStudios.length ? '18px' : '0'};">
+                    ${topGenres.map(([g,c], i) => `<span style="background:${i===0?'rgba(249,115,22,0.35)':'rgba(255,255,255,0.08)'};border:1px solid ${i===0?'rgba(249,115,22,0.5)':'rgba(255,255,255,0.1)'};border-radius:20px;padding:6px 14px;font-size:13px;font-weight:700;color:white;">${g} <span style="opacity:0.5;font-weight:400;">${c}</span></span>`).join('')}
+                </div>
+                ${topStudios.length ? `<div style="font-size:12px;color:rgba(255,255,255,0.35);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Favourite Studios</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    ${topStudios.map(([s,c], i) => `<span style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;color:white;">${s}</span>`).join('')}
+                </div>` : ''}
+            `) : ''}
+
+            <!-- ── SCORE STORY ── -->
+            ${scoredReviews.length ? wSection('background:radial-gradient(ellipse at 50% 80%,rgba(234,179,8,0.2) 0%,transparent 60%)', `
+                <div style="font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(234,179,8,0.7);margin-bottom:10px;">Score Story</div>
+                ${mostCommonScore && mostCommonScore[1] > 0 ? `<div style="font-size:20px;font-weight:800;color:white;margin-bottom:18px;">You most often give a <span style="color:#FFC107;">${mostCommonScore[0]}/10</span></div>` : ''}
+                <div style="display:flex;align-items:flex-end;gap:4px;height:80px;margin-bottom:6px;">
                     ${Object.entries(dist).map(([score, count]) => `
-                        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;">
-                            <div style="font-size:9px;color:var(--text-muted);font-weight:700;">${count || ''}</div>
-                            <div style="width:100%;background:var(--accent-yellow);border-radius:3px 3px 0 0;height:${Math.round((count/maxDist)*64)}px;min-height:${count>0?3:0}px;opacity:${count>0?1:0.15};transition:height .3s;"></div>
-                            <div style="font-size:10px;font-weight:700;color:var(--text-muted);">${score}</div>
+                        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+                            <div style="font-size:8px;color:rgba(255,255,255,0.4);font-weight:700;">${count||''}</div>
+                            <div style="width:100%;background:#FFC107;border-radius:3px 3px 0 0;height:${Math.round((count/maxDist)*58)}px;min-height:${count>0?3:0}px;opacity:${count>0?1:0.15};"></div>
                         </div>`).join('')}
                 </div>
-            </div>
-
-            ${topGenres.length ? `<div style="background:var(--bg-gray);border-radius:12px;padding:16px;margin-bottom:16px;">
-                <div style="font-weight:700;font-size:14px;margin-bottom:12px;">Top Genres</div>
-                <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                    ${topGenres.map(([g,c]) => `<span style="background:var(--bg-gray-darker);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;">${g} <span style="color:var(--text-muted);font-weight:400;">${c}</span></span>`).join('')}
+                <div style="display:flex;gap:4px;">
+                    ${Object.keys(dist).map(s => `<div style="flex:1;text-align:center;font-size:10px;font-weight:700;color:rgba(255,255,255,0.35);">${s}</div>`).join('')}
                 </div>
-            </div>` : ''}
+                ${(highReview || lowReview) ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">
+                    ${highReview ? `<div style="background:rgba(255,255,255,0.06);border-radius:10px;padding:12px;">
+                        <div style="font-size:10px;color:rgba(255,255,255,0.35);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Highest Rated</div>
+                        <div style="font-size:13px;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${highReview.animeTitle||'—'}</div>
+                        <div style="font-size:18px;font-weight:900;color:#FFC107;">${highReview.score}</div>
+                    </div>` : ''}
+                    ${lowReview && lowReview.mal_id !== highReview?.mal_id ? `<div style="background:rgba(255,255,255,0.06);border-radius:10px;padding:12px;">
+                        <div style="font-size:10px;color:rgba(255,255,255,0.35);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Lowest Rated</div>
+                        <div style="font-size:13px;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${lowReview.animeTitle||'—'}</div>
+                        <div style="font-size:18px;font-weight:900;color:rgba(255,100,100,0.9);">${lowReview.score}</div>
+                    </div>` : ''}
+                </div>` : ''}
+            `) : ''}
 
-            ${topStudios.length ? `<div style="background:var(--bg-gray);border-radius:12px;padding:16px;margin-bottom:16px;">
-                <div style="font-weight:700;font-size:14px;margin-bottom:12px;">Top Studios</div>
-                <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                    ${topStudios.map(([s,c]) => `<span style="background:var(--bg-gray-darker);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;">${s} <span style="color:var(--text-muted);font-weight:400;">${c}</span></span>`).join('')}
+            <!-- ── RANK ── -->
+            ${wSection('background:radial-gradient(ellipse at 40% 50%,rgba(234,179,8,0.25) 0%,transparent 60%),radial-gradient(ellipse at 75% 30%,rgba(251,146,60,0.15) 0%,transparent 50%)', `
+                <div style="font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(234,179,8,0.7);margin-bottom:10px;">Rank</div>
+                <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+                    <span class="material-symbols-outlined" style="font-size:40px;color:${rankInfo.color};">${rankInfo.icon}</span>
+                    <div>
+                        <div style="font-size:26px;font-weight:900;color:white;">${rankInfo.name}</div>
+                        <div style="font-size:13px;color:rgba(255,255,255,0.45);">${reviews.length} review${reviews.length !== 1 ? 's' : ''} written</div>
+                    </div>
                 </div>
-            </div>` : ''}
+                ${rankInfo.next ? `<div style="background:rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;height:10px;margin-bottom:8px;">
+                    <div style="height:100%;background:linear-gradient(90deg,#FFC107,#f97316);border-radius:8px;width:${rankPct}%;transition:width .5s;"></div>
+                </div>
+                <div style="font-size:12px;color:rgba(255,255,255,0.4);">${rankInfo.next - reviews.length} more review${rankInfo.next - reviews.length !== 1 ? 's' : ''} to next rank</div>`
+                : `<div style="font-size:14px;color:#FFC107;font-weight:700;">💎 Max Rank Achieved</div>`}
+            `)}
 
-            <div style="background:var(--bg-gray);border-radius:12px;padding:16px;">
-                <div style="font-weight:700;font-size:14px;margin-bottom:12px;">Community Activity</div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;">
-                    ${_statCard('BuzzWord Games', bwSnap.size, 'grid_view')}
-                    ${_statCard('Brackets', bracketSnap.size, 'emoji_events')}
-                    ${_statCard('Tier Lists', tlSnap.size, 'leaderboard')}
-                    ${_statCard('Hot Takes', htSnap.size, 'local_fire_department')}
-                    ${_statCard('Polls', pollSnap.size, 'bar_chart')}
-                    ${isMe ? _statCard('Trivia Played', (() => { let c=0; for(let i=0;i<localStorage.length;i++){if(localStorage.key(i)?.startsWith('weebee_trivia_'))c++;} return c; })(), 'quiz') : ''}
+            <!-- ── COMMUNITY ── -->
+            ${wSection('background:radial-gradient(ellipse at 25% 50%,rgba(16,185,129,0.25) 0%,transparent 55%),radial-gradient(ellipse at 75% 50%,rgba(6,182,212,0.15) 0%,transparent 55%)', `
+                <div style="font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(16,185,129,0.75);margin-bottom:16px;">Community</div>
+                <div style="display:flex;justify-content:center;gap:24px;flex-wrap:wrap;margin-bottom:20px;">
+                    ${likesReceived > 0 ? bigStat(likesReceived, 'likes received', 'across all posts') : ''}
+                    ${postsCount > 0 ? bigStat(postsCount, 'posts made', 'hot takes + posts') : ''}
                 </div>
-            </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;">
+                    ${[
+                        ['BuzzWord', bwSnap.size, 'grid_view'],
+                        ['Brackets', bracketSnap.size, 'emoji_events'],
+                        ['Tier Lists', tlSnap.size, 'leaderboard'],
+                        ['Hot Takes', htSnap.size, 'local_fire_department'],
+                        ['Polls', pollSnap.size, 'bar_chart'],
+                        ['Posts', gpSnap.size, 'edit_note'],
+                        ['Trivia', triviaPlayed, 'quiz'],
+                    ].map(([label, val]) => `<div style="background:rgba(255,255,255,0.06);border-radius:10px;padding:12px;text-align:center;">
+                        <div style="font-size:22px;font-weight:900;color:white;">${val}</div>
+                        <div style="font-size:10px;color:rgba(255,255,255,0.4);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;">${label}</div>
+                    </div>`).join('')}
+                </div>
+            `)}
+
+            ${privacyHTML}
         `;
     } catch(e) {
         console.error(e);
@@ -4829,14 +4947,15 @@ window.switchCommunityTab = function(event, tabId) {
 };
 
 window.openCreatePost = function() {
-    window.switchView('community-view');
-    document.querySelectorAll('#community-view .community-tab-content').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('#community-view .community-tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById('community-tab-posts').style.display = 'block';
-    const btn = document.querySelector('[onclick*="community-tab-posts"]');
-    if (btn) btn.classList.add('active');
-    window.loadGeneralPosts();
-    setTimeout(() => document.getElementById('general-post-text')?.focus(), 150);
+    const modal = document.getElementById('create-post-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    setTimeout(() => document.getElementById('general-post-text')?.focus(), 100);
+};
+
+window.closeCreatePostModal = function() {
+    const modal = document.getElementById('create-post-modal');
+    if (modal) modal.style.display = 'none';
 };
 
 window.goToTriviaTab = function() {
@@ -5378,7 +5497,8 @@ window.submitGeneralPost = async function() {
         textEl.value = '';
         document.getElementById('gp-char-count').innerText = '0';
         window.clearPostImage();
-        window.loadGeneralPosts();
+        window.closeCreatePostModal();
+        window.fetchHomeActivityFeed?.();
     } catch(e) {
         console.error('submitGeneralPost:', e);
         alert('Failed to post: ' + e.message);
