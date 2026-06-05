@@ -6870,28 +6870,36 @@ window.loadRecommendedUsers = async function() {
                 myMap[r.mal_id] = parseFloat(r.score);
             }
         });
-        const myIds = Object.keys(myMap);
+        // Normalise all keys to strings for consistent comparison
+        const myIds = Object.keys(myMap).map(String);
         if (myIds.length < 3) return;
 
         // Take top-rated mal_ids as seeds (up to 30 for the `in` query)
+        // Cast to Number because Jikan stores mal_id as a number in Firestore
         const seedIds = myIds.sort((a, b) => myMap[b] - myMap[a]).slice(0, 30);
+        const seedIdsNum = seedIds.map(Number);
 
         // Query reviews for these anime from all users
         const otherSnap = await getDocs(query(
             collection(db, 'reviews'),
-            where('mal_id', 'in', seedIds)
+            where('mal_id', 'in', seedIdsNum)
         ));
 
-        // Group by uid and build score maps
+        console.log(`[PeopleLike] my ids: ${myIds.length}, seed query returned: ${otherSnap.size} docs`);
+
+        // Group by uid and build score maps (normalise mal_id to string)
         const userMaps = {};
         const userMeta = {};
         otherSnap.docs.forEach(d => {
             const r = d.data();
             if (!r.uid || r.uid === auth.currentUser.uid) return;
             if (!r.mal_id || !r.score || r.type === 'suggestion' || r.type === 'series') return;
+            const key = String(r.mal_id);
             if (!userMaps[r.uid]) { userMaps[r.uid] = {}; userMeta[r.uid] = { uid: r.uid, displayName: r.username || 'Anonymous', avatar: r.avatar }; }
-            userMaps[r.uid][r.mal_id] = parseFloat(r.score);
+            userMaps[r.uid][key] = parseFloat(r.score);
         });
+
+        console.log(`[Peoplelike] other users found: ${Object.keys(userMaps).length}`);
 
         // Compute taste match for each user
         const scored = [];
