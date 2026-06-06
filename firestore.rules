@@ -283,6 +283,11 @@ service cloud.firestore {
       allow create: if isAuth();
     }
 
+    // ── Cross-device game progress sync ──────────────────────────────────────
+    match /game_progress/{uid} {
+      allow read, write: if isAuth() && request.auth.uid == uid;
+    }
+
     // ── Founders ─────────────────────────────────────────────────────────────
     match /founders/{doc} {
       allow read: if true;

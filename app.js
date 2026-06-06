@@ -451,6 +451,38 @@ window.scrollCarousel = function(containerId, direction) {
     }
 };
 
+// ─── CROSS-DEVICE GAME PROGRESS SYNC ────────────────────────────────────────
+// Saves game state to localStorage AND Firestore so progress syncs across devices
+window._saveGameState = function(key, value) {
+    localStorage.setItem(key, value);
+    if (auth.currentUser) {
+        setDoc(doc(db, 'game_progress', auth.currentUser.uid), { [key]: value }, { merge: true }).catch(() => {});
+    }
+};
+
+// Called on login — pulls today's cloud progress into localStorage for all games
+window._syncGameProgressFromCloud = async function() {
+    if (!auth.currentUser) return;
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const keys = [
+        `wb_bwop_${today}`, `wb_bwnrt_${today}`, `wb_bwblc_${today}`, `wb_bwdb_${today}`,
+        `weebee_trivia_${today}`,
+        `weebee_ob_${today}`, `weebee_ob_offset_${today}`, `weebee_melobee_posted_${today}`,
+        'weebee_mb_stats',
+    ];
+    try {
+        const snap = await getDoc(doc(db, 'game_progress', auth.currentUser.uid));
+        if (!snap.exists()) return;
+        const cloud = snap.data();
+        keys.forEach(key => {
+            // Only write to localStorage if this device doesn't already have today's data
+            if (cloud[key] != null && !localStorage.getItem(key)) {
+                localStorage.setItem(key, cloud[key]);
+            }
+        });
+    } catch(e) { console.error('_syncGameProgressFromCloud', e); }
+};
+
 onAuthStateChanged(auth, (user) => {
     const authSection = document.getElementById('user-auth-section');
     if (user) {
@@ -490,6 +522,7 @@ onAuthStateChanged(auth, (user) => {
         fetchMyFollows();
         window.fetchFriendData();
         window.updateTopbarRank();
+        window._syncGameProgressFromCloud();
         // Apply saved custom cursor
         getDoc(doc(db, 'profiles', user.uid)).then(pd => {
             const cursor = pd.exists() ? pd.data().customCursor : null;
@@ -9081,7 +9114,7 @@ window.submitBwNrtGuess = async function() {
     const map = {green:'🟩',yellow:'🟨',yellow_up:'🟨',yellow_down:'🟨',red:'🟥'};
     const emojiRow = [colors.gender,colors.affiliation,colors.jutsuType,colors.nature,colors.attribute,colors.kekkeiGenkai,colors.debutArc].map(x=>map[x]||'⬛').join('');
     const saveData = { guesses: window.bwNrtState.guesses.map(g=>g.id), solved: window.bwNrtState.solved, date: today, guessCount: window.bwNrtState.guesses.length, displayName: auth.currentUser?.displayName||'Player' };
-    localStorage.setItem(`wb_bwnrt_${today}`, JSON.stringify(saveData));
+    window._saveGameState(`wb_bwnrt_${today}`, JSON.stringify(saveData));
     if (auth.currentUser) {
         setDoc(doc(db, 'bw_nrt_games', `${auth.currentUser.uid}_${today}`), saveData).catch(e => console.warn('NRT save failed:', e.message));
         if (window.bwNrtState.solved) window.bwNrtUpdateLeaderboard(window.bwNrtState.guesses.length);
@@ -9817,7 +9850,7 @@ window.submitBwOpGuess = async function() {
     // Save state
     const today = bwGetDate();
     const saveData = { guesses: window.bwOpState.guesses.map(g=>g.id), solved: window.bwOpState.solved, date: today, guessCount: window.bwOpState.guesses.length, displayName: auth.currentUser?.displayName || 'Player' };
-    localStorage.setItem(`wb_bwop_${today}`, JSON.stringify(saveData));
+    window._saveGameState(`wb_bwop_${today}`, JSON.stringify(saveData));
     if (auth.currentUser) {
         setDoc(doc(db, 'bw_op_games', `${auth.currentUser.uid}_${today}`), saveData).catch(e => console.warn('OP save failed:', e.message));
         if (window.bwOpState.solved) window.bwOpUpdateLeaderboard(window.bwOpState.guesses.length);
@@ -10362,7 +10395,7 @@ window.submitBwBlcGuess = async function() {
     if (!isCorrect && bwAllGreen(colors)) bwShowAllGreenNotice('bwblc-grid', 7 * 500 + 800);
     const today = bwGetDate();
     const saveData = { guesses: window.bwBlcState.guesses.map(g=>g.id), solved: window.bwBlcState.solved, date: today, guessCount: window.bwBlcState.guesses.length, displayName: auth.currentUser?.displayName||'Player' };
-    localStorage.setItem(`wb_bwblc_${today}`, JSON.stringify(saveData));
+    window._saveGameState(`wb_bwblc_${today}`, JSON.stringify(saveData));
     if (auth.currentUser) {
         setDoc(doc(db, 'bw_blc_games', `${auth.currentUser.uid}_${today}`), saveData).catch(e => console.warn('BLC save failed:', e.message));
         if (window.bwBlcState.solved) window.bwBlcUpdateLeaderboard(window.bwBlcState.guesses.length);
@@ -10783,7 +10816,7 @@ window.submitBwDbGuess = async function() {
         setDoc(doc(db, 'bw_db_games', `${auth.currentUser.uid}_${today}`), saveData).catch(()=>{});
         if (window.bwDbState.solved) window.bwDbUpdateLeaderboard(window.bwDbState.guesses.length);
     } else {
-        localStorage.setItem(`wb_bwdb_${today}`, JSON.stringify(saveData));
+        window._saveGameState(`wb_bwdb_${today}`, JSON.stringify(saveData));
     }
 };
 
@@ -11587,7 +11620,7 @@ window.triviaAnswer = function(idx) {
         st.current++;
         if (st.current >= st.questions.length) {
             const today = new Date().toISOString().split('T')[0];
-            localStorage.setItem(`weebee_trivia_${today}`, JSON.stringify({ score: st.score }));
+            window._saveGameState(`weebee_trivia_${today}`, JSON.stringify({ score: st.score }));
             _triviaShowResult(st.score, false);
         } else {
             _triviaRender();
@@ -11748,7 +11781,7 @@ window.postTriviaToFeed = async function(btn, score) {
         // Mark posted in localStorage
         try {
             const saved = JSON.parse(localStorage.getItem('weebee_trivia_' + today) || '{}');
-            localStorage.setItem('weebee_trivia_' + today, JSON.stringify({ ...saved, posted: true }));
+            window._saveGameState('weebee_trivia_' + today, JSON.stringify({ ...saved, posted: true }));
         } catch(e) {}
         btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">campaign</span> ✓ Posted!';
         window.loadTriviaFeed();
@@ -11892,7 +11925,7 @@ window.openOpeningBee = async function() {
 function _obSave() {
     const today = new Date().toISOString().split('T')[0];
     const st = window._obState;
-    localStorage.setItem('weebee_ob_' + today, JSON.stringify({ guesses: st.guesses, solved: st.solved, failed: st.failed }));
+    window._saveGameState('weebee_ob_' + today, JSON.stringify({ guesses: st.guesses, solved: st.solved, failed: st.failed }));
 }
 
 function _obRender() {
@@ -12125,7 +12158,7 @@ window._obAdminReset = function() {
     localStorage.removeItem('weebee_melobee_posted_' + today);
     // Pick a random offset so each reset lands on a different song
     const offset = Math.floor(Math.random() * OB_POOL.length);
-    localStorage.setItem('weebee_ob_offset_' + today, offset);
+    window._saveGameState('weebee_ob_offset_' + today, offset);
     if (window._obAudio) { window._obAudio.pause(); window._obAudio = null; }
     if (window._obPlayTimer) { clearTimeout(window._obPlayTimer); window._obPlayTimer = null; }
     window._obPlaying = false;
@@ -12156,7 +12189,7 @@ function _mbRecordWin(guessCount) {
     stats.totalWins = (stats.totalWins || 0) + 1;
     stats.streak = stats.lastWinDate === yesterday ? (stats.streak || 0) + 1 : 1;
     stats.lastWinDate = today;
-    localStorage.setItem('weebee_mb_stats', JSON.stringify(stats));
+    window._saveGameState('weebee_mb_stats', JSON.stringify(stats));
     return stats;
 }
 
@@ -12200,7 +12233,7 @@ window.postMeloBeeToFeed = async function(btn) {
             emojiRow: _mbEmojiRow(st.guesses, st.solved),
             date: today, timestamp: new Date(), likes: [], dislikes: [], commentCount: 0
         });
-        localStorage.setItem('weebee_melobee_posted_' + today, '1');
+        window._saveGameState('weebee_melobee_posted_' + today, '1');
         btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">campaign</span> ✓ Posted!';
         window.loadMeloBeeFeed?.();
         window.fetchHomeActivityFeed?.();
