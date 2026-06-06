@@ -394,6 +394,11 @@
                         <button class="p-tab" onclick="switchListTab(event, 'on-hold')">On Hold</button>
                         <button class="p-tab" onclick="switchListTab(event, 'dropped')">Dropped</button>
                         <button class="p-tab" onclick="switchListTab(event, 'plan-to-watch')">Plan to Watch</button>
+                        <button class="p-tab" onclick="switchListTab(event, 'my-lists')"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle;">format_list_bulleted</span> My Lists</button>
+                    </div>
+
+                    <div id="my-lists-section" style="display:none;margin-top:16px;">
+                        <div id="my-lists-container"></div>
                     </div>
 
                     <div class="list-table-container">
@@ -1994,6 +1999,6 @@
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=219"></script>
+    <script type="module" src="app.js?v=220"></script>
 </body>
 </html>

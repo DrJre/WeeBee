@@ -1987,8 +1987,29 @@ window.fetchMyList = async function(targetUid = null) {
 window.switchListTab = function(event, tabId) {
     document.querySelectorAll('.list-tabs .p-tab').forEach(t => t.classList.remove('active'));
     event.currentTarget.classList.add('active');
+
+    const tableSection = document.querySelector('.list-table-container');
+    const listsSection = document.getElementById('my-lists-section');
+
+    if (tabId === 'my-lists') {
+        if (tableSection) tableSection.style.display = 'none';
+        if (listsSection) listsSection.style.display = 'block';
+        // Reuse loadProfileLists but target the my-lists-container
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+            const container = document.getElementById('my-lists-container');
+            if (container) {
+                container.dataset.loaded = '';  // reset so it always refreshes
+                window._loadMyListsTab(uid);
+            }
+        }
+        return;
+    }
+
+    // Any other tab — show the anime table, hide lists
+    if (tableSection) tableSection.style.display = '';
+    if (listsSection) listsSection.style.display = 'none';
     window.currentListTab = tabId;
-    
     window.currentListSort = { key: 'score', desc: true };
     renderAnimeList();
 };
@@ -5983,12 +6004,15 @@ window.deleteCustomList = async function(listId) {
     } catch(e) { alert('Failed to delete list.'); }
 };
 
-window.loadProfileLists = async function(uid) {
-    const container = document.getElementById('user-lists-container');
-    if (!container || container.dataset.loaded === uid) return;
+window._loadMyListsTab = async function(uid) {
+    const container = document.getElementById('my-lists-container');
+    if (!container) return;
     container.dataset.loaded = uid;
+    await window._renderListsInto(container, uid, true);
+};
+
+window._renderListsInto = async function(container, uid, isMe) {
     container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);">Loading...</div>';
-    const isMe = uid === auth.currentUser?.uid;
     try {
         const snap  = await getDocs(query(collection(db, 'custom_lists'), where('memberUids', 'array-contains', uid)));
         const lists = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.updatedAt?.toMillis?.()|| 0) - (a.updatedAt?.toMillis?.()|| 0));
@@ -6019,7 +6043,15 @@ window.loadProfileLists = async function(uid) {
                 </div>`;
             }).join('')}
         </div>`;
-    } catch(e) { console.error('loadProfileLists:', e); container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);">Could not load lists.</div>'; }
+    } catch(e) { console.error('_renderListsInto:', e); container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);">Could not load lists.</div>'; }
+};
+
+window.loadProfileLists = async function(uid) {
+    const container = document.getElementById('user-lists-container');
+    if (!container || container.dataset.loaded === uid) return;
+    container.dataset.loaded = uid;
+    const isMe = uid === auth.currentUser?.uid;
+    await window._renderListsInto(container, uid, isMe);
 };
 
 // --- POLLS ---
