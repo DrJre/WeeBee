@@ -5669,7 +5669,7 @@ window.openListViewer = async function(listId) {
     document.getElementById('lv-search-section').style.display = 'none';
     document.getElementById('lv-entries').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">Loading...</div>';
     // Wire search input every time modal opens — most reliable approach
-    const searchInp = document.getElementById('list-search-input');
+    const searchInp = document.getElementById('lv-search-input');
     if (searchInp) searchInp.oninput = () => window.searchAnimeForList(searchInp.value);
     try {
         const snap = await getDoc(doc(db, 'custom_lists', listId));
@@ -5736,9 +5736,9 @@ window._renderListViewer = function() {
     if (searchSection) {
         searchSection.style.display = isMember ? 'block' : 'none';
         // Clear previous search state
-        const inp = document.getElementById('list-search-input');
+        const inp = document.getElementById('lv-search-input');
         if (inp) inp.value = '';
-        const res = document.getElementById('list-search-results');
+        const res = document.getElementById('lv-search-results');
         if (res) res.innerHTML = '';
     }
 
@@ -5784,7 +5784,7 @@ window.toggleListSharePanel = function() {
 
 window.searchAnimeForList = function(query) {
     clearTimeout(_listSearchTimer);
-    const results = document.getElementById('list-search-results');
+    const results = document.getElementById('lv-search-results');
     if (!results) return;
     const q = query.trim();
     if (!q) { results.innerHTML = ''; return; }
@@ -5830,9 +5830,9 @@ window.addAnimeToList = async function(listId, malId, title, image) {
         await updateDoc(listRef, { entries, updatedAt: new Date() });
         window._currentListData = { ...window._currentListData, entries };
         // Clear search
-        const inp = document.getElementById('list-search-input');
+        const inp = document.getElementById('lv-search-input');
         if (inp) inp.value = '';
-        const res = document.getElementById('list-search-results');
+        const res = document.getElementById('lv-search-results');
         if (res) res.innerHTML = '';
         // Re-render just entries
         const lv = document.getElementById('lv-entries');
