@@ -5676,6 +5676,48 @@ window._currentListId   = null;
 window._currentListData = null;
 let _listSearchTimer    = null;
 
+const LIST_STATUS_COLORS = {
+    'watching':      '#3b82f6',
+    'completed':     '#22c55e',
+    'on-hold':       '#eab308',
+    'dropped':       '#ef4444',
+    'plan-to-watch': '#9ca3af',
+};
+const LIST_STATUS_LABELS = {
+    'watching':      'Watching',
+    'completed':     'Completed',
+    'on-hold':       'On Hold',
+    'dropped':       'Dropped',
+    'plan-to-watch': 'Plan to Watch',
+};
+const _HEX_CLIP = 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)';
+
+window._listMemberStatuses = {}; // { mal_id: { uid: status } }
+
+window._fetchListMemberStatuses = async function() {
+    const list = window._currentListData;
+    window._listMemberStatuses = {};
+    if (!list) return;
+    const memberUids = list.memberUids || [];
+    const malIds     = (list.entries || []).map(e => e.mal_id);
+    if (!memberUids.length || !malIds.length) return;
+    try {
+        const malSet = new Set(malIds);
+        // Firestore 'in' supports up to 10 values — chunk if needed
+        for (let i = 0; i < memberUids.length; i += 10) {
+            const chunk = memberUids.slice(i, i + 10);
+            const snap  = await getDocs(query(collection(db, 'anime_lists'), where('uid', 'in', chunk)));
+            snap.docs.forEach(d => {
+                const data = d.data();
+                if (malSet.has(data.mal_id) && data.status) {
+                    if (!window._listMemberStatuses[data.mal_id]) window._listMemberStatuses[data.mal_id] = {};
+                    window._listMemberStatuses[data.mal_id][data.uid] = data.status;
+                }
+            });
+        }
+    } catch(e) { console.error('_fetchListMemberStatuses:', e); }
+};
+
 window.openCreateListModal = function() {
     if (!auth.currentUser) return window.openAuthModal();
     const m = document.getElementById('create-list-modal');
@@ -5730,13 +5772,14 @@ window.openListViewer = async function(listId) {
         if (!snap.exists()) { document.getElementById('lv-entries').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">List not found.</div>'; return; }
         window._currentListId   = listId;
         window._currentListData = { id: listId, ...snap.data() };
+        await window._fetchListMemberStatuses();
         window._renderListViewer();
     } catch(e) { console.error('openListViewer:', e); document.getElementById('lv-entries').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">Could not load list.</div>'; }
 };
 window.closeListViewer = function() {
     const modal = document.getElementById('list-viewer-modal');
     if (modal) modal.style.display = 'none';
-    window._currentListId = null; window._currentListData = null;
+    window._currentListId = null; window._currentListData = null; window._listMemberStatuses = {};
 };
 
 window._renderListViewer = function() {
@@ -5766,6 +5809,15 @@ window._renderListViewer = function() {
                     <span style="color:var(--text-muted);">·</span>
                     <span style="font-size:12px;color:var(--text-muted);">${entries.length} anime</span>
                     ${!isMember&&uid ? `<button onclick="window.joinList('${list.id}')" class="submit-btn" style="font-size:12px;padding:5px 14px;margin-left:8px;">Join List</button>` : ''}
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                    <span style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Key:</span>
+                    ${Object.entries(LIST_STATUS_LABELS).map(([s, label]) =>
+                        `<div style="display:flex;align-items:center;gap:3px;">
+                            <div style="width:10px;height:11px;clip-path:${_HEX_CLIP};background:${LIST_STATUS_COLORS[s]};flex-shrink:0;"></div>
+                            <span style="font-size:10px;color:var(--text-muted);">${label}</span>
+                        </div>`
+                    ).join('')}
                 </div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
@@ -5809,18 +5861,31 @@ window._renderListViewer = function() {
 };
 
 window._renderListEntry = function(entry, list, isMember) {
-    const myStatus = window.myAnimeList?.find(a => a.mal_id === entry.mal_id)?.status;
-    const statusLabels = { watching: '👁 Watching', completed: '✓ Done', 'plan-to-watch': '🔖 Plan', 'on-hold': '⏸ On Hold', dropped: '✗ Dropped' };
-    const statusBadge = myStatus
-        ? `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(255,193,7,0.15);color:#FFC107;border:1px solid rgba(255,193,7,0.3);">${statusLabels[myStatus]||myStatus}</span>`
-        : '';
-    return `<div style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--border-color);">
+    const memberUids  = list.memberUids || [];
+    const statusMap   = window._listMemberStatuses || {};
+    const entryStatus = statusMap[entry.mal_id] || {};
+
+    // Build hex cluster — one per member who has a status for this anime
+    const hexes = memberUids
+        .filter(uid => entryStatus[uid])
+        .map(uid => {
+            const status  = entryStatus[uid];
+            const color   = LIST_STATUS_COLORS[status] || '#9ca3af';
+            const member  = list.memberInfo?.[uid] || {};
+            const name    = member.displayName || 'User';
+            const avatar  = member.avatar || '';
+            const tooltip = `${name}: ${LIST_STATUS_LABELS[status] || status}`.replace(/"/g, '&quot;');
+            const inner   = avatar
+                ? `<img src="${avatar}" style="width:18px;height:18px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">`
+                : `<span style="font-size:8px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5);">${name.slice(0,2).toUpperCase()}</span>`;
+            return `<div title="${tooltip}" style="width:26px;height:30px;clip-path:${_HEX_CLIP};background:${color};display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:default;">${inner}</div>`;
+        }).join('');
+    const hexCluster = hexes ? `<div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center;margin-left:8px;">${hexes}</div>` : '';
+
+    return `<div style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--border-color);align-items:flex-start;">
         <img src="${entry.image||''}" style="width:44px;height:62px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:pointer;" onclick="window.closeListViewer();window.loadAnimeDetails(${entry.mal_id})" onerror="this.style.background='var(--bg-gray-darker)'">
         <div style="flex:1;min-width:0;">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
-                <span style="font-size:14px;font-weight:700;color:var(--text-dark);cursor:pointer;" onclick="window.closeListViewer();window.loadAnimeDetails(${entry.mal_id})">${entry.title}</span>
-                ${statusBadge}
-            </div>
+            <div style="font-size:14px;font-weight:700;color:var(--text-dark);cursor:pointer;margin-bottom:4px;" onclick="window.closeListViewer();window.loadAnimeDetails(${entry.mal_id})">${entry.title}</div>
             ${entry.note ? `<div style="font-size:12px;color:var(--text-muted);font-style:italic;margin-bottom:6px;">"${entry.note}"</div>` : ''}
             ${isMember ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
                 <button onclick="window.quickAddToMyList(${entry.mal_id},'${(entry.title||'').replace(/'/g,"\\'")}','${entry.image||''}')" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;gap:3px;"><span class="material-symbols-outlined" style="font-size:13px;">bookmark_add</span>My List</button>
@@ -5828,6 +5893,7 @@ window._renderListEntry = function(entry, list, isMember) {
                 <button onclick="window.removeFromList('${list.id}',${entry.mal_id})" style="font-size:11px;padding:3px 9px;border-radius:6px;border:1px solid rgba(255,82,82,0.25);background:transparent;color:rgba(255,82,82,0.75);cursor:pointer;display:flex;align-items:center;gap:3px;"><span class="material-symbols-outlined" style="font-size:13px;">remove</span></button>
             </div>` : ''}
         </div>
+        ${hexCluster}
     </div>`;
 };
 
@@ -5845,20 +5911,15 @@ window.searchAnimeForList = function(query) {
     if (q.length < 2) { results.innerHTML = ''; return; }
     results.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 4px;">Searching...</div>';
     _listSearchTimer = setTimeout(async () => {
-        try {
-            const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8&sfw=false`);
-            if (!res.ok) throw new Error(`${res.status}`);
-            const json   = await res.json();
-            const animes = json?.data || [];
-            if (!animes.length) { results.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 4px;">No results found.</div>'; return; }
+        // Normalize results from either source into { mal_id, title, img, type, year }
+        const renderResults = (animes) => {
             const existing = new Set((window._currentListData?.entries||[]).map(e => e.mal_id));
             results.innerHTML = `<div style="border:1px solid var(--border-color);border-radius:8px;overflow:hidden;margin-top:8px;">${animes.map(a => {
                 const already = existing.has(a.mal_id);
-                const img     = a.images?.jpg?.small_image_url || a.images?.jpg?.image_url || '';
                 const safeTitle = (a.title||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
-                const safeImg   = img.replace(/'/g,"\\'");
+                const safeImg   = (a.img||'').replace(/'/g,"\\'");
                 return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border-color);background:var(--bg-white);">
-                    <img src="${img}" style="width:30px;height:42px;border-radius:4px;object-fit:cover;flex-shrink:0;" onerror="this.style.background='var(--bg-gray-darker)'">
+                    <img src="${a.img||''}" style="width:30px;height:42px;border-radius:4px;object-fit:cover;flex-shrink:0;" onerror="this.style.background='var(--bg-gray-darker)'">
                     <div style="flex:1;min-width:0;">
                         <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-dark);">${a.title}</div>
                         ${a.year ? `<div style="font-size:11px;color:var(--text-muted);">${a.type||''} · ${a.year}</div>` : ''}
@@ -5866,7 +5927,54 @@ window.searchAnimeForList = function(query) {
                     <button onclick="window.addAnimeToList('${window._currentListId}',${a.mal_id},'${safeTitle}','${safeImg}')" ${already?'disabled':''} style="font-size:12px;padding:5px 12px;border-radius:6px;border:none;background:${already?'var(--bg-gray-darker)':'var(--accent-yellow)'};color:${already?'var(--text-muted)':'#111'};cursor:${already?'default':'pointer'};font-weight:700;flex-shrink:0;">${already?'Added':'+ Add'}</button>
                 </div>`;
             }).join('')}</div>`;
+        };
+
+        // --- Jikan (primary) ---
+        try {
+            const apiUrl = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8&sfw=false`;
+            let res = await fetch(apiUrl);
+            if (res.status >= 500) {
+                await new Promise(r => setTimeout(r, 800));
+                res = await fetch(apiUrl);
+            }
+            if (res.ok) {
+                const json = await res.json();
+                const animes = (json?.data || []).map(a => ({
+                    mal_id: a.mal_id,
+                    title: a.title,
+                    img: a.images?.jpg?.small_image_url || a.images?.jpg?.image_url || '',
+                    type: a.type || '',
+                    year: a.year || '',
+                }));
+                if (animes.length) { renderResults(animes); return; }
+            }
+        } catch(_) {}
+
+        // --- AniList fallback (returns idMal so MAL IDs stay consistent) ---
+        try {
+            const alRes = await fetch('https://graphql.anilist.co', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: `query($s:String){Page(perPage:8){media(search:$s,type:ANIME){idMal title{romaji english}coverImage{medium}startDate{year}format}}}`,
+                    variables: { s: q },
+                }),
+            });
+            if (!alRes.ok) throw new Error(`${alRes.status}`);
+            const alJson = await alRes.json();
+            const animes = (alJson?.data?.Page?.media || [])
+                .filter(a => a.idMal)
+                .map(a => ({
+                    mal_id: a.idMal,
+                    title: a.title?.english || a.title?.romaji || '',
+                    img: a.coverImage?.medium || '',
+                    type: a.format || '',
+                    year: a.startDate?.year || '',
+                }));
+            if (!animes.length) { results.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 4px;">No results found.</div>'; return; }
+            renderResults(animes);
         } catch(e) {
+            console.error('searchAnimeForList fallback error:', e);
             results.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:8px 4px;">Search failed — try again in a moment.</div>`;
         }
     }, 450);
@@ -5936,10 +6044,13 @@ window.quickAddToMyList = async function(malId, title, image) {
         });
         if (!window.myAnimeList) window.myAnimeList = [];
         window.myAnimeList.push({ mal_id: malId, animeTitle: title, animeImage: image, status: 'plan-to-watch' });
-        // Refresh entry row to show status badge
-        const lv = document.getElementById('lv-entries');
-        if (lv && window._currentListData) lv.innerHTML = window._currentListData.entries.map(e => window._renderListEntry(e, window._currentListData, true)).join('');
-        // Toast feedback
+        // Update status cache and re-render hex clusters
+        if (auth.currentUser && window._currentListData) {
+            if (!window._listMemberStatuses[malId]) window._listMemberStatuses[malId] = {};
+            window._listMemberStatuses[malId][auth.currentUser.uid] = 'plan-to-watch';
+            const lv = document.getElementById('lv-entries');
+            if (lv) lv.innerHTML = window._currentListData.entries.map(e => window._renderListEntry(e, window._currentListData, true)).join('');
+        }
         window.showToast?.(`Added "${title}" to your Plan to Watch list`);
     } catch(e) { console.error('quickAddToMyList:', e); }
 };
