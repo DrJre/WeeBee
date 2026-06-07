@@ -549,6 +549,10 @@ onAuthStateChanged(auth, (user) => {
             if (adminPanel) adminPanel.style.display = window.isAdmin ? 'block' : 'none';
             const obAdminControls = document.getElementById('ob-admin-controls');
             if (obAdminControls) obAdminControls.style.display = window.isAdmin ? 'block' : 'none';
+            const tcgNavBtn = document.getElementById('tcg-nav-btn');
+            if (tcgNavBtn) tcgNavBtn.style.display = window.isAdmin ? '' : 'none';
+            const tcgNavBtnMobile = document.getElementById('tcg-nav-btn-mobile');
+            if (tcgNavBtnMobile) tcgNavBtnMobile.style.display = window.isAdmin ? '' : 'none';
         });
         // Handle shared URL params
         const _urlParams = new URLSearchParams(window.location.search);
@@ -5195,6 +5199,99 @@ window._lbFetchers = {
     },
 };
 
+// ── TCG Card Prototype (admin only) ──────────────────────────────
+const TCG_ANIME_NAMES = { '20': 'Naruto', '21': 'One Piece', '269': 'Bleach' };
+const TCG_RARE_CUTOFFS = { '20': 15, '21': 16, '269': 11 };
+const TCG_PULL_SIZE = 50;
+
+window._tcgApplyAnimeDefaults = function() {
+    const select = document.getElementById('tcg-anime-select');
+    const cutoffInput = document.getElementById('tcg-rare-cutoff');
+    if (!select || !cutoffInput) return;
+    const def = TCG_RARE_CUTOFFS[select.value];
+    if (def) cutoffInput.value = def;
+};
+
+window.tcgGenerateCards = async function() {
+    if (!window.isAdmin) return;
+    const animeId = parseInt(document.getElementById('tcg-anime-select').value, 10);
+    const rareCutoff = Math.max(1, parseInt(document.getElementById('tcg-rare-cutoff').value, 10) || 10);
+    const animeName = TCG_ANIME_NAMES[animeId] || 'Unknown';
+    const statusEl = document.getElementById('tcg-status');
+    const btn = document.getElementById('tcg-generate-btn');
+    const grid = document.getElementById('tcg-card-grid');
+
+    btn.disabled = true;
+    statusEl.textContent = `Pulling characters for ${animeName} from AniList…`;
+    grid.innerHTML = '';
+
+    try {
+        // AniList caps the nested `characters` connection at 25 per page, so pull two pages to reach TCG_PULL_SIZE (50)
+        const query = `query($id:Int,$page:Int){Media(id:$id,type:ANIME){title{romaji} characters(sort:FAVOURITES_DESC,perPage:25,page:$page){edges{role node{id name{full} image{large} favourites}}}}}`;
+        const pages = Math.ceil(TCG_PULL_SIZE / 25);
+        let edges = [];
+        for (let page = 1; page <= pages; page++) {
+            const res = await fetch('https://graphql.anilist.co', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query, variables: { id: animeId, page } }),
+            });
+            if (!res.ok) throw new Error(`AniList request failed (${res.status})`);
+            const json = await res.json();
+            edges = edges.concat(json?.data?.Media?.characters?.edges || []);
+            if (page < pages) await new Promise(r => setTimeout(r, 700));
+        }
+        edges = edges.slice(0, TCG_PULL_SIZE)
+            .filter(edge => (edge.node.name?.full || '').trim().toLowerCase() !== 'narrator');
+        if (!edges.length) throw new Error('No characters returned');
+
+        const cards = edges.map((edge, i) => ({
+            name: edge.node.name?.full || 'Unknown',
+            anime: animeName,
+            image: edge.node.image?.large || '',
+            favourites: edge.node.favourites || 0,
+            role: edge.role,
+            rarity: i < rareCutoff ? 'rare' : 'common',
+        }));
+
+        statusEl.textContent = `Generated ${cards.length} cards for ${animeName} — top ${rareCutoff} by popularity are Rare, the rest are Common.`;
+        window._tcgRenderCards(cards);
+    } catch (e) {
+        console.error('tcgGenerateCards error:', e);
+        statusEl.textContent = `Failed to generate cards: ${e.message}`;
+    } finally {
+        btn.disabled = false;
+    }
+};
+
+window._tcgRenderCards = function(cards) {
+    const grid = document.getElementById('tcg-card-grid');
+    if (!grid) return;
+    grid.innerHTML = cards.map(c => {
+        const rarityLabel = c.rarity === 'rare' ? 'Rare' : 'Common';
+        const art = c.image ? `<img src="${c.image}" alt="${c.name}">` : '';
+        return `
+            <div class="wb-card-wrap">
+                <div class="wb-card rarity-${c.rarity}">
+                    <div class="wb-card-inner">
+                        <div class="wb-card-header">
+                            <span class="wb-mark">WEEBEE</span>
+                            <span class="wb-rarity-gem">⬡</span>
+                        </div>
+                        <div class="wb-card-art">${art}</div>
+                        <div class="wb-card-footer">
+                            <div class="wb-card-name">${c.name}</div>
+                            <div class="wb-card-series">${c.anime}</div>
+                            <div class="wb-card-rarity-label">${rarityLabel}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="wb-card-caption">${c.role} · ${c.favourites.toLocaleString()} favourites</div>
+            </div>
+        `;
+    }).join('');
+};
+
 window.loadLeaderboards = function() {
     const container = document.getElementById('leaderboard-container');
     if (!container || container.dataset.built) return;
@@ -8047,7 +8144,7 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     if(targetId !== 'anime-detail-view') window.previousViewId = targetId;
     if(targetId !== 'profile-view') window.targetProfileUid = null;
     if (!skipHistory) {
-        const _tabHashes = { 'home-view': '', 'discover-view': 'discover', 'my-list-view': 'mylist', 'news-view': 'news', 'community-view': 'community' };
+        const _tabHashes = { 'home-view': '', 'discover-view': 'discover', 'my-list-view': 'mylist', 'news-view': 'news', 'community-view': 'community', 'tcg-view': 'tcg' };
         const _tabHash = _tabHashes[targetId];
         // Clear ?anime= or ?profile= params when navigating to non-detail views
         if (targetId !== 'anime-detail-view' && targetId !== 'profile-view') {
@@ -8102,6 +8199,10 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
             }).finally(() => {
                 const adminPanel = document.getElementById('patch-notes-admin');
                 if (adminPanel) adminPanel.style.display = window.isAdmin ? 'block' : 'none';
+                const tcgNavBtn = document.getElementById('tcg-nav-btn');
+                if (tcgNavBtn) tcgNavBtn.style.display = window.isAdmin ? '' : 'none';
+                const tcgNavBtnMobile = document.getElementById('tcg-nav-btn-mobile');
+                if (tcgNavBtnMobile) tcgNavBtnMobile.style.display = window.isAdmin ? '' : 'none';
             });
         }
     }
@@ -9015,7 +9116,7 @@ const BW_NRT_CHARS = [
     {id:'roshi',      name:'Roshi',              img:'https://cdn.myanimelist.net/images/characters/7/585052.jpg',                      gender:'Male',   affiliation:['Stone'],                                 jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Earth','Fire'],                                  kekkeiGenkai:true,  attribute:['Jinchuriki'],        debutArc:'Akatsuki Suppression'},
     {id:'fuu',        name:'Fu',                 img:'https://cdn.myanimelist.net/images/characters/3/553177.jpg',                      gender:'Female', affiliation:['Waterfall'],                             jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Lightning','Earth','Wind'],                      kekkeiGenkai:false, attribute:['Jinchuriki'],        debutArc:'Fourth Shinobi World War'},
     {id:'blackzetsu', name:'Black Zetsu',        img:'https://cdn.myanimelist.net/images/characters/14/618824.jpg',                     gender:'Male',   affiliation:['Akatsuki'],                              jutsuType:['Ninjutsu','Fuinjutsu','Kinjutsu'],                                            nature:['Earth','Water'],                                 kekkeiGenkai:false, attribute:[],                    debutArc:'Akatsuki Suppression'},
-    {id:'chojuro',    name:'Chojuro',            img:'https://s4.anilist.co/file/anilistcdn/character/large/23418.jpg',                 gender:'Male',   affiliation:['Mist'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu'],                                             nature:['Water'],                                         kekkeiGenkai:false, attribute:['Kage'],              debutArc:'Five Kage Summit'},
+    {id:'chojuro',    name:'Chojuro',            img:'https://s4.anilist.co/file/anilistcdn/character/large/23418.jpg',                 gender:'Male',   affiliation:['Mist'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu'],                                             nature:['Water'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Five Kage Summit'},
     {id:'ao',         name:'Ao',                 img:'https://cdn.myanimelist.net/images/characters/13/631929.jpg',                     gender:'Male',   affiliation:['Mist'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Water','Fire','Earth'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Five Kage Summit'},
     {id:'genma',      name:'Genma Shiranui',      img:'https://s4.anilist.co/file/anilistcdn/character/large/n3735-IRx14wSYNVSE.png',    gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Fire','Earth'],                                  kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
 ];
