@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>WeeBee Card Test — Common vs Rare</title>
+<title>WeeBee Card Test — Common vs Rare vs SR</title>
 <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body {
@@ -265,112 +265,65 @@
 </head>
 <body>
 
-    <!-- ═══ COMMON #1 ═══ -->
-    <div class="wb-card-wrap">
-        <div class="wb-card rarity-common">
-            <div class="wb-card-inner">
-                <div class="wb-card-header">
-                    <span class="wb-mark">WEEBEE</span>
-                    <span class="wb-rarity-gem">⬡</span>
-                </div>
-                <div class="wb-card-art">
-                    <img class="wb-art-backdrop" src="https://s4.anilist.co/file/anilistcdn/character/large/b46498-ritqAj9FW6jX.png" alt="" aria-hidden="true">
-                    <img class="wb-art-main" src="https://s4.anilist.co/file/anilistcdn/character/large/b46498-ritqAj9FW6jX.png" alt="Jean Kirstein">
-                </div>
-                <div class="wb-card-footer">
-                    <div class="wb-card-name">Jean Kirstein</div>
-                    <div class="wb-card-series">Attack on Titan</div>
-                    <div class="wb-card-rarity-label">Common</div>
-                </div>
-            </div>
-        </div>
-        <div class="wb-card-caption">Common — visible header &amp; footer plates</div>
-    </div>
+    <div id="wb-card-grid" style="display:contents;"></div>
 
-    <!-- ═══ COMMON #2 ═══ -->
-    <div class="wb-card-wrap">
-        <div class="wb-card rarity-common">
-            <div class="wb-card-inner">
-                <div class="wb-card-header">
-                    <span class="wb-mark">WEEBEE</span>
-                    <span class="wb-rarity-gem">⬡</span>
-                </div>
-                <div class="wb-card-art">
-                    <img class="wb-art-backdrop" src="https://s4.anilist.co/file/anilistcdn/character/large/b46494-g7xYYuBtYPnO.png" alt="" aria-hidden="true">
-                    <img class="wb-art-main" src="https://s4.anilist.co/file/anilistcdn/character/large/b46494-g7xYYuBtYPnO.png" alt="Armin Arlert">
-                </div>
-                <div class="wb-card-footer">
-                    <div class="wb-card-name">Armin Arlert</div>
-                    <div class="wb-card-series">Attack on Titan</div>
-                    <div class="wb-card-rarity-label">Common</div>
-                </div>
-            </div>
-        </div>
-        <div class="wb-card-caption">Same plate structure — consistency check</div>
-    </div>
+    <script>
+        // ── Card data — append entries here to preview new art ──────────
+        // rarity: 'common' | 'rare' | 'sr'
+        const CARDS = [
+            { name: 'Jean Kirstein', anime: 'Attack on Titan', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b46498-ritqAj9FW6jX.png', rarity: 'common', caption: 'Common — visible header & footer plates' },
+            { name: 'Armin Arlert', anime: 'Attack on Titan', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b46494-g7xYYuBtYPnO.png', rarity: 'common', caption: 'Same plate structure — consistency check' },
+            { name: 'Rangiku Matsumoto', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FRangiku.jpg?alt=media&token=7950d22d-9255-42c5-ad3e-dccb31a322c2', rarity: 'sr', caption: 'SR — full-art + cool holo frame + diagonal foil sheen + faceted gem' },
+            { name: 'Monkey D. Luffy', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_luffy.avif?alt=media&token=7d379fbf-5984-4a41-b62c-4068d06f43cd', rarity: 'sr', caption: 'SR — Wano arc art set' },
+            { name: 'Nami', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_nami.avif?alt=media&token=a7d7912f-e758-4285-879a-5729dd64abe7', rarity: 'sr', caption: 'SR — Wano arc art set' },
+            { name: 'Robin', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_robin.avif?alt=media&token=b987319c-c47e-4137-99c4-af9a3a826dd0', rarity: 'sr', caption: 'SR — Wano arc art set' },
+            { name: 'Sanji', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_sanji.avif?alt=media&token=975cc211-46b3-4ea1-a0f0-630b27b51d03', rarity: 'sr', caption: 'SR — Wano arc art set' },
+            { name: 'Usopp', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_usopp.avif?alt=media&token=133cfc8e-d160-4c8b-97fe-e0e4b94ad00f', rarity: 'sr', caption: 'SR — Wano arc art set' },
+            { name: 'Zoro', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_zoro.avif?alt=media&token=232c431a-09f3-4467-b54e-37130e367f2c', rarity: 'sr', caption: 'SR — Wano arc art set' },
+            { name: 'Jinbe', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_23wa_jinbe.avif?alt=media&token=6db14e64-94cf-4269-b93b-94eec88f3460', rarity: 'sr', caption: 'SR — Wano arc art set' },
+            { name: 'Brook', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_brook.avif?alt=media&token=38ca74e2-3e4c-44db-8bbb-dc57b28cd5c3', rarity: 'sr', caption: 'SR — Wano arc art set' },
+            { name: 'Chopper', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_chopper.avif?alt=media&token=05c00e1b-9a5c-4285-a9b0-1cd684f8ad1e', rarity: 'sr', caption: 'SR — Wano arc art set' },
+            { name: 'Franky', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_franky.avif?alt=media&token=511168ad-8067-4e9c-afde-dd06e3327b4c', rarity: 'sr', caption: 'SR — Wano arc art set' },
+            { name: 'Ichigo', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FIchigo.jpg?alt=media&token=4237e9e4-90e9-4949-b2ad-a4331cf287de', rarity: 'sr', caption: 'SR — Bleach art set' },
+            { name: 'Orihime', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOrihime.jpg?alt=media&token=0134562c-1dc4-4db7-8166-221806097f02', rarity: 'sr', caption: 'SR — Bleach art set' },
+            { name: 'Yoruichi', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FYoruichi.jpg?alt=media&token=1f6180a1-ef53-4d25-9324-12057675c07a', rarity: 'sr', caption: 'SR — Bleach art set' },
+            { name: 'Mikasa Ackerman', anime: 'Attack on Titan', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b40881-F3gr1PkreDvj.png', rarity: 'rare', caption: 'Rare — full-art, same info floats over the art with no plate' },
+            { name: 'Levi', anime: 'Attack on Titan', image: 'https://s4.anilist.co/file/anilistcdn/character/large/b45627-CR68RyZmddGG.png', rarity: 'rare', caption: 'Same full-art treatment — consistency check' },
+        ];
 
-    <!-- ═══ SR #1 ═══ -->
-    <div class="wb-card-wrap">
-        <div class="wb-card rarity-sr">
-            <div class="wb-card-inner">
-                <div class="wb-card-art">
-                    <img src="https://cdn.myanimelist.net/images/characters/12/520186.jpg" alt="Rangiku Matsumoto">
-                </div>
-                <div class="wb-card-header">
-                    <span class="wb-mark">WEEBEE</span>
-                    <span class="wb-rarity-gem"><span>⬡</span></span>
-                </div>
-                <div class="wb-card-footer">
-                    <div class="wb-card-name">Rangiku Matsumoto</div>
-                    <div class="wb-card-series">Bleach</div>
-                    <div class="wb-card-rarity-label">SR</div>
-                </div>
-            </div>
-        </div>
-        <div class="wb-card-caption">SR — full-art + cool holo frame + diagonal foil sheen + faceted gem</div>
-    </div>
+        const RARITY_LABELS = { common: 'Common', rare: 'Rare', sr: 'SR' };
 
-    <!-- ═══ RARE #1 ═══ -->
-    <div class="wb-card-wrap">
-        <div class="wb-card rarity-rare">
-            <div class="wb-card-inner">
-                <div class="wb-card-art">
-                    <img src="https://s4.anilist.co/file/anilistcdn/character/large/b40881-F3gr1PkreDvj.png" alt="Mikasa Ackerman">
-                </div>
-                <div class="wb-card-header">
-                    <span class="wb-mark">WEEBEE</span>
-                    <span class="wb-rarity-gem">⬡</span>
-                </div>
-                <div class="wb-card-footer">
-                    <div class="wb-card-name">Mikasa Ackerman</div>
-                    <div class="wb-card-series">Attack on Titan</div>
-                    <div class="wb-card-rarity-label">Rare</div>
-                </div>
-            </div>
-        </div>
-        <div class="wb-card-caption">Rare — full-art, same info floats over the art with no plate</div>
-    </div>
+        function renderCard(c) {
+            const label = RARITY_LABELS[c.rarity] || c.rarity;
+            const gem = c.rarity === 'sr'
+                ? '<span class="wb-rarity-gem"><span>⬡</span></span>'
+                : '<span class="wb-rarity-gem">⬡</span>';
+            const art = c.rarity === 'common'
+                ? `<img class="wb-art-backdrop" src="${c.image}" alt="" aria-hidden="true"><img class="wb-art-main" src="${c.image}" alt="${c.name}">`
+                : `<img src="${c.image}" alt="${c.name}">`;
 
-    <!-- ═══ RARE #2 ═══ -->
-    <div class="wb-card-wrap">
-        <div class="wb-card rarity-rare">
-            <div class="wb-card-inner">
-                <div class="wb-card-art">
-                    <img src="https://s4.anilist.co/file/anilistcdn/character/large/b45627-CR68RyZmddGG.png" alt="Levi">
+            return `
+                <div class="wb-card-wrap">
+                    <div class="wb-card rarity-${c.rarity}">
+                        <div class="wb-card-inner">
+                            <div class="wb-card-header">
+                                <span class="wb-mark">WEEBEE</span>
+                                ${gem}
+                            </div>
+                            <div class="wb-card-art">${art}</div>
+                            <div class="wb-card-footer">
+                                <div class="wb-card-name">${c.name}</div>
+                                <div class="wb-card-series">${c.anime}</div>
+                                <div class="wb-card-rarity-label">${label}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="wb-card-caption">${c.caption || ''}</div>
                 </div>
-                <div class="wb-card-header">
-                    <span class="wb-mark">WEEBEE</span>
-                    <span class="wb-rarity-gem">⬡</span>
-                </div>
-                <div class="wb-card-footer">
-                    <div class="wb-card-name">Levi</div>
-                    <div class="wb-card-series">Attack on Titan</div>
-                    <div class="wb-card-rarity-label">Rare</div>
-                </div>
-            </div>
-        </div>
-        <div class="wb-card-caption">Same full-art treatment — consistency check</div>
-    </div>
+            `;
+        }
 
+        document.getElementById('wb-card-grid').innerHTML = CARDS.map(renderCard).join('');
+    </script>
 </body>
 </html>

@@ -1218,6 +1218,58 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 }
 .rarity-common .wb-card-rarity-label { background: rgba(255,255,255,0.10); color: #c7ccd1; }
 .rarity-rare   .wb-card-rarity-label { background: rgba(245,158,11,0.18); color: #fde68a; border-color: rgba(253,230,138,0.4); }
+
+/* SR rarity — cool holo/prismatic frame, full art + foil sheen, one notch fancier than Rare */
+.wb-card.rarity-sr {
+    background: linear-gradient(155deg, #ddd6fe 0%, #a78bfa 30%, #6366f1 65%, #4338ca 100%);
+    padding: 6px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45), 0 0 24px rgba(139,92,246,0.5);
+}
+.rarity-sr .wb-card-art { position: absolute; inset: 0; }
+.rarity-sr .wb-card-art::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(10,10,16,0.85) 0%, transparent 38%);
+    z-index: 1;
+}
+.rarity-sr .wb-card-art::before {
+    content: '';
+    position: absolute;
+    inset: -20%;
+    background: linear-gradient(115deg,
+        transparent 30%,
+        rgba(221,214,254,0.30) 42%,
+        rgba(99,102,241,0.22) 50%,
+        rgba(244,114,182,0.28) 58%,
+        transparent 70%);
+    mix-blend-mode: screen;
+    z-index: 2;
+    pointer-events: none;
+}
+.rarity-sr .wb-card-header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    background: linear-gradient(180deg, rgba(30,20,55,0.55) 0%, transparent 100%);
+    z-index: 3;
+}
+.rarity-sr .wb-card-footer {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: transparent;
+    z-index: 3;
+}
+.rarity-sr .wb-rarity-gem {
+    background: linear-gradient(145deg, #ede9fe, #8b5cf6 55%, #4c1d95);
+    box-shadow: 0 2px 12px rgba(139,92,246,0.7);
+    border-radius: 4px;
+    transform: rotate(45deg);
+    width: 18px;
+    height: 18px;
+}
+.rarity-sr .wb-rarity-gem span { display:inline-block; transform: rotate(-45deg); }
+.rarity-sr .wb-card-rarity-label { background: rgba(139,92,246,0.20); color: #ede9fe; border-color: rgba(221,214,254,0.4); }
+
 .wb-card-grid {
     display: flex;
     flex-wrap: wrap;

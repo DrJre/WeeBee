@@ -5292,6 +5292,50 @@ window._tcgRenderCards = function(cards) {
     }).join('');
 };
 
+// Hand-curated SR art — sourced manually and stored in Firebase Storage (tcg-art/)
+const TCG_SR_CARDS = [
+    { name: 'Rangiku Matsumoto', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FRangiku.jpg?alt=media&token=7950d22d-9255-42c5-ad3e-dccb31a322c2' },
+    { name: 'Ichigo', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FIchigo.jpg?alt=media&token=4237e9e4-90e9-4949-b2ad-a4331cf287de' },
+    { name: 'Orihime', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOrihime.jpg?alt=media&token=0134562c-1dc4-4db7-8166-221806097f02' },
+    { name: 'Yoruichi', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FYoruichi.jpg?alt=media&token=1f6180a1-ef53-4d25-9324-12057675c07a' },
+    { name: 'Monkey D. Luffy', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_luffy.avif?alt=media&token=7d379fbf-5984-4a41-b62c-4068d06f43cd' },
+    { name: 'Nami', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_nami.avif?alt=media&token=a7d7912f-e758-4285-879a-5729dd64abe7' },
+    { name: 'Robin', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_robin.avif?alt=media&token=b987319c-c47e-4137-99c4-af9a3a826dd0' },
+    { name: 'Sanji', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_sanji.avif?alt=media&token=975cc211-46b3-4ea1-a0f0-630b27b51d03' },
+    { name: 'Usopp', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_usopp.avif?alt=media&token=133cfc8e-d160-4c8b-97fe-e0e4b94ad00f' },
+    { name: 'Zoro', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_zoro.avif?alt=media&token=232c431a-09f3-4467-b54e-37130e367f2c' },
+    { name: 'Jinbe', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_23wa_jinbe.avif?alt=media&token=6db14e64-94cf-4269-b93b-94eec88f3460' },
+    { name: 'Brook', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_brook.avif?alt=media&token=38ca74e2-3e4c-44db-8bbb-dc57b28cd5c3' },
+    { name: 'Chopper', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_chopper.avif?alt=media&token=05c00e1b-9a5c-4285-a9b0-1cd684f8ad1e' },
+    { name: 'Franky', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_franky.avif?alt=media&token=511168ad-8067-4e9c-afde-dd06e3327b4c' },
+];
+
+window._tcgRenderSRCards = function() {
+    const grid = document.getElementById('tcg-sr-grid');
+    if (!grid || grid.dataset.built) return;
+    grid.dataset.built = '1';
+    grid.innerHTML = TCG_SR_CARDS.map(c => `
+        <div class="wb-card-wrap">
+            <div class="wb-card rarity-sr">
+                <div class="wb-card-inner">
+                    <div class="wb-card-header">
+                        <span class="wb-mark">WEEBEE</span>
+                        <span class="wb-rarity-gem"><span>⬡</span></span>
+                    </div>
+                    <div class="wb-card-art"><img src="${c.image}" alt="${c.name}"></div>
+                    <div class="wb-card-footer">
+                        <div class="wb-card-name">${c.name}</div>
+                        <div class="wb-card-series">${c.anime}</div>
+                        <div class="wb-card-rarity-label">SR</div>
+                    </div>
+                </div>
+            </div>
+            <div class="wb-card-caption">Hand-curated art</div>
+        </div>
+    `).join('');
+};
+if (document.getElementById('tcg-sr-grid')) window._tcgRenderSRCards();
+
 window.loadLeaderboards = function() {
     const container = document.getElementById('leaderboard-container');
     if (!container || container.dataset.built) return;
@@ -6336,32 +6380,39 @@ window._renderPollsFeed = function() {
 
 window._renderPollCard = function(poll, uid) {
     const opts = _pollOpts(poll);
+    const isCorrupted = opts.length < 2 || opts.some(o => typeof o?.text !== 'string' || !o.text);
     const totalVotes = opts.reduce((s, o) => s + (o.voters||[]).length, 0);
     const myVoteIdx = uid ? opts.findIndex(o => (o.voters||[]).includes(uid)) : -1;
     const hasVoted = myVoteIdx !== -1;
     const ago = poll.timestamp?.toDate ? formatTimeAgo(poll.timestamp.toDate()) : '';
     const isOwner = uid && poll.uid === uid;
 
-    const optionsHTML = opts.map((opt, i) => {
-        const count = (opt.voters||[]).length;
-        const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
-        const isMyVote = myVoteIdx === i;
+    let optionsHTML;
+    if (isCorrupted) {
+        optionsHTML = `<div style="padding:14px;border-radius:8px;background:var(--bg-gray);color:var(--text-muted);font-size:13px;text-align:center;">⚠️ This poll's data couldn't be loaded correctly.${isOwner ? ' Please delete it and create a new one — sorry about that!' : ' The creator will need to delete and recreate it.'}</div>`;
+    } else {
+        optionsHTML = opts.map((opt, i) => {
+            const count = (opt.voters||[]).length;
+            const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+            const isMyVote = myVoteIdx === i;
 
-        if (hasVoted) {
-            return `<div style="margin-bottom:8px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                    <span style="font-size:14px;font-weight:${isMyVote?'700':'400'};color:var(--text-dark);">${isMyVote?'✓ ':''}${opt.text}</span>
-                    <span style="font-size:13px;font-weight:700;color:var(--text-muted);">${pct}%</span>
-                </div>
-                <div style="height:8px;border-radius:4px;background:var(--bg-gray-darker);overflow:hidden;">
-                    <div style="height:100%;width:${pct}%;background:${isMyVote?'var(--accent-yellow)':'#2196F3'};border-radius:4px;transition:width 0.4s ease;"></div>
-                </div>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${count} vote${count!==1?'s':''}</div>
-            </div>`;
-        } else {
-            return `<button onclick="window.votePoll('${poll.id}',${i})" style="width:100%;text-align:left;padding:10px 14px;margin-bottom:8px;border-radius:8px;border:2px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;cursor:pointer;font-weight:600;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='var(--border-color)'">${opt.text}</button>`;
-        }
-    }).join('');
+            if (hasVoted) {
+                const hoverAttrs = isMyVote ? '' : ` onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'"`;
+                return `<div onclick="window.votePoll('${poll.id}',${i})" style="margin-bottom:8px;cursor:pointer;transition:opacity .15s;"${hoverAttrs} title="${isMyVote ? 'Your vote' : 'Tap to change your vote to this option'}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                        <span style="font-size:14px;font-weight:${isMyVote?'700':'400'};color:var(--text-dark);">${isMyVote?'✓ ':''}${opt.text}</span>
+                        <span style="font-size:13px;font-weight:700;color:var(--text-muted);">${pct}%</span>
+                    </div>
+                    <div style="height:8px;border-radius:4px;background:var(--bg-gray-darker);overflow:hidden;">
+                        <div style="height:100%;width:${pct}%;background:${isMyVote?'var(--accent-yellow)':'#2196F3'};border-radius:4px;transition:width 0.4s ease;"></div>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${count} vote${count!==1?'s':''}</div>
+                </div>`;
+            } else {
+                return `<button onclick="window.votePoll('${poll.id}',${i})" style="width:100%;text-align:left;padding:10px 14px;margin-bottom:8px;border-radius:8px;border:2px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;cursor:pointer;font-weight:600;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='var(--border-color)'">${opt.text}</button>`;
+            }
+        }).join('');
+    }
 
     const likes = poll.likes || [];
     const dislikes = poll.dislikes || [];
@@ -6388,7 +6439,7 @@ window._renderPollCard = function(poll, uid) {
         </div>
         <div style="font-weight:700;font-size:16px;margin-bottom:12px;line-height:1.4;">${poll.question}</div>
         ${optionsHTML}
-        ${hasVoted ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px;margin-bottom:12px;">${totalVotes} total vote${totalVotes!==1?'s':''}</div>` : ''}
+        ${hasVoted && !isCorrupted ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px;margin-bottom:12px;">${totalVotes} total vote${totalVotes!==1?'s':''} · tap an option to change your vote</div>` : ''}
         <div class="review-actions">
             <div class="action-stat">
                 <button onclick="window.toggleBwPostComments(event,this,'${poll.id}')">
@@ -6459,23 +6510,32 @@ window.votePoll = async function(pollId, optionIdx) {
     const poll = listPoll || actPoll;
     if (!poll) return;
     const opts = _pollOpts(poll);
-    const alreadyVoted = opts.some(o => (o.voters||[]).includes(uid));
-    if (alreadyVoted) return;
-    function applyVote(p) {
-        if (!Array.isArray(p.options)) p.options = _pollOpts(p);
-        p.options[optionIdx].voters = [...(p.options[optionIdx].voters||[]), uid];
+    if (opts.length < 2 || opts.some(o => typeof o?.text !== 'string' || !o.text)) return; // corrupted poll — voting disabled
+    const currentIdx = opts.findIndex(o => (o.voters||[]).includes(uid));
+    if (currentIdx === optionIdx) return; // already your vote — no-op
+
+    // Snapshot before mutating, both for rollback and as the basis of the Firestore write
+    const snapshot = opts.map(o => ({ text: o.text, voters: [...(o.voters||[])] }));
+    function moveVote(baseOpts) {
+        return baseOpts.map((o, i) => {
+            const voters = (o.voters||[]).filter(v => v !== uid);
+            if (i === optionIdx) voters.push(uid);
+            return { text: o.text, voters };
+        });
     }
+    function applyVote(p) { p.options = moveVote(_pollOpts(p)); }
+    function rollbackVote(p) { p.options = snapshot.map(o => ({ text: o.text, voters: [...o.voters] })); }
+
     applyVote(poll);
     if (listPoll && listPoll !== poll) applyVote(listPoll);
     if (actPoll && actPoll !== poll) applyVote(actPoll);
     window._renderPollsFeed();
     window._refreshHomeFeedItem(pollId);
     try {
-        await updateDoc(doc(db, 'polls', pollId), { [`options.${optionIdx}.voters`]: arrayUnion(uid) });
+        // Firestore can't address array elements by dot-path (e.g. 'options.0.voters') without
+        // clobbering the whole array field into a map — write the entire options array back instead.
+        await updateDoc(doc(db, 'polls', pollId), { options: moveVote(snapshot) });
     } catch(e) {
-        function rollbackVote(p) {
-            if (Array.isArray(p.options)) p.options[optionIdx].voters = p.options[optionIdx].voters.filter(x => x !== uid);
-        }
         rollbackVote(poll);
         if (listPoll && listPoll !== poll) rollbackVote(listPoll);
         if (actPoll && actPoll !== poll) rollbackVote(actPoll);
@@ -12138,7 +12198,29 @@ function _obDaily() {
 window._obAudio = null;
 window._obPlayTimer = null;
 
+// Apple's iTunes CDN serves its 30s preview clips with Content-Type: audio/x-m4p
+// ("protected AAC"), even though the clips themselves aren't DRM-protected — browsers
+// refuse to play that MIME type via <audio>. Re-fetch as raw bytes and wrap in a Blob
+// with a corrected type so playback works regardless of the server's mislabeled header.
+async function _obResolvePlayableUrl(rawUrl) {
+    if (!rawUrl) return rawUrl;
+    try {
+        const res = await fetch(rawUrl);
+        if (!res.ok) return rawUrl;
+        let type = res.headers.get('content-type') || '';
+        if (type === 'audio/x-m4p') type = 'audio/mp4';
+        const buf = await res.arrayBuffer();
+        return URL.createObjectURL(new Blob([buf], { type: type || 'audio/mp4' }));
+    } catch (e) {
+        return rawUrl;
+    }
+}
+
 window.openOpeningBee = async function() {
+    // Release any object URL from a previous song before loading a new one
+    if (window._obState?.song?.playableAudio?.startsWith('blob:')) {
+        URL.revokeObjectURL(window._obState.song.playableAudio);
+    }
     const today = new Date().toISOString().split('T')[0];
     const saved = JSON.parse(localStorage.getItem('weebee_ob_' + today) || 'null');
     const template = _obDaily();
@@ -12155,6 +12237,7 @@ window.openOpeningBee = async function() {
             if (match) song.audio = match.preview;
         } catch(e) {}
     }
+    song.playableAudio = await _obResolvePlayableUrl(song.audio);
     window._obState = {
         song,
         guesses: saved?.guesses || [],
@@ -12263,7 +12346,7 @@ window._obPlay = function() {
     if (window._obPlayTimer) { clearTimeout(window._obPlayTimer); window._obPlayTimer = null; }
     if (window._obAudio) { window._obAudio.pause(); }
 
-    const audio = new Audio(st.song.audio);
+    const audio = new Audio(st.song.playableAudio || st.song.audio);
     audio.volume = parseFloat(document.getElementById('ob-volume')?.value || '0.25');
     window._obAudio = audio;
     window._obPlaying = false;
@@ -12289,7 +12372,7 @@ window._obPlayFull = function() {
     const st = window._obState;
     if (!st) return;
     if (window._obAudio) window._obAudio.pause();
-    const audio = new Audio(st.song.audio);
+    const audio = new Audio(st.song.playableAudio || st.song.audio);
     audio.volume = parseFloat(document.getElementById('ob-volume')?.value || '0.25');
     window._obAudio = audio;
     audio.play().catch(() => {});
