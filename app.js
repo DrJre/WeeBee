@@ -9272,6 +9272,7 @@ function bwNrtShowResult() {
             <div id="ninitials-answer" style="width:100px;height:100px;border-radius:50%;background:var(--accent-yellow);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;color:#111;">${initials}</div>
             <div style="font-size:20px;font-weight:800;color:#FF8C00;">${answer.name}</div>
             <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
+            <div id="bwnrt-streak-line" style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.85);"></div>
             <div style="width:100%;margin-top:10px;">
                 <textarea id="bwnrt-feed-caption" placeholder="Add a caption to your post... (optional)" maxlength="200" rows="2" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:white;font-size:13px;resize:none;box-sizing:border-box;font-family:inherit;margin-bottom:8px;" oninput="this.style.borderColor=this.value?'rgba(255,140,0,0.6)':'rgba(255,255,255,0.2)'"></textarea>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
@@ -9282,6 +9283,7 @@ function bwNrtShowResult() {
         </div>`;
         if (inputArea) inputArea.style.display = 'none';
         window.bwNrtApplyImages();
+        window._bwShowStreak('bw_nrt_leaderboard', 'bwnrt-streak-line');
         const statusEl = document.getElementById('bwnrt-status-text');
         if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
     } else {
@@ -9827,9 +9829,9 @@ const BW_OP_CHARS = [
     {id:'hancock',name:'Boa Hancock',img:'https://cdn.myanimelist.net/images/characters/14/146013.jpg',gender:'Female',affiliation:'Kuja Pirates',df:{has:true,type:'Paramecia',name:'Mero Mero no Mi'},haki:['Observation','Armament','Conquerors'],bounty:1659000000,height:191,firstArc:'Amazon Lily'},
     {id:'doflamingo',name:'Donquixote Doflamingo',img:'https://cdn.myanimelist.net/images/characters/5/349513.jpg',gender:'Male',affiliation:'Donquixote Pirates',df:{has:true,type:'Paramecia',name:'Ito Ito no Mi'},haki:['Observation','Armament','Conquerors'],bounty:340000000,height:305,firstArc:'Jaya'},
     {id:'crocodile',name:'Crocodile',img:'https://cdn.myanimelist.net/images/characters/6/100535.jpg',gender:'Male',affiliation:'Cross Guild',df:{has:true,type:'Logia',name:'Suna Suna no Mi'},haki:['Armament'],bounty:1965000000,height:253,firstArc:'Alabasta'},
-    {id:'law',name:'Trafalgar D. Water Law',img:'https://cdn.myanimelist.net/images/characters/10/258757.jpg',gender:'Male',affiliation:'Heart Pirates',df:{has:true,type:'Paramecia',name:'Ope Ope no Mi'},haki:['Observation','Armament','Conquerors'],bounty:3000000000,height:191,firstArc:'Sabaody Archipelago'},
+    {id:'law',name:'Trafalgar D. Water Law',img:'https://cdn.myanimelist.net/images/characters/10/258757.jpg',gender:'Male',affiliation:'Heart Pirates',df:{has:true,type:'Paramecia',name:'Ope Ope no Mi'},haki:['Observation','Armament'],bounty:3000000000,height:191,firstArc:'Sabaody Archipelago'},
     {id:'buggy',name:'Buggy',img:'https://cdn.myanimelist.net/images/characters/6/69112.jpg',gender:'Male',affiliation:'Cross Guild',df:{has:true,type:'Paramecia',name:'Bara Bara no Mi'},haki:[],bounty:3189000000,height:182,firstArc:'Orange Town'},
-    {id:'sabo',name:'Sabo',img:'https://cdn.myanimelist.net/images/characters/15/131855.jpg',gender:'Male',affiliation:'Revolutionary Army',df:{has:true,type:'Logia',name:'Mera Mera no Mi'},haki:['Observation','Armament','Conquerors'],bounty:602000000,height:187,firstArc:'Dressrosa'},
+    {id:'sabo',name:'Sabo',img:'https://cdn.myanimelist.net/images/characters/15/131855.jpg',gender:'Male',affiliation:'Revolutionary Army',df:{has:true,type:'Logia',name:'Mera Mera no Mi'},haki:['Observation','Armament'],bounty:602000000,height:187,firstArc:'Dressrosa'},
     {id:'ace',name:'Portgas D. Ace',img:'https://cdn.myanimelist.net/images/characters/2/72220.jpg',gender:'Male',affiliation:'Whitebeard Pirates',df:{has:true,type:'Logia',name:'Mera Mera no Mi'},haki:['Observation','Armament','Conquerors'],bounty:550000000,height:185,firstArc:'Alabasta'},
     {id:'rayleigh',name:'Silvers Rayleigh',img:'https://cdn.myanimelist.net/images/characters/16/141861.jpg',gender:'Male',affiliation:'Roger Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:0,height:188,firstArc:'Sabaody Archipelago'},
     {id:'roger',name:'Gol D. Roger',img:'https://cdn.myanimelist.net/images/characters/3/51747.jpg',gender:'Male',affiliation:'Roger Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:5564800000,height:274,firstArc:'Romance Dawn'},
@@ -9848,12 +9850,12 @@ const BW_OP_CHARS = [
     {id:'caesar',name:'Caesar Clown',img:'https://cdn.myanimelist.net/images/characters/7/235823.jpg',gender:'Male',affiliation:'Punk Hazard',df:{has:true,type:'Logia',name:'Gasu Gasu no Mi'},haki:[],bounty:300000000,height:309,firstArc:'Punk Hazard'},
     {id:'bartolomeo',name:'Bartolomeo',img:'https://cdn.myanimelist.net/images/characters/13/249217.jpg',gender:'Male',affiliation:'Barto Club',df:{has:true,type:'Paramecia',name:'Bari Bari no Mi'},haki:['Armament'],bounty:200000000,height:220,firstArc:'Dressrosa'},
     {id:'cavendish',name:'Cavendish',img:'https://cdn.myanimelist.net/images/characters/15/280596.jpg',gender:'Male',affiliation:'Beautiful Pirates',df:{has:false,type:null,name:null},haki:['Observation','Armament'],bounty:330000000,height:200,firstArc:'Dressrosa'},
-    {id:'rebecca',name:'Rebecca',img:'https://cdn.myanimelist.net/images/characters/11/284339.jpg',gender:'Female',affiliation:'Dressrosa',df:{has:false,type:null,name:null},haki:[],bounty:0,height:165,firstArc:'Dressrosa'},
+    {id:'rebecca',name:'Rebecca',img:'https://cdn.myanimelist.net/images/characters/11/284339.jpg',gender:'Female',affiliation:'Dressrosa',df:{has:false,type:null,name:null},haki:['Observation'],bounty:0,height:165,firstArc:'Dressrosa'},
     {id:'katakuri',name:'Charlotte Katakuri',img:'https://cdn.myanimelist.net/images/characters/8/342776.jpg',gender:'Male',affiliation:'Big Mom Pirates',df:{has:true,type:'Paramecia',name:'Mochi Mochi no Mi'},haki:['Observation','Armament','Conquerors'],bounty:1057000000,height:509,firstArc:'Whole Cake Island'},
     {id:'carrot',name:'Carrot',img:'https://cdn.myanimelist.net/images/characters/8/323766.jpg',gender:'Female',affiliation:'Mink Tribe',df:{has:false,type:null,name:null},haki:['Armament'],bounty:0,height:169,firstArc:'Zou'},
     {id:'yamato',name:'Yamato',img:'https://cdn.myanimelist.net/images/characters/14/490104.jpg',gender:'Female',affiliation:'Wano',df:{has:true,type:'Zoan',name:'Inu Inu no Mi, Okuchi-no-Makami Model'},haki:['Observation','Armament','Conquerors'],bounty:0,height:263,firstArc:'Wano'},
     {id:'queen',name:'Queen',img:'https://cdn.myanimelist.net/images/characters/14/401501.jpg',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Brachiosaurus Model'},haki:['Armament'],bounty:1320000000,height:612,firstArc:'Wano'},
-    {id:'king',name:'King',img:'https://cdn.myanimelist.net/images/characters/15/401447.jpg',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Pteranodon Model'},haki:['Observation','Armament','Conquerors'],bounty:1390000000,height:613,firstArc:'Wano'},
+    {id:'king',name:'King',img:'https://cdn.myanimelist.net/images/characters/15/401447.jpg',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Pteranodon Model'},haki:['Observation','Armament'],bounty:1390000000,height:613,firstArc:'Wano'},
     {id:'jack',name:'Jack',img:'https://cdn.myanimelist.net/images/characters/10/337290.jpg',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Zou Zou no Mi, Mammoth Model'},haki:['Armament'],bounty:1000000000,height:450,firstArc:'Zou'},
     {id:'sengoku',name:'Sengoku',img:'https://cdn.myanimelist.net/images/characters/7/88938.jpg',gender:'Male',affiliation:'Marines',df:{has:true,type:'Zoan',name:'Hito Hito no Mi, Daibutsu Model'},haki:['Observation','Armament','Conquerors'],bounty:0,height:278,firstArc:'Marineford'},
     // ── New additions ──
@@ -9863,16 +9865,16 @@ const BW_OP_CHARS = [
     {id:'smoothie',name:'Charlotte Smoothie',img:'https://s4.anilist.co/file/anilistcdn/character/large/b136036-hWdz3OAupfri.jpg',gender:'Female',affiliation:'Big Mom Pirates',df:{has:true,type:'Paramecia',name:'Shibo Shibo no Mi'},haki:['Armament'],bounty:932000000,height:464,firstArc:'Whole Cake Island'},
     {id:'cracker',name:'Charlotte Cracker',img:'https://s4.anilist.co/file/anilistcdn/character/large/b136035-OWcGohs8YDwH.jpg',gender:'Male',affiliation:'Big Mom Pirates',df:{has:true,type:'Paramecia',name:'Bisu Bisu no Mi'},haki:['Armament'],bounty:860000000,height:307,firstArc:'Whole Cake Island'},
     {id:'oden',name:'Kozuki Oden',img:'https://s4.anilist.co/file/anilistcdn/character/large/b149797-UmdR7up3kgoK.png',gender:'Male',affiliation:'Kozuki Clan',df:{has:false,type:null,name:null},haki:['Observation','Armament','Conquerors'],bounty:0,height:382,firstArc:'Wano'},
-    {id:'momonosuke',name:'Momonosuke',img:'https://s4.anilist.co/file/anilistcdn/character/large/b126184-QZ8JNecT5wQc.png',gender:'Male',affiliation:'Kozuki Clan',df:{has:true,type:'Zoan',name:'Uo Uo no Mi, Seiryu Model'},haki:['Conquerors'],bounty:0,height:140,firstArc:'Punk Hazard'},
+    {id:'momonosuke',name:'Momonosuke',img:'https://s4.anilist.co/file/anilistcdn/character/large/b126184-QZ8JNecT5wQc.png',gender:'Male',affiliation:'Kozuki Clan',df:{has:true,type:'Zoan',name:'Uo Uo no Mi, Seiryu Model'},haki:[],bounty:0,height:140,firstArc:'Punk Hazard'},
     {id:'orochi',name:'Kurozumi Orochi',img:'https://s4.anilist.co/file/anilistcdn/character/large/b132669-TGXODbAMwtLV.png',gender:'Male',affiliation:'Wano',df:{has:true,type:'Zoan',name:'Hebi Hebi no Mi, Yamata no Orochi Model'},haki:[],bounty:0,height:192,firstArc:'Wano'},
-    {id:'ulti',name:'Ulti',img:'https://s4.anilist.co/file/anilistcdn/character/large/b64769-WoWlCMLLgJ14.png',gender:'Female',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Pachycephalosaurus Model'},haki:['Armament','Conquerors'],bounty:400000000,height:269,firstArc:'Wano'},
+    {id:'ulti',name:'Ulti',img:'https://s4.anilist.co/file/anilistcdn/character/large/b64769-WoWlCMLLgJ14.png',gender:'Female',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Pachycephalosaurus Model'},haki:['Armament'],bounty:400000000,height:269,firstArc:'Wano'},
     {id:'pageone',name:'Page One',img:'https://s4.anilist.co/file/anilistcdn/character/large/b172132-QpYBzNJ16R7n.jpg',gender:'Male',affiliation:'Beasts Pirates',df:{has:true,type:'Zoan',name:'Ryu Ryu no Mi, Spinosaurus Model'},haki:['Armament'],bounty:290000000,height:319,firstArc:'Wano'},
     {id:'apoo',name:'Scratchmen Apoo',img:'https://s4.anilist.co/file/anilistcdn/character/large/b20288-7ccM0oyUvyLu.jpg',gender:'Male',affiliation:'On Air Pirates',df:{has:true,type:'Paramecia',name:'Oto Oto no Mi'},haki:[],bounty:350000000,height:256,firstArc:'Sabaody Archipelago'},
     {id:'urouge',name:'Urouge',img:'https://s4.anilist.co/file/anilistcdn/character/large/b20294-6jBqrVoAQSaz.png',gender:'Male',affiliation:'Fallen Monk Pirates',df:{has:true,type:'Paramecia',name:'Karma Karma no Mi'},haki:['Armament'],bounty:108000000,height:390,firstArc:'Sabaody Archipelago'},
     {id:'koala',name:'Koala',img:'https://s4.anilist.co/file/anilistcdn/character/large/b43093-STjuKaQk68Ex.jpg',gender:'Female',affiliation:'Revolutionary Army',df:{has:false,type:null,name:null},haki:['Armament'],bounty:0,height:165,firstArc:'Dressrosa'},
     {id:'ivankov',name:'Emporio Ivankov',img:'https://s4.anilist.co/file/anilistcdn/character/large/22646.jpg',gender:'Male',affiliation:'Revolutionary Army',df:{has:true,type:'Paramecia',name:'Horu Horu no Mi'},haki:['Armament'],bounty:0,height:692,firstArc:'Impel Down'},
-    {id:'inuarashi',name:'Inuarashi',img:'https://s4.anilist.co/file/anilistcdn/character/large/126182-fyFwu3Ih1yej.jpg',gender:'Male',affiliation:'Mokomo Dukedom',df:{has:false,type:null,name:null},haki:['Armament','Conquerors'],bounty:0,height:450,firstArc:'Zou'},
-    {id:'nekomamushi',name:'Nekomamushi',img:'https://s4.anilist.co/file/anilistcdn/character/large/126181-kleTMK1K9tda.jpg',gender:'Male',affiliation:'Mokomo Dukedom',df:{has:false,type:null,name:null},haki:['Armament','Conquerors'],bounty:0,height:400,firstArc:'Zou'},
+    {id:'inuarashi',name:'Inuarashi',img:'https://s4.anilist.co/file/anilistcdn/character/large/126182-fyFwu3Ih1yej.jpg',gender:'Male',affiliation:'Mokomo Dukedom',df:{has:false,type:null,name:null},haki:['Armament'],bounty:0,height:450,firstArc:'Zou'},
+    {id:'nekomamushi',name:'Nekomamushi',img:'https://s4.anilist.co/file/anilistcdn/character/large/126181-kleTMK1K9tda.jpg',gender:'Male',affiliation:'Mokomo Dukedom',df:{has:false,type:null,name:null},haki:['Armament'],bounty:0,height:400,firstArc:'Zou'},
     {id:'pedro',name:'Pedro',img:'https://s4.anilist.co/file/anilistcdn/character/large/b126180-ud2y3PGElJDU.jpg',gender:'Male',affiliation:'Mokomo Dukedom',df:{has:false,type:null,name:null},haki:['Armament'],bounty:382000000,height:310,firstArc:'Whole Cake Island'},
     {id:'reiju',name:'Vinsmoke Reiju',img:'https://s4.anilist.co/file/anilistcdn/character/large/b127891-FSRMoIQeDyV8.png',gender:'Female',affiliation:'Vinsmoke Family',df:{has:false,type:null,name:null},haki:['Armament'],bounty:0,height:174,firstArc:'Whole Cake Island'},
     {id:'judge',name:'Vinsmoke Judge',img:'https://s4.anilist.co/file/anilistcdn/character/large/b127895-Io7YzfaJSW7t.png',gender:'Male',affiliation:'Vinsmoke Family',df:{has:false,type:null,name:null},haki:[],bounty:0,height:262,firstArc:'Whole Cake Island'},
@@ -9998,6 +10000,7 @@ function bwOpShowResult() {
             ${answerImg}
             <div style="font-size:20px;font-weight:800;color:#FFD700;">${answer.name}</div>
             <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
+            <div id="bwop-streak-line" style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.85);"></div>
             <div style="display:flex; gap:10px; margin-top:8px; flex-wrap:wrap; justify-content:center;">
             </div>
             <div style="width:100%;margin-top:10px;">
@@ -10015,6 +10018,7 @@ function bwOpShowResult() {
         if (inputArea) inputArea.style.display = 'none';
         // Load answer image
         window.bwOpApplyImages();
+        window._bwShowStreak('bw_op_leaderboard', 'bwop-streak-line');
         // Update thumbnail status
         const statusEl = document.getElementById('bwop-status-text');
         if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
@@ -10556,6 +10560,7 @@ function bwBlcShowResult() {
             <div id="blcinitials-answer" style="width:100px;height:100px;border-radius:50%;background:var(--accent-yellow);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;color:#111;">${initials}</div>
             <div style="font-size:20px;font-weight:800;color:#00BCD4;">${answer.name}</div>
             <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
+            <div id="bwblc-streak-line" style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.85);"></div>
             <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
             </div>
             <div style="width:100%;margin-top:10px;">
@@ -10568,6 +10573,7 @@ function bwBlcShowResult() {
         </div>`;
         if (inputArea) inputArea.style.display = 'none';
         window.bwBlcApplyImages();
+        window._bwShowStreak('bw_blc_leaderboard', 'bwblc-streak-line');
         const statusEl = document.getElementById('bwblc-status-text');
         if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
     } else {
@@ -10979,6 +10985,7 @@ function bwDbShowResult() {
             <div id="dbinitials-answer" style="width:100px;height:100px;border-radius:50%;background:var(--accent-yellow);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;color:#111;">${initials}</div>
             <div style="font-size:20px;font-weight:800;color:#FF6F00;">${answer.name}</div>
             <div style="font-size:15px;font-weight:700;color:white;">🎉 ${guesses.length === 1 ? 'First try!' : `Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'}!`}</div>
+            <div id="bwdb-streak-line" style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.85);"></div>
             <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
             </div>
             <div style="width:100%;margin-top:10px;">
@@ -10991,6 +10998,7 @@ function bwDbShowResult() {
         </div>`;
         if (inputArea) inputArea.style.display = 'none';
         window.bwDbApplyImages();
+        window._bwShowStreak('bw_db_leaderboard', 'bwdb-streak-line');
         const statusEl = document.getElementById('bwdb-status-text');
         if (statusEl) statusEl.innerText = `✓ Solved in ${guesses.length} ${guesses.length===1?'guess':'guesses'} today!`;
     } else {
@@ -11280,6 +11288,17 @@ if (_sentinel) _feedObserver.observe(_sentinel);
 function bwGetDate() {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
+
+// Fetches the user's current streak from a BuzzWord leaderboard collection and fills in the placeholder element
+window._bwShowStreak = async function(leaderboardCollection, elId) {
+    if (!auth.currentUser) return;
+    try {
+        const snap = await getDoc(doc(db, leaderboardCollection, auth.currentUser.uid));
+        const streak = snap.exists() ? (snap.data().currentStreak || 0) : 0;
+        const el = document.getElementById(elId);
+        if (el && streak > 0) el.innerHTML = `🔥 ${streak} day${streak === 1 ? '' : 's'} streak`;
+    } catch(e) {}
+};
 
 // Returns days elapsed since 2025-01-01 — used to cycle through the fixed character order
 function bwDayIndex(dateStr) {
@@ -11865,6 +11884,19 @@ function _triviaGetDaily() {
 
 window._triviaState = null;
 
+// Tracks consecutive daily-trivia play streak in localStorage
+function _triviaRecordPlay() {
+    const stats = JSON.parse(localStorage.getItem('weebee_trivia_stats') || '{"streak":0,"lastPlayDate":""}');
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    if (stats.lastPlayDate !== today) {
+        stats.streak = stats.lastPlayDate === yesterday ? (stats.streak || 0) + 1 : 1;
+        stats.lastPlayDate = today;
+        window._saveGameState('weebee_trivia_stats', JSON.stringify(stats));
+    }
+    return stats;
+}
+
 window.openTriviaGame = function() {
     const container = document.getElementById('trivia-game-container');
     const playBtn = document.getElementById('trivia-play-btn');
@@ -11925,6 +11957,7 @@ window.triviaAnswer = function(idx) {
         if (st.current >= st.questions.length) {
             const today = new Date().toISOString().split('T')[0];
             window._saveGameState(`weebee_trivia_${today}`, JSON.stringify({ score: st.score }));
+            _triviaRecordPlay();
             _triviaShowResult(st.score, false);
         } else {
             _triviaRender();
@@ -11940,11 +11973,13 @@ function _triviaShowResult(score, alreadyDone) {
     window._triviaShareText = '🧠 Anime Trivia — ' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '\n' + emoji + ' ' + score + '/5 on WeeBee Daily Trivia!\n\nPlay it here: https://weebee.buzz/#trivia';
     const today = new Date().toISOString().split('T')[0];
     const alreadyPosted = (() => { try { return JSON.parse(localStorage.getItem('weebee_trivia_' + today) || '{}').posted; } catch(e) { return false; } })();
+    const _triviaStreak = (() => { try { return JSON.parse(localStorage.getItem('weebee_trivia_stats')||'{}').streak || 0; } catch(e){ return 0; } })();
     container.innerHTML = `
         <div style="background:var(--bg-gray);border-radius:16px;padding:24px;margin-bottom:16px;border:1px solid rgba(156,39,176,0.3);text-align:center;">
             <div style="font-size:52px;margin-bottom:12px;">${emoji}</div>
             <div style="font-size:32px;font-weight:900;color:#CE93D8;margin-bottom:6px;">${score} / 5</div>
             <div style="font-size:14px;color:var(--text-muted);margin-bottom:${alreadyDone?'8':'20'}px;">${msg}</div>
+            ${_triviaStreak > 0 ? `<div style="font-size:13px;font-weight:700;color:#9C27B0;margin-bottom:${alreadyDone?'8':'14'}px;">🔥 ${_triviaStreak} day${_triviaStreak === 1 ? '' : 's'} streak</div>` : ''}
             ${alreadyDone ? '<div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">You already played today — come back tomorrow!</div>' : ''}
             <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
                 <button onclick="navigator.clipboard.writeText(window._triviaShareText).then(()=>alert('Copied to clipboard!')).catch(()=>alert('Could not copy'))" class="action-btn" style="background:#9C27B0;color:white;">
@@ -12262,6 +12297,7 @@ function _obRender() {
 
     const clipDur = OB_CLIPS[st.clipIdx];
     const done = st.solved || st.failed;
+    const _mbStreak = st.solved ? (() => { try { return JSON.parse(localStorage.getItem('weebee_mb_stats')||'{}').streak || 0; } catch(e){ return 0; } })() : 0;
 
     const dots = OB_CLIPS.map((_, i) => {
         const used = i < st.guesses.length;
@@ -12284,6 +12320,7 @@ function _obRender() {
         <div style="font-size:28px;margin-bottom:8px;">${st.solved ? '🎉' : '😔'}</div>
         <div style="font-weight:800;font-size:18px;color:var(--text-dark);margin-bottom:4px;">${st.solved ? 'Nice one!' : 'Better luck tomorrow!'}</div>
         <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;">The answer was <strong style="color:var(--text-dark);">${st.song.anime}</strong></div>
+        ${_mbStreak > 0 ? `<div style="font-size:13px;font-weight:700;color:#22c55e;margin-bottom:14px;">🔥 ${_mbStreak} day${_mbStreak === 1 ? '' : 's'} streak</div>` : ''}
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
             <button onclick="window._obPlayFull()" class="action-btn" style="background:#a78bfa;color:white;">▶ Play Full Opening</button>
             <button onclick="window.shareMeloBee()" class="action-btn" style="background:#22c55e;color:white;"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">share</span> Share Score</button>
