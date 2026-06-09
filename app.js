@@ -5600,16 +5600,21 @@ const TCG_PACKS = [
     }
 ];
 
-window._tcgCardPool = null;
+window._tcgRarePool  = null;
+window._tcgCommonPool = null;
 
 async function _tcgEnsureCardPool() {
-    if (window._tcgCardPool) return;
+    if (window._tcgRarePool && window._tcgCommonPool) return;
     try {
-        const snap = await getDocs(query(collection(db, 'characters'), limit(300)));
-        const pool = [];
-        snap.forEach(d => { const c = d.data(); if (c.name && c.image) pool.push({ name: c.name, anime: c.series || c.anime || '', image: c.image }); });
-        window._tcgCardPool = pool;
-    } catch(e) { window._tcgCardPool = []; }
+        const [rareSnap, commonSnap] = await Promise.all([
+            getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'rare'),   limit(2000))),
+            getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'common'), limit(2000))),
+        ]);
+        window._tcgRarePool   = [];
+        window._tcgCommonPool = [];
+        rareSnap.forEach(d   => { const c = d.data(); if (c.name && c.image) window._tcgRarePool.push(c); });
+        commonSnap.forEach(d => { const c = d.data(); if (c.name && c.image) window._tcgCommonPool.push(c); });
+    } catch(e) { window._tcgRarePool = []; window._tcgCommonPool = []; }
 }
 
 function _tcgPickCard(rarity) {
@@ -5618,18 +5623,83 @@ function _tcgPickCard(rarity) {
             const src = TCG_SSR_CARDS[Math.floor(Math.random() * TCG_SSR_CARDS.length)];
             return { name: src.name, anime: src.anime, image: src.image, rarity: 'ssr' };
         }
-        rarity = 'sr'; // fallback if no SSR art loaded yet
+        rarity = 'sr';
     }
     if (rarity === 'sr') {
         const src = TCG_SR_CARDS[Math.floor(Math.random() * TCG_SR_CARDS.length)];
         return { name: src.name, anime: src.anime, image: src.image, rarity: 'sr' };
     }
-    const pool = window._tcgCardPool || [];
+    const pool = rarity === 'rare' ? (window._tcgRarePool || []) : (window._tcgCommonPool || []);
     if (!pool.length) return { name: '???', anime: '', image: '', rarity };
-    const candidates = rarity === 'rare' ? pool.slice(0, Math.min(50, pool.length)) : pool;
-    const c = candidates[Math.floor(Math.random() * candidates.length)];
-    return { name: c.name, anime: c.anime, image: c.image, rarity };
+    const c = pool[Math.floor(Math.random() * pool.length)];
+    return { name: c.name, anime: c.series || c.anime || '', image: c.image, rarity };
 }
+
+// ── TCG Card Pool Seeder (admin) ──────────────────────────────────────────────
+window._tcgSeedCardPool = async function() {
+    if (!window.isAdmin) return;
+    const statusEl = document.getElementById('tcg-seed-status');
+    const btn = document.getElementById('tcg-seed-btn');
+    if (!statusEl || !btn) return;
+    btn.disabled = true;
+
+    const log = msg => { statusEl.textContent = msg; console.log('[TCG Seed]', msg); };
+    const delay = ms => new Promise(r => setTimeout(r, ms));
+
+    try {
+        // Step 1: fetch top 100 anime from Jikan (4 pages of 25)
+        log('Fetching top 100 anime from MAL…');
+        const animeList = [];
+        for (let page = 1; page <= 4; page++) {
+            const res = await fetch(`https://api.jikan.moe/v4/top/anime?limit=25&page=${page}`);
+            const json = await res.json();
+            (json.data || []).forEach(a => animeList.push({ mal_id: a.mal_id, title: a.title_english || a.title }));
+            log(`Fetched page ${page}/4 — ${animeList.length} anime so far…`);
+            await delay(500);
+        }
+
+        // Step 2: for each anime, fetch top 30 chars from AniList and upsert to Firestore
+        let saved = 0, skipped = 0;
+        for (let i = 0; i < animeList.length; i++) {
+            const anime = animeList[i];
+            log(`[${i + 1}/${animeList.length}] ${anime.title} — fetching characters…`);
+            try {
+                const aniRes = await fetch('https://graphql.anilist.co', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: `query($id:Int){Media(idMal:$id,type:ANIME){characters(sort:[FAVOURITES_DESC],perPage:30,page:1){nodes{id name{full}image{large}}}}}`, variables: { id: anime.mal_id } })
+                });
+                const aniJson = await aniRes.json();
+                const chars = aniJson?.data?.Media?.characters?.nodes || [];
+                for (let rank = 0; rank < chars.length; rank++) {
+                    const ch = chars[rank];
+                    if (!ch?.id || !ch?.image?.large) continue;
+                    const docId = `char_${ch.id}`;
+                    await setDoc(doc(db, 'characters', docId), {
+                        name:       ch.name.full,
+                        image:      ch.image.large,
+                        series:     anime.title,
+                        mal_id:     anime.mal_id,
+                        anilist_id: ch.id,
+                        rank:       rank + 1,
+                        rarityTier: rank < 15 ? 'rare' : 'common',
+                    }, { merge: true });
+                    saved++;
+                }
+            } catch(e) { skipped++; }
+            await delay(600); // stay under AniList rate limit
+        }
+
+        // Reset cached pools so next pack open reloads from DB
+        window._tcgRarePool  = null;
+        window._tcgCommonPool = null;
+        log(`Done! ${saved} characters saved, ${skipped} anime skipped.`);
+    } catch(e) {
+        log(`Error: ${e.message}`);
+    } finally {
+        btn.disabled = false;
+    }
+};
 
 function _tcgRollPackCards(pack) {
     const cards = [];

@@ -845,6 +845,16 @@
                         <span id="tcg-status" style="font-size:13px; color:var(--text-muted);"></span>
                     </div>
 
+                    <!-- Card Pool Seeder -->
+                    <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                        <div>
+                            <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Card Pool Seeder</div>
+                            <div style="font-size:12px; color:var(--text-muted);">Fetches top 100 anime → top 30 chars each → saves to Firestore with rarity tags. Takes ~60s.</div>
+                        </div>
+                        <button id="tcg-seed-btn" onclick="window._tcgSeedCardPool()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Seed Card Pool</button>
+                        <span id="tcg-seed-status" style="font-size:12px; color:var(--text-muted); flex:1;"></span>
+                    </div>
+
                     <div id="tcg-card-grid" class="wb-card-grid"></div>
 
                     <!-- Amber Wallet (admin) -->
@@ -2068,6 +2078,6 @@
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=237"></script>
+    <script type="module" src="app.js?v=238"></script>
 </body>
 </html>
