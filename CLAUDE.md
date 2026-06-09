@@ -6,6 +6,13 @@
 - [ ] **User Stats page** — permanent "Your Stats" profile tab: total episodes watched, top genres, top studios, rank progression, review streaks (like Spotify Wrapped but always available)
 - [ ] **Connections-style game** — daily: group 16 anime characters into 4 categories, shareable results (ON HOLD)
 
+## TCG / Amber — Next Up
+- [ ] **Testing** — end-to-end test amber earning (games, reviews, completions, interactions, login streak), pack purchase deduction, and card rendering for all rarities
+- [ ] **Card back art** — design real card back artwork to replace the placeholder WeeBee bee text in the pack opening flip animation
+- [ ] **Pack opening effects** — particle burst on SR pull, card glow animations, optional sound; make the reveal feel more impactful
+- [ ] **Amber visibility** — show amber balance in topbar, profile stats section, and anywhere the user would expect to see their currency
+- [ ] **Card binder / collection viewer** — persistent collection saved to Firestore when packs are opened; binder UI to browse owned cards by rarity/series
+
 ## Next Patch Notes
 
 🗃️ WeeBee Character Database
