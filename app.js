@@ -196,6 +196,9 @@ window.awardAchievements = async function(ids) {
         for (let i = 0; i < toAward.length; i++) {
             const ach = ACHIEVEMENTS.find(a => a.id === toAward[i]);
             if (ach) { if (i > 0) await new Promise(r => setTimeout(r, 3800)); window.showAchievementToast(ach); }
+            const amberVal = ACHIEVEMENT_AMBER[toAward[i]];
+            if (amberVal) _awardAmber(amberVal, `achievement:${toAward[i]}`).catch(() => {});
+            if (toAward[i] === 'review_50') window._amberAnimeAuthority = true;
         }
     } catch(e) {}
 };
@@ -217,6 +220,80 @@ window.showAchievementToast = function(ach) {
     window._toastTimer = setTimeout(() => { toast.style.display = 'none'; }, 4500);
 };
 
+// ── Amber Currency System ────────────────────────────────────────
+// Achievement amber payouts by tier: Common 25 | Uncommon 50 | Rare 100 | Epic 250 | Legendary 500 | Mythic 1000
+const ACHIEVEMENT_AMBER = {
+    // Common
+    review_1:25, review_10:25, indepth_1:25, indepth_10:25, react_1:25, react_10:25,
+    complete_1:25, complete_10:25, dropout:25, first_follow:25,
+    bwop_first:25, bwnrt_first:25, bwblc_first:25, bwdb_first:25,
+    feed_showtime:25, tl_first:25, trivia_first:25, trivia_7:25,
+    ht_first:25, ht_10:25, poll_first:25, mb_first:25,
+    // Uncommon
+    review_25:50, review_50:50, indepth_25:50, indepth_50:50, react_25:50, react_50:50,
+    complete_25:50, complete_50:50, suggestor_5:50,
+    bwop_streak_7:50, bwnrt_streak_7:50, bwblc_streak_7:50, bwdb_streak_7:50,
+    bw_double_agent:50, feed_trending:50, tl_10:50, tl_crowd_pleaser:50,
+    trivia_perfect:50, trivia_30:50, ht_controversial:50, poll_popular:50,
+    mb_perfect_pitch:50, mb_streak_7:50,
+    // Rare
+    review_100:100, indepth_100:100, react_100:100, complete_100:100,
+    bwop_total_30:100, bwnrt_total_30:100, bwblc_total_30:100, bwdb_total_30:100,
+    bw_multiverse:100, ht_popular:100, mb_total_30:100,
+    bwop_1guess:100, bwnrt_1guess:100, bwblc_1guess:100, bwdb_1guess:100,
+    // Epic
+    review_250:250, indepth_250:250, react_250:250, complete_250:250,
+    // Legendary
+    review_500:500, indepth_500:500, react_500:500, complete_500:500,
+    founder:500, top_reviewer:500, bwop_streak_100:500,
+    // Mythic
+    review_1000:1000, indepth_1000:1000, react_1000:1000, complete_1000:1000,
+};
+
+// Whether the current user has unlocked Anime Authority (review_50) — cached on load
+window._amberAnimeAuthority = false;
+
+// Award amber to the current user
+async function _awardAmber(amount, reason) {
+    if (!auth.currentUser || amount <= 0) return;
+    const uid = auth.currentUser.uid;
+    try {
+        await updateDoc(doc(db, 'profiles', uid), { amber: increment(amount) });
+        addDoc(collection(db, 'amber_log'), { uid, amount, reason, timestamp: new Date() }).catch(() => {});
+    } catch(e) {}
+}
+
+// Award amber to any uid — used for likes received by post author
+async function _awardAmberToUser(uid, amount, reason) {
+    if (!uid || amount <= 0) return;
+    try {
+        await updateDoc(doc(db, 'profiles', uid), { amber: increment(amount) });
+        addDoc(collection(db, 'amber_log'), { uid, amount, reason, timestamp: new Date() }).catch(() => {});
+    } catch(e) {}
+}
+
+// Award amber for a daily-capped action (e.g. games) — fires once per key per day
+function _awardAmberDaily(key, amount) {
+    if (!auth.currentUser) return;
+    const today = new Date().toISOString().split('T')[0];
+    const storageKey = `weebee_amber_${key}_${today}`;
+    if (localStorage.getItem(storageKey)) return;
+    localStorage.setItem(storageKey, '1');
+    _awardAmber(amount, key).catch(() => {});
+}
+
+// Award 1 amber for an interaction (like/comment given) — max 10/day combined
+function _awardAmberInteraction() {
+    if (!auth.currentUser) return;
+    const today = new Date().toISOString().split('T')[0];
+    const key = `weebee_amber_interactions_${today}`;
+    const count = parseInt(localStorage.getItem(key) || '0');
+    if (count >= 10) return;
+    localStorage.setItem(key, count + 1);
+    _awardAmber(1, 'interaction').catch(() => {});
+}
+// ── End Amber Currency System ────────────────────────────────────
+
 window.initUserAchievements = async function() {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
@@ -228,6 +305,7 @@ window.initUserAchievements = async function() {
         ]);
         const profile = profileDoc.exists() ? profileDoc.data() : {};
         const existing = achDoc.exists() ? achDoc.data() : {};
+        window._amberAnimeAuthority = !!existing.review_50;
 
         const toCheck = [
             ...window.getEarnedIds('review', profile.reviewCount  || 0),
@@ -257,9 +335,31 @@ window.initUserAchievements = async function() {
             setDoc(doc(db, "achievements", uid), updates, { merge: true }).catch(() => {});
         }
     } catch(e) {}
+    // Login bonus
+    _awardLoginBonus().catch(() => {});
     // Check community achievements separately (Tier Lists, Feed)
     window.checkCommunityAchievements().catch(() => {});
 };
+
+async function _awardLoginBonus() {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const today = new Date().toISOString().split('T')[0];
+    const storageKey = `weebee_amber_login_${today}`;
+    if (localStorage.getItem(storageKey)) return;
+    try {
+        const pd = await getDoc(doc(db, 'profiles', uid));
+        const p = pd.exists() ? pd.data() : {};
+        const lastDate = p.lastLoginDate || null;
+        const streak = p.loginStreak || 0;
+        const yesterday = new Date(Date.now() - 864e5).toISOString().split('T')[0];
+        const newStreak = lastDate === yesterday ? streak + 1 : 1;
+        const bonus = 100 + Math.min((newStreak - 1) * 5, 100);
+        localStorage.setItem(storageKey, '1');
+        await updateDoc(doc(db, 'profiles', uid), { loginStreak: newStreak, lastLoginDate: today });
+        await _awardAmber(bonus, `login:streak${newStreak}`);
+    } catch(e) {}
+}
 
 window.checkCommunityAchievements = async function() {
     if (!auth.currentUser) return;
@@ -1333,6 +1433,7 @@ window.submitInDepthReview = async function() {
                 likes: [], dislikes: [], commentCount: 0
             });
             if (!window.isSeriesReview) {
+                _awardAmber(10 + (window._amberAnimeAuthority ? 10 : 0), 'review:indepth').catch(() => {});
                 window.myReviewCount = (window.myReviewCount || 0) + 1;
                 window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
                 const _avId = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
@@ -1385,6 +1486,7 @@ window.submitQuickReview = async function() {
                 uid: auth.currentUser.uid, timestamp: new Date(),
                 likes: [], dislikes: [], commentCount: 0
             });
+            _awardAmber(5, 'review:quick').catch(() => {});
             window.myReviewCount = (window.myReviewCount || 0) + 1;
             window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
             const _avIq = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
@@ -1929,7 +2031,7 @@ window.saveListEntry = async function(docId, mal_id, title, img, totalEps) {
         // Track completed/dropped counts for achievements
         if (auth.currentUser && status !== prevStatus) {
             const profileUpdates = {};
-            if (status === 'completed') profileUpdates.completedCount = increment(1);
+            if (status === 'completed') { profileUpdates.completedCount = increment(1); _awardAmber(2, 'anime:complete').catch(() => {}); }
             if (status === 'dropped') profileUpdates.droppedCount = increment(1);
             if (Object.keys(profileUpdates).length) {
                 setDoc(doc(db, "profiles", auth.currentUser.uid), profileUpdates, { merge: true }).then(() =>
@@ -5336,6 +5438,287 @@ window._tcgRenderSRCards = function() {
 };
 if (document.getElementById('tcg-sr-grid')) window._tcgRenderSRCards();
 
+window._amberLoadWallet = async function() {
+    if (!window.isAdmin) return;
+    const el = document.getElementById('amber-wallet-content');
+    if (!el) return;
+    el.innerHTML = '<p style="color:var(--text-muted);">Loading…</p>';
+    try {
+        // Top balances
+        const profilesSnap = await getDocs(query(collection(db, 'profiles'), limit(100)));
+        const users = [];
+        profilesSnap.forEach(d => {
+            const p = d.data();
+            if (p.amber) users.push({ uid: d.id, name: p.displayName || 'Unknown', amber: p.amber, streak: p.loginStreak || 0 });
+        });
+        users.sort((a, b) => b.amber - a.amber);
+
+        // Recent transactions
+        const logSnap = await getDocs(query(collection(db, 'amber_log'), orderBy('timestamp', 'desc'), limit(30)));
+        const logs = [];
+        logSnap.forEach(d => logs.push(d.data()));
+
+        el.innerHTML = `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start;">
+                <div>
+                    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:10px;">Top Balances</div>
+                    ${users.length === 0 ? '<p style="color:var(--text-muted);">No amber earned yet.</p>' :
+                        users.map((u, i) => `
+                            <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-color);">
+                                <span style="font-size:13px;">${i + 1}. ${u.name}</span>
+                                <span style="font-size:13px; font-weight:700; color:#f59e0b;">🟡 ${u.amber.toLocaleString()}</span>
+                            </div>`).join('')}
+                </div>
+                <div>
+                    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:10px;">Recent Transactions</div>
+                    ${logs.length === 0 ? '<p style="color:var(--text-muted);">No transactions yet.</p>' :
+                        logs.map(l => {
+                            const ts = l.timestamp?.toDate ? l.timestamp.toDate().toLocaleString() : '';
+                            return `<div style="padding:6px 0; border-bottom:1px solid var(--border-color); font-size:12px;">
+                                <span style="color:#f59e0b; font-weight:700;">+${l.amount}</span>
+                                <span style="color:var(--text-muted); margin:0 6px;">·</span>
+                                <span>${l.reason}</span>
+                                <span style="color:var(--text-muted); float:right;">${ts}</span>
+                            </div>`;
+                        }).join('')}
+                </div>
+            </div>`;
+    } catch(e) { el.innerHTML = `<p style="color:red;">Failed to load: ${e.message}</p>`; }
+};
+
+// ── TCG Pack Store ────────────────────────────────────────────────────────────
+
+const TCG_PACKS = [
+    {
+        id: 'standard',
+        name: 'Standard Pack',
+        cost: 300,
+        gradient: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
+        description: '5 cards · 1 guaranteed Rare+',
+        odds: 'Common 89% · Rare 10% · SR 1%\nGuaranteed slot: Rare 90% · SR 10%',
+        guaranteedSR: false,
+    },
+    {
+        id: 'premium',
+        name: 'Premium Pack',
+        cost: 750,
+        gradient: 'linear-gradient(135deg,#b45309,#f59e0b)',
+        description: '5 cards · 1 guaranteed SR',
+        odds: 'Common 70% · Rare 25% · SR 5%\nGuaranteed slot: always SR',
+        guaranteedSR: true,
+    }
+];
+
+window._tcgCardPool = null;
+
+async function _tcgEnsureCardPool() {
+    if (window._tcgCardPool) return;
+    try {
+        const snap = await getDocs(query(collection(db, 'characters'), limit(300)));
+        const pool = [];
+        snap.forEach(d => { const c = d.data(); if (c.name && c.image) pool.push({ name: c.name, anime: c.series || c.anime || '', image: c.image }); });
+        window._tcgCardPool = pool;
+    } catch(e) { window._tcgCardPool = []; }
+}
+
+function _tcgPickCard(rarity) {
+    if (rarity === 'sr') {
+        const src = TCG_SR_CARDS[Math.floor(Math.random() * TCG_SR_CARDS.length)];
+        return { name: src.name, anime: src.anime, image: src.image, rarity: 'sr' };
+    }
+    const pool = window._tcgCardPool || [];
+    if (!pool.length) return { name: '???', anime: '', image: '', rarity };
+    const candidates = rarity === 'rare' ? pool.slice(0, Math.min(50, pool.length)) : pool;
+    const c = candidates[Math.floor(Math.random() * candidates.length)];
+    return { name: c.name, anime: c.anime, image: c.image, rarity };
+}
+
+function _tcgRollPackCards(pack) {
+    const cards = [];
+    // Guaranteed slot
+    if (pack.guaranteedSR) {
+        cards.push(_tcgPickCard('sr'));
+    } else {
+        cards.push(_tcgPickCard(Math.random() < 0.10 ? 'sr' : 'rare'));
+    }
+    // 4 remaining slots
+    for (let i = 0; i < 4; i++) {
+        const r = Math.random();
+        let rarity;
+        if (pack.guaranteedSR) {
+            if      (r < 0.05) rarity = 'sr';
+            else if (r < 0.30) rarity = 'rare';
+            else               rarity = 'common';
+        } else {
+            if      (r < 0.01) rarity = 'sr';
+            else if (r < 0.10) rarity = 'rare';
+            else               rarity = 'common';
+        }
+        cards.push(_tcgPickCard(rarity));
+    }
+    return cards.sort(() => Math.random() - 0.5);
+}
+
+window._tcgRenderStore = async function() {
+    if (!window.isAdmin) return;
+    const el = document.getElementById('tcg-store');
+    if (!el) return;
+    let amber = 0;
+    try {
+        if (auth.currentUser) {
+            const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid));
+            amber = pd.exists() ? (pd.data().amber || 0) : 0;
+        }
+    } catch(e) {}
+
+    el.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+            <div>
+                <h3 style="margin:0 0 4px;">Pack Store <span style="font-size:11px;font-weight:700;color:var(--accent-yellow);border:1px solid var(--accent-yellow);border-radius:6px;padding:2px 8px;vertical-align:middle;">ADMIN</span></h3>
+                <p style="color:var(--text-muted);font-size:13px;margin:0;">Spend Amber to pull card packs.</p>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <div style="display:flex;align-items:center;gap:8px;background:var(--bg-gray);border-radius:10px;padding:10px 16px;">
+                    <span style="font-size:20px;">🟡</span>
+                    <span style="font-size:20px;font-weight:800;color:#f59e0b;" id="store-amber-bal">${amber.toLocaleString()}</span>
+                    <span style="font-size:12px;color:var(--text-muted);">Amber</span>
+                </div>
+                <button onclick="window._tcgGrantTestAmber()" style="padding:9px 14px;border-radius:8px;border:1px dashed var(--border-color);background:transparent;color:var(--text-muted);font-size:12px;cursor:pointer;">+ Grant 1000 (test)</button>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;max-width:520px;">
+            ${TCG_PACKS.map(pack => {
+                const canAfford = amber >= pack.cost;
+                return `
+                <div style="background:var(--bg-gray);border-radius:14px;overflow:hidden;border:1px solid var(--border-color);">
+                    <div style="background:${pack.gradient};padding:28px 20px;text-align:center;">
+                        <div style="font-size:52px;margin-bottom:10px;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.4));">🃏</div>
+                        <div style="font-size:17px;font-weight:800;color:white;">${pack.name}</div>
+                        <div style="font-size:12px;color:rgba(255,255,255,0.75);margin-top:4px;">${pack.description}</div>
+                    </div>
+                    <div style="padding:16px;">
+                        <div style="font-size:11px;color:var(--text-muted);line-height:1.7;white-space:pre-line;margin-bottom:14px;">${pack.odds}</div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                            <div style="font-size:17px;font-weight:800;color:#f59e0b;">🟡 ${pack.cost.toLocaleString()}</div>
+                            <button onclick="window._tcgBuyPack('${pack.id}')"
+                                style="padding:9px 18px;border-radius:8px;border:none;background:${pack.gradient};color:white;font-weight:700;font-size:13px;cursor:pointer;opacity:${canAfford ? '1' : '0.5'};">
+                                Open Pack
+                            </button>
+                        </div>
+                        ${!canAfford ? `<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">🟡 ${(pack.cost - amber).toLocaleString()} more needed</div>` : ''}
+                    </div>
+                </div>`;
+            }).join('')}
+        </div>`;
+};
+
+window._tcgGrantTestAmber = async function() {
+    if (!window.isAdmin || !auth.currentUser) return;
+    await _awardAmber(1000, 'admin:test_grant');
+    window._tcgRenderStore();
+};
+
+window._tcgBuyPack = async function(packId) {
+    if (!auth.currentUser) return window.openAuthModal();
+    const pack = TCG_PACKS.find(p => p.id === packId);
+    if (!pack) return;
+    const uid = auth.currentUser.uid;
+    try {
+        const pd = await getDoc(doc(db, 'profiles', uid));
+        const amber = pd.exists() ? (pd.data().amber || 0) : 0;
+        if (amber < pack.cost) return alert('Not enough Amber!');
+        await updateDoc(doc(db, 'profiles', uid), { amber: increment(-pack.cost) });
+        addDoc(collection(db, 'amber_log'), { uid, amount: -pack.cost, reason: `pack:${packId}`, timestamp: new Date() }).catch(() => {});
+    } catch(e) { alert('Purchase failed: ' + e.message); return; }
+
+    await _tcgEnsureCardPool();
+    const cards = _tcgRollPackCards(pack);
+    _tcgShowPackOpening(pack, cards);
+    window._tcgRenderStore();
+};
+
+window._tcgShowPackOpening = function(pack, cards) {
+    document.getElementById('tcg-pack-modal')?.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'tcg-pack-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.93);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;';
+
+    modal.innerHTML = `
+        <div style="text-align:center;margin-bottom:28px;">
+            <div style="font-size:26px;font-weight:800;color:white;margin-bottom:6px;">${pack.name}</div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.45);">Click a card to flip it</div>
+        </div>
+        <div id="tcg-pack-cards-row" style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;max-width:1200px;"></div>
+        <div style="margin-top:32px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+            <button onclick="window._tcgRevealAll()" style="padding:10px 26px;border-radius:8px;border:none;background:rgba(255,255,255,0.14);color:white;font-weight:700;font-size:14px;cursor:pointer;">Reveal All</button>
+            <button onclick="document.getElementById('tcg-pack-modal').remove()" style="padding:10px 26px;border-radius:8px;border:none;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.5);font-weight:700;font-size:14px;cursor:pointer;">Close</button>
+        </div>`;
+
+    document.body.appendChild(modal);
+    window._tcgOpeningCards = cards;
+
+    const row = modal.querySelector('#tcg-pack-cards-row');
+    cards.forEach((card, i) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'tcg-flip-card';
+        wrap.style.cssText = 'width:220px;height:308px;perspective:900px;flex-shrink:0;';
+        wrap.onclick = () => window._tcgFlipCard(i);
+
+        const inner = document.createElement('div');
+        inner.className = 'tcg-flip-inner';
+        inner.id = `tcg-inner-${i}`;
+
+        // Back face (shown first)
+        const back = document.createElement('div');
+        back.className = 'tcg-flip-back';
+        back.style.cssText = 'background:linear-gradient(155deg,#1e1b4b,#312e81,#1e1b4b);border:2px solid #4338ca;display:flex;align-items:center;justify-content:center;';
+        back.innerHTML = `<div style="text-align:center;pointer-events:none;"><div style="font-size:32px;">🐝</div><div style="font-size:10px;font-weight:800;letter-spacing:2px;color:#6366f1;margin-top:8px;">WEEBEE</div></div>`;
+
+        // Front face (revealed on flip)
+        const front = document.createElement('div');
+        front.className = 'tcg-flip-front';
+        front.innerHTML = _tcgBuildCardFace(card);
+
+        inner.appendChild(back);
+        inner.appendChild(front);
+        wrap.appendChild(inner);
+        row.appendChild(wrap);
+    });
+};
+
+function _tcgBuildCardFace(card) {
+    const rarity = card.rarity || 'common';
+    const label = { sr: 'SR', rare: 'Rare', common: 'Common' }[rarity] || 'Common';
+    const art = card.image ? `<img src="${card.image}" alt="${card.name}">` : '';
+    const gem = rarity === 'sr' ? `<span class="wb-rarity-gem"><span>⬡</span></span>` : `<span class="wb-rarity-gem">⬡</span>`;
+    return `<div class="wb-card rarity-${rarity}">
+        <div class="wb-card-inner">
+            <div class="wb-card-header">
+                <span class="wb-mark">WEEBEE</span>
+                ${gem}
+            </div>
+            <div class="wb-card-art">${art}</div>
+            <div class="wb-card-footer">
+                <div class="wb-card-name">${card.name}</div>
+                <div class="wb-card-series">${card.anime}</div>
+                <div class="wb-card-rarity-label">${label}</div>
+            </div>
+        </div>
+    </div>`;
+}
+
+window._tcgFlipCard = function(i) {
+    const inner = document.getElementById(`tcg-inner-${i}`);
+    if (!inner || inner.classList.contains('flipped')) return;
+    inner.classList.add('flipped');
+};
+
+window._tcgRevealAll = function() {
+    const cards = document.querySelectorAll('#tcg-pack-cards-row .tcg-flip-card');
+    cards.forEach((_, i) => setTimeout(() => window._tcgFlipCard(i), i * 220));
+};
+
 window.loadLeaderboards = function() {
     const container = document.getElementById('leaderboard-container');
     if (!container || container.dataset.built) return;
@@ -8246,6 +8629,10 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
             nrtStatusEl.innerText = 'New puzzle available! 🍃';
         }
     }
+    if(targetId === 'tcg-view') {
+        window._tcgRenderSRCards();
+        window._tcgRenderStore();
+    }
     if(targetId === 'news-view') {
         fetchGlobalNews();
         window.loadPatchNotes();
@@ -9463,6 +9850,7 @@ window.checkBwNrtAchievements = async function(guessCount, streak, totalWins) {
         if (opLb.exists() && (opLb.data().totalWins || 0) >= 1) ids.push('bw_multiverse');
     } catch(e) {}
     if (ids.length) window.awardAchievements(ids).catch(() => {});
+    _awardAmberDaily('game_bwnrt', 25);
 };
 
 window.bwNrtShare = function() {
@@ -9632,6 +10020,13 @@ window.toggleBwPostReaction = async function(event, postId, postCollection, type
         if (likesEl) likesEl.textContent = `${Math.max(0, newLikeCount)} Likes`;
         if (dislikesEl) dislikesEl.textContent = `${Math.max(0, newDislikeCount)} Dislikes`;
 
+        // Amber: liker earns 1 interaction; post author earns 1 per like received
+        if (type === 'like' && !hasReacted) {
+            _awardAmberInteraction();
+            const postAuthorUid = snap.exists() ? snap.data().uid : null;
+            if (postAuthorUid && postAuthorUid !== uid) _awardAmberToUser(postAuthorUid, 1, 'like_received').catch(() => {});
+        }
+
         // Write to Firestore
         if (snap.exists()) {
             await updateDoc(ref, {
@@ -9774,6 +10169,7 @@ window.submitBwPostComment = async function(event, btn, postId, postCollection) 
     const commentData = { postId, uid: auth.currentUser.uid, displayName: auth.currentUser.displayName, avatar: av, text, timestamp: new Date(), ...(replyTo && { replyTo }), ...(replyToUid && { replyToUid }) };
     try {
         const ref = await addDoc(collection(db, 'bw_post_comments'), commentData);
+        _awardAmberInteraction();
         const listEl = card.querySelector('.bw-comments-list');
         if (listEl) {
             listEl.querySelector('p')?.remove();
@@ -10202,6 +10598,7 @@ window.checkBwOpAchievements = async function(guessCount, streak, totalWins) {
         if (nrtLb.exists() && (nrtLb.data().totalWins || 0) >= 1) ids.push('bw_multiverse');
     } catch(e) {}
     if (ids.length) window.awardAchievements(ids).catch(() => {});
+    _awardAmberDaily('game_bwop', 25);
 };
 
 window.bwOpShare = function() {
@@ -10740,6 +11137,7 @@ window.checkBwBlcAchievements = async function(guessCount, streak, totalWins) {
     if (streak >= 7) ids.push('bwblc_streak_7');
     if (totalWins >= 30) ids.push('bwblc_total_30');
     if (ids.length) window.awardAchievements(ids).catch(() => {});
+    _awardAmberDaily('game_bwblc', 25);
 };
 
 window.bwBlcShare = function() {
@@ -11160,6 +11558,7 @@ window.checkBwDbAchievements = async function(guessCount, streak, totalWins) {
     if (streak >= 7) ids.push('bwdb_streak_7');
     if (totalWins >= 30) ids.push('bwdb_total_30');
     if (ids.length) window.awardAchievements(ids).catch(() => {});
+    _awardAmberDaily('game_bwdb', 25);
 };
 
 window.bwDbShare = function() {
@@ -12011,6 +12410,7 @@ function _triviaShowResult(score, alreadyDone) {
         if (totalPlays >= 7) toAward.push('trivia_7');
         if (totalPlays >= 30) toAward.push('trivia_30');
         window.awardAchievements(toAward).catch(() => {});
+        _awardAmberDaily('game_trivia', 25);
     }
 }
 
@@ -12500,6 +12900,7 @@ window._obSubmitGuess = function() {
             if (mbStats.streak >= 7) toAward.push('mb_streak_7');
             if (mbStats.totalWins >= 30) toAward.push('mb_total_30');
             window.awardAchievements(toAward).catch(() => {});
+            _awardAmberDaily('game_melobee', 25);
         }
     } else if (st.guesses.length >= OB_CLIPS.length) {
         st.failed = true;

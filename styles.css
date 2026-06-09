@@ -1277,3 +1277,41 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 }
 .wb-card-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; }
 .wb-card-caption { font-size:11px; color:var(--text-muted); text-align:center; max-width:220px; }
+
+/* ── Pack Opening ─────────────────────────────────────────────── */
+.tcg-flip-card { cursor: pointer; }
+.tcg-flip-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tcg-flip-inner.flipped { transform: rotateY(180deg); }
+.tcg-flip-front,
+.tcg-flip-back {
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    overflow: hidden;
+}
+.tcg-flip-back { transform: rotateY(0deg); }
+.tcg-flip-front { transform: rotateY(180deg); }
+
+.tcg-pack-card-sr {
+    background: linear-gradient(155deg, #ddd6fe 0%, #a78bfa 30%, #6366f1 65%, #4338ca 100%);
+    padding: 5px;
+    box-shadow: 0 0 20px rgba(139,92,246,0.6);
+}
+.tcg-pack-card-rare {
+    background: linear-gradient(155deg, #bfdbfe 0%, #3b82f6 50%, #1e3a8a 100%);
+    padding: 5px;
+    box-shadow: 0 0 14px rgba(59,130,246,0.4);
+}
+.tcg-pack-card-common {
+    background: linear-gradient(155deg, #374151, #1f2937);
+    padding: 5px;
+    border: 1px solid #4b5563;
+}

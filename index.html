@@ -29,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=58">
+    <link rel="stylesheet" href="styles.css?v=63">
 </head>
 <body>
     <div class="app-container">
@@ -847,11 +847,29 @@
 
                     <div id="tcg-card-grid" class="wb-card-grid"></div>
 
+                    <!-- Amber Wallet (admin) -->
+                    <div style="margin:40px 0 0; padding-top:32px; border-top:1px solid var(--border-color);">
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+                            <div>
+                                <h3 style="margin:0 0 4px;">Amber Currency <span style="font-size:11px; font-weight:700; color:#f59e0b; border:1px solid #f59e0b; border-radius:6px; padding:2px 8px; vertical-align:middle;">ADMIN</span></h3>
+                                <p style="color:var(--text-muted); font-size:13px; margin:0;">Live balances and transaction log. Admin-only until TCG launch.</p>
+                            </div>
+                            <button onclick="window._amberLoadWallet()" style="padding:9px 18px; border-radius:8px; border:none; background:var(--bg-gray); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Refresh</button>
+                        </div>
+                        <div id="amber-wallet-content" style="background:var(--bg-gray); border-radius:12px; padding:20px;">
+                            <p style="color:var(--text-muted); margin:0;">Click Refresh to load wallet data.</p>
+                        </div>
+                    </div>
+
                     <div style="margin:34px 0 14px;">
                         <h3 style="margin:0 0 4px;">SR Card Showcase <span style="font-size:11px; font-weight:700; color:#a78bfa; border:1px solid #a78bfa; border-radius:6px; padding:2px 8px; vertical-align:middle;">HAND-CURATED</span></h3>
                         <p style="color:var(--text-muted); font-size:13px; margin:0;">Hand-picked art for SR-tier cards — sourced manually and stored in Firebase Storage rather than auto-pulled.</p>
                     </div>
                     <div id="tcg-sr-grid" class="wb-card-grid"></div>
+
+                    <!-- Pack Store -->
+                    <div id="tcg-store" style="margin:40px 0 0; padding-top:32px; border-top:1px solid var(--border-color);"></div>
+
                 </div>
 
     <!-- Tier List Creator Modal -->
@@ -2041,6 +2059,6 @@
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=230"></script>
+    <script type="module" src="app.js?v=236"></script>
 </body>
 </html>
