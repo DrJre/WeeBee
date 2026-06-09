@@ -5660,6 +5660,7 @@ window._tcgSeedCardPool = async function() {
 
         // Step 2: for each anime, fetch top 30 chars from AniList and upsert to Firestore
         let saved = 0, skipped = 0;
+        const seenCharIds = new Set();
         for (let i = 0; i < animeList.length; i++) {
             const anime = animeList[i];
             log(`[${i + 1}/${animeList.length}] ${anime.title} — fetching characters…`);
@@ -5675,15 +5676,18 @@ window._tcgSeedCardPool = async function() {
                     const ch = chars[rank];
                     if (!ch?.id || !ch?.image?.large) continue;
                     const docId = `char_${ch.id}`;
-                    await setDoc(doc(db, 'characters', docId), {
+                    const isNew = !seenCharIds.has(ch.id);
+                    seenCharIds.add(ch.id);
+                    const data = {
                         name:       ch.name.full,
                         image:      ch.image.large,
-                        series:     anime.title,
                         mal_id:     anime.mal_id,
                         anilist_id: ch.id,
                         rank:       rank + 1,
                         rarityTier: rank < 15 ? 'rare' : 'common',
-                    }, { merge: true });
+                    };
+                    if (isNew) data.series = anime.title;
+                    await setDoc(doc(db, 'characters', docId), data, { merge: true });
                     saved++;
                 }
             } catch(e) { skipped++; }
