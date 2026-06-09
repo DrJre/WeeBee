@@ -1270,6 +1270,100 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 .rarity-sr .wb-rarity-gem span { display:inline-block; transform: rotate(-45deg); }
 .rarity-sr .wb-card-rarity-label { background: rgba(139,92,246,0.20); color: #ede9fe; border-color: rgba(221,214,254,0.4); }
 
+/* SSR rarity — prismatic animated rainbow border + holographic hover shimmer */
+.wb-card.rarity-ssr {
+    background: linear-gradient(135deg,
+        #ff6b6b 0%, #ffd93d 17%, #6bcb77 33%,
+        #4d96ff 50%, #c77dff 67%, #ff8fab 83%, #ff6b6b 100%);
+    background-size: 300% 300%;
+    animation: ssr-prismatic 5s ease infinite;
+    padding: 6px;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.6),
+                0 0 32px rgba(255,200,0,0.45),
+                0 0 70px rgba(180,100,255,0.25);
+}
+@keyframes ssr-prismatic {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+/* Holographic shimmer overlay — position/color follows mouse via --mx/--my CSS vars set by JS */
+.wb-card.rarity-ssr::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    border-radius: inherit;
+    background:
+        radial-gradient(
+            ellipse at calc(var(--mx, 0.5) * 100%) calc(var(--my, 0.5) * 100%),
+            rgba(255,255,255,0.38) 0%,
+            transparent 55%
+        ),
+        linear-gradient(
+            calc(var(--mx, 0.5) * 200deg + 30deg),
+            transparent 10%,
+            rgba(255, 60, 130, 0.25) 25%,
+            rgba(255, 210, 0, 0.25) 38%,
+            rgba(0, 230, 130, 0.25) 50%,
+            rgba(60, 160, 255, 0.25) 62%,
+            rgba(200, 60, 255, 0.25) 75%,
+            transparent 88%
+        );
+    mix-blend-mode: screen;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+.wb-card.rarity-ssr:hover::after { opacity: 1; }
+.rarity-ssr .wb-card-art { position: absolute; inset: 0; }
+.rarity-ssr .wb-card-art::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(8,8,20,0.88) 0%, transparent 40%);
+    z-index: 1;
+}
+.rarity-ssr .wb-card-header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    background: linear-gradient(180deg, rgba(15,5,35,0.65) 0%, transparent 100%);
+    z-index: 3;
+}
+.rarity-ssr .wb-card-footer {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: transparent;
+    z-index: 3;
+}
+.rarity-ssr .wb-rarity-gem {
+    background: conic-gradient(from 0deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff, #c77dff, #ff6b6b);
+    box-shadow: 0 0 14px rgba(255,210,0,0.9), 0 0 4px rgba(255,255,255,0.6);
+    border-radius: 4px;
+    transform: rotate(45deg);
+    width: 20px;
+    height: 20px;
+    animation: ssr-gem-hue 3s linear infinite;
+}
+@keyframes ssr-gem-hue {
+    from { filter: hue-rotate(0deg); }
+    to   { filter: hue-rotate(360deg); }
+}
+.rarity-ssr .wb-rarity-gem span { display:inline-block; transform: rotate(-45deg); }
+.rarity-ssr .wb-card-rarity-label {
+    background: rgba(255,200,0,0.15);
+    color: #ffd93d;
+    border-color: rgba(255,215,0,0.5);
+}
+/* SSR flip card back in pack opening */
+.tcg-pack-card-ssr {
+    background: linear-gradient(135deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff, #c77dff);
+    background-size: 300% 300%;
+    animation: ssr-prismatic 3s ease infinite;
+    padding: 5px;
+    box-shadow: 0 0 30px rgba(255,200,0,0.65), 0 0 55px rgba(180,100,255,0.3);
+}
+
 .wb-card-grid {
     display: flex;
     flex-wrap: wrap;

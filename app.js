@@ -5410,7 +5410,97 @@ const TCG_SR_CARDS = [
     { name: 'Brook', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_brook.avif?alt=media&token=38ca74e2-3e4c-44db-8bbb-dc57b28cd5c3' },
     { name: 'Chopper', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_chopper.avif?alt=media&token=05c00e1b-9a5c-4285-a9b0-1cd684f8ad1e' },
     { name: 'Franky', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_franky.avif?alt=media&token=511168ad-8067-4e9c-afde-dd06e3327b4c' },
+    { name: 'Mitsuri Kanroji', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FMitsuri%20Kanroji.jpg?alt=media&token=3d8250f3-f1ca-4886-a4ff-d8d3470e1f53' },
+    { name: 'Muichiro Tokito', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FMuichiro%20Tokito.webp?alt=media&token=c61e844d-b7f8-4f3f-9138-a2f4539d704b' },
+    { name: 'Obanai Iguro', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FObanai%20Iguro.webp?alt=media&token=3b79b0fd-cc97-4656-bbf2-e2791e2fe8e5' },
+    { name: 'Shinazugawa Sanemi', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FShinazugawa%20Sanemi.jpg?alt=media&token=e3be9ce2-7d80-4989-a97e-f9a957283612' },
+    { name: 'Shinobu Kocho', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FShinobu%20Kocho.jpg?alt=media&token=7ba06ddf-3e5c-4494-a846-905f2b357d9f' },
+    { name: 'Annie Leonhart', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSR%2FAnnie%20Leonhart.jpg?alt=media&token=a0d7bff0-99aa-4639-b573-b10803c4b182' },
+    { name: 'Erwin Smith', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSR%2FErwin.jpg?alt=media&token=3ac93734-4076-4733-96d5-1068b246b746' },
+    { name: 'Hange Zoe', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSR%2FHange%20Zoe.webp?alt=media&token=6c132998-9e52-47f7-8a76-f4cb03a01a1c' },
+    { name: 'Reiner Braun', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSR%2FReiner%20Braun.jpg?alt=media&token=b9b297ed-c424-4cbf-a888-adf721e51cc9' },
+    { name: 'Sasha Braus', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSR%2FSasha%20Braus.jpg?alt=media&token=5512cce8-94d0-4dff-9492-616e7b0440e9' },
+    { name: 'Choji Akimichi', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FChoji%20Akimichi.jpg?alt=media&token=7777551f-1052-4db5-bd4a-06ba051f69c5' },
+    { name: 'Gaara', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FGaara.jpg?alt=media&token=00c39565-b769-458c-8f7f-1f5ba6f2638e' },
+    { name: 'Hinata Hyuga', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FHinata.jpg?alt=media&token=1f91f8ce-c969-4c34-8fc9-b349fef36bc7' },
+    { name: 'Ino Yamanaka', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FIno.jpg?alt=media&token=5434306f-3687-4e75-b72e-09b9df614595' },
+    { name: 'Jiraiya', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FJiraiya.webp?alt=media&token=9037126c-da4b-419d-8abb-2051645047ca' },
+    { name: 'Kurama', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FKurama.png?alt=media&token=8b813a81-2682-4d3f-92f0-a3cd4dc4a7b4' },
+    { name: 'Madara Uchiha', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FMadara%20Uchiha.jpg?alt=media&token=e598906f-0a82-4fae-90c9-66ab0e370c35' },
+    { name: 'Might Guy', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FMight%20Guy.jpg?alt=media&token=9b8ee44d-28d8-4ec2-a976-51abfc53da4d' },
+    { name: 'Sakura Haruno', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FSakura.jpg?alt=media&token=24d308fb-4f3a-4efd-ae90-766ab6a42964' },
+    { name: 'Shikamaru Nara', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FShikamaru.webp?alt=media&token=0307d0dc-05db-4125-8370-85f6fde8872a' },
+    { name: 'Tsunade', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FTsunade.jpg?alt=media&token=6b09848a-3aaf-4f08-84e1-2b3f72442bd0' },
 ];
+
+// SSR art — hand-curated, prismatic rainbow border + holographic hover shimmer
+const TCG_SSR_CARDS = [
+    { name: 'Giyu Tomioka', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FGiyu%20Tomioka.jpg?alt=media&token=13f67e57-3f13-456d-90b2-8a7334190f5f' },
+    { name: 'Gyomei Himejima', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FGyomei%20Himejima.jpg?alt=media&token=b75994e0-ce87-4277-9a3c-d5833e822ce3' },
+    { name: 'Inosuke Hashibira', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FInosuke.jpg?alt=media&token=da40f235-12ec-46d0-b1a7-c7bac1de61e5' },
+    { name: 'Kyojuro Rengoku', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FKyojuro%20Rengoku.jpg?alt=media&token=aa39e0c3-2b53-4686-8af2-64d50c1ec6c7' },
+    { name: 'Tanjiro Kamado', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FTanjiro%20Kamado.png?alt=media&token=b59e5e9b-f637-4910-91bc-15af1f46dc9e' },
+    { name: 'Tengen Uzui', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FTengen%20Uzui.jpg?alt=media&token=747f178f-ca86-4037-8a7f-4ca277fcc4a0' },
+    { name: 'Zenitsu Agatsuma', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FZenitsu.jpg?alt=media&token=1603d1fa-b954-4351-b000-592cdcf66dc7' },
+    { name: 'Brook', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FBrook.jpg?alt=media&token=31fb4f42-ee6d-4604-9069-e784bfbb2af7' },
+    { name: 'Franky', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FFranky.jpg?alt=media&token=242f865e-fce9-4e0d-83be-0295a0275702' },
+    { name: 'Dracule Mihawk', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FDracul%20Mihawk.jpg?alt=media&token=73f48c02-c11e-4802-94e2-a7d891fe60eb' },
+    { name: 'Jinbe', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FJinbe.png?alt=media&token=aadef010-7cf5-4e6e-bf7d-aba627bf05ae' },
+    { name: 'Marco', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FMarco.jpg?alt=media&token=9135bf32-2aab-43af-a5b2-935b4810cf94' },
+    { name: 'Monkey D. Garp', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FMonkey%20D%20Garp.webp?alt=media&token=581d0b72-c8a1-4a9d-8e7b-3e657059a302' },
+    { name: 'Monkey D. Luffy', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FMonkey%20D%20Luffy.png?alt=media&token=3b87b7ad-8081-4ba6-ae46-c73368c07aad' },
+    { name: 'Nami', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FNami.jpg?alt=media&token=4a31cee7-4b33-4fb7-8bf4-5ed7ee454d49' },
+    { name: 'Nico Robin', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FNico%20Robin.jpg?alt=media&token=70927948-1913-49e7-aa87-2648100a864e' },
+    { name: 'Portgas D. Ace', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FPortgas%20D%20Ace.jpg?alt=media&token=2e07f391-d811-4cdc-84f4-e4be226b67d4' },
+    { name: 'Roronoa Zoro', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FRoranora%20Zoro.jpg?alt=media&token=1c204a55-427b-4f45-8c07-fd9da90b67d9' },
+    { name: 'Sabo', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FSabo.webp?alt=media&token=943253fe-bfb0-45a6-a0ca-e41426a1a7e7' },
+    { name: 'Shanks', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FShanks.webp?alt=media&token=5fe5bc95-4efd-4699-8f6c-8f7711158156' },
+    { name: 'Tony Tony Chopper', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FTony%20Chopper.webp?alt=media&token=26095214-aa23-4e44-b4b7-8e87e5beb5bc' },
+    { name: 'Trafalgar Law', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FTrafalgar%20D%20Law.webp?alt=media&token=f2bce9d6-912f-40a6-86dd-142575f845f8' },
+    { name: 'Usopp', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FUsopp.webp?alt=media&token=31ac136b-e5cb-4cee-83d2-4cf51355c3fd' },
+    { name: 'Vinsmoke Sanji', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FVinsmoke%20Sanji.jpg?alt=media&token=022738ef-7ab2-404c-9e16-fb409b31f646' },
+    { name: 'Eren Yeager', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSSR%2FEren%20Yeager.jpg?alt=media&token=0976d27d-1750-4bdd-a3e6-15adcf8709c6' },
+    { name: 'Founding Titan', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSSR%2FFounding%20Titan.webp?alt=media&token=5f5cb23a-84e4-44cc-bc18-a59af0c6d552' },
+    { name: 'Levi Ackerman', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSSR%2FLevi%20Ackerman.jpg?alt=media&token=0287298f-32de-4e5f-82b7-93f8446da4c0' },
+    { name: 'Mikasa Ackerman', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSSR%2FMikasa%20Ackerman.jpg?alt=media&token=f25aff94-bad9-4599-aace-0f29915febc2' },
+    { name: 'Itachi Uchiha', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FItatchi%20Uchiha.jpg?alt=media&token=a3e72963-73a5-4867-8693-4a484b2093e9' },
+    { name: 'Jiraiya', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FJiraiya.webp?alt=media&token=add55e6c-772d-42d8-84c0-73b0a1f07ef4' },
+    { name: 'Kakashi Hatake', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FKakashi.png?alt=media&token=2f8247d6-7b28-4050-9177-82b9546748de' },
+    { name: 'Minato Namikaze', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FMinato.webp?alt=media&token=f201d8ed-9579-4202-ba2b-6bbfa62d47a8' },
+    { name: 'Naruto Uzumaki', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FNaruto%20Uzumaki.jpg?alt=media&token=6b03be5c-1d70-45f4-92ae-a51469f76106' },
+    { name: 'Rock Lee', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FRock%20Lee.webp?alt=media&token=56c25c09-0453-4780-8400-c752e6550147' },
+    { name: 'Sasuke Uchiha', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FSasuke%20Uchiha.webp?alt=media&token=d3d46732-3e5e-48bf-bcdb-b4d0b4b36f87' },
+    { name: 'Tobi', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FToby.png?alt=media&token=9f23f657-8d1a-4582-af36-6d747a8cb0e3' },
+];
+
+window._tcgRenderSSRCards = function() {
+    const grid = document.getElementById('tcg-ssr-grid');
+    if (!grid || grid.dataset.built) return;
+    grid.dataset.built = '1';
+    if (!TCG_SSR_CARDS.length) {
+        grid.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">No SSR cards yet — add entries to TCG_SSR_CARDS to see them here.</p>';
+        return;
+    }
+    grid.innerHTML = TCG_SSR_CARDS.map(c => `
+        <div class="wb-card-wrap">
+            <div class="wb-card rarity-ssr">
+                <div class="wb-card-inner">
+                    <div class="wb-card-header">
+                        <span class="wb-mark">WEEBEE</span>
+                        <span class="wb-rarity-gem"><span>⬡</span></span>
+                    </div>
+                    <div class="wb-card-art"><img src="${c.image}" alt="${c.name}"></div>
+                    <div class="wb-card-footer">
+                        <div class="wb-card-name">${c.name}</div>
+                        <div class="wb-card-series">${c.anime}</div>
+                        <div class="wb-card-rarity-label">SSR</div>
+                    </div>
+                </div>
+            </div>
+            <div class="wb-card-caption">Hand-curated art</div>
+        </div>
+    `).join('');
+};
 
 window._tcgRenderSRCards = function() {
     const grid = document.getElementById('tcg-sr-grid');
@@ -5437,6 +5527,7 @@ window._tcgRenderSRCards = function() {
     `).join('');
 };
 if (document.getElementById('tcg-sr-grid')) window._tcgRenderSRCards();
+if (document.getElementById('tcg-ssr-grid')) window._tcgRenderSSRCards();
 
 window._amberLoadWallet = async function() {
     if (!window.isAdmin) return;
@@ -5522,6 +5613,13 @@ async function _tcgEnsureCardPool() {
 }
 
 function _tcgPickCard(rarity) {
+    if (rarity === 'ssr') {
+        if (TCG_SSR_CARDS.length) {
+            const src = TCG_SSR_CARDS[Math.floor(Math.random() * TCG_SSR_CARDS.length)];
+            return { name: src.name, anime: src.anime, image: src.image, rarity: 'ssr' };
+        }
+        rarity = 'sr'; // fallback if no SSR art loaded yet
+    }
     if (rarity === 'sr') {
         const src = TCG_SR_CARDS[Math.floor(Math.random() * TCG_SR_CARDS.length)];
         return { name: src.name, anime: src.anime, image: src.image, rarity: 'sr' };
@@ -5633,7 +5731,14 @@ window._tcgBuyPack = async function(packId) {
 
     await _tcgEnsureCardPool();
     const cards = _tcgRollPackCards(pack);
-    _tcgShowPackOpening(pack, cards);
+
+    let enrichedCards = cards;
+    try {
+        enrichedCards = await _tcgSavePackToCollection(uid, cards);
+        window._tcgCollectionCache = null;
+    } catch(e) { console.error('Failed to save pack to collection:', e); }
+
+    _tcgShowPackOpening(pack, enrichedCards);
     window._tcgRenderStore();
 };
 
@@ -5689,9 +5794,12 @@ window._tcgShowPackOpening = function(pack, cards) {
 
 function _tcgBuildCardFace(card) {
     const rarity = card.rarity || 'common';
-    const label = { sr: 'SR', rare: 'Rare', common: 'Common' }[rarity] || 'Common';
+    const label = { ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common' }[rarity] || 'Common';
     const art = card.image ? `<img src="${card.image}" alt="${card.name}">` : '';
-    const gem = rarity === 'sr' ? `<span class="wb-rarity-gem"><span>⬡</span></span>` : `<span class="wb-rarity-gem">⬡</span>`;
+    const gem = (rarity === 'sr' || rarity === 'ssr') ? `<span class="wb-rarity-gem"><span>⬡</span></span>` : `<span class="wb-rarity-gem">⬡</span>`;
+    const serialLine = card.serial != null
+        ? `<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:0.5px;margin-top:4px;">#${card.serial}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>`
+        : '';
     return `<div class="wb-card rarity-${rarity}">
         <div class="wb-card-inner">
             <div class="wb-card-header">
@@ -5703,10 +5811,20 @@ function _tcgBuildCardFace(card) {
                 <div class="wb-card-name">${card.name}</div>
                 <div class="wb-card-series">${card.anime}</div>
                 <div class="wb-card-rarity-label">${label}</div>
+                ${serialLine}
             </div>
         </div>
     </div>`;
 }
+
+// Holographic shimmer — updates --mx/--my on SSR cards so the CSS overlay follows the cursor
+document.addEventListener('mousemove', function(e) {
+    const card = e.target.closest('.rarity-ssr');
+    if (!card) return;
+    const r = card.getBoundingClientRect();
+    card.style.setProperty('--mx', ((e.clientX - r.left) / r.width).toFixed(3));
+    card.style.setProperty('--my', ((e.clientY - r.top) / r.height).toFixed(3));
+});
 
 window._tcgFlipCard = function(i) {
     const inner = document.getElementById(`tcg-inner-${i}`);
@@ -5717,6 +5835,325 @@ window._tcgFlipCard = function(i) {
 window._tcgRevealAll = function() {
     const cards = document.querySelectorAll('#tcg-pack-cards-row .tcg-flip-card');
     cards.forEach((_, i) => setTimeout(() => window._tcgFlipCard(i), i * 220));
+};
+
+// ── TCG Collection System ─────────────────────────────────────────────────────
+
+const RARITY_MAX_VERSIONS = { common: 5000, rare: 2500, sr: 500, ssr: 250 };
+
+const TCG_PREMADE_BINDERS = [
+    { id: 'one_piece',      name: 'One Piece',       emoji: '🏴‍☠️', color: '#f59e0b' },
+    { id: 'naruto',         name: 'Naruto',          emoji: '🍃',   color: '#f97316' },
+    { id: 'demon_slayer',   name: 'Demon Slayer',    emoji: '🗡️',  color: '#ef4444' },
+    { id: 'attack_on_titan',name: 'Attack on Titan', emoji: '⚔️',  color: '#6b7280' },
+    { id: 'bleach',         name: 'Bleach',          emoji: '☠️',  color: '#8b5cf6' },
+];
+
+function _tcgCardKey(card) {
+    const n = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+    return `${card.rarity}_${n(card.name)}_${n(card.anime)}`;
+}
+
+function _tcgShufflePool(max) {
+    const arr = Array.from({ length: max }, (_, i) => i + 1);
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
+async function _tcgAssignSerial(card) {
+    const key = _tcgCardKey(card);
+    const maxV = RARITY_MAX_VERSIONS[card.rarity] || 5000;
+    const ref = doc(db, 'card_serials', key);
+    return runTransaction(db, async tx => {
+        const snap = await tx.get(ref);
+        if (!snap.exists() || !snap.data().versionsRemaining?.length) {
+            const edition = snap.exists() ? (snap.data().edition || 1) + 1 : 1;
+            const pool = _tcgShufflePool(maxV);
+            const version = pool.pop();
+            tx.set(ref, { versionsRemaining: pool, edition, maxVersions: maxV });
+            return { version, edition };
+        }
+        const { edition = 1 } = snap.data();
+        const pool = [...snap.data().versionsRemaining];
+        const idx = Math.floor(Math.random() * pool.length);
+        const version = pool.splice(idx, 1)[0];
+        tx.update(ref, { versionsRemaining: pool });
+        return { version, edition };
+    });
+}
+
+async function _tcgSavePackToCollection(uid, cards) {
+    const enriched = await Promise.all(cards.map(async card => {
+        try {
+            const { version, edition } = await _tcgAssignSerial(card);
+            return { ...card, serial: version, edition };
+        } catch(e) { return { ...card, serial: null, edition: null }; }
+    }));
+    const colRef = collection(db, 'card_collections', uid, 'cards');
+    await Promise.all(enriched.map(c => addDoc(colRef, {
+        name: c.name, anime: c.anime, rarity: c.rarity, image: c.image,
+        serial: c.serial, edition: c.edition, pulledAt: serverTimestamp(),
+    })));
+    return enriched;
+}
+
+window._tcgCollectionCache = null;
+
+async function _tcgLoadCollection(uid, forceRefresh = false) {
+    if (window._tcgCollectionCache && !forceRefresh) return window._tcgCollectionCache;
+    const snap = await getDocs(collection(db, 'card_collections', uid, 'cards'));
+    const cards = [];
+    snap.forEach(d => cards.push({ id: d.id, ...d.data() }));
+    window._tcgCollectionCache = cards;
+    return cards;
+}
+
+window._tcgRenderMyCollection = async function(activeTab = 'mycards', forceRefresh = false) {
+    const el = document.getElementById('tcg-collection');
+    if (!el) return;
+    if (!auth.currentUser) { el.innerHTML = '<p style="color:var(--text-muted);">Sign in to view your collection.</p>'; return; }
+    if (forceRefresh) window._tcgCollectionCache = null;
+
+    const tabs = [
+        { id: 'mycards',  label: 'My Cards' },
+        { id: 'premade',  label: 'Premade Binders' },
+        { id: 'mybinders',label: 'My Binders' },
+    ];
+
+    el.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+            <div>
+                <h3 style="margin:0 0 4px;">My Collection</h3>
+                <p style="color:var(--text-muted);font-size:13px;margin:0;">Cards pulled from packs — track your sets and build binders.</p>
+            </div>
+            <button onclick="window._tcgRenderMyCollection('${activeTab}', true)" style="padding:8px 14px;border-radius:8px;border:none;background:var(--bg-gray);color:var(--text-dark);font-size:12px;font-weight:700;cursor:pointer;">Refresh</button>
+        </div>
+        <div style="display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid var(--border-color);">
+            ${tabs.map(t => `<button onclick="window._tcgRenderMyCollection('${t.id}')" style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:700;color:${t.id===activeTab?'var(--text-dark)':'var(--text-muted)'};border-bottom:2px solid ${t.id===activeTab?'var(--accent-yellow)':'transparent'};margin-bottom:-1px;">${t.label}</button>`).join('')}
+        </div>
+        <div id="tcg-collection-content"><div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div></div>`;
+
+    const content = document.getElementById('tcg-collection-content');
+    const uid = auth.currentUser.uid;
+    if (activeTab === 'mycards') await window._tcgRenderMyCardsTab(content, uid);
+    else if (activeTab === 'premade') window._tcgRenderPremadeBinderSelect(content);
+    else await _tcgRenderMyBindersTab(content, uid);
+};
+
+window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
+    let cards;
+    try { cards = await _tcgLoadCollection(uid); }
+    catch(e) { el.innerHTML = `<p style="color:var(--text-muted);">Failed to load: ${e.message}</p>`; return; }
+
+    if (!cards.length) { el.innerHTML = `<p style="color:var(--text-muted);">No cards yet — open a pack to get started!</p>`; return; }
+
+    const rarityOrder = { ssr:0, sr:1, rare:2, common:3 };
+    const filtered = (filter === 'all' ? [...cards] : cards.filter(c => c.rarity === filter))
+        .sort((a,b) => (rarityOrder[a.rarity]??9) - (rarityOrder[b.rarity]??9));
+    const counts = { ssr:0, sr:0, rare:0, common:0 };
+    cards.forEach(c => { if (c.rarity in counts) counts[c.rarity]++; });
+
+    el.innerHTML = `
+        <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+            ${['all','ssr','sr','rare','common'].map(f => {
+                const labels = { all:`All (${cards.length})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
+                const active = f === filter;
+                return `<button onclick="window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'),'${uid}','${f}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
+            }).join('')}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:18px;">
+            ${filtered.map(card => {
+                const serial = card.serial != null ? `#${card.serial}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : '';
+                return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                    ${_tcgBuildCardFace(card)}
+                    ${serial ? `<div style="font-size:11px;color:var(--text-muted);font-weight:700;">${serial}</div>` : ''}
+                </div>`;
+            }).join('')}
+        </div>`;
+};
+
+window._tcgRenderPremadeBinderSelect = function(el) {
+    el.innerHTML = `
+        <p style="color:var(--text-muted);font-size:13px;margin:0 0 20px;">Select a series to view its complete SR/SSR card set. Grey cards are ones you haven't pulled yet.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;">
+            ${TCG_PREMADE_BINDERS.map(b => {
+                const setCards = [...TCG_SSR_CARDS, ...TCG_SR_CARDS].filter(c => c.anime === b.name);
+                if (!setCards.length) return '';
+                return `<div onclick="window._tcgOpenPremadeBinder('${b.name}')" style="cursor:pointer;background:var(--bg-gray);border-radius:14px;padding:22px 28px;border:2px solid var(--border-color);min-width:160px;text-align:center;transition:border-color .15s;" onmouseover="this.style.borderColor='${b.color}'" onmouseout="this.style.borderColor='var(--border-color)'">
+                    <div style="font-size:36px;margin-bottom:10px;">${b.emoji}</div>
+                    <div style="font-weight:800;font-size:15px;margin-bottom:4px;">${b.name}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${setCards.length} cards</div>
+                </div>`;
+            }).join('')}
+        </div>`;
+};
+
+window._tcgOpenPremadeBinder = async function(animeName, page = 0) {
+    const el = document.getElementById('tcg-collection-content');
+    if (!el || !auth.currentUser) return;
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading binder…</div>';
+
+    const setCards = [...TCG_SSR_CARDS, ...TCG_SR_CARDS].filter(c => c.anime === animeName);
+    let owned = [];
+    try { owned = await _tcgLoadCollection(auth.currentUser.uid); } catch(e) {}
+
+    const ownedMap = {};
+    owned.forEach(c => {
+        const key = _tcgCardKey(c);
+        if (!ownedMap[key]) ownedMap[key] = [];
+        ownedMap[key].push(c);
+    });
+
+    const CARDS_PER_PAGE = 9;
+    const totalPages = Math.max(1, Math.ceil(setCards.length / CARDS_PER_PAGE));
+    const safePage = Math.min(page, totalPages - 1);
+    const pageCards = setCards.slice(safePage * CARDS_PER_PAGE, (safePage + 1) * CARDS_PER_PAGE);
+    while (pageCards.length < CARDS_PER_PAGE) pageCards.push(null);
+
+    const ownedCount = setCards.filter(c => ownedMap[_tcgCardKey(c)]?.length).length;
+    const binder = TCG_PREMADE_BINDERS.find(b => b.name === animeName) || {};
+    const pct = Math.round(ownedCount / setCards.length * 100);
+
+    const pageButtons = Array.from({ length: totalPages }, (_, i) =>
+        `<button onclick="window._tcgOpenPremadeBinder('${animeName}',${i})" style="padding:9px 13px;border-radius:8px;border:none;background:${i===safePage?'var(--accent-yellow)':'var(--bg-gray)'};color:${i===safePage?'#000':'var(--text-dark)'};font-weight:700;font-size:13px;cursor:pointer;">${i+1}</button>`
+    ).join('');
+
+    el.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+            <button onclick="window._tcgRenderPremadeBinderSelect(document.getElementById('tcg-collection-content'))" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:12px;font-weight:700;cursor:pointer;">← Back</button>
+            <div>
+                <div style="font-size:18px;font-weight:800;">${binder.emoji||'📖'} ${animeName}</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${ownedCount} / ${setCards.length} collected · Page ${safePage+1} of ${totalPages}</div>
+            </div>
+            <div style="margin-left:auto;background:var(--bg-gray);border-radius:10px;padding:7px 16px;font-size:14px;font-weight:800;color:${binder.color||'#f59e0b'};">${pct}%</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,220px);gap:18px;margin-bottom:24px;">
+            ${pageCards.map(c => {
+                if (!c) return `<div style="width:220px;height:308px;border-radius:14px;background:var(--bg-gray-darker);border:1px dashed var(--border-color);"></div>`;
+                const key = _tcgCardKey(c);
+                const copies = ownedMap[key] || [];
+                const isOwned = copies.length > 0;
+                const first = copies[0];
+                const serial = isOwned && first?.serial != null ? `#${first.serial}${(first.edition||1)>1?` · Ed.${first.edition}`:''}` : '';
+                return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;">
+                    <div style="${isOwned?'':'filter:grayscale(1) brightness(0.3);pointer-events:none;'}">
+                        ${_tcgBuildCardFace({ ...c, serial: first?.serial, edition: first?.edition })}
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);font-weight:700;">${isOwned?(serial||'Collected'):'Not collected'}</div>
+                    ${copies.length > 1 ? `<div style="position:absolute;top:8px;right:4px;background:#f59e0b;color:#111;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:800;">×${copies.length}</div>` : ''}
+                </div>`;
+            }).join('')}
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+            ${safePage > 0 ? `<button onclick="window._tcgOpenPremadeBinder('${animeName}',${safePage-1})" style="padding:9px 20px;border-radius:8px;border:none;background:var(--bg-gray);color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;">← Prev</button>` : ''}
+            ${pageButtons}
+            ${safePage < totalPages-1 ? `<button onclick="window._tcgOpenPremadeBinder('${animeName}',${safePage+1})" style="padding:9px 20px;border-radius:8px;border:none;background:var(--bg-gray);color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;">Next →</button>` : ''}
+        </div>`;
+};
+
+async function _tcgRenderMyBindersTab(el, uid) {
+    let binders = [];
+    try {
+        const snap = await getDocs(collection(db, 'card_binders', uid, 'binders'));
+        snap.forEach(d => binders.push({ id: d.id, ...d.data() }));
+    } catch(e) { el.innerHTML = `<p style="color:var(--text-muted);">Failed to load binders.</p>`; return; }
+
+    el.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+            <p style="color:var(--text-muted);font-size:13px;margin:0;">Create custom binders to organize your favorite cards.</p>
+            <button onclick="window._tcgCreateBinderModal()" style="padding:9px 18px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-weight:700;font-size:13px;cursor:pointer;">+ New Binder</button>
+        </div>
+        ${binders.length ? `<div style="display:flex;flex-wrap:wrap;gap:14px;">${binders.map(b => `
+            <div onclick="window._tcgOpenUserBinder('${b.id}','${uid}')" style="cursor:pointer;background:var(--bg-gray);border-radius:14px;padding:22px 28px;border:2px solid var(--border-color);min-width:180px;text-align:center;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='var(--border-color)'">
+                <div style="font-size:34px;margin-bottom:8px;">📒</div>
+                <div style="font-weight:800;font-size:15px;margin-bottom:4px;">${b.name}</div>
+                <div style="font-size:12px;color:var(--text-muted);">${(b.cardIds||[]).length} cards</div>
+            </div>`).join('')}</div>` :
+        `<p style="color:var(--text-muted);">No binders yet — create one above to get started.</p>`}`;
+}
+
+window._tcgCreateBinderModal = function() {
+    document.getElementById('tcg-binder-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'tcg-binder-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;';
+    modal.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:16px;padding:28px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+            <h3 style="margin:0 0 18px;">New Binder</h3>
+            <input id="binder-name-input" type="text" placeholder="e.g. My Favorites, SSR Only, Best Waifus…" maxlength="40"
+                style="width:100%;padding:12px 14px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;margin-bottom:16px;"
+                onkeydown="if(event.key==='Enter')window._tcgSaveNewBinder()">
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+                <button onclick="document.getElementById('tcg-binder-modal').remove()" style="padding:10px 18px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;">Cancel</button>
+                <button onclick="window._tcgSaveNewBinder()" style="padding:10px 18px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-weight:700;font-size:13px;cursor:pointer;">Create</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    setTimeout(() => document.getElementById('binder-name-input')?.focus(), 50);
+};
+
+window._tcgSaveNewBinder = async function() {
+    if (!auth.currentUser) return;
+    const name = document.getElementById('binder-name-input')?.value?.trim();
+    if (!name) return;
+    try {
+        await addDoc(collection(db, 'card_binders', auth.currentUser.uid, 'binders'), { name, cardIds: [], createdAt: serverTimestamp() });
+        document.getElementById('tcg-binder-modal')?.remove();
+        window._tcgRenderMyCollection('mybinders');
+    } catch(e) { alert('Failed: ' + e.message); }
+};
+
+window._tcgOpenUserBinder = async function(binderId, uid, page = 0) {
+    const el = document.getElementById('tcg-collection-content');
+    if (!el) return;
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div>';
+
+    let binder, binderCards = [];
+    try {
+        const snap = await getDoc(doc(db, 'card_binders', uid, 'binders', binderId));
+        if (!snap.exists()) { el.innerHTML = '<p>Binder not found.</p>'; return; }
+        binder = snap.data();
+        if (binder.cardIds?.length) {
+            const all = await _tcgLoadCollection(uid);
+            binderCards = binder.cardIds.map(id => all.find(c => c.id === id)).filter(Boolean);
+        }
+    } catch(e) { el.innerHTML = `<p style="color:var(--text-muted);">Failed to load.</p>`; return; }
+
+    const CARDS_PER_PAGE = 9;
+    const totalPages = Math.max(1, Math.ceil(binderCards.length / CARDS_PER_PAGE));
+    const safePage = Math.min(page, totalPages - 1);
+    const pageCards = [...binderCards.slice(safePage * CARDS_PER_PAGE, (safePage+1) * CARDS_PER_PAGE)];
+    while (pageCards.length < CARDS_PER_PAGE) pageCards.push(null);
+
+    const pageButtons = Array.from({ length: totalPages }, (_, i) =>
+        `<button onclick="window._tcgOpenUserBinder('${binderId}','${uid}',${i})" style="padding:9px 13px;border-radius:8px;border:none;background:${i===safePage?'var(--accent-yellow)':'var(--bg-gray)'};color:${i===safePage?'#000':'var(--text-dark)'};font-weight:700;font-size:13px;cursor:pointer;">${i+1}</button>`
+    ).join('');
+
+    el.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+            <button onclick="window._tcgRenderMyCollection('mybinders')" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:12px;font-weight:700;cursor:pointer;">← Back</button>
+            <div>
+                <div style="font-size:18px;font-weight:800;">📒 ${binder.name}</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${binderCards.length} cards · Page ${safePage+1} of ${totalPages}</div>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,220px);gap:18px;margin-bottom:24px;">
+            ${pageCards.map(card => card ?
+                `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                    ${_tcgBuildCardFace(card)}
+                    ${card.serial != null ? `<div style="font-size:11px;color:var(--text-muted);font-weight:700;">#${card.serial}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''}
+                </div>` :
+                `<div style="width:220px;height:308px;border-radius:14px;background:var(--bg-gray-darker);border:2px dashed var(--border-color);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--text-muted);">+</div>`
+            ).join('')}
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+            ${safePage > 0 ? `<button onclick="window._tcgOpenUserBinder('${binderId}','${uid}',${safePage-1})" style="padding:9px 20px;border-radius:8px;border:none;background:var(--bg-gray);color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;">← Prev</button>` : ''}
+            ${pageButtons}
+            ${safePage < totalPages-1 ? `<button onclick="window._tcgOpenUserBinder('${binderId}','${uid}',${safePage+1})" style="padding:9px 20px;border-radius:8px;border:none;background:var(--bg-gray);color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;">Next →</button>` : ''}
+        </div>`;
 };
 
 window.loadLeaderboards = function() {
@@ -8631,7 +9068,9 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     }
     if(targetId === 'tcg-view') {
         window._tcgRenderSRCards();
+        window._tcgRenderSSRCards();
         window._tcgRenderStore();
+        window._tcgRenderMyCollection();
     }
     if(targetId === 'news-view') {
         fetchGlobalNews();

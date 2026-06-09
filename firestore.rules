@@ -289,6 +289,25 @@ service cloud.firestore {
       allow create: if isAuth();
     }
 
+    // ── TCG card collections (per-user subcollection) ─────────────────────────
+    match /card_collections/{uid}/cards/{card} {
+      allow read: if true;
+      allow create: if isOwner(uid);
+      allow delete: if isOwner(uid);
+    }
+
+    // ── TCG card serial pools (global, transactionally updated on pack open) ──
+    match /card_serials/{doc} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+
+    // ── TCG user binders ─────────────────────────────────────────────────────
+    match /card_binders/{uid}/binders/{binder} {
+      allow read: if true;
+      allow write: if isOwner(uid);
+    }
+
     // ── Cross-device game progress sync ──────────────────────────────────────
     match /game_progress/{uid} {
       allow read, write: if isAuth() && request.auth.uid == uid;
