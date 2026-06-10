@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "firebase-admin": "^14.0.0"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
   }
 }
