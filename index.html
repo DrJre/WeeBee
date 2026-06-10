@@ -29,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=63">
+    <link rel="stylesheet" href="styles.css?v=65">
 </head>
 <body>
     <div class="app-container">
@@ -852,8 +852,13 @@
                             <div style="font-size:12px; color:var(--text-muted);">Fetches top 100 anime → top 30 chars each → saves to Firestore with rarity tags. Takes ~60s.</div>
                         </div>
                         <button id="tcg-seed-btn" onclick="window._tcgSeedCardPool()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Seed Card Pool</button>
+                        <button id="tcg-purge-btn" onclick="window._tcgPurgeOrphans()" style="padding:10px 20px; border-radius:8px; border:1px solid #ef4444; background:transparent; color:#ef4444; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Purge Orphans</button>
                         <span id="tcg-seed-status" style="font-size:12px; color:var(--text-muted); flex:1;"></span>
+                        <button onclick="window._tcgBrowsePool()" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Browse Pool</button>
                     </div>
+
+                    <!-- Pool Browser -->
+                    <div id="tcg-pool-browser" style="margin-bottom:18px;"></div>
 
                     <div id="tcg-card-grid" class="wb-card-grid"></div>
 
@@ -2078,6 +2083,6 @@
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=238"></script>
+    <script type="module" src="app.js?v=250"></script>
 </body>
 </html>

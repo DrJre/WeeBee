@@ -1082,6 +1082,7 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     box-shadow: 0 12px 40px rgba(0,0,0,0.45);
     font-family: inherit;
     flex-shrink: 0;
+    transform: translateZ(0);
 }
 .wb-card.rarity-common {
     background: linear-gradient(160deg, #c7ccd1 0%, #9aa1a8 50%, #7d848c 100%);
@@ -1277,10 +1278,15 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
         #4d96ff 50%, #c77dff 67%, #ff8fab 83%, #ff6b6b 100%);
     background-size: 300% 300%;
     animation: ssr-prismatic 5s ease infinite;
+    animation-play-state: paused;
     padding: 6px;
     box-shadow: 0 12px 48px rgba(0,0,0,0.6),
                 0 0 32px rgba(255,200,0,0.45),
                 0 0 70px rgba(180,100,255,0.25);
+    contain: paint;
+}
+.wb-card.rarity-ssr.ssr-in-view {
+    animation-play-state: running;
 }
 @keyframes ssr-prismatic {
     0%   { background-position: 0% 50%; }
@@ -1344,6 +1350,10 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     width: 20px;
     height: 20px;
     animation: ssr-gem-hue 3s linear infinite;
+    animation-play-state: paused;
+}
+.wb-card.rarity-ssr.ssr-in-view .wb-rarity-gem {
+    animation-play-state: running;
 }
 @keyframes ssr-gem-hue {
     from { filter: hue-rotate(0deg); }

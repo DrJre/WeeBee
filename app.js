@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 
@@ -5427,10 +5427,17 @@ const TCG_SR_CARDS = [
     { name: 'Jiraiya', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FJiraiya.webp?alt=media&token=9037126c-da4b-419d-8abb-2051645047ca' },
     { name: 'Kurama', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FKurama.png?alt=media&token=8b813a81-2682-4d3f-92f0-a3cd4dc4a7b4' },
     { name: 'Madara Uchiha', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FMadara%20Uchiha.jpg?alt=media&token=e598906f-0a82-4fae-90c9-66ab0e370c35' },
-    { name: 'Might Guy', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FMight%20Guy.jpg?alt=media&token=9b8ee44d-28d8-4ec2-a976-51abfc53da4d' },
     { name: 'Sakura Haruno', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FSakura.jpg?alt=media&token=24d308fb-4f3a-4efd-ae90-766ab6a42964' },
     { name: 'Shikamaru Nara', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FShikamaru.webp?alt=media&token=0307d0dc-05db-4125-8370-85f6fde8872a' },
     { name: 'Tsunade', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FTsunade.jpg?alt=media&token=6b09848a-3aaf-4f08-84e1-2b3f72442bd0' },
+    { name: 'Fern', anime: 'Frieren', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFrieren%2FSR%2FFern.jpg?alt=media&token=c3dab217-2aa6-4c2d-8e77-15aa4c7b7c11' },
+    { name: 'Frieren', anime: 'Frieren', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFrieren%2FSR%2FFrieren.jpg?alt=media&token=68824569-b83a-4dc8-97e0-4cec4e4cc5e5' },
+    { name: 'Stark', anime: 'Frieren', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFrieren%2FSR%2FStark.webp?alt=media&token=a165be35-86ae-426f-9047-9865a3092972' },
+    { name: 'Hajime Iwaizumi', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FHajime%20Iwaizumi.jpg?alt=media&token=b6c806c1-d623-425a-9604-e5ef62ee031c' },
+    { name: 'Shoyo Hinata', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FHinata.jpg?alt=media&token=a5b4cd86-ea65-4943-aed4-95537ec0c34c' },
+    { name: 'Tobio Kageyama', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FKageyama.jpg?alt=media&token=4cf18e22-3273-4298-8b3a-66eec4847c2a' },
+    { name: 'Kiyoko Shimizu', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FKiyoko%20Shimizu.jpg?alt=media&token=40070ca2-19f7-4b9b-993e-7416781571e2' },
+    { name: 'Oikawa', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FOikawa.jpg?alt=media&token=b99fd9ce-e3a3-46f5-896e-0bea24b9a806' },
 ];
 
 // SSR art — hand-curated, prismatic rainbow border + holographic hover shimmer
@@ -5466,11 +5473,15 @@ const TCG_SSR_CARDS = [
     { name: 'Itachi Uchiha', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FItatchi%20Uchiha.jpg?alt=media&token=a3e72963-73a5-4867-8693-4a484b2093e9' },
     { name: 'Jiraiya', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FJiraiya.webp?alt=media&token=add55e6c-772d-42d8-84c0-73b0a1f07ef4' },
     { name: 'Kakashi Hatake', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FKakashi.png?alt=media&token=2f8247d6-7b28-4050-9177-82b9546748de' },
-    { name: 'Minato Namikaze', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FMinato.webp?alt=media&token=f201d8ed-9579-4202-ba2b-6bbfa62d47a8' },
+    { name: 'Minato Namikaze', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FMinato%20Namikaze.jpg?alt=media&token=bc3f6fb4-cc96-4ec5-a41a-4c404a7bd652' },
     { name: 'Naruto Uzumaki', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FNaruto%20Uzumaki.jpg?alt=media&token=6b03be5c-1d70-45f4-92ae-a51469f76106' },
     { name: 'Rock Lee', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FRock%20Lee.webp?alt=media&token=56c25c09-0453-4780-8400-c752e6550147' },
     { name: 'Sasuke Uchiha', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FSasuke%20Uchiha.webp?alt=media&token=d3d46732-3e5e-48bf-bcdb-b4d0b4b36f87' },
     { name: 'Tobi', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FToby.png?alt=media&token=9f23f657-8d1a-4582-af36-6d747a8cb0e3' },
+    { name: 'Might Guy', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FMight%20Guy.jpg?alt=media&token=9b8ee44d-28d8-4ec2-a976-51abfc53da4d' },
+    { name: 'Frieren', anime: 'Frieren', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFrieren%2FSSR%2FFrieren.jpg?alt=media&token=58584d0d-19c2-4ff7-9b42-aa373f2bb4de' },
+    { name: 'Shoyo Hinata', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSSR%2FShoyo%20Hinata.jpg?alt=media&token=eb7d141d-ef05-40d9-ba43-e99ae49a1173' },
+    { name: 'Tobio Kageyama', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSSR%2FTobio%20Kageyama.jpg?alt=media&token=21e375e0-a510-4bb1-8290-eaaf8bc0e9b9' },
 ];
 
 window._tcgRenderSSRCards = function() {
@@ -5586,7 +5597,7 @@ const TCG_PACKS = [
         cost: 300,
         gradient: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
         description: '5 cards · 1 guaranteed Rare+',
-        odds: 'Common 89% · Rare 10% · SR 1%\nGuaranteed slot: Rare 90% · SR 10%',
+        odds: 'Common 90% · Rare 9.5% · SR 0.4% · SSR 0.1%\nGuaranteed slot: Rare 95% · SR 4.5% · SSR 0.5%',
         guaranteedSR: false,
     },
     {
@@ -5594,11 +5605,29 @@ const TCG_PACKS = [
         name: 'Premium Pack',
         cost: 750,
         gradient: 'linear-gradient(135deg,#b45309,#f59e0b)',
-        description: '5 cards · 1 guaranteed SR',
-        odds: 'Common 70% · Rare 25% · SR 5%\nGuaranteed slot: always SR',
+        description: '5 cards · 1 guaranteed SR+',
+        odds: 'Common 75% · Rare 21% · SR 3% · SSR 1%\nGuaranteed slot: SR 95% · SSR 5%',
         guaranteedSR: true,
     }
 ];
+
+function _normalizeSeriesName(title) {
+    if (!title) return title;
+    let t = title;
+    // Strip ": Final Season" and everything after (AoT, MHA, etc.)
+    t = t.replace(/:\s*(The\s+)?Final Season.*/i, '');
+    // Strip ": Season N" / ": Nth Season" and everything after
+    t = t.replace(/:\s*\d+(st|nd|rd|th)?\s+Season.*/i, '');
+    t = t.replace(/:\s*Season\s+\d+.*/i, '');
+    // Strip trailing " Season N" (no colon)
+    t = t.replace(/\s+Season\s+\d+\s*$/i, '');
+    // Strip trailing " Part N" or ": Part N"
+    t = t.replace(/\s*[:\-]\s*Part\s+\d+\s*$/i, '');
+    t = t.replace(/\s+Part\s+\d+\s*$/i, '');
+    // Strip " - Arc/Chapter/Cour/Season suffix" (Demon Slayer arcs, etc.)
+    t = t.replace(/\s+[-–]\s+.*?(Arc|Chapter|Cour)\s*\d*\s*$/i, '');
+    return t.trim();
+}
 
 window._tcgRarePool  = null;
 window._tcgCommonPool = null;
@@ -5612,8 +5641,8 @@ async function _tcgEnsureCardPool() {
         ]);
         window._tcgRarePool   = [];
         window._tcgCommonPool = [];
-        rareSnap.forEach(d   => { const c = d.data(); if (c.name && c.image) window._tcgRarePool.push(c); });
-        commonSnap.forEach(d => { const c = d.data(); if (c.name && c.image) window._tcgCommonPool.push(c); });
+        rareSnap.forEach(d   => { const c = d.data(); if (c.name && c.image && c.series) window._tcgRarePool.push(c); });
+        commonSnap.forEach(d => { const c = d.data(); if (c.name && c.image && c.series) window._tcgCommonPool.push(c); });
     } catch(e) { window._tcgRarePool = []; window._tcgCommonPool = []; }
 }
 
@@ -5632,8 +5661,125 @@ function _tcgPickCard(rarity) {
     const pool = rarity === 'rare' ? (window._tcgRarePool || []) : (window._tcgCommonPool || []);
     if (!pool.length) return { name: '???', anime: '', image: '', rarity };
     const c = pool[Math.floor(Math.random() * pool.length)];
-    return { name: c.name, anime: c.series || c.anime || '', image: c.image, rarity };
+    return { name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity };
 }
+
+// ── TCG Card Pool Browser (admin) ────────────────────────────────────────────
+window._tcgBrowsePool = async function(filter = 'all', search = '', offset = 0) {
+    const el = document.getElementById('tcg-pool-browser');
+    if (!el) return;
+    window._tcgPoolState = { filter, search, offset };
+
+    const PAGE = 40;
+    el.innerHTML = `<p style="color:var(--text-muted);font-size:13px;">Loading...</p>`;
+
+    try {
+        const constraints = [collection(db, 'characters')];
+        if (filter === 'rare')   constraints.push(where('rarityTier', '==', 'rare'));
+        if (filter === 'common') constraints.push(where('rarityTier', '==', 'common'));
+
+        // fetch all matching (we need count + search client-side, pool is ≤3000)
+        const snap = await getDocs(query(...constraints, limit(3000)));
+        let docs = [];
+        snap.forEach(d => { const c = d.data(); if (c.name && c.image) docs.push({ ...c, _id: d.id }); });
+
+        // client-side search
+        if (search.trim()) {
+            const q = search.trim().toLowerCase();
+            docs = docs.filter(c => c.name.toLowerCase().includes(q) || (c.series||'').toLowerCase().includes(q));
+        }
+
+        const total = docs.length;
+        const rareCount  = filter === 'all' ? docs.filter(c => c.rarityTier === 'rare').length : (filter === 'rare' ? total : '—');
+        const commonCount = filter === 'all' ? docs.filter(c => c.rarityTier === 'common').length : (filter === 'common' ? total : '—');
+        const page = docs.slice(offset, offset + PAGE);
+
+        const filterBtns = ['all','rare','common'].map(f => {
+            const active = f === filter;
+            const label = { all: 'All', rare: 'Rare', common: 'Common' }[f];
+            return `<button onclick="window._tcgBrowsePool('${f}',document.getElementById('tcg-pool-search').value,0)" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'transparent'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${label}</button>`;
+        }).join('');
+
+        const cards = page.map(c => {
+            const rarity = c.rarityTier || 'common';
+            const label = { rare: 'Rare', common: 'Common' }[rarity] || 'Common';
+            const art = c.image ? `<img src="${c.image}" alt="${c.name}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<div style=&quot;display:flex;align-items:center;justify-content:center;height:100%;color:#ef4444;font-size:11px;font-weight:700;text-align:center;padding:8px;&quot;>Image failed to load</div>'">` : '';
+            return `<div style="display:flex;flex-direction:column;align-items:flex-start;gap:6px;">
+                <div class="wb-card rarity-${rarity}" style="transform:scale(0.85);transform-origin:top left;flex-shrink:0;margin-bottom:-46px;">
+                    <div class="wb-card-inner">
+                        <div class="wb-card-header"><span class="wb-mark">WEEBEE</span><span class="wb-rarity-gem">⬡</span></div>
+                        <div class="wb-card-art">${art}</div>
+                        <div class="wb-card-footer">
+                            <div class="wb-card-name">${c.name}</div>
+                            <div class="wb-card-series">${_normalizeSeriesName(c.series||'')}</div>
+                            <div class="wb-card-rarity-label">${label}</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:6px;">
+                    <button onclick="window._tcgEditCardImage('${c._id}','${c.name.replace(/'/g,"\\'")}')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:11px;font-weight:700;cursor:pointer;">Edit Image</button>
+                    <button onclick="window._tcgDeleteCard('${c._id}','${c.name.replace(/'/g,"\\'")}')" style="padding:4px 10px;border-radius:6px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:11px;font-weight:700;cursor:pointer;">Delete</button>
+                </div>
+            </div>`;
+        }).join('');
+
+        const prevBtn = offset > 0
+            ? `<button onclick="window._tcgBrowsePool('${filter}',document.getElementById('tcg-pool-search').value,${offset-PAGE})" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-size:13px;font-weight:700;cursor:pointer;">← Prev</button>`
+            : '';
+        const nextBtn = offset + PAGE < total
+            ? `<button onclick="window._tcgBrowsePool('${filter}',document.getElementById('tcg-pool-search').value,${offset+PAGE})" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-size:13px;font-weight:700;cursor:pointer;">Next →</button>`
+            : '';
+
+        el.innerHTML = `
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+                ${filterBtns}
+                <input id="tcg-pool-search" type="text" placeholder="Search name or series…" value="${search.replace(/"/g,'&quot;')}"
+                    oninput="clearTimeout(window._poolSearchTimer);window._poolSearchTimer=setTimeout(()=>window._tcgBrowsePool('${filter}',this.value,0),350)"
+                    style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;min-width:180px;flex:1;">
+                <span style="font-size:12px;color:var(--text-muted);white-space:nowrap;">
+                    <b style="color:var(--accent-yellow)">${total}</b> results &nbsp;·&nbsp;
+                    <b>${typeof rareCount==='number'?rareCount:rareCount}</b> Rare &nbsp;·&nbsp;
+                    <b>${typeof commonCount==='number'?commonCount:commonCount}</b> Common
+                </span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;">
+                ${cards || '<p style="color:var(--text-muted);font-size:13px;">No cards found.</p>'}
+            </div>
+            ${(prevBtn || nextBtn) ? `<div style="display:flex;gap:10px;margin-top:16px;">${prevBtn}${nextBtn}<span style="font-size:12px;color:var(--text-muted);align-self:center;">Showing ${offset+1}–${Math.min(offset+PAGE,total)} of ${total}</span></div>` : ''}
+        `;
+    } catch(e) {
+        el.innerHTML = `<p style="color:var(--text-muted);font-size:13px;">Failed to load: ${e.message}</p>`;
+    }
+};
+
+window._tcgEditCardImage = async function(docId, name) {
+    if (!window.isAdmin || !docId) return;
+    const url = prompt(`New image URL for ${name}:`);
+    if (!url || !url.trim()) return;
+    try {
+        await setDoc(doc(db, 'characters', docId), { image: url.trim() }, { merge: true });
+        window._tcgRarePool = null;
+        window._tcgCommonPool = null;
+        const { filter, search, offset } = window._tcgPoolState || {};
+        window._tcgBrowsePool(filter, search, offset);
+    } catch(e) {
+        alert(`Failed to update image: ${e.message}`);
+    }
+};
+
+window._tcgDeleteCard = async function(docId, name) {
+    if (!window.isAdmin || !docId) return;
+    if (!confirm(`Delete "${name}" from the card pool? This can't be undone.`)) return;
+    try {
+        await deleteDoc(doc(db, 'characters', docId));
+        window._tcgRarePool = null;
+        window._tcgCommonPool = null;
+        const { filter, search, offset } = window._tcgPoolState || {};
+        window._tcgBrowsePool(filter, search, offset);
+    } catch(e) {
+        alert(`Failed to delete: ${e.message}`);
+    }
+};
 
 // ── TCG Card Pool Seeder (admin) ──────────────────────────────────────────────
 window._tcgSeedCardPool = async function() {
@@ -5686,7 +5832,7 @@ window._tcgSeedCardPool = async function() {
                         rank:       rank + 1,
                         rarityTier: rank < 15 ? 'rare' : 'common',
                     };
-                    if (isNew) data.series = anime.title;
+                    if (isNew) data.series = _normalizeSeriesName(anime.title);
                     await setDoc(doc(db, 'characters', docId), data, { merge: true });
                     saved++;
                 }
@@ -5705,26 +5851,69 @@ window._tcgSeedCardPool = async function() {
     }
 };
 
+window._tcgPurgeOrphans = async function() {
+    if (!window.isAdmin) return;
+    const statusEl = document.getElementById('tcg-seed-status');
+    const btn = document.getElementById('tcg-purge-btn');
+    if (!btn) return;
+    btn.disabled = true;
+    if (statusEl) statusEl.textContent = 'Scanning for orphaned characters…';
+
+    try {
+        const snap = await getDocs(collection(db, 'characters'));
+        const orphans = [];
+        snap.forEach(d => { if (!d.data().series) orphans.push(d.ref); });
+        if (!orphans.length) {
+            if (statusEl) statusEl.textContent = 'No orphans found — pool is clean!';
+            btn.disabled = false;
+            return;
+        }
+        if (statusEl) statusEl.textContent = `Deleting ${orphans.length} orphaned characters…`;
+        // batch deletes (max 500 per batch)
+        const BATCH_SIZE = 400;
+        for (let i = 0; i < orphans.length; i += BATCH_SIZE) {
+            const b = writeBatch(db);
+            orphans.slice(i, i + BATCH_SIZE).forEach(ref => b.delete(ref));
+            await b.commit();
+        }
+        window._tcgRarePool = null;
+        window._tcgCommonPool = null;
+        if (statusEl) statusEl.textContent = `Purged ${orphans.length} orphans. Pool is clean!`;
+        // refresh browser if open
+        const browser = document.getElementById('tcg-pool-browser');
+        if (browser && browser.innerHTML) window._tcgBrowsePool();
+    } catch(e) {
+        if (statusEl) statusEl.textContent = `Purge error: ${e.message}`;
+    } finally {
+        btn.disabled = false;
+    }
+};
+
 function _tcgRollPackCards(pack) {
     const cards = [];
     // Guaranteed slot
     if (pack.guaranteedSR) {
-        cards.push(_tcgPickCard('sr'));
+        cards.push(_tcgPickCard(Math.random() < 0.05 ? 'ssr' : 'sr'));
     } else {
-        cards.push(_tcgPickCard(Math.random() < 0.10 ? 'sr' : 'rare'));
+        const r = Math.random();
+        if      (r < 0.005) cards.push(_tcgPickCard('ssr'));
+        else if (r < 0.05)  cards.push(_tcgPickCard('sr'));
+        else                cards.push(_tcgPickCard('rare'));
     }
     // 4 remaining slots
     for (let i = 0; i < 4; i++) {
         const r = Math.random();
         let rarity;
         if (pack.guaranteedSR) {
-            if      (r < 0.05) rarity = 'sr';
-            else if (r < 0.30) rarity = 'rare';
-            else               rarity = 'common';
+            if      (r < 0.01)   rarity = 'ssr';
+            else if (r < 0.04)   rarity = 'sr';
+            else if (r < 0.25)   rarity = 'rare';
+            else                 rarity = 'common';
         } else {
-            if      (r < 0.01) rarity = 'sr';
-            else if (r < 0.10) rarity = 'rare';
-            else               rarity = 'common';
+            if      (r < 0.001)  rarity = 'ssr';
+            else if (r < 0.005)  rarity = 'sr';
+            else if (r < 0.10)   rarity = 'rare';
+            else                 rarity = 'common';
         }
         cards.push(_tcgPickCard(rarity));
     }
@@ -5871,8 +6060,9 @@ function _tcgBuildCardFace(card) {
     const label = { ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common' }[rarity] || 'Common';
     const art = card.image ? `<img src="${card.image}" alt="${card.name}">` : '';
     const gem = (rarity === 'sr' || rarity === 'ssr') ? `<span class="wb-rarity-gem"><span>⬡</span></span>` : `<span class="wb-rarity-gem">⬡</span>`;
+    const maxV = RARITY_MAX_VERSIONS[rarity] || 5000;
     const serialLine = card.serial != null
-        ? `<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:0.5px;margin-top:4px;">#${card.serial}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>`
+        ? `<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:0.5px;margin-top:4px;">${card.serial} / ${maxV}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>`
         : '';
     return `<div class="wb-card rarity-${rarity}">
         <div class="wb-card-inner">
@@ -5899,6 +6089,32 @@ document.addEventListener('mousemove', function(e) {
     card.style.setProperty('--mx', ((e.clientX - r.left) / r.width).toFixed(3));
     card.style.setProperty('--my', ((e.clientY - r.top) / r.height).toFixed(3));
 });
+
+// Pause SSR prismatic/gem animations when off-screen — keeps the effect while
+// avoiding constant repaints for cards the user isn't currently looking at.
+const _ssrAnimObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => entry.target.classList.toggle('ssr-in-view', entry.isIntersecting));
+}, { rootMargin: '150px' });
+
+function _tcgObserveSSRCards(root = document) {
+    const cards = root.matches?.('.wb-card.rarity-ssr') ? [root] : root.querySelectorAll?.('.wb-card.rarity-ssr') || [];
+    cards.forEach(el => {
+        if (el.dataset.ssrObserved) return;
+        el.dataset.ssrObserved = '1';
+        _ssrAnimObserver.observe(el);
+    });
+}
+
+new MutationObserver((mutations) => {
+    for (const m of mutations) {
+        m.addedNodes.forEach(node => {
+            if (node.nodeType !== 1) return;
+            _tcgObserveSSRCards(node);
+        });
+    }
+}).observe(document.body, { childList: true, subtree: true });
+
+_tcgObserveSSRCards();
 
 window._tcgFlipCard = function(i) {
     const inner = document.getElementById(`tcg-inner-${i}`);
@@ -6040,7 +6256,7 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:18px;">
             ${filtered.map(card => {
-                const serial = card.serial != null ? `#${card.serial}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : '';
+                const serial = card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : '';
                 return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
                     ${_tcgBuildCardFace(card)}
                     ${serial ? `<div style="font-size:11px;color:var(--text-muted);font-weight:700;">${serial}</div>` : ''}
@@ -6111,7 +6327,7 @@ window._tcgOpenPremadeBinder = async function(animeName, page = 0) {
                 const copies = ownedMap[key] || [];
                 const isOwned = copies.length > 0;
                 const first = copies[0];
-                const serial = isOwned && first?.serial != null ? `#${first.serial}${(first.edition||1)>1?` · Ed.${first.edition}`:''}` : '';
+                const serial = isOwned && first?.serial != null ? `${first.serial} / ${RARITY_MAX_VERSIONS[c.rarityTier]||5000}${(first.edition||1)>1?` · Ed.${first.edition}`:''}` : '';
                 return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;">
                     <div style="${isOwned?'':'filter:grayscale(1) brightness(0.3);pointer-events:none;'}">
                         ${_tcgBuildCardFace({ ...c, serial: first?.serial, edition: first?.edition })}
@@ -6218,7 +6434,7 @@ window._tcgOpenUserBinder = async function(binderId, uid, page = 0) {
             ${pageCards.map(card => card ?
                 `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
                     ${_tcgBuildCardFace(card)}
-                    ${card.serial != null ? `<div style="font-size:11px;color:var(--text-muted);font-weight:700;">#${card.serial}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''}
+                    ${card.serial != null ? `<div style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''}
                 </div>` :
                 `<div style="width:220px;height:308px;border-radius:14px;background:var(--bg-gray-darker);border:2px dashed var(--border-color);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--text-muted);">+</div>`
             ).join('')}
