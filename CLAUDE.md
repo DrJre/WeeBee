@@ -6,6 +6,9 @@
 - [ ] **User Stats page** — permanent "Your Stats" profile tab: total episodes watched, top genres, top studios, rank progression, review streaks (like Spotify Wrapped but always available)
 - [ ] **Connections-style game** — daily: group 16 anime characters into 4 categories, shareable results (ON HOLD)
 
+## Security — Next Up
+- [ ] **Server-side pack opening** — `card_collections/{uid}/cards/{card}` allows `create: if isOwner(uid)`, and pack rolls (rarity + serial assignment) happen client-side before the write. A user could write themselves a fake `{rarity:'ur', serial:1, ...}` card directly via Firestore, bypassing odds entirely. Real fix requires a Cloud Function (Blaze plan) to roll packs and assign serials server-side. (profiles/amber + characters + patch_notes write-access holes already fixed in firestore.rules.)
+
 ## TCG / Amber — Next Up
 - [ ] **Remove dead TCG admin code** — once admin tooling is fully migrated/stable, delete now-unused functions (old SR/SSR grid renderers if replaced, old pool seeder helpers, etc.) — left in place for now just in case
 - [ ] **Testing** — end-to-end test amber earning (games, reviews, completions, interactions, login streak), pack purchase deduction, and card rendering for all rarities

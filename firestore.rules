@@ -5,6 +5,7 @@ service cloud.firestore {
     // ── Helpers ──────────────────────────────────────────────────────────────
     function isAuth() { return request.auth != null; }
     function isOwner(uid) { return isAuth() && request.auth.uid == uid; }
+    function isAdmin() { return isAuth() && request.auth.uid == 'XUD3ym2NcdWtrUiPLlFFaO5ufMh1'; }
 
     // ── Reviews ───────────────────────────────────────────────────────────────
     match /reviews/{doc} {
@@ -135,7 +136,11 @@ service cloud.firestore {
 
     match /patch_notes/{doc} {
       allow read: if true;
-      allow write: if isAuth();
+      // Posting/deleting official patch notes is admin-only (UI is gated by
+      // window.isAdmin, but that's client-side only — enforce here too).
+      // Likes/dislikes are toggled by any signed-in user via update.
+      allow create, delete: if isAdmin();
+      allow update: if isAuth();
     }
 
     // ── Comments ──────────────────────────────────────────────────────────────
@@ -166,7 +171,23 @@ service cloud.firestore {
     // ── Profiles ──────────────────────────────────────────────────────────────
     match /profiles/{uid} {
       allow read: if true;
-      allow write: if isOwner(uid);
+      allow create: if isOwner(uid);
+      // Owner can update their own profile (display name, bio, avatar, etc.),
+      // but privileged numeric fields (currency, rank counters) can only move
+      // by small bounded amounts per write — matches the largest legitimate
+      // single award (UR dismantle = 1500 amber) or spend (premium pack =
+      // 1000 amber), and the +1 increments used for review/completion
+      // counters. Prevents a client from setting these to arbitrary values.
+      allow update: if isAdmin() || (
+        isOwner(uid) &&
+        request.resource.data.get('amber', 0) >= resource.data.get('amber', 0) - 1000 &&
+        request.resource.data.get('amber', 0) <= resource.data.get('amber', 0) + 2000 &&
+        request.resource.data.get('reviewCount', 0)    <= resource.data.get('reviewCount', 0) + 1 &&
+        request.resource.data.get('indepthCount', 0)   <= resource.data.get('indepthCount', 0) + 1 &&
+        request.resource.data.get('completedCount', 0) <= resource.data.get('completedCount', 0) + 1 &&
+        request.resource.data.get('reactionCount', 0)  <= resource.data.get('reactionCount', 0) + 1 &&
+        request.resource.data.get('loginStreak', 0)    <= resource.data.get('loginStreak', 0) + 1
+      );
     }
 
     // ── Anime lists & top lists ───────────────────────────────────────────────
@@ -262,7 +283,11 @@ service cloud.firestore {
 
     match /characters/{doc} {
       allow read: if true;
-      allow write: if isAuth();
+      // Tier-list character search auto-caches new AniList results for any
+      // signed-in user (always a brand-new doc), but editing or deleting
+      // existing card art/rarities (TCG admin tools) is admin-only.
+      allow create: if isAuth();
+      allow update, delete: if isAdmin();
     }
 
     // ── Feedback ──────────────────────────────────────────────────────────────
@@ -292,7 +317,10 @@ service cloud.firestore {
     // ── TCG card collections (per-user subcollection) ─────────────────────────
     match /card_collections/{uid}/cards/{card} {
       allow read: if true;
-      allow create: if isOwner(uid);
+      // Admin can also create cards directly in another user's collection —
+      // used to gift the 1-of-1 Founder edition card.
+      allow create: if isOwner(uid) || isAdmin();
+      allow update: if isOwner(uid);
       allow delete: if isOwner(uid);
     }
 
