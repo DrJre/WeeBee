@@ -7,6 +7,7 @@
 - [ ] **Connections-style game** — daily: group 16 anime characters into 4 categories, shareable results (ON HOLD)
 
 ## TCG / Amber — Next Up
+- [ ] **Remove dead TCG admin code** — once admin tooling is fully migrated/stable, delete now-unused functions (old SR/SSR grid renderers if replaced, old pool seeder helpers, etc.) — left in place for now just in case
 - [ ] **Testing** — end-to-end test amber earning (games, reviews, completions, interactions, login streak), pack purchase deduction, and card rendering for all rarities
 - [ ] **Card back art** — design real card back artwork to replace the placeholder WeeBee bee text in the pack opening flip animation
 - [ ] **Pack opening effects** — particle burst on SR pull, card glow animations, optional sound; make the reveal feel more impactful

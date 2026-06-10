@@ -1,0 +1,4 @@
+node_modules/
+serviceAccountKey.json
+weebee-fbbd8-firebase-adminsdk-*.json
+.firebase/

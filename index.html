@@ -29,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=65">
+    <link rel="stylesheet" href="styles.css?v=66">
 </head>
 <body>
     <div class="app-container">
@@ -53,7 +53,7 @@
                     <button class="nav-btn" data-target="community-view" onclick="switchView('community-view')">
                         <span class="material-symbols-outlined">groups</span><span class="nav-label"> Community</span>
                     </button>
-                    <button id="tcg-nav-btn" class="nav-btn" data-target="tcg-view" onclick="switchView('tcg-view')" style="display:none;">
+                    <button id="tcg-nav-btn" class="nav-btn" data-target="tcg-view" onclick="switchView('tcg-view')">
                         <span class="material-symbols-outlined">style</span><span class="nav-label"> TCG</span>
                     </button>
                 </nav>
@@ -102,7 +102,7 @@
             <button class="nav-btn" data-target="community-view" onclick="switchView('community-view'); closeMobileMenu()">
                 <span class="material-symbols-outlined">groups</span> Community
             </button>
-            <button id="tcg-nav-btn-mobile" class="nav-btn" data-target="tcg-view" onclick="switchView('tcg-view'); closeMobileMenu()" style="display:none;">
+            <button id="tcg-nav-btn-mobile" class="nav-btn" data-target="tcg-view" onclick="switchView('tcg-view'); closeMobileMenu()">
                 <span class="material-symbols-outlined">style</span> TCG
             </button>
         </div>
@@ -819,80 +819,163 @@
                 </div><!-- /community-view -->
 
                 <div id="tcg-view" class="view">
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; flex-wrap:wrap; gap:10px;">
-                        <div>
-                            <h2 style="margin:0 0 4px;">WeeBee TCG <span style="font-size:12px; font-weight:700; color:var(--accent-yellow); border:1px solid var(--accent-yellow); border-radius:6px; padding:2px 8px; vertical-align:middle;">ADMIN</span></h2>
-                            <p style="color:var(--text-muted); font-size:13px; margin:0;">Prototype card generator — pulls characters from AniList, auto-assigns rarity, and previews the card design. Not yet visible to users.</p>
+
+                    <!-- TCG HERO BANNER -->
+                    <div class="bw-banner-hero" style="border-radius:20px; padding:36px 32px; margin-bottom:20px; text-align:center; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden;">
+                        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%, rgba(245,158,11,0.25) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(124,58,237,0.25) 0%, transparent 60%); pointer-events:none;"></div>
+                        <div style="position:relative; z-index:1;">
+                            <div style="font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:8px;">WeeBee</div>
+                            <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">🃏 TCG 🐝</div>
+                            <div style="font-size:15px; color:rgba(255,255,255,0.55); margin-top:10px;">Open packs, collect cards, and build your binder</div>
                         </div>
                     </div>
 
-                    <div style="background:var(--bg-gray); border-radius:12px; padding:18px; margin:18px 0; display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;">
-                        <div>
-                            <label style="display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:6px;">Source Anime</label>
-                            <select id="tcg-anime-select" onchange="window._tcgApplyAnimeDefaults()" style="padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px;">
-                                <option value="20">Naruto</option>
-                                <option value="21">One Piece</option>
-                                <option value="269">Bleach</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:6px;">Rare Cutoff (top N most popular)</label>
-                            <input type="number" id="tcg-rare-cutoff" value="15" min="1" max="30" style="width:90px; padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; box-sizing:border-box;">
-                        </div>
-                        <button onclick="window.tcgGenerateCards()" id="tcg-generate-btn" style="padding:11px 22px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:14px; cursor:pointer;">
-                            Pull Characters &amp; Generate Cards
+                    <!-- TCG TABS -->
+                    <div class="detail-tabs" style="margin-bottom:24px;">
+                        <button class="detail-tab active tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-store')">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">storefront</span> Store
                         </button>
-                        <span id="tcg-status" style="font-size:13px; color:var(--text-muted);"></span>
+                        <button class="detail-tab tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-collection')">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">collections_bookmark</span> Collection
+                        </button>
+                        <button class="detail-tab tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-trading')">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">swap_horiz</span> Trading
+                        </button>
+                        <button id="tcg-tab-admin-btn" class="detail-tab tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-admin')" style="display:none;">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">admin_panel_settings</span> Admin
+                        </button>
                     </div>
 
-                    <!-- Card Pool Seeder -->
-                    <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                        <div>
-                            <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Card Pool Seeder</div>
-                            <div style="font-size:12px; color:var(--text-muted);">Fetches top 100 anime → top 30 chars each → saves to Firestore with rarity tags. Takes ~60s.</div>
-                        </div>
-                        <button id="tcg-seed-btn" onclick="window._tcgSeedCardPool()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Seed Card Pool</button>
-                        <button id="tcg-purge-btn" onclick="window._tcgPurgeOrphans()" style="padding:10px 20px; border-radius:8px; border:1px solid #ef4444; background:transparent; color:#ef4444; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Purge Orphans</button>
-                        <span id="tcg-seed-status" style="font-size:12px; color:var(--text-muted); flex:1;"></span>
-                        <button onclick="window._tcgBrowsePool()" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Browse Pool</button>
-                    </div>
+                    <!-- STORE TAB -->
+                    <div id="tcg-tab-store" class="tcg-tab-content">
+                        <div id="tcg-store"></div>
 
-                    <!-- Pool Browser -->
-                    <div id="tcg-pool-browser" style="margin-bottom:18px;"></div>
-
-                    <div id="tcg-card-grid" class="wb-card-grid"></div>
-
-                    <!-- Amber Wallet (admin) -->
-                    <div style="margin:40px 0 0; padding-top:32px; border-top:1px solid var(--border-color);">
-                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
-                            <div>
-                                <h3 style="margin:0 0 4px;">Amber Currency <span style="font-size:11px; font-weight:700; color:#f59e0b; border:1px solid #f59e0b; border-radius:6px; padding:2px 8px; vertical-align:middle;">ADMIN</span></h3>
-                                <p style="color:var(--text-muted); font-size:13px; margin:0;">Live balances and transaction log. Admin-only until TCG launch.</p>
+                        <!-- HOW TO EARN AMBER -->
+                        <div style="margin-top:32px; background:var(--bg-gray); border-radius:14px; padding:20px 24px;">
+                            <h3 style="margin:0 0 14px; display:flex; align-items:center; gap:8px;">🟡 How to Earn Amber</h3>
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px;">
+                                <div style="display:flex; align-items:flex-start; gap:10px;">
+                                    <span style="font-size:22px;">📝</span>
+                                    <div><strong>Write Reviews</strong><br><span style="color:var(--text-muted); font-size:13px;">+5 quick · +10 in-depth</span></div>
+                                </div>
+                                <div style="display:flex; align-items:flex-start; gap:10px;">
+                                    <span style="font-size:22px;">✅</span>
+                                    <div><strong>Complete Anime</strong><br><span style="color:var(--text-muted); font-size:13px;">+2 per anime marked completed</span></div>
+                                </div>
+                                <div style="display:flex; align-items:flex-start; gap:10px;">
+                                    <span style="font-size:22px;">🎮</span>
+                                    <div><strong>Play Daily Games</strong><br><span style="color:var(--text-muted); font-size:13px;">+25 each for BuzzWord, Trivia &amp; MeloBee (once per day)</span></div>
+                                </div>
+                                <div style="display:flex; align-items:flex-start; gap:10px;">
+                                    <span style="font-size:22px;">🔥</span>
+                                    <div><strong>Login Streak</strong><br><span style="color:var(--text-muted); font-size:13px;">+100 daily, up to +200 with a longer streak</span></div>
+                                </div>
+                                <div style="display:flex; align-items:flex-start; gap:10px;">
+                                    <span style="font-size:22px;">💬</span>
+                                    <div><strong>Like &amp; Comment</strong><br><span style="color:var(--text-muted); font-size:13px;">+1 per interaction, up to 10/day</span></div>
+                                </div>
+                                <div style="display:flex; align-items:flex-start; gap:10px;">
+                                    <span style="font-size:22px;">🏆</span>
+                                    <div><strong>Unlock Achievements</strong><br><span style="color:var(--text-muted); font-size:13px;">+25 to +1000 depending on rarity</span></div>
+                                </div>
                             </div>
-                            <button onclick="window._amberLoadWallet()" style="padding:9px 18px; border-radius:8px; border:none; background:var(--bg-gray); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Refresh</button>
                         </div>
-                        <div id="amber-wallet-content" style="background:var(--bg-gray); border-radius:12px; padding:20px;">
-                            <p style="color:var(--text-muted); margin:0;">Click Refresh to load wallet data.</p>
+
+                        <div id="tcg-showcase" style="margin-top:40px;"></div>
+                        <div id="tcg-search-section" style="margin-top:40px;">
+                            <h3 style="margin:0 0 14px;">Search Cards</h3>
+                            <input id="tcg-search-input" type="text" placeholder="Search by character or series..."
+                                oninput="clearTimeout(window._tcgSearchTimer);window._tcgSearchTimer=setTimeout(()=>window._tcgSearchCards(this.value),300)"
+                                style="width:100%; max-width:400px; padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; box-sizing:border-box; margin-bottom:18px;">
+                            <div id="tcg-search-results"></div>
                         </div>
                     </div>
 
-                    <div style="margin:34px 0 14px;">
-                        <h3 style="margin:0 0 4px;">SR Card Showcase <span style="font-size:11px; font-weight:700; color:#a78bfa; border:1px solid #a78bfa; border-radius:6px; padding:2px 8px; vertical-align:middle;">HAND-CURATED</span></h3>
-                        <p style="color:var(--text-muted); font-size:13px; margin:0;">Hand-picked art for SR-tier cards — sourced manually and stored in Firebase Storage rather than auto-pulled.</p>
+                    <!-- COLLECTION TAB -->
+                    <div id="tcg-tab-collection" class="tcg-tab-content" style="display:none;">
+                        <div id="tcg-collection"></div>
                     </div>
-                    <div id="tcg-sr-grid" class="wb-card-grid"></div>
 
-                    <div style="margin:34px 0 14px;">
-                        <h3 style="margin:0 0 4px;">SSR Card Showcase <span style="font-size:11px; font-weight:700; color:#ffd93d; border:1px solid #ffd93d; border-radius:6px; padding:2px 8px; vertical-align:middle;">HAND-CURATED</span></h3>
-                        <p style="color:var(--text-muted); font-size:13px; margin:0;">The rarest tier — prismatic rainbow border with holographic hover shimmer. Hover a card to see the foil effect.</p>
+                    <!-- TRADING TAB -->
+                    <div id="tcg-tab-trading" class="tcg-tab-content" style="display:none;">
+                        <div style="text-align:center; padding:80px 20px; color:var(--text-muted);">
+                            <div style="font-size:56px; margin-bottom:14px;">🔄</div>
+                            <h3 style="margin:0 0 8px;">Trading Coming Soon</h3>
+                            <p style="margin:0;">Trade cards with other players — coming in a future update.</p>
+                        </div>
                     </div>
-                    <div id="tcg-ssr-grid" class="wb-card-grid"></div>
 
-                    <!-- Pack Store -->
-                    <div id="tcg-store" style="margin:40px 0 0; padding-top:32px; border-top:1px solid var(--border-color);"></div>
+                    <!-- ADMIN TAB -->
+                    <div id="tcg-tab-admin" class="tcg-tab-content" style="display:none;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; flex-wrap:wrap; gap:10px;">
+                            <div>
+                                <h2 style="margin:0 0 4px;">TCG Admin Tools <span style="font-size:12px; font-weight:700; color:var(--accent-yellow); border:1px solid var(--accent-yellow); border-radius:6px; padding:2px 8px; vertical-align:middle;">ADMIN</span></h2>
+                                <p style="color:var(--text-muted); font-size:13px; margin:0;">Card generator, pool seeder, and hand-curated showcases. Only visible to admins.</p>
+                            </div>
+                        </div>
 
-                    <!-- My Collection & Binders -->
-                    <div id="tcg-collection" style="margin:40px 0 0; padding-top:32px; border-top:1px solid var(--border-color);"></div>
+                        <div style="background:var(--bg-gray); border-radius:12px; padding:18px; margin:18px 0; display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;">
+                            <div>
+                                <label style="display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:6px;">Source Anime</label>
+                                <select id="tcg-anime-select" onchange="window._tcgApplyAnimeDefaults()" style="padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px;">
+                                    <option value="20">Naruto</option>
+                                    <option value="21">One Piece</option>
+                                    <option value="269">Bleach</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:6px;">Rare Cutoff (top N most popular)</label>
+                                <input type="number" id="tcg-rare-cutoff" value="15" min="1" max="30" style="width:90px; padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; box-sizing:border-box;">
+                            </div>
+                            <button onclick="window.tcgGenerateCards()" id="tcg-generate-btn" style="padding:11px 22px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:14px; cursor:pointer;">
+                                Pull Characters &amp; Generate Cards
+                            </button>
+                            <span id="tcg-status" style="font-size:13px; color:var(--text-muted);"></span>
+                        </div>
+
+                        <!-- Card Pool Seeder -->
+                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                            <div>
+                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Card Pool Seeder</div>
+                                <div style="font-size:12px; color:var(--text-muted);">Fetches top 100 anime → top 30 chars each → saves to Firestore with rarity tags. Takes ~60s.</div>
+                            </div>
+                            <button id="tcg-seed-btn" onclick="window._tcgSeedCardPool()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Seed Card Pool</button>
+                            <button id="tcg-purge-btn" onclick="window._tcgPurgeOrphans()" style="padding:10px 20px; border-radius:8px; border:1px solid #ef4444; background:transparent; color:#ef4444; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Purge Orphans</button>
+                            <span id="tcg-seed-status" style="font-size:12px; color:var(--text-muted); flex:1;"></span>
+                            <button onclick="window._tcgBrowsePool()" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Browse Pool</button>
+                        </div>
+
+                        <!-- Pool Browser -->
+                        <div id="tcg-pool-browser" style="margin-bottom:18px;"></div>
+
+                        <div id="tcg-card-grid" class="wb-card-grid"></div>
+
+                        <!-- Amber Wallet (admin) -->
+                        <div style="margin:40px 0 0; padding-top:32px; border-top:1px solid var(--border-color);">
+                            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+                                <div>
+                                    <h3 style="margin:0 0 4px;">Amber Currency <span style="font-size:11px; font-weight:700; color:#f59e0b; border:1px solid #f59e0b; border-radius:6px; padding:2px 8px; vertical-align:middle;">ADMIN</span></h3>
+                                    <p style="color:var(--text-muted); font-size:13px; margin:0;">Live balances and transaction log.</p>
+                                </div>
+                                <button onclick="window._amberLoadWallet()" style="padding:9px 18px; border-radius:8px; border:none; background:var(--bg-gray); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Refresh</button>
+                            </div>
+                            <div id="amber-wallet-content" style="background:var(--bg-gray); border-radius:12px; padding:20px;">
+                                <p style="color:var(--text-muted); margin:0;">Click Refresh to load wallet data.</p>
+                            </div>
+                        </div>
+
+                        <div style="margin:34px 0 14px;">
+                            <h3 style="margin:0 0 4px;">SR Card Showcase <span style="font-size:11px; font-weight:700; color:#a78bfa; border:1px solid #a78bfa; border-radius:6px; padding:2px 8px; vertical-align:middle;">HAND-CURATED</span></h3>
+                            <p style="color:var(--text-muted); font-size:13px; margin:0;">Hand-picked art for SR-tier cards — sourced manually and stored in Firebase Storage rather than auto-pulled.</p>
+                        </div>
+                        <div id="tcg-sr-grid" class="wb-card-grid"></div>
+
+                        <div style="margin:34px 0 14px;">
+                            <h3 style="margin:0 0 4px;">SSR Card Showcase <span style="font-size:11px; font-weight:700; color:#ffd93d; border:1px solid #ffd93d; border-radius:6px; padding:2px 8px; vertical-align:middle;">HAND-CURATED</span></h3>
+                            <p style="color:var(--text-muted); font-size:13px; margin:0;">The rarest tier — prismatic rainbow border with holographic hover shimmer. Hover a card to see the foil effect.</p>
+                        </div>
+                        <div id="tcg-ssr-grid" class="wb-card-grid"></div>
+                    </div>
 
                 </div>
 
@@ -2083,6 +2166,6 @@
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=250"></script>
+    <script type="module" src="app.js?v=253"></script>
 </body>
 </html>
