@@ -900,11 +900,7 @@
 
                     <!-- TRADING TAB -->
                     <div id="tcg-tab-trading" class="tcg-tab-content" style="display:none;">
-                        <div style="text-align:center; padding:80px 20px; color:var(--text-muted);">
-                            <div style="font-size:56px; margin-bottom:14px;">🔄</div>
-                            <h3 style="margin:0 0 8px;">Trading Coming Soon</h3>
-                            <p style="margin:0;">Trade cards with other players — coming in a future update.</p>
-                        </div>
+                        <div id="tcg-trades-container"></div>
                     </div>
 
                     <!-- ADMIN TAB -->
@@ -957,6 +953,16 @@
                             <span id="tcg-srssr-migrate-status" style="font-size:12px; color:var(--text-muted); flex:1;"></span>
                         </div>
 
+                        <!-- Image Validator -->
+                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                            <div>
+                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Validate Card Images</div>
+                                <div style="font-size:12px; color:var(--text-muted);">Test-loads every card's image. Any that fail are flagged and excluded from pack pulls until you fix or delete them.</div>
+                            </div>
+                            <button onclick="window._tcgValidateImages()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Scan &amp; Fix Images</button>
+                        </div>
+                        <div id="tcg-image-validate-results" style="margin-bottom:18px;"></div>
+
                         <!-- Pool Browser -->
                         <div id="tcg-pool-browser" style="margin-bottom:18px;"></div>
 
@@ -996,6 +1002,11 @@
                                 <option value="naruto">Naruto Uzumaki (Naruto, UR)</option>
                                 <option value="choji">Choji Akimichi (Naruto, UR)</option>
                                 <option value="brook">Brook (One Piece, UR)</option>
+                                <option value="rengoku">Rengoku (Demon Slayer, UR)</option>
+                                <option value="shoyo_hinata">Shoyo Hinata (Haikyu, UR)</option>
+                                <option value="alphonse_elric">Alphonse Elric (Fullmetal Alchemist, UR)</option>
+                                <option value="makima">Makima (Chainsaw Man, UR)</option>
+                                <option value="dreaded">Dreaded (WeeBee Original, UR)</option>
                             </select>
                             <div id="founder-card-preview" style="margin-bottom:14px;"></div>
                             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
@@ -1176,7 +1187,7 @@
                                 <button class="p-tab active" onclick="switchProfileTab(event, 'p-feed')">Feed</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-reviews')">Reviews</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-lists')">Lists</button>
-                                <button class="p-tab" onclick="switchProfileTab(event, 'p-tcg-binders')">TCG Binders</button>
+                                <button class="p-tab" onclick="switchProfileTab(event, 'p-tcg-binders')">TCG Collection</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-stats')">Stats</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-achievements')">Achievements</button>
                                 <button class="p-tab" onclick="switchProfileTab(event, 'p-friends')">Friends</button>

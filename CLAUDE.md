@@ -16,6 +16,7 @@
 - [ ] **Pack opening effects** — particle burst on SR pull, card glow animations, optional sound; make the reveal feel more impactful
 - [ ] **Amber visibility** — show amber balance in topbar, profile stats section, and anywhere the user would expect to see their currency
 - [ ] **Card binder / collection viewer** — persistent collection saved to Firestore when packs are opened; binder UI to browse owned cards by rarity/series
+- [ ] **Shareable card images** — "Share" button to export any card (with full WeeBee frame: border, holo gem, name plate, rarity, serial) as a standalone image others can post in Discord etc. Requires canvas compositing of the frame + art (CSS effects can't be exported directly); for animated rarities (SR/SSR/UR) ideally re-encode as an animated GIF with the frame baked into every frame (needs a client-side GIF decode/encode lib — no Cloud Functions available). Generate on-demand when the Share button is clicked, upload result to Storage, copy link. Static PNG (still frame) is the fallback if animated re-encoding proves too slow/heavy.
 
 ## Next Patch Notes
 

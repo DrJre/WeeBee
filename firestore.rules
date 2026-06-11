@@ -67,7 +67,10 @@ service cloud.firestore {
     match /bw_op_games/{doc} {
       allow read: if true;
       allow create: if isAuth();
-      allow update: if isOwner(resource.data.uid);
+      // Doc id is `{uid}_{YYYY-MM-DD}` — ownership is derived from the id
+      // itself so a write isn't blocked if an earlier save (before this
+      // doc had a `uid` field) created it without one.
+      allow update: if isAuth() && doc.split('_')[0] == request.auth.uid;
     }
     match /bw_op_leaderboard/{doc} {
       allow read: if true;
@@ -76,7 +79,10 @@ service cloud.firestore {
     match /bw_nrt_games/{doc} {
       allow read: if true;
       allow create: if isAuth();
-      allow update: if isOwner(resource.data.uid);
+      // Doc id is `{uid}_{YYYY-MM-DD}` — ownership is derived from the id
+      // itself so a write isn't blocked if an earlier save (before this
+      // doc had a `uid` field) created it without one.
+      allow update: if isAuth() && doc.split('_')[0] == request.auth.uid;
     }
     match /bw_nrt_leaderboard/{doc} {
       allow read: if true;
@@ -85,7 +91,10 @@ service cloud.firestore {
     match /bw_blc_games/{doc} {
       allow read: if true;
       allow create: if isAuth();
-      allow update: if isOwner(resource.data.uid);
+      // Doc id is `{uid}_{YYYY-MM-DD}` — ownership is derived from the id
+      // itself so a write isn't blocked if an earlier save (before this
+      // doc had a `uid` field) created it without one.
+      allow update: if isAuth() && doc.split('_')[0] == request.auth.uid;
     }
     match /bw_blc_leaderboard/{doc} {
       allow read: if true;
@@ -94,7 +103,10 @@ service cloud.firestore {
     match /bw_db_games/{doc} {
       allow read: if true;
       allow create: if isAuth();
-      allow update: if isOwner(resource.data.uid);
+      // Doc id is `{uid}_{YYYY-MM-DD}` — ownership is derived from the id
+      // itself so a write isn't blocked if an earlier save (before this
+      // doc had a `uid` field) created it without one.
+      allow update: if isAuth() && doc.split('_')[0] == request.auth.uid;
     }
     match /bw_db_leaderboard/{doc} {
       allow read: if true;
@@ -357,6 +369,36 @@ service cloud.firestore {
     match /founders/{doc} {
       allow read: if true;
       allow write: if isAuth();
+    }
+
+    // ── TCG card trades ───────────────────────────────────────────────────────
+    // Card transfers happen client-side: when a trade is accepted, each side's
+    // own client deletes its given-up cards and recreates the received cards
+    // (snapshotted in offerCards/requestCards at proposal time) in its own
+    // card_collections subcollection — no cross-user writes needed.
+    match /trades/{tradeId} {
+      allow read: if isAuth() && request.auth.uid in resource.data.participants;
+      allow create: if isAuth() &&
+        request.auth.uid in request.resource.data.participants &&
+        request.resource.data.fromUid == request.auth.uid &&
+        request.resource.data.toUid != request.auth.uid &&
+        request.resource.data.status == 'pending';
+      allow update: if isAuth() && request.auth.uid in resource.data.participants;
+    }
+
+    // ── TCG card trade locks ────────────────────────────────────────────────
+    // When a trade is accepted, the accepting user claims a lock on each card
+    // they're about to receive (doc id `{ownerUid}_{cardId}`). This stops the
+    // same source card from being paid out by two different accepted trades
+    // (e.g. a user sending two pending offers for the same card, both
+    // accepted before the sender's client has removed the card). The owner
+    // of the locked card removes the lock once their side of the trade is
+    // applied.
+    match /card_trade_locks/{lockId} {
+      allow read: if true;
+      allow create: if isAuth() &&
+        get(/databases/$(database)/documents/trades/$(request.resource.data.tradeId)).data.participants.hasAny([request.auth.uid]);
+      allow delete: if isAuth();
     }
   }
 }
