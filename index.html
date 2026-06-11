@@ -30,7 +30,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=66">
+    <link rel="stylesheet" href="styles.css?v=70">
 </head>
 <body>
     <div class="app-container">
@@ -990,7 +990,13 @@
                         <!-- Gift Founder Card (admin) -->
                         <div style="margin:24px 0 0;">
                             <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:10px;">Gift Founder Card</div>
-                            <p style="color:var(--text-muted); font-size:12px; margin:0 0 10px;">Gifts the 1-of-1 "Founder" edition card (currently: Levi Ackerman, UR) to a user's collection.</p>
+                            <p style="color:var(--text-muted); font-size:12px; margin:0 0 10px;">Gifts a 1-of-1 "Founder" edition card to a user's collection. Pick the design, then search for the recipient.</p>
+                            <select id="founder-gift-select" onchange="window._tcgRenderFounderPreview()" style="padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; margin-bottom:14px;">
+                                <option value="levi">Levi Ackerman (Attack on Titan, UR)</option>
+                                <option value="naruto">Naruto Uzumaki (Naruto, UR)</option>
+                                <option value="choji">Choji Akimichi (Naruto, UR)</option>
+                                <option value="brook">Brook (One Piece, UR)</option>
+                            </select>
                             <div id="founder-card-preview" style="margin-bottom:14px;"></div>
                             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
                                 <input type="text" id="founder-gift-search" placeholder="Search by display name..." onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsersForFounder();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
@@ -2195,6 +2201,6 @@
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=253"></script>
+    <script type="module" src="app.js?v=260"></script>
 </body>
 </html>

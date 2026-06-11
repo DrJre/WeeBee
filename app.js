@@ -5136,13 +5136,14 @@ window.switchTcgTab = function(event, tabId) {
     if (tabId === 'tcg-tab-admin') window._tcgRenderFounderPreview();
 };
 
-// Renders a static preview of the Founder gift card so admins can check the
-// art/label before sending it to anyone.
+// Renders a preview of the currently-selected Founder gift card so admins
+// can check the art/label before sending it to anyone.
 window._tcgRenderFounderPreview = function() {
     const el = document.getElementById('founder-card-preview');
-    if (!el || el.dataset.rendered) return;
-    el.dataset.rendered = '1';
-    el.innerHTML = `<div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(TCG_FOUNDER_CARD)}</div></div>`;
+    if (!el) return;
+    const select = document.getElementById('founder-gift-select');
+    const card = TCG_FOUNDER_CARDS.find(c => c.id === select?.value) || TCG_FOUNDER_CARDS[0];
+    el.innerHTML = `<div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>`;
     _tcgObserveSSRCards(el);
 };
 
@@ -5495,6 +5496,18 @@ const TCG_SR_CARDS = [
     { name: 'Himiko Toga', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSR%2FToga.jpg?alt=media&token=1140a85c-0e10-45e1-acb0-a805ba9bd0d0' },
     { name: 'Anya Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSR%2FAnya%20Forger.jpg?alt=media&token=25bfa3ba-d056-4725-a3c2-7e899050b197' },
     { name: 'Yor Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSR%2FYor%20Forger.jpg?alt=media&token=e7efce79-67b7-46a4-8ca8-497336badb36' },
+    { name: 'Future Trunks', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FFuture%20Trunks.jpg?alt=media&token=b35e17da-7291-41e1-85e3-010edc16565c' },
+    { name: 'Gohan', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FGohan.jpg?alt=media&token=777ed92d-9dd7-4cee-b4f8-a7e880d0fbb7' },
+    { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FGoku.jpg?alt=media&token=ffca75fe-b937-493d-8f5f-796a8e9d5452' },
+    { name: 'Piccolo', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FPiccolo.jpg?alt=media&token=7cb85d13-e9cb-451e-9ae3-3744cc23a5d9' },
+    { name: 'Vegeta', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FVegeta.jpg?alt=media&token=11b1e828-8e8e-4e22-a0b7-c15f2b868cc8' },
+    { name: 'Zenitsu', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FZenitsu.jpg?alt=media&token=a20ecab2-d516-4dc6-b530-2e6e54cfc17f' },
+    { name: 'Muzan', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FMuzan.jpg?alt=media&token=9249c475-e135-41a2-8e49-9fd3f8d12a6e' },
+    { name: 'Tanjiro', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FTanjiro.jpg?alt=media&token=6a233273-2bb3-4fe5-aa54-74a14c579654' },
+    { name: 'Tengen Uzui', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FTengen%20Uzui.jpg?alt=media&token=c18001ec-c5f8-4ac6-a726-2406e83779d6' },
+    { name: 'Sung Jin-Woo', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSR%2FSung%20Jin-Woo.webp?alt=media&token=ace45778-8d98-411b-807c-39a04e62c03e' },
+    { name: 'Gabimaru', anime: "Hell's Paradise", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHell\'s%20Paradise%2FSR%2FGabimaru.webp?alt=media&token=dbd97df1-28f5-4237-a832-d7aa79de6276' },
+    { name: 'Luck Voltia', anime: 'Black Clover', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlack%20Clover%2FLuck%20Voltia.jpg?alt=media&token=f94e904e-8394-49ca-869e-72e4b5c73c50' },
 ];
 
 // SSR art — hand-curated, prismatic rainbow border + holographic hover shimmer
@@ -5546,19 +5559,39 @@ const TCG_SSR_CARDS = [
     { name: 'Gojo', anime: 'Jujutsu Kaisen', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJJK%2FSSR%2FGojo.webp?alt=media&token=7de91a3a-bd9d-4248-85e0-c37ab78c3067' },
     { name: 'Izuku Midoriya', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FIzuku%20Midoriya.jpg?alt=media&token=3fe565ae-28a3-407e-8be1-be7cb7d4b22e' },
     { name: 'Yor Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSSR%2FYor%20Forger.webp?alt=media&token=84fead07-4f1a-4b87-afa0-c20ab3314bef' },
+    { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FGoku.webp?alt=media&token=2a908b50-04b5-49ed-84d3-c49a654a06b9' },
+    { name: 'Kid Gohan', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FKid%20Gohan.webp?alt=media&token=1aec64a8-66b7-45d6-a063-1729d41951de' },
 ];
 
 // UR art — top rarity, hand-curated. Animated art (e.g. animated WebP) encouraged.
 const TCG_UR_CARDS = [
 ];
 
-// Founder gift card — 1-of-1 per founder, hand-gifted by an admin. Never enters
+// Founder gift cards — 1-of-1 designs, hand-gifted by an admin. Never enter
 // the pack pool; rendered with the gold "Founder" label instead of a serial.
-const TCG_FOUNDER_CARD = {
-    name: 'Levi Ackerman', anime: 'Attack on Titan', rarity: 'ur',
-    image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FUR%2FLevi%20Ackerman.gif?alt=media&token=be445e89-10ac-420d-b314-58364db4588f',
-    founder: true,
-};
+// Admin picks which design to send from the dropdown in the gift panel.
+const TCG_FOUNDER_CARDS = [
+    {
+        id: 'levi', name: 'Levi Ackerman', anime: 'Attack on Titan', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FUR%2FLevi%20Ackerman.gif?alt=media&token=be445e89-10ac-420d-b314-58364db4588f',
+        founder: true,
+    },
+    {
+        id: 'naruto', name: 'Naruto Uzumaki', anime: 'Naruto', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FNaruto.gif?alt=media&token=193d6d16-8d2e-46e1-92b9-7adfd776105e',
+        founder: true,
+    },
+    {
+        id: 'choji', name: 'Choji Akimichi', anime: 'Naruto', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FChoji.gif?alt=media&token=6ef72bc6-de77-4c34-b286-5bacd654d35d',
+        founder: true,
+    },
+    {
+        id: 'brook', name: 'Brook', anime: 'One Piece', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FBrook%20Final.gif?alt=media&token=4ae1b6b5-aa68-4532-bdf3-8eb379afcf3e',
+        founder: true,
+    },
+];
 
 window._amberLoadWallet = async function() {
     if (!window.isAdmin) return;
@@ -5673,14 +5706,16 @@ window._tcgAdminSearchUsersForFounder = async function() {
 
 window._tcgAdminGiftFounderCard = async function(uid, name) {
     if (!window.isAdmin) return;
-    if (!confirm(`Gift the Founder Edition "${TCG_FOUNDER_CARD.name}" card to ${name}? This is a 1-of-1 — make sure they don't already have one.`)) return;
+    const select = document.getElementById('founder-gift-select');
+    const card = TCG_FOUNDER_CARDS.find(c => c.id === select?.value) || TCG_FOUNDER_CARDS[0];
+    if (!confirm(`Gift the Founder Edition "${card.name}" card to ${name}? This is a 1-of-1 — make sure they don't already have one.`)) return;
     try {
         await addDoc(collection(db, 'card_collections', uid, 'cards'), {
-            name: TCG_FOUNDER_CARD.name, anime: TCG_FOUNDER_CARD.anime, rarity: TCG_FOUNDER_CARD.rarity,
-            image: TCG_FOUNDER_CARD.image, founder: true, serial: null, edition: null,
+            name: card.name, anime: card.anime, rarity: card.rarity,
+            image: card.image, founder: true, serial: null, edition: null,
             pulledAt: serverTimestamp(),
         });
-        alert(`Gifted Founder card to ${name}.`);
+        alert(`Gifted Founder card "${card.name}" to ${name}.`);
     } catch(e) { alert('Failed: ' + e.message); }
 };
 

@@ -341,6 +341,18 @@ service cloud.firestore {
       allow read, write: if isAuth() && request.auth.uid == uid;
     }
 
+    // ── Username reservations (lowercase, normalized display names) ──────────
+    match /usernames/{name} {
+      allow read: if true;
+      // Claiming a name: the doc must point to the requester's own uid.
+      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+      // Releasing your old name (on rename): only the owner can delete.
+      // resource is null if no reservation doc exists for the old name
+      // (common for accounts created before this system existed) — allow
+      // that no-op delete too.
+      allow delete: if isAuth() && (resource == null || resource.data.uid == request.auth.uid);
+    }
+
     // ── Founders ─────────────────────────────────────────────────────────────
     match /founders/{doc} {
       allow read: if true;
