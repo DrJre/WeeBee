@@ -328,13 +328,25 @@ function _awardAmberInteraction() {
 
 // Tracks the "reacted to N posts" Social achievements — call when a user
 // adds a like/dislike/agree/etc. to any post (not when removing one).
-function _recordReactionGiven() {
-    if (!auth.currentUser) return;
-    setDoc(doc(db, "profiles", auth.currentUser.uid), { reactionCount: increment(1) }, { merge: true }).then(() =>
-        getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
-            window.awardAchievements(window.getEarnedIds('react', pd.exists() ? (pd.data().reactionCount || 1) : 1)).catch(() => {});
-        })
-    ).catch(() => {});
+// `itemKey` uniquely identifies the post being reacted to; a given key is
+// only ever counted once, so toggling a like on/off repeatedly on the same
+// post can't be used to farm achievement/amber progress.
+// Returns true if this was a brand-new reaction, false if `itemKey` was
+// already counted previously.
+async function _recordReactionGiven(itemKey) {
+    if (!auth.currentUser) return false;
+    const ref = doc(db, "profiles", auth.currentUser.uid);
+    try {
+        const pd = await getDoc(ref);
+        const reacted = pd.exists() ? (pd.data().reactedItemKeys || []) : [];
+        if (itemKey && reacted.includes(itemKey)) return false;
+        const update = { reactionCount: increment(1) };
+        if (itemKey) update.reactedItemKeys = arrayUnion(itemKey);
+        await setDoc(ref, update, { merge: true });
+        const newPd = await getDoc(ref);
+        window.awardAchievements(window.getEarnedIds('react', newPd.exists() ? (newPd.data().reactionCount || 1) : 1)).catch(() => {});
+        return true;
+    } catch(e) { return false; }
 }
 // ── End Amber Currency System ────────────────────────────────────
 
@@ -2593,7 +2605,7 @@ window.toggleReaction = async function(event, reviewId, type, btn) {
         if(type === 'like') { if(likes.includes(auth.currentUser.uid)) likes = likes.filter(id => id !== auth.currentUser.uid); else { likes.push(auth.currentUser.uid); dislikes = dislikes.filter(id => id !== auth.currentUser.uid); addedReaction = true; } }
         else { if(dislikes.includes(auth.currentUser.uid)) dislikes = dislikes.filter(id => id !== auth.currentUser.uid); else { dislikes.push(auth.currentUser.uid); likes = likes.filter(id => id !== auth.currentUser.uid); addedReaction = true; } }
         await updateDoc(reviewRef, { likes, dislikes });
-        if (addedReaction) _recordReactionGiven();
+        if (addedReaction) _recordReactionGiven(`review_${reviewId}`);
     }
 };
 
@@ -2707,7 +2719,7 @@ window.toggleCommentReaction = async function(event, commentId, type, btnElement
         if(type === 'like') { if(likes.includes(auth.currentUser.uid)) likes = likes.filter(id => id !== auth.currentUser.uid); else { likes.push(auth.currentUser.uid); dislikes = dislikes.filter(id => id !== auth.currentUser.uid); addedReaction = true; } }
         else { if(dislikes.includes(auth.currentUser.uid)) dislikes = dislikes.filter(id => id !== auth.currentUser.uid); else { dislikes.push(auth.currentUser.uid); likes = likes.filter(id => id !== auth.currentUser.uid); addedReaction = true; } }
         await updateDoc(commentRef, { likes, dislikes });
-        if (addedReaction) _recordReactionGiven();
+        if (addedReaction) _recordReactionGiven(`comment_${commentId}`);
     }
 };
 
@@ -5180,7 +5192,7 @@ window.likeTierList = async function(id, btn) {
         const hadLiked=likes.includes(uid);
         const newLikes=hadLiked?likes.filter(x=>x!==uid):[...likes,uid];
         await updateDoc(doc(db,"tier_lists",id),{likes:newLikes});
-        if (!hadLiked) _recordReactionGiven();
+        if (!hadLiked) _recordReactionGiven(`tierlist_${id}`);
         const liked=newLikes.includes(uid);
         btn.style.background=liked?'var(--accent-yellow)':'var(--bg-gray-darker)'; btn.style.color=liked?'':'var(--text-dark)';
         btn.innerHTML=`<span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">${liked?'favorite':'favorite_border'}</span> ${newLikes.length}`;
@@ -10813,7 +10825,7 @@ window.toggleArticleReaction = async function(type) {
         likes = likes.filter(u => u !== uid);
     }
     await updateDoc(pRef, { likes, dislikes });
-    if (addedReaction) _recordReactionGiven();
+    if (addedReaction) _recordReactionGiven(`patchnote_${id}`);
     document.getElementById('article-like-count').innerText = likes.length;
     document.getElementById('article-dislike-count').innerText = dislikes.length;
     document.getElementById('article-like-btn').style.color = likes.includes(uid) ? 'var(--accent-yellow)' : 'var(--text-dark)';
@@ -13064,15 +13076,16 @@ window.toggleBwPostReaction = async function(event, postId, postCollection, type
         if (likesEl) likesEl.textContent = `${Math.max(0, newLikeCount)} Likes`;
         if (dislikesEl) dislikesEl.textContent = `${Math.max(0, newDislikeCount)} Dislikes`;
 
-        // Amber: liker earns 1 interaction; post author earns 1 per like received
-        if (type === 'like' && !hasReacted) {
-            _awardAmberInteraction();
-            const postAuthorUid = snap.exists() ? snap.data().uid : null;
-            if (postAuthorUid && postAuthorUid !== uid) _awardAmberToUser(postAuthorUid, 1, 'like_received').catch(() => {});
+        // Social achievements + amber: track reactions given (likes and dislikes both
+        // count), but only once per post — toggling a reaction on/off can't farm progress.
+        if (!hasReacted) {
+            const isNewReaction = await _recordReactionGiven(`${postCollection}_${postId}`);
+            if (isNewReaction && type === 'like') {
+                _awardAmberInteraction();
+                const postAuthorUid = snap.exists() ? snap.data().uid : null;
+                if (postAuthorUid && postAuthorUid !== uid) _awardAmberToUser(postAuthorUid, 1, 'like_received').catch(() => {});
+            }
         }
-
-        // Social achievements: track reactions given (likes and dislikes both count)
-        if (!hasReacted) _recordReactionGiven();
 
         // Write to Firestore
         if (snap.exists()) {
