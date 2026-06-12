@@ -677,7 +677,7 @@ onAuthStateChanged(auth, (user) => {
                     <span style="font-size:14px;">🟡</span><span id="topbar-amber-value">0</span>
                 </div>
                 <span class="topbar-display-name" style="font-weight:600; font-size:14px;">${user.displayName}</span><span id="topbar-rank-badge" style="display:inline-flex; align-items:center; margin-left:2px;"></span>
-                <img src="${avatarUrl}" alt="User" class="avatar" style="cursor:pointer;" onclick="event.stopPropagation(); viewUserProfile('${user.uid}')">
+                <img src="${avatarUrl}" alt="User" class="avatar" style="cursor:pointer;" onclick="window.topbarAvatarClick(event, '${user.uid}')">
                 <span class="material-symbols-outlined topbar-chevron" style="font-size:18px; cursor:pointer;" onclick="toggleDropdown(event)">expand_more</span>
             </div>
             <div id="profile-dropdown" class="dropdown-menu" style="display: none; right:0; top:50px;">
@@ -789,6 +789,14 @@ onAuthStateChanged(auth, (user) => {
     }
     if(window.currentActiveViewId === 'home-view') fetchHomepageReviews();
 });
+
+// On mobile (no room for the chevron) tapping the avatar opens the account
+// dropdown; on desktop it goes straight to the user's profile.
+window.topbarAvatarClick = function(e, uid) {
+    e.stopPropagation();
+    if (window.innerWidth <= 860) { window.toggleDropdown(e); return; }
+    viewUserProfile(uid);
+};
 
 window.toggleDropdown = function(e) {
     e.stopPropagation(); 

@@ -254,7 +254,7 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
 
     /* ── Topbar: tighten spacing, hide non-essential elements ── */
     .topbar-display-name { display: none; }
-    .topbar-chevron { font-size: 20px !important; }
+    .topbar-chevron { display: none; }
     .topbar-right { gap: 4px; }
     .user-profile { gap: 4px; }
     .topbar-notif-wrap { margin-right: 0 !important; }
