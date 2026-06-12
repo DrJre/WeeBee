@@ -177,6 +177,8 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     /* Profile header */
     .profile-banner { min-height: 200px; }
     .profile-banner-overlay { padding: 14px 14px 16px; }
+    .profile-banner-overlay > div { width: 100%; }
+    .profile-banner-overlay > div > div:last-child { padding-right: 84px; }
     .profile-avatar-large { width: 60px; height: 60px; }
 
     /* Review cards */
@@ -237,13 +239,17 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     /* Character grid */
     .character-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 
+    /* Profile card showcase — fit 2 columns on narrow phones */
+    #profile-card-showcase > div { padding: 14px 10px; }
+    .profile-showcase-grid { gap: 10px !important; }
+
     /* Carousel arrows — pull them in so they don't clip */
     .carousel-arrow.left { left: -8px; }
     .carousel-arrow.right { right: -8px; }
 
     /* ── Topbar: tighten spacing, hide non-essential elements ── */
     .topbar-display-name { display: none; }
-    .topbar-chevron { display: none; }
+    .topbar-chevron { font-size: 20px !important; }
     .topbar-right { gap: 4px; }
     .user-profile { gap: 4px; }
     .topbar-notif-wrap { margin-right: 0 !important; }

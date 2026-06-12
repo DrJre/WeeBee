@@ -7442,7 +7442,7 @@ window._tcgRenderProfileShowcase = async function(uid) {
                 <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">🃏 Card Showcase</span>
                 ${isMe ? `<button onclick="window._tcgOpenShowcasePicker()" title="Edit showcase" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--accent-yellow);color:#222;font-size:18px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;">+</button>` : ''}
             </div>
-            <div style="display:flex;flex-wrap:wrap;gap:14px;">
+            <div class="profile-showcase-grid" style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;">
                 ${cards.map(card => `
                     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
                         <div style="width:140px;height:196px;overflow:hidden;"><div style="transform:scale(0.636);transform-origin:top left;">${_tcgBuildCardFace(card)}</div></div>
