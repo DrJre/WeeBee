@@ -752,6 +752,10 @@ onAuthStateChanged(auth, (user) => {
         window.myAnimeList = [];
         window.applyCursor('default');
         if (window.amberUnsubscribe) { window.amberUnsubscribe(); window.amberUnsubscribe = null; }
+        _wheelLoadConfig().then(config => {
+            const wheelTabBtn = document.getElementById('games-tab-wheel-btn');
+            if (wheelTabBtn) wheelTabBtn.style.display = config.enabled ? '' : 'none';
+        });
         // Shared card links work without signing in (card_collections + profiles are publicly readable)
         const _cardId = _initialUrlParams.get('card');
         if (_cardId) {
@@ -6363,7 +6367,7 @@ function _wheelShowResultModal(section) {
         default:
             body = `<div style="font-size:20px;color:#fff;">You won: ${_wheelSectionLabel(section)}</div>`;
     }
-    modal.innerHTML = `<div style="text-align:center;background:var(--bg-card);border-radius:16px;padding:36px 28px;max-width:360px;">${body}<button onclick="document.getElementById('wheel-result-modal')?.remove()" class="action-btn" style="margin-top:20px;">Nice!</button></div>`;
+    modal.innerHTML = `<div style="text-align:center;background:var(--bg-card);border-radius:16px;padding:36px 28px;max-width:360px;">${body}<button onclick="document.getElementById('wheel-result-modal')?.remove()" class="action-btn" style="margin:20px auto 0;">Nice!</button></div>`;
     document.body.appendChild(modal);
 }
 
