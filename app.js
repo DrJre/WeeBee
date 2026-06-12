@@ -5953,6 +5953,27 @@ function _wheelSectionColor(section, index = 0) {
     }
 }
 
+// Ordering for the prizes sidebar — best prizes first.
+const WHEEL_SIDEBAR_ORDER = [
+    s => s.type === 'monthly_ur',
+    s => s.type === 'pack' && s.packId === 'premium',
+    s => s.type === 'pack' && s.packId === 'standard',
+    s => s.type === 'amber' && s.value === 500,
+    s => s.type === 'amber' && s.value === 200,
+    s => s.type === 'amber' && s.value === 100,
+    s => s.type === 'amber' && s.value === 50,
+    s => s.type === 'extra_spin',
+    s => s.type === 'nothing',
+];
+function _wheelSidebarRank(section) {
+    const idx = WHEEL_SIDEBAR_ORDER.findIndex(fn => fn(section));
+    return idx === -1 ? WHEEL_SIDEBAR_ORDER.length : idx;
+}
+function _wheelSidebarLabel(section, ur) {
+    if (section.type === 'monthly_ur') return `${ur.name} (UR)`;
+    return _wheelSectionLabel(section);
+}
+
 // Builds the shuffled section layout for a user's wheel for the month.
 // `n` = total sections (days remaining in the month, inclusive of today,
 // plus 4). Exactly one section is the monthly UR; the rest are scaled
@@ -6096,6 +6117,22 @@ function _wheelRender(el, config, state) {
             </div>
         </div>` : '';
 
+    const now = new Date();
+    const urStampText = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
+    const urCard = { name: ur.name, anime: ur.anime, image: ur.image, rarity: 'ur', monthlyUr: true, stampText: urStampText };
+
+    const sidebarRows = state.sections
+        .map((s, i) => ({ s, i }))
+        .sort((a, b) => _wheelSidebarRank(a.s) - _wheelSidebarRank(b.s))
+        .map(({ s, i }) => {
+            const claimed = !!used[i];
+            return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:var(--bg-gray);${claimed ? 'opacity:0.35;' : ''}">
+                <span style="font-size:18px;">${_wheelSectionIcon(s)}</span>
+                <span style="font-size:13px;font-weight:700;${claimed ? 'text-decoration:line-through;' : ''}">${_wheelSidebarLabel(s, ur)}</span>
+                ${claimed ? '<span style="margin-left:auto;font-size:11px;color:var(--text-muted);">✓</span>' : ''}
+            </div>`;
+        }).join('');
+
     el.innerHTML = `
         <div style="text-align:center;">
             <div class="bw-banner-hero" style="border-radius:20px;padding:28px 24px;margin-bottom:20px;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
@@ -6108,18 +6145,32 @@ function _wheelRender(el, config, state) {
                 </div>
             </div>
 
-            <div id="wheel-outer" class="wheel-outer" style="position:relative;width:${wheelSize}px;height:${wheelSize}px;margin:0 auto 24px;">
-                <div class="wheel-ring"></div>
-                <div class="wheel-sparkles">${[0, 1, 2, 3, 4, 5].map(i => `<span class="wheel-sparkle" style="--i:${i};">✨</span>`).join('')}</div>
-                <div id="wheel-flash" class="wheel-flash"></div>
-                <div id="wheel-container" style="position:relative;width:100%;height:100%;overflow:visible;">
-                    <div id="wheel-disc" style="width:100%;height:100%;border-radius:50%;background:conic-gradient(${gradientStops});position:relative;border:6px solid var(--bg-card);box-shadow:0 0 0 4px var(--border-color);">
-                        ${icons}
+            <div style="display:flex;gap:28px;justify-content:center;align-items:flex-start;flex-wrap:wrap;margin-top:36px;">
+                <div style="flex:0 0 auto;max-width:220px;">
+                    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">🌟 This Month's Grand Prize</div>
+                    <div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(urCard)}</div></div>
+                </div>
+
+                <div id="wheel-outer" class="wheel-outer" style="position:relative;width:${wheelSize}px;height:${wheelSize}px;margin:0 auto 24px;">
+                    <div class="wheel-ring"></div>
+                    <div class="wheel-sparkles">${[0, 1, 2, 3, 4, 5].map(i => `<span class="wheel-sparkle" style="--i:${i};">✨</span>`).join('')}</div>
+                    <div id="wheel-flash" class="wheel-flash"></div>
+                    <div id="wheel-container" style="position:relative;width:100%;height:100%;overflow:visible;">
+                        <div id="wheel-disc" style="width:100%;height:100%;border-radius:50%;background:conic-gradient(${gradientStops});position:relative;border:6px solid var(--bg-card);box-shadow:0 0 0 4px var(--border-color);">
+                            ${icons}
+                        </div>
+                        <div id="wheel-pointer" style="position:absolute;top:-${isDesktop ? 22 : 14}px;left:50%;transform:translateX(-50%);font-size:${isDesktop ? 48 : 32}px;transform-origin:top center;filter:drop-shadow(0 0 6px rgba(245,158,11,0.7));">🔻</div>
+                        <button id="wheel-spin-btn" onclick="window._wheelSpin()" ${canSpin ? '' : 'disabled'} class="wheel-spin-btn" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${btnSize}px;height:${btnSize}px;border-radius:50%;border:4px solid var(--bg-card);z-index:10;font-weight:900;font-size:${isDesktop ? '16px' : '11px'};line-height:1.2;color:#fff;box-shadow:0 0 24px rgba(245,158,11,0.55),0 0 0 4px var(--border-color);${canSpin ? 'background:linear-gradient(135deg,#f59e0b,#dc2626);cursor:pointer;' : 'background:var(--bg-gray);opacity:0.45;cursor:default;'}">
+                            ${canSpin ? (state.lastSpinDate === today ? 'EXTRA<br>SPIN' : '🎡<br>SPIN') : '✅'}
+                        </button>
                     </div>
-                    <div id="wheel-pointer" style="position:absolute;top:-${isDesktop ? 22 : 14}px;left:50%;transform:translateX(-50%);font-size:${isDesktop ? 48 : 32}px;transform-origin:top center;filter:drop-shadow(0 0 6px rgba(245,158,11,0.7));">🔻</div>
-                    <button id="wheel-spin-btn" onclick="window._wheelSpin()" ${canSpin ? '' : 'disabled'} class="wheel-spin-btn" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${btnSize}px;height:${btnSize}px;border-radius:50%;border:4px solid var(--bg-card);z-index:10;font-weight:900;font-size:${isDesktop ? '16px' : '11px'};line-height:1.2;color:#fff;box-shadow:0 0 24px rgba(245,158,11,0.55),0 0 0 4px var(--border-color);${canSpin ? 'background:linear-gradient(135deg,#f59e0b,#dc2626);cursor:pointer;' : 'background:var(--bg-gray);opacity:0.45;cursor:default;'}">
-                        ${canSpin ? (state.lastSpinDate === today ? 'EXTRA<br>SPIN' : '🎡<br>SPIN') : '✅'}
-                    </button>
+                </div>
+
+                <div style="flex:0 0 220px;max-width:220px;text-align:left;">
+                    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">🎁 Prizes</div>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        ${sidebarRows}
+                    </div>
                 </div>
             </div>
 
@@ -6128,6 +6179,7 @@ function _wheelRender(el, config, state) {
             ${window.isAdmin && !config.enabled ? `<div style="margin-top:16px;padding:10px 16px;background:rgba(239,68,68,0.12);border:1px solid #ef4444;border-radius:10px;color:#ef4444;font-size:12px;font-weight:700;display:inline-block;">⚠️ Wheel is hidden from regular users — admin preview only</div>` : ''}
             ${adminPanel}
         </div>`;
+    _tcgObserveSSRCards(el);
 }
 
 window._wheelSaveConfig = async function() {
