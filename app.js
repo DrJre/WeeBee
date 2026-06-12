@@ -6334,14 +6334,19 @@ async function _wheelGrantReward(uid, section) {
             const pack = TCG_PACKS.find(p => p.id === section.packId);
             if (!pack) return true;
             for (let attempt = 0; attempt < 2; attempt++) {
+                _tcgDebugLog('wheelPack:attempt', { packId: section.packId, attempt });
                 try {
                     await _tcgEnsureCardPool();
                     const cards = _tcgRollPackCards(pack);
                     const enriched = await _withTimeout(_tcgSavePackToCollection(uid, cards), 10000, 'Pack save');
                     window._tcgCollectionCache.delete(uid);
                     window._wheelPendingPackReveal = { pack, cards: enriched };
+                    _tcgDebugLog('wheelPack:success', { packId: section.packId, cardCount: enriched.length });
                     return true;
-                } catch(e) { console.error(`Wheel pack grant failed (attempt ${attempt + 1}):`, e); }
+                } catch(e) {
+                    console.error(`Wheel pack grant failed (attempt ${attempt + 1}):`, e);
+                    _tcgDebugLog('wheelPack:attemptFailed', { packId: section.packId, attempt, error: e.message });
+                }
             }
             return false;
         }
@@ -7050,12 +7055,16 @@ window._tcgBuyPack = async function(packId) {
 
     let enrichedCards = null;
     for (let attempt = 0; attempt < 2 && !enrichedCards; attempt++) {
+        _tcgDebugLog('buyPack:attempt', { packId, attempt });
         try {
             await _tcgEnsureCardPool();
             const cards = _tcgRollPackCards(pack);
             enrichedCards = await _withTimeout(_tcgSavePackToCollection(uid, cards), 10000, 'Pack save');
             window._tcgCollectionCache.delete(uid);
-        } catch(e) { console.error(`Failed to save pack to collection (attempt ${attempt + 1}):`, e); }
+        } catch(e) {
+            console.error(`Failed to save pack to collection (attempt ${attempt + 1}):`, e);
+            _tcgDebugLog('buyPack:attemptFailed', { packId, attempt, error: e.message });
+        }
     }
 
     if (!enrichedCards) {
@@ -7065,10 +7074,12 @@ window._tcgBuyPack = async function(packId) {
         try { await updateDoc(doc(db, 'profiles', uid), { amber: increment(cost) }); } catch(e) { console.error('Pack refund failed:', e); }
         document.getElementById('tcg-pack-modal')?.remove();
         window._tcgBuyInProgress = false;
+        _tcgDebugLog('buyPack:refunded', { packId, cost });
         alert("Hmm, something went wrong opening that pack. You've been refunded — please try again.");
         return;
     }
 
+    _tcgDebugLog('buyPack:success', { packId, cardCount: enrichedCards.length });
     _tcgShowPackOpening(pack, enrichedCards);
     window._tcgRenderStore();
     window._tcgBuyInProgress = false;
@@ -7453,6 +7464,17 @@ async function _tcgAssignSerial(card) {
     });
 }
 
+// Temporary diagnostic logging for the mobile pack-opening bug — writes to
+// `debug_logs` (admin-readable only) so we can see what actually happened on
+// a device we can't attach devtools to. Safe to remove once resolved.
+function _tcgDebugLog(step, data) {
+    if (!auth.currentUser) return;
+    addDoc(collection(db, 'debug_logs'), {
+        uid: auth.currentUser.uid, step, data: data || null,
+        ts: serverTimestamp(), userAgent: navigator.userAgent, online: navigator.onLine,
+    }).catch(() => {});
+}
+
 // Rejects after `ms` if `promise` hasn't settled — used so a stalled Firestore
 // write (e.g. dropped mobile connection) is treated as a failure instead of
 // hanging forever while the UI moves on as if it succeeded.
@@ -7468,13 +7490,17 @@ async function _tcgSavePackToCollection(uid, cards) {
         try {
             const { version, edition } = await _tcgAssignSerial(card);
             return { ...card, serial: version, edition };
-        } catch(e) { return { ...card, serial: null, edition: null }; }
+        } catch(e) {
+            _tcgDebugLog('assignSerial:failed', { card: card.name, rarity: card.rarity, error: e.message });
+            return { ...card, serial: null, edition: null };
+        }
     }));
     const colRef = collection(db, 'card_collections', uid, 'cards');
-    await Promise.all(enriched.map(c => addDoc(colRef, {
+    const docIds = await Promise.all(enriched.map(c => addDoc(colRef, {
         name: c.name, anime: c.anime, rarity: c.rarity, image: c.image,
         serial: c.serial, edition: c.edition, pulledAt: serverTimestamp(),
-    })));
+    }).then(ref => ref.id)));
+    _tcgDebugLog('savePack:written', { uid, docIds, cards: enriched.map(c => ({ name: c.name, rarity: c.rarity, serial: c.serial })) });
     // addDoc() resolves as soon as the write is queued locally — on a dead/
     // flaky mobile connection that happens instantly even though the write
     // never reaches Firestore. Confirm the writes actually made it to the
@@ -7482,6 +7508,7 @@ async function _tcgSavePackToCollection(uid, cards) {
     // stuck offline queue into a clear failure (refund + retry) instead of a
     // silent "looks fine but nothing saved" result.
     await waitForPendingWrites(db);
+    _tcgDebugLog('savePack:confirmed', { uid, docIds });
     return enriched;
 }
 

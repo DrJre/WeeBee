@@ -387,6 +387,12 @@ service cloud.firestore {
       allow write: if isAuth();
     }
 
+    // ── Temporary client-side debug log (pack-opening mobile bug investigation) ──
+    match /debug_logs/{doc} {
+      allow create: if isAuth();
+      allow read: if isAdmin();
+    }
+
     // ── TCG user binders ─────────────────────────────────────────────────────
     match /card_binders/{uid}/binders/{binder} {
       allow read: if true;
