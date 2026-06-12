@@ -5614,7 +5614,7 @@ const TCG_FOUNDER_CARDS = [
     },
     {
         id: 'choji', name: 'Choji Akimichi', anime: 'Naruto', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FChoji%20New.gif?alt=media&token=e048599d-8c02-4620-8eb5-b0b5a01a5ac5',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FChoji%202.gif?alt=media&token=0a6229cb-18a8-4830-913f-ae1844561d62',
         founder: true,
     },
     {
