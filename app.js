@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch, waitForPendingWrites } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 
@@ -7022,6 +7022,7 @@ window._tcgShowPackLoading = function(pack) {
 window._tcgBuyPack = async function(packId) {
     if (!auth.currentUser) return window.openAuthModal();
     if (window._tcgBuyInProgress) return;
+    if (navigator.onLine === false) return alert("You appear to be offline — please check your connection and try again.");
     const pack = TCG_PACKS.find(p => p.id === packId);
     if (!pack) return;
     const uid = auth.currentUser.uid;
@@ -7474,6 +7475,13 @@ async function _tcgSavePackToCollection(uid, cards) {
         name: c.name, anime: c.anime, rarity: c.rarity, image: c.image,
         serial: c.serial, edition: c.edition, pulledAt: serverTimestamp(),
     })));
+    // addDoc() resolves as soon as the write is queued locally — on a dead/
+    // flaky mobile connection that happens instantly even though the write
+    // never reaches Firestore. Confirm the writes actually made it to the
+    // server before declaring success; the caller's timeout wrapper turns a
+    // stuck offline queue into a clear failure (refund + retry) instead of a
+    // silent "looks fine but nothing saved" result.
+    await waitForPendingWrites(db);
     return enriched;
 }
 
