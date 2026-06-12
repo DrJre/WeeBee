@@ -138,23 +138,23 @@ const ACHIEVEMENTS = [
     { id: 'suggestor_5',  name: 'The Recommender',        desc: 'Made 5 anime suggestions to the community',  icon: 'lightbulb',         cat: 'Special',   color: '#FF9800' },
     // Community: BuzzWord — One Piece
     { id: 'bwop_first',       name: "Devil's Luck",       desc: 'Solved your first One Piece BuzzWord puzzle',        icon: 'casino',                cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000' },
-    { id: 'bwop_1guess',      name: 'First Mate',          desc: 'Solved the One Piece puzzle in just 1 guess',        icon: 'anchor',                cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000' },
+    { id: 'bwop_1guess',      name: 'First Mate',          desc: 'Solved the One Piece puzzle in just 1 guess',        icon: 'anchor',                cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000', perk: '+25 Amber every time you solve this puzzle' },
     { id: 'bwop_streak_7',    name: 'Straw Hat',           desc: 'Solved the One Piece puzzle 7 days in a row',        icon: 'wb_sunny',              cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000' },
     { id: 'bwop_total_30',    name: 'Grand Line',          desc: 'Solved the One Piece puzzle 30 times total',         icon: 'explore',               cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000' },
     { id: 'bwop_streak_100',  name: 'The One Piece',       desc: 'Solved the One Piece puzzle 100 days in a row',      icon: 'diamond',               cat: 'Community', subcat: 'BuzzWord',   color: '#FFD700' },
     // Community: BuzzWord — Naruto
     { id: 'bwnrt_first',      name: 'Genin',               desc: 'Solved your first Naruto BuzzWord puzzle',           icon: 'star',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00' },
-    { id: 'bwnrt_1guess',     name: 'Dattebayo!',          desc: 'Solved the Naruto puzzle in just 1 guess',           icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00' },
+    { id: 'bwnrt_1guess',     name: 'Dattebayo!',          desc: 'Solved the Naruto puzzle in just 1 guess',           icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00', perk: '+25 Amber every time you solve this puzzle' },
     { id: 'bwnrt_streak_7',   name: 'Shinobi Way',         desc: 'Solved the Naruto puzzle 7 days in a row',           icon: 'local_fire_department', cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00' },
     { id: 'bwnrt_total_30',   name: "Hokage's Path",       desc: 'Solved the Naruto puzzle 30 times total',            icon: 'military_tech',         cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00' },
     // Community: BuzzWord — Bleach
     { id: 'bwblc_first',      name: 'Soul Reaper',         desc: 'Solved your first Bleach BuzzWord puzzle',           icon: 'star',                  cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4' },
-    { id: 'bwblc_1guess',     name: 'Bankai!',             desc: 'Solved the Bleach puzzle in just 1 guess',           icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4' },
+    { id: 'bwblc_1guess',     name: 'Bankai!',             desc: 'Solved the Bleach puzzle in just 1 guess',           icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4', perk: '+25 Amber every time you solve this puzzle' },
     { id: 'bwblc_streak_7',   name: 'Gotei 13',            desc: 'Solved the Bleach puzzle 7 days in a row',           icon: 'local_fire_department', cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4' },
     { id: 'bwblc_total_30',   name: "Captain's Path",      desc: 'Solved the Bleach puzzle 30 times total',            icon: 'military_tech',         cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4' },
     // Community: BuzzWord — Dragon Ball
     { id: 'bwdb_first',       name: 'Power Level',         desc: 'Solved your first Dragon Ball BuzzWord puzzle',      icon: 'star',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00' },
-    { id: 'bwdb_1guess',      name: 'Over 9000!',          desc: 'Solved the Dragon Ball puzzle in just 1 guess',      icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00' },
+    { id: 'bwdb_1guess',      name: 'Over 9000!',          desc: 'Solved the Dragon Ball puzzle in just 1 guess',      icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00', perk: '+25 Amber every time you solve this puzzle' },
     { id: 'bwdb_streak_7',    name: 'Super Saiyan',        desc: 'Solved the Dragon Ball puzzle 7 days in a row',      icon: 'local_fire_department', cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00' },
     { id: 'bwdb_total_30',    name: 'Limit Breaker',       desc: 'Solved the Dragon Ball puzzle 30 times total',       icon: 'military_tech',         cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00' },
     // Community: BuzzWord — General + Feed
@@ -186,26 +186,29 @@ const ACHIEVEMENTS = [
     { id: 'mb_total_30',      name: 'Music Junkie',        desc: 'Solved MeloBee 30 times total',                      icon: 'military_tech',         cat: 'Community', subcat: 'MeloBee',    color: '#22c55e' },
 ];
 
+// Returns the set of all achievement ids the user has unlocked (existing + newly awarded this call).
 window.awardAchievements = async function(ids) {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) return new Set();
     try {
         const uid = auth.currentUser.uid;
         const achDoc = await getDoc(doc(db, "achievements", uid));
         const existing = achDoc.exists() ? achDoc.data() : {};
         const toAward = [...new Set(ids)].filter(id => !existing[id]);
-        if (!toAward.length) return;
-        const updates = {};
-        const now = new Date();
-        toAward.forEach(id => { updates[id] = { earnedAt: now }; });
-        await setDoc(doc(db, "achievements", uid), updates, { merge: true });
-        for (let i = 0; i < toAward.length; i++) {
-            const ach = ACHIEVEMENTS.find(a => a.id === toAward[i]);
-            if (ach) { if (i > 0) await new Promise(r => setTimeout(r, 3800)); window.showAchievementToast(ach); }
-            const amberVal = ACHIEVEMENT_AMBER[toAward[i]];
-            if (amberVal) _awardAmber(amberVal, `achievement:${toAward[i]}`).catch(() => {});
-            if (toAward[i] === 'review_50') window._amberAnimeAuthority = true;
+        if (toAward.length) {
+            const updates = {};
+            const now = new Date();
+            toAward.forEach(id => { updates[id] = { earnedAt: now }; });
+            await setDoc(doc(db, "achievements", uid), updates, { merge: true });
+            for (let i = 0; i < toAward.length; i++) {
+                const ach = ACHIEVEMENTS.find(a => a.id === toAward[i]);
+                if (ach) { if (i > 0) await new Promise(r => setTimeout(r, 3800)); window.showAchievementToast(ach); }
+                const amberVal = ACHIEVEMENT_AMBER[toAward[i]];
+                if (amberVal) _awardAmber(amberVal, `achievement:${toAward[i]}`).catch(() => {});
+                if (toAward[i] === 'review_50') window._amberAnimeAuthority = true;
+            }
         }
-    } catch(e) {}
+        return new Set([...Object.keys(existing), ...toAward]);
+    } catch(e) { return new Set(); }
 };
 
 window.getEarnedIds = function(category, count) {
@@ -448,6 +451,7 @@ window.loadProfileAchievements = async function(uid) {
                 <span class="material-symbols-outlined ach-icon" style="${isEarned ? `color:${ach.color}` : ''}">${ach.icon}</span>
                 <div class="ach-name">${ach.name}</div>
                 <div class="ach-desc">${ach.desc}</div>
+                ${isEarned && ach.perk ? `<div class="ach-perk" style="font-size:11px;font-weight:700;color:#f59e0b;margin-top:4px;">🟡 ${ach.perk}</div>` : ''}
                 ${date ? `<div class="ach-date">${date}</div>` : ''}
             </div>`;
         };
@@ -5610,7 +5614,7 @@ const TCG_FOUNDER_CARDS = [
     },
     {
         id: 'choji', name: 'Choji Akimichi', anime: 'Naruto', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FChoji.gif?alt=media&token=6ef72bc6-de77-4c34-b286-5bacd654d35d',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FChoji%20New.gif?alt=media&token=e048599d-8c02-4620-8eb5-b0b5a01a5ac5',
         founder: true,
     },
     {
@@ -5630,7 +5634,7 @@ const TCG_FOUNDER_CARDS = [
     },
     {
         id: 'alphonse_elric', name: 'Alphonse Elric', anime: 'Fullmetal Alchemist', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFullmetal%20Alchemist%2FUR%2FAlphonse%20Elric.gif?alt=media&token=da13a9db-e1f8-48fa-aaf6-4fdea5296b17',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFullmetal%20Alchemist%2FUR%2FAlphonse%20Elric.gif?alt=media&token=cc3b3904-f07d-427a-867d-1e09ba20818b',
         founder: true,
     },
     {
@@ -5641,6 +5645,21 @@ const TCG_FOUNDER_CARDS = [
     {
         id: 'dreaded', name: 'Dreaded', anime: 'WeeBee Original', rarity: 'ur',
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDreaded%2Funnamed.jpg?alt=media&token=7c7e085e-d137-430b-8166-60594a3c866e',
+        founder: true,
+    },
+    {
+        id: 'rock_lee', name: 'Rock Lee', anime: 'Naruto', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FRock%20Lee.gif?alt=media&token=bb34d915-5b99-4f94-8d2c-9348ca1b2442',
+        founder: true,
+    },
+    {
+        id: 'zoro', name: 'Zoro', anime: 'One Piece', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FZoro.gif?alt=media&token=710bba4f-247f-41a6-bb05-99275f98370a',
+        founder: true,
+    },
+    {
+        id: 'luffy', name: 'Luffy', anime: 'One Piece', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FLuffy%20UR.gif?alt=media&token=1c145ceb-0a03-434b-9cb7-bb95cf257ae9',
         founder: true,
     },
 ];
@@ -6960,6 +6979,89 @@ window._tcgTogglePin = async function(cardId, profileUid) {
     } catch(e) { alert('Failed to update showcase: ' + e.message); }
 };
 
+// ── Multiselect: bulk dismantle / bulk pin ──────────────────────────────────
+window._tcgMultiSelect = { active: false, selected: new Set() };
+
+window._tcgToggleMultiSelect = function(uid, filter, profileUid) {
+    window._tcgMultiSelect.active = !window._tcgMultiSelect.active;
+    window._tcgMultiSelect.selected.clear();
+    if (profileUid) {
+        const el = document.getElementById('user-tcg-binders-container');
+        if (el) window._tcgRenderProfileBindersList(el, profileUid);
+    } else {
+        window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'), uid, filter);
+    }
+};
+
+window._tcgToggleCardSelect = function(cardId, uid, filter, profileUid) {
+    const sel = window._tcgMultiSelect.selected;
+    if (sel.has(cardId)) sel.delete(cardId); else sel.add(cardId);
+    if (profileUid) {
+        const el = document.getElementById('user-tcg-binders-container');
+        if (el) window._tcgRenderProfileBindersList(el, profileUid);
+    } else {
+        window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'), uid, filter);
+    }
+};
+
+window._tcgBulkDismantle = async function(uid, profileUid) {
+    if (!auth.currentUser || auth.currentUser.uid !== uid) return;
+    const sel = window._tcgMultiSelect.selected;
+    if (!sel.size) return;
+    let cards;
+    try { cards = await _tcgLoadCollection(uid); } catch(e) { return; }
+    const selectedCards = cards.filter(c => sel.has(c.id));
+    const total = selectedCards.reduce((sum, c) => sum + (TCG_DISMANTLE_RATES[c.rarity] || 0), 0);
+    if (!confirm(`Dismantle ${selectedCards.length} card(s) for 🟡 ${total.toLocaleString()} Amber total? This cannot be undone.`)) return;
+    try {
+        for (const c of selectedCards) {
+            await deleteDoc(doc(db, 'card_collections', uid, 'cards', c.id));
+        }
+        if (total > 0) await _awardAmber(total, 'tcg:dismantle');
+        window._tcgCollectionCache.delete(uid);
+        window._tcgMultiSelect.active = false;
+        window._tcgMultiSelect.selected.clear();
+        if (profileUid) {
+            const el = document.getElementById('user-tcg-binders-container');
+            if (el) await window._tcgRenderProfileBindersList(el, profileUid);
+            window._tcgRenderProfileShowcase(profileUid);
+        } else {
+            window._tcgRenderMyCollection('mycards', true);
+        }
+    } catch(e) {
+        alert('Failed to dismantle: ' + e.message);
+    }
+};
+
+window._tcgBulkPin = async function(uid, profileUid) {
+    if (!auth.currentUser || auth.currentUser.uid !== uid) return;
+    const sel = window._tcgMultiSelect.selected;
+    if (!sel.size) return;
+    try {
+        const pd = await getDoc(doc(db, 'profiles', uid));
+        let pins = pd.exists() ? (pd.data().pinnedTcgCardIds || []) : [];
+        const toAdd = [...sel].filter(id => !pins.includes(id));
+        if (!toAdd.length) { alert('All selected cards are already pinned.'); return; }
+        if (pins.length + toAdd.length > 5) {
+            alert(`You can only showcase up to 5 cards total. You currently have ${pins.length} pinned and selected ${toAdd.length} new card(s) — unpin some first or select fewer.`);
+            return;
+        }
+        pins = [...pins, ...toAdd];
+        await setDoc(doc(db, 'profiles', uid), { pinnedTcgCardIds: pins }, { merge: true });
+        window._tcgMultiSelect.active = false;
+        window._tcgMultiSelect.selected.clear();
+        if (profileUid) {
+            const el = document.getElementById('user-tcg-binders-container');
+            if (el) await window._tcgRenderProfileBindersList(el, profileUid);
+            window._tcgRenderProfileShowcase(profileUid);
+        } else {
+            window._tcgRenderMyCollection('mycards', true);
+        }
+    } catch(e) {
+        alert('Failed to pin: ' + e.message);
+    }
+};
+
 window._tcgCollectionCache = new Map();
 
 async function _tcgLoadCollection(uid, forceRefresh = false) {
@@ -7051,26 +7153,42 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
     const counts = { ur:0, ssr:0, sr:0, rare:0, common:0 };
     cards.forEach(c => { if (c.rarity in counts) counts[c.rarity]++; });
 
+    const ms = window._tcgMultiSelect;
+    const selCount = ms.selected.size;
+    const selTotal = selCount ? cards.filter(c => ms.selected.has(c.id)).reduce((sum,c) => sum + (TCG_DISMANTLE_RATES[c.rarity]||0), 0) : 0;
+
     el.innerHTML = `
-        <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
-            ${['all','ur','ssr','sr','rare','common'].map(f => {
-                const labels = { all:`All (${cards.length})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
-                const active = f === filter;
-                return `<button onclick="window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'),'${uid}','${f}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
-            }).join('')}
+        <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                ${['all','ur','ssr','sr','rare','common'].map(f => {
+                    const labels = { all:`All (${cards.length})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
+                    const active = f === filter;
+                    return `<button onclick="window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'),'${uid}','${f}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
+                }).join('')}
+            </div>
+            <button onclick="window._tcgToggleMultiSelect('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${ms.active?'var(--accent-yellow)':'var(--border-color)'};background:${ms.active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${ms.active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${ms.active ? '✕ Cancel' : '☑ Multiselect'}</button>
         </div>
+        ${ms.active ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;padding:10px 14px;background:var(--bg-gray);border-radius:10px;border:1px solid var(--border-color);">
+            <span style="font-size:13px;font-weight:700;">${selCount} selected</span>
+            <button onclick="window._tcgBulkPin('${uid}')" ${!selCount?'disabled':''} style="padding:6px 14px;border-radius:8px;border:1px solid ${selCount?'var(--accent-yellow)':'var(--border-color)'};background:${selCount?'rgba(245,158,11,0.12)':'var(--bg-gray-darker)'};color:${selCount?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:${selCount?'pointer':'default'};">☆ Pin Selected</button>
+            <button onclick="window._tcgBulkDismantle('${uid}')" ${!selCount?'disabled':''} style="padding:6px 14px;border-radius:8px;border:1px solid var(--border-color);background:${selCount?'var(--bg-card)':'var(--bg-gray-darker)'};color:${selCount?'var(--text-dark)':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:${selCount?'pointer':'default'};">Dismantle Selected${selCount?` · 🟡 ${selTotal.toLocaleString()}`:''}</button>
+        </div>` : ''}
         <div class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;">
             ${filtered.map(card => {
                 const serial = card.founder ? 'Founder Edition' : (card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : '');
                 const dismantleAmount = TCG_DISMANTLE_RATES[card.rarity] || 0;
                 const isPinned = pinnedIds.includes(card.id);
-                return `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-                    <div class="tcg-card-scale-wrap" onclick="window._tcgOpenCardViewer('${uid}','${card.id}')" style="cursor:pointer;"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>
+                const selected = ms.active && ms.selected.has(card.id);
+                return `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;${selected?'outline:3px solid var(--accent-yellow);border-radius:14px;':''}">
+                    <div class="tcg-card-scale-wrap" onclick="${ms.active ? `window._tcgToggleCardSelect('${card.id}','${uid}','${filter}')` : `window._tcgOpenCardViewer('${uid}','${card.id}')`}" style="cursor:pointer;position:relative;">
+                        ${ms.active ? `<div style="position:absolute;top:6px;left:6px;z-index:3;width:24px;height:24px;border-radius:50%;border:2px solid #fff;background:${selected?'var(--accent-yellow)':'rgba(0,0,0,0.45)'};display:flex;align-items:center;justify-content:center;font-size:14px;color:#222;font-weight:900;">${selected?'✓':''}</div>` : ''}
+                        <div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div>
+                    </div>
                     ${serial ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${serial}</div>` : ''}
-                    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">
+                    ${!ms.active ? `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">
                         <button onclick="window._tcgTogglePin('${card.id}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isPinned?'var(--accent-yellow)':'var(--border-color)'};background:${isPinned?'rgba(245,158,11,0.12)':'transparent'};color:${isPinned?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;" title="${isPinned ? 'Remove from showcase' : 'Pin to profile showcase'}">${isPinned ? '★ Pinned' : '☆ Pin'}</button>
                         <button class="tcg-dismantle-btn" onclick="window._tcgDismantleCard('${card.id}','${card.rarity}','${card.name.replace(/'/g,"\\'")}')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;" title="Break down for amber">Dismantle · 🟡 ${dismantleAmount}</button>
-                    </div>
+                    </div>` : ''}
                 </div>`;
             }).join('')}
         </div>`;
@@ -7369,6 +7487,10 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
     const rarityOrder = { ur:-1, ssr:0, sr:1, rare:2, common:3 };
     const sortedCards = [...cards].sort((a,b) => (rarityOrder[a.rarity]??9) - (rarityOrder[b.rarity]??9));
 
+    const ms = window._tcgMultiSelect;
+    const selCount = ms.selected.size;
+    const selTotal = (isOwner && selCount) ? cards.filter(c => ms.selected.has(c.id)).reduce((sum,c) => sum + (TCG_DISMANTLE_RATES[c.rarity]||0), 0) : 0;
+
     el.innerHTML = `
         ${!isOwner && auth.currentUser ? `<div style="margin-bottom:24px;"><button onclick="window._tcgOpenTradeProposal('${uid}')" style="padding:10px 20px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">🔄 Propose Trade</button></div>` : ''}
         <div style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">📒 Binders</div>
@@ -7380,16 +7502,28 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
             </div>`).join('')}</div>` :
         `<p style="color:var(--text-muted);margin:0 0 28px;">${isOwner ? 'You haven\'t created any binders yet — head to the TCG tab to make one.' : 'This user hasn\'t created any binders yet.'}</p>`}
 
-        <div style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">🃏 All Cards (${cards.length})</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+            <div style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">🃏 All Cards (${cards.length})</div>
+            ${isOwner && cards.length ? `<button onclick="window._tcgToggleMultiSelect('${uid}',null,'${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${ms.active?'var(--accent-yellow)':'var(--border-color)'};background:${ms.active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${ms.active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${ms.active ? '✕ Cancel' : '☑ Multiselect'}</button>` : ''}
+        </div>
+        ${isOwner && ms.active ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;padding:10px 14px;background:var(--bg-gray);border-radius:10px;border:1px solid var(--border-color);">
+            <span style="font-size:13px;font-weight:700;">${selCount} selected</span>
+            <button onclick="window._tcgBulkPin('${uid}','${uid}')" ${!selCount?'disabled':''} style="padding:6px 14px;border-radius:8px;border:1px solid ${selCount?'var(--accent-yellow)':'var(--border-color)'};background:${selCount?'rgba(245,158,11,0.12)':'var(--bg-gray-darker)'};color:${selCount?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:${selCount?'pointer':'default'};">☆ Pin Selected</button>
+            <button onclick="window._tcgBulkDismantle('${uid}','${uid}')" ${!selCount?'disabled':''} style="padding:6px 14px;border-radius:8px;border:1px solid var(--border-color);background:${selCount?'var(--bg-card)':'var(--bg-gray-darker)'};color:${selCount?'var(--text-dark)':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:${selCount?'pointer':'default'};">Dismantle Selected${selCount?` · 🟡 ${selTotal.toLocaleString()}`:''}</button>
+        </div>` : ''}
         ${cards.length ? `<div class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;">
             ${sortedCards.map(card => {
                 const serial = card.founder ? 'Founder Edition' : (card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : '');
                 const dismantleAmount = TCG_DISMANTLE_RATES[card.rarity] || 0;
                 const isPinned = pinnedIds.includes(card.id);
-                return `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-                    <div class="tcg-card-scale-wrap" onclick="window._tcgOpenCardViewer('${uid}','${card.id}')" style="cursor:pointer;"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>
+                const selected = isOwner && ms.active && ms.selected.has(card.id);
+                return `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;${selected?'outline:3px solid var(--accent-yellow);border-radius:14px;':''}">
+                    <div class="tcg-card-scale-wrap" onclick="${isOwner && ms.active ? `window._tcgToggleCardSelect('${card.id}','${uid}',null,'${uid}')` : `window._tcgOpenCardViewer('${uid}','${card.id}')`}" style="cursor:pointer;position:relative;">
+                        ${isOwner && ms.active ? `<div style="position:absolute;top:6px;left:6px;z-index:3;width:24px;height:24px;border-radius:50%;border:2px solid #fff;background:${selected?'var(--accent-yellow)':'rgba(0,0,0,0.45)'};display:flex;align-items:center;justify-content:center;font-size:14px;color:#222;font-weight:900;">${selected?'✓':''}</div>` : ''}
+                        <div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div>
+                    </div>
                     ${serial ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${serial}</div>` : ''}
-                    ${isOwner ? `<div style="display:flex;gap:6px;">
+                    ${isOwner && !ms.active ? `<div style="display:flex;gap:6px;">
                         <button onclick="window._tcgTogglePin('${card.id}','${uid}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isPinned?'var(--accent-yellow)':'var(--border-color)'};background:${isPinned?'rgba(245,158,11,0.12)':'transparent'};color:${isPinned?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;" title="${isPinned ? 'Remove from showcase' : 'Pin to profile showcase'}">${isPinned ? '★ Pinned' : '☆ Pin'}</button>
                         <button class="tcg-dismantle-btn" onclick="window._tcgDismantleCard('${card.id}','${card.rarity}','${card.name.replace(/'/g,"\\'")}','${uid}')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;" title="Break down for amber">Dismantle · 🟡 ${dismantleAmount}</button>
                     </div>` : ''}
@@ -12178,7 +12312,8 @@ window.checkBwNrtAchievements = async function(guessCount, streak, totalWins) {
         const opLb = await getDoc(doc(db, 'bw_op_leaderboard', uid));
         if (opLb.exists() && (opLb.data().totalWins || 0) >= 1) ids.push('bw_multiverse');
     } catch(e) {}
-    if (ids.length) window.awardAchievements(ids).catch(() => {});
+    const unlocked = await window.awardAchievements(ids).catch(() => new Set());
+    if (unlocked.has('bwnrt_1guess')) _awardAmberDaily('game_bwnrt_mastery', 25);
     _awardAmberDaily('game_bwnrt', 25);
 };
 
@@ -12925,7 +13060,8 @@ window.checkBwOpAchievements = async function(guessCount, streak, totalWins) {
         const nrtLb = await getDoc(doc(db, 'bw_nrt_leaderboard', uid));
         if (nrtLb.exists() && (nrtLb.data().totalWins || 0) >= 1) ids.push('bw_multiverse');
     } catch(e) {}
-    if (ids.length) window.awardAchievements(ids).catch(() => {});
+    const unlocked = await window.awardAchievements(ids).catch(() => new Set());
+    if (unlocked.has('bwop_1guess')) _awardAmberDaily('game_bwop_mastery', 25);
     _awardAmberDaily('game_bwop', 25);
 };
 
@@ -13463,7 +13599,8 @@ window.checkBwBlcAchievements = async function(guessCount, streak, totalWins) {
     if (guessCount === 1) ids.push('bwblc_1guess');
     if (streak >= 7) ids.push('bwblc_streak_7');
     if (totalWins >= 30) ids.push('bwblc_total_30');
-    if (ids.length) window.awardAchievements(ids).catch(() => {});
+    const unlocked = await window.awardAchievements(ids).catch(() => new Set());
+    if (unlocked.has('bwblc_1guess')) _awardAmberDaily('game_bwblc_mastery', 25);
     _awardAmberDaily('game_bwblc', 25);
 };
 
@@ -13883,7 +14020,8 @@ window.checkBwDbAchievements = async function(guessCount, streak, totalWins) {
     if (guessCount === 1) ids.push('bwdb_1guess');
     if (streak >= 7) ids.push('bwdb_streak_7');
     if (totalWins >= 30) ids.push('bwdb_total_30');
-    if (ids.length) window.awardAchievements(ids).catch(() => {});
+    const unlocked = await window.awardAchievements(ids).catch(() => new Set());
+    if (unlocked.has('bwdb_1guess')) _awardAmberDaily('game_bwdb_mastery', 25);
     _awardAmberDaily('game_bwdb', 25);
 };
 
