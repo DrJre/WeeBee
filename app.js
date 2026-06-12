@@ -6274,29 +6274,44 @@ window._wheelSpin = async function() {
             setTimeout(() => flashEl.classList.remove('active'), 700);
         }
         _wheelConfettiBurst(section.type === 'monthly_ur' ? 120 : (section.type === 'nothing' ? 0 : 46), section);
-        await _wheelGrantReward(uid, section);
-        _wheelShowResultModal(section);
+        const grantOk = await _wheelGrantReward(uid, section);
+        if (!grantOk) {
+            // Hand the slice back so the player doesn't lose their spin to a failed grant.
+            const revertedUsed = { ...state.usedIndices };
+            delete revertedUsed[pickIdx];
+            try {
+                await updateDoc(doc(db, 'wheel_state', uid), { usedIndices: revertedUsed });
+                state.usedIndices = revertedUsed;
+            } catch(e) { console.error('Failed to revert wheel slice after grant failure:', e); }
+        }
+        _wheelShowResultModal(section, grantOk);
         window._wheelRefreshBadges();
         _wheelRender(document.getElementById('wheel-tab-content'), window._wheelConfig || {}, state);
     }, SPIN_DURATION);
 };
 
+// Returns true if the prize was successfully granted, false if it should be
+// retried (caller will then return the claimed slice back to the pool so the
+// player doesn't lose their spin).
 async function _wheelGrantReward(uid, section) {
     switch (section.type) {
         case 'amber':
-            await _awardAmber(section.value, 'wheel:spin').catch(() => {});
-            break;
+            try { await _awardAmber(section.value, 'wheel:spin'); return true; }
+            catch(e) { console.error('Wheel amber grant failed:', e); return false; }
         case 'pack': {
             const pack = TCG_PACKS.find(p => p.id === section.packId);
-            if (!pack) break;
-            try {
-                await _tcgEnsureCardPool();
-                const cards = _tcgRollPackCards(pack);
-                const enriched = await _tcgSavePackToCollection(uid, cards);
-                window._tcgCollectionCache.delete(uid);
-                window._wheelPendingPackReveal = { pack, cards: enriched };
-            } catch(e) { console.error('Wheel pack grant failed:', e); }
-            break;
+            if (!pack) return true;
+            for (let attempt = 0; attempt < 2; attempt++) {
+                try {
+                    await _tcgEnsureCardPool();
+                    const cards = _tcgRollPackCards(pack);
+                    const enriched = await _tcgSavePackToCollection(uid, cards);
+                    window._tcgCollectionCache.delete(uid);
+                    window._wheelPendingPackReveal = { pack, cards: enriched };
+                    return true;
+                } catch(e) { console.error(`Wheel pack grant failed (attempt ${attempt + 1}):`, e); }
+            }
+            return false;
         }
         case 'monthly_ur': {
             const ur = _wheelGetMonthlyUrCard();
@@ -6308,11 +6323,11 @@ async function _wheelGrantReward(uid, section) {
                     monthlyUr: true, stampText, serial: null, edition: null, pulledAt: serverTimestamp(),
                 });
                 window._tcgCollectionCache.delete(uid);
-            } catch(e) { console.error('Monthly UR grant failed:', e); }
-            try { await setDoc(doc(db, 'wheel_state', uid), { pendingUrClaim: false }, { merge: true }); } catch(e) {}
-            break;
+                await setDoc(doc(db, 'wheel_state', uid), { pendingUrClaim: false }, { merge: true }).catch(() => {});
+                return true;
+            } catch(e) { console.error('Monthly UR grant failed:', e); return false; }
         }
-        default: break;
+        default: return true;
     }
 }
 
@@ -6339,9 +6354,9 @@ function _wheelConfettiBurst(count, section) {
     }
 }
 
-function _wheelShowResultModal(section) {
+function _wheelShowResultModal(section, grantOk = true) {
     document.getElementById('wheel-result-modal')?.remove();
-    if (section.type === 'pack' && window._wheelPendingPackReveal) {
+    if (section.type === 'pack' && grantOk && window._wheelPendingPackReveal) {
         const { pack, cards } = window._wheelPendingPackReveal;
         window._wheelPendingPackReveal = null;
         _tcgShowPackOpening(pack, cards);
@@ -6351,6 +6366,9 @@ function _wheelShowResultModal(section) {
     modal.id = 'wheel-result-modal';
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;';
     let body;
+    if (!grantOk) {
+        body = `<div style="font-size:60px;">⚠️</div><div style="font-size:20px;font-weight:800;color:#fff;margin-top:8px;">Hmm, something went wrong</div><div style="color:rgba(255,255,255,0.7);margin-top:6px;">We couldn't grant your prize. Your spin has been returned — please try again.</div>`;
+    } else
     switch (section.type) {
         case 'monthly_ur':
             body = `<div style="font-size:60px;">🌟</div><div style="font-size:22px;font-weight:900;color:#fff;margin-top:8px;">JACKPOT!</div><div style="color:rgba(255,255,255,0.7);margin-top:6px;">You won this month's exclusive UR card!</div>`;
