@@ -6298,25 +6298,23 @@ window._wheelSpin = async function() {
     if (section.type === 'monthly_ur') update.pendingUrClaim = true;
 
     setTimeout(async () => {
-        try {
-            await updateDoc(doc(db, 'wheel_state', uid), update);
-        } catch(e) { console.error('Wheel spin save failed:', e); }
-        Object.assign(state, update);
         const flashEl = document.getElementById('wheel-flash');
         if (flashEl && section.type !== 'nothing') {
             flashEl.classList.add('active');
             setTimeout(() => flashEl.classList.remove('active'), 700);
         }
         _wheelConfettiBurst(section.type === 'monthly_ur' ? 120 : (section.type === 'nothing' ? 0 : 46), section);
+        // Grant the reward FIRST, and only mark the slice as used/spent if the
+        // grant actually succeeds. This way a failure on flaky mobile
+        // connections never burns the player's spin — the slice (and their
+        // daily spin / extra spin) stays available to retry, with no revert
+        // write needed since nothing was committed yet.
         const grantOk = await _wheelGrantReward(uid, section);
-        if (!grantOk) {
-            // Hand the slice back so the player doesn't lose their spin to a failed grant.
-            const revertedUsed = { ...state.usedIndices };
-            delete revertedUsed[pickIdx];
+        if (grantOk) {
             try {
-                await updateDoc(doc(db, 'wheel_state', uid), { usedIndices: revertedUsed });
-                state.usedIndices = revertedUsed;
-            } catch(e) { console.error('Failed to revert wheel slice after grant failure:', e); }
+                await updateDoc(doc(db, 'wheel_state', uid), update);
+            } catch(e) { console.error('Wheel spin save failed:', e); }
+            Object.assign(state, update);
         }
         _wheelShowResultModal(section, grantOk);
         window._wheelRefreshBadges();
@@ -7049,14 +7047,26 @@ window._tcgBuyPack = async function(packId) {
         return;
     }
 
-    await _tcgEnsureCardPool();
-    const cards = _tcgRollPackCards(pack);
+    let enrichedCards = null;
+    for (let attempt = 0; attempt < 2 && !enrichedCards; attempt++) {
+        try {
+            await _tcgEnsureCardPool();
+            const cards = _tcgRollPackCards(pack);
+            enrichedCards = await _tcgSavePackToCollection(uid, cards);
+            window._tcgCollectionCache.delete(uid);
+        } catch(e) { console.error(`Failed to save pack to collection (attempt ${attempt + 1}):`, e); }
+    }
 
-    let enrichedCards = cards;
-    try {
-        enrichedCards = await _tcgSavePackToCollection(uid, cards);
-        window._tcgCollectionCache.delete(uid);
-    } catch(e) { console.error('Failed to save pack to collection:', e); }
+    if (!enrichedCards) {
+        // Couldn't persist the cards after retrying — refund the amber rather
+        // than showing a pack-opening animation for cards the player doesn't
+        // actually own.
+        try { await updateDoc(doc(db, 'profiles', uid), { amber: increment(cost) }); } catch(e) { console.error('Pack refund failed:', e); }
+        document.getElementById('tcg-pack-modal')?.remove();
+        window._tcgBuyInProgress = false;
+        alert("Hmm, something went wrong opening that pack. You've been refunded — please try again.");
+        return;
+    }
 
     _tcgShowPackOpening(pack, enrichedCards);
     window._tcgRenderStore();
