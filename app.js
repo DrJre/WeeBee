@@ -6152,7 +6152,7 @@ function _wheelRender(el, config, state) {
             <div style="display:flex;gap:28px;justify-content:center;align-items:flex-start;flex-wrap:wrap;margin-top:36px;">
                 <div style="flex:0 0 auto;max-width:220px;">
                     <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">🌟 This Month's Grand Prize</div>
-                    <div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(urCard)}</div></div>
+                    <div class="tcg-card-scale-wrap" style="margin:0 auto;"><div class="tcg-card-scale">${_tcgBuildCardFace(urCard)}</div></div>
                 </div>
 
                 <div id="wheel-outer" class="wheel-outer" style="position:relative;width:${wheelSize}px;height:${wheelSize}px;margin:0 auto 24px;">
