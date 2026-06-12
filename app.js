@@ -6337,7 +6337,7 @@ async function _wheelGrantReward(uid, section) {
                 try {
                     await _tcgEnsureCardPool();
                     const cards = _tcgRollPackCards(pack);
-                    const enriched = await _tcgSavePackToCollection(uid, cards);
+                    const enriched = await _withTimeout(_tcgSavePackToCollection(uid, cards), 10000, 'Pack save');
                     window._tcgCollectionCache.delete(uid);
                     window._wheelPendingPackReveal = { pack, cards: enriched };
                     return true;
@@ -7052,7 +7052,7 @@ window._tcgBuyPack = async function(packId) {
         try {
             await _tcgEnsureCardPool();
             const cards = _tcgRollPackCards(pack);
-            enrichedCards = await _tcgSavePackToCollection(uid, cards);
+            enrichedCards = await _withTimeout(_tcgSavePackToCollection(uid, cards), 10000, 'Pack save');
             window._tcgCollectionCache.delete(uid);
         } catch(e) { console.error(`Failed to save pack to collection (attempt ${attempt + 1}):`, e); }
     }
@@ -7450,6 +7450,16 @@ async function _tcgAssignSerial(card) {
         tx.update(ref, { versionsRemaining: pool });
         return { version, edition };
     });
+}
+
+// Rejects after `ms` if `promise` hasn't settled — used so a stalled Firestore
+// write (e.g. dropped mobile connection) is treated as a failure instead of
+// hanging forever while the UI moves on as if it succeeded.
+function _withTimeout(promise, ms, label) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out`)), ms)),
+    ]);
 }
 
 async function _tcgSavePackToCollection(uid, cards) {
