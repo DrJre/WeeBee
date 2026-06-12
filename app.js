@@ -212,7 +212,7 @@ window.awardAchievements = async function(ids) {
 };
 
 window.getEarnedIds = function(category, count) {
-    const t = { review:[1,10,25,50,100,250,500,1000], indepth:[1,10,25,50,100,250,500,1000], react:[1,10,25,50,100,250,500,1000], complete:[1,10,25,50,100,250,500,1000] };
+    const t = { review:[1,10,25,50,100,250,500,1000], indepth:[1,10,25,50,100,250,500,1000], react:[1,10,25,50,100,250,500,1000], complete:[1,10,25,50,100,250,500,1000], suggestor:[5] };
     return (t[category] || []).filter(n => count >= n).map(n => `${category}_${n}`);
 };
 
@@ -370,6 +370,16 @@ window.initUserAchievements = async function() {
             ...window.getEarnedIds('complete', profile.completedCount|| 0),
         ];
         if ((profile.droppedCount || 0) >= 10) toCheck.push('dropout');
+
+        // Backfill suggestionCount for users who posted suggestions before this
+        // counter existed, by counting their existing 'suggestion' reviews.
+        let suggestionCount = profile.suggestionCount;
+        if (suggestionCount == null) {
+            const suggSnap = await getDocs(query(collection(db, "reviews"), where("uid", "==", uid), where("type", "==", "suggestion")));
+            suggestionCount = suggSnap.size;
+            setDoc(doc(db, "profiles", uid), { suggestionCount }, { merge: true }).catch(() => {});
+        }
+        toCheck.push(...window.getEarnedIds('suggestor', suggestionCount || 0));
 
         const founders = foundersDoc.exists() ? (foundersDoc.data().uids || []) : [];
         founders.forEach(id => window.founderUids.add(id));
@@ -2469,12 +2479,16 @@ window.submitSuggestion = async function() {
         const text = document.getElementById('suggest-feed-text').value.trim();
         if(!text) return alert("Please add a reason for your suggestion!");
         
-        await addDoc(collection(db, "reviews"), { 
-            mal_id: window.currentAnimeId, animeTitle: animeTitle, animeImage: animeImage, 
-            type: 'suggestion', score: null, text: text, username: auth.currentUser.displayName, 
-            avatar: auth.currentUser.photoURL, uid: auth.currentUser.uid, timestamp: new Date(), 
-            likes: [], dislikes: [], commentCount: 0 
+        await addDoc(collection(db, "reviews"), {
+            mal_id: window.currentAnimeId, animeTitle: animeTitle, animeImage: animeImage,
+            type: 'suggestion', score: null, text: text, username: auth.currentUser.displayName,
+            avatar: auth.currentUser.photoURL, uid: auth.currentUser.uid, timestamp: new Date(),
+            likes: [], dislikes: [], commentCount: 0
         });
+        const profRef = doc(db, "profiles", auth.currentUser.uid);
+        await setDoc(profRef, { suggestionCount: increment(1) }, { merge: true });
+        const profSnap = await getDoc(profRef);
+        window.awardAchievements(window.getEarnedIds('suggestor', profSnap.exists() ? (profSnap.data().suggestionCount || 1) : 1)).catch(() => {});
         alert("Posted suggestion to the feed!");
     } else {
         const targetId = document.getElementById('suggest-friend-select').value;
