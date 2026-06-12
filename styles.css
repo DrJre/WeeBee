@@ -1254,6 +1254,7 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 .wb-card-footer {
     padding: 10px 14px 12px;
     z-index: 2;
+    text-align: left;
 }
 .rarity-common .wb-card-footer {
     position: absolute;
@@ -1299,6 +1300,21 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 }
 .rarity-common .wb-card-rarity-label { background: rgba(255,255,255,0.10); color: #c7ccd1; }
 .rarity-rare   .wb-card-rarity-label { background: rgba(245,158,11,0.18); color: #fde68a; border-color: rgba(253,230,138,0.4); }
+
+/* Monthly Prize Wheel UR card — date stamp badge */
+.wb-card-stamp {
+    display: inline-block;
+    margin-top: 7px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 5px;
+    border: 1px solid rgba(245,158,11,0.5);
+    background: rgba(245,158,11,0.15);
+    color: #fde68a;
+}
 
 /* SR rarity — cool holo/prismatic frame, full art + foil sheen, one notch fancier than Rare */
 .wb-card.rarity-sr {

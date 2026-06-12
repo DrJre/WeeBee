@@ -7120,7 +7120,7 @@ function _tcgBuildCardFace(card) {
     const serialLine = card.founder
         ? `<div class="wb-founder-label">Founder</div>`
         : (card.monthlyUr
-            ? `<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:0.5px;margin-top:4px;">${card.stampText}</div>`
+            ? `<div class="wb-card-stamp">${card.stampText}</div>`
             : (card.serial != null
                 ? `<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:0.5px;margin-top:4px;">${card.serial} / ${maxV}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>`
                 : ''));
