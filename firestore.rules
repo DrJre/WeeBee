@@ -11,7 +11,13 @@ service cloud.firestore {
     match /reviews/{doc} {
       allow read: if true;
       allow create: if isAuth();
-      allow update, delete: if isOwner(resource.data.uid);
+      allow delete: if isOwner(resource.data.uid);
+      // Owner can edit anything; other signed-in users can only toggle
+      // their own like/dislike reaction.
+      allow update: if isOwner(resource.data.uid) || (
+        isAuth() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'dislikes'])
+      );
     }
 
     // ── Community content (likes/votes require update by any auth user) ───────
@@ -171,7 +177,13 @@ service cloud.firestore {
     match /comments/{doc} {
       allow read: if true;
       allow create: if isAuth();
-      allow update, delete: if isOwner(resource.data.uid);
+      allow delete: if isOwner(resource.data.uid);
+      // Owner can edit anything; other signed-in users can only toggle
+      // their own like/dislike reaction.
+      allow update: if isOwner(resource.data.uid) || (
+        isAuth() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'dislikes'])
+      );
     }
 
     match /profile_comments/{doc} {
@@ -331,9 +343,42 @@ service cloud.firestore {
       allow read: if true;
       // Admin can also create cards directly in another user's collection —
       // used to gift the 1-of-1 Founder edition card.
-      allow create: if isOwner(uid) || isAdmin();
+      // Monthly Prize Wheel UR cards are special-cased: the owner can only
+      // create one if their wheel_state shows they actually landed on the
+      // UR slot this spin (pendingUrClaim == true) — prevents writing a
+      // fake monthly UR directly.
+      allow create: if isAdmin() || (
+        isOwner(uid) && (
+          request.resource.data.monthlyUr != true ||
+          get(/databases/$(database)/documents/wheel_state/$(uid)).data.pendingUrClaim == true
+        )
+      );
       allow update: if isOwner(uid);
       allow delete: if isOwner(uid);
+    }
+
+    // ── Prize Wheel ────────────────────────────────────────────────────────
+    // Admin-managed config: this month's UR card art/name + enabled toggle.
+    match /wheel_config/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Per-user wheel state. `sections` (the shuffled reward layout for the
+    // month) and `month` are immutable once created — only `usedIndices`,
+    // `lastSpinDate`, `extraSpinsAvailable`, and `pendingUrClaim` may change,
+    // and at most one new section may be claimed per write.
+    match /wheel_state/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid) &&
+        request.resource.data.sections == resource.data.sections &&
+        request.resource.data.month == resource.data.month &&
+        request.resource.data.usedIndices.size() <= resource.data.usedIndices.size() + 1 &&
+        request.resource.data.lastSpinDate >= resource.data.lastSpinDate;
+      // Admin-only "reset my wheel" testing tool deletes this doc so it
+      // regenerates fresh on next load.
+      allow delete: if isAdmin();
     }
 
     // ── TCG card serial pools (global, transactionally updated on pack open) ──

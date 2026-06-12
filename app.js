@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 
 const firebaseConfig = {
@@ -302,6 +302,19 @@ function _awardAmberDaily(key, amount) {
     _awardAmber(amount, key).catch(() => {});
 }
 
+// One-time bonus for a user's very first review (quick or in-depth) —
+// guarded by a profile flag so deleting/re-adding a review can't re-trigger it.
+async function _awardFirstReviewBonus() {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    try {
+        const pd = await getDoc(doc(db, 'profiles', uid));
+        if (pd.exists() && pd.data().firstReviewBonusGiven) return;
+        await setDoc(doc(db, 'profiles', uid), { firstReviewBonusGiven: true }, { merge: true });
+        await _awardAmber(500, 'review:first');
+    } catch(e) {}
+}
+
 // Award 1 amber for an interaction (like/comment given) — max 10/day combined
 function _awardAmberInteraction() {
     if (!auth.currentUser) return;
@@ -311,6 +324,17 @@ function _awardAmberInteraction() {
     if (count >= 10) return;
     localStorage.setItem(key, count + 1);
     _awardAmber(1, 'interaction').catch(() => {});
+}
+
+// Tracks the "reacted to N posts" Social achievements — call when a user
+// adds a like/dislike/agree/etc. to any post (not when removing one).
+function _recordReactionGiven() {
+    if (!auth.currentUser) return;
+    setDoc(doc(db, "profiles", auth.currentUser.uid), { reactionCount: increment(1) }, { merge: true }).then(() =>
+        getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
+            window.awardAchievements(window.getEarnedIds('react', pd.exists() ? (pd.data().reactionCount || 1) : 1)).catch(() => {});
+        })
+    ).catch(() => {});
 }
 // ── End Amber Currency System ────────────────────────────────────
 
@@ -649,10 +673,17 @@ onAuthStateChanged(auth, (user) => {
         window._syncGameProgressFromCloud();
         window._amberSubscribeTopbar();
         window._tcgProcessAcceptedTrades();
-        // Apply saved custom cursor
+        // Apply saved custom cursor + theme preference (cloud-synced so it
+        // follows the user across devices instead of defaulting to dark).
         getDoc(doc(db, 'profiles', user.uid)).then(pd => {
-            const cursor = pd.exists() ? pd.data().customCursor : null;
-            if (cursor) window.applyCursor(cursor);
+            const data = pd.exists() ? pd.data() : {};
+            if (data.customCursor) window.applyCursor(data.customCursor);
+            if (data.theme === 'light' || data.theme === 'dark') {
+                document.documentElement.setAttribute('data-theme', data.theme);
+                localStorage.setItem('weebee-theme', data.theme);
+                const toggle = document.getElementById('dark-mode-toggle');
+                if (toggle) toggle.checked = data.theme === 'dark';
+            }
         }).catch(() => {});
         // Backfill displayNameLower for case-insensitive search
         if (user.displayName) {
@@ -677,6 +708,11 @@ onAuthStateChanged(auth, (user) => {
             if (obAdminControls) obAdminControls.style.display = window.isAdmin ? 'block' : 'none';
             const tcgAdminTabBtn = document.getElementById('tcg-tab-admin-btn');
             if (tcgAdminTabBtn) tcgAdminTabBtn.style.display = window.isAdmin ? '' : 'none';
+            _wheelLoadConfig().then(config => {
+                const wheelTabBtn = document.getElementById('games-tab-wheel-btn');
+                if (wheelTabBtn) wheelTabBtn.style.display = (config.enabled || window.isAdmin) ? '' : 'none';
+                window._wheelRefreshBadges();
+            });
         });
         // Handle shared URL params
         const _urlParams = _initialUrlParams;
@@ -1084,6 +1120,9 @@ window.toggleDarkMode = function() {
     const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('weebee-theme', newTheme);
+    if (auth.currentUser) {
+        setDoc(doc(db, "profiles", auth.currentUser.uid), { theme: newTheme }, { merge: true }).catch(() => {});
+    }
 };
 
 // --- BEE TRAIL ---
@@ -1475,6 +1514,7 @@ window.submitInDepthReview = async function() {
                 likes: [], dislikes: [], commentCount: 0
             });
             if (!window.isSeriesReview) {
+                if (!(window.myReviewCount > 0)) _awardFirstReviewBonus().catch(() => {});
                 _awardAmber(10 + (window._amberAnimeAuthority ? 10 : 0), 'review:indepth').catch(() => {});
                 window.myReviewCount = (window.myReviewCount || 0) + 1;
                 window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
@@ -1528,6 +1568,7 @@ window.submitQuickReview = async function() {
                 uid: auth.currentUser.uid, timestamp: new Date(),
                 likes: [], dislikes: [], commentCount: 0
             });
+            if (!(window.myReviewCount > 0)) _awardFirstReviewBonus().catch(() => {});
             _awardAmber(5, 'review:quick').catch(() => {});
             window.myReviewCount = (window.myReviewCount || 0) + 1;
             window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
@@ -1647,7 +1688,7 @@ window.submitAuth = async function() {
             const avatarUrl = `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(username.trim())}&backgroundColor=ffc107&fontColor=333333`;
             await updateProfile(userCred.user, { displayName: username.trim(), photoURL: avatarUrl });
             setDoc(doc(db, "usernames", normName), { uid: userCred.user.uid }).catch(() => {});
-            setDoc(doc(db, "profiles", userCred.user.uid), { displayName: username.trim(), avatar: avatarUrl, bio: '', genres: [] }, { merge: true }).catch(() => {});
+            setDoc(doc(db, "profiles", userCred.user.uid), { displayName: username.trim(), avatar: avatarUrl, bio: '', genres: [], amber: 300 }, { merge: true }).catch(() => {});
 
             await addDoc(collection(db, "notifications"), {
                 targetUid: userCred.user.uid, type: 'system', senderName: 'WeeBee Team', senderUid: 'system',
@@ -1661,7 +1702,15 @@ window.submitAuth = async function() {
     } catch (e) { document.getElementById('auth-error').innerText = e.message; }
 };
 
-window.signInWithGoogle = async function() { try { await signInWithPopup(auth, googleProvider); window.closeAllModals(); } catch (error) { alert(error.message); } };
+window.signInWithGoogle = async function() {
+    try {
+        const result = await signInWithPopup(auth, googleProvider);
+        if (getAdditionalUserInfo(result)?.isNewUser) {
+            setDoc(doc(db, "profiles", result.user.uid), { amber: 300 }, { merge: true }).catch(() => {});
+        }
+        window.closeAllModals();
+    } catch (error) { alert(error.message); }
+};
 window.logoutUser = function() {
     if(confirm("Are you sure you want to log out?")) {
         if(window.notifUnsubscribe) { window.notifUnsubscribe(); window.notifUnsubscribe = null; }
@@ -2540,13 +2589,7 @@ window.toggleReaction = async function(event, reviewId, type, btn) {
         if(type === 'like') { if(likes.includes(auth.currentUser.uid)) likes = likes.filter(id => id !== auth.currentUser.uid); else { likes.push(auth.currentUser.uid); dislikes = dislikes.filter(id => id !== auth.currentUser.uid); addedReaction = true; } }
         else { if(dislikes.includes(auth.currentUser.uid)) dislikes = dislikes.filter(id => id !== auth.currentUser.uid); else { dislikes.push(auth.currentUser.uid); likes = likes.filter(id => id !== auth.currentUser.uid); addedReaction = true; } }
         await updateDoc(reviewRef, { likes, dislikes });
-        if (addedReaction) {
-            setDoc(doc(db, "profiles", auth.currentUser.uid), { reactionCount: increment(1) }, { merge: true }).then(() =>
-                getDoc(doc(db, "profiles", auth.currentUser.uid)).then(pd => {
-                    window.awardAchievements(window.getEarnedIds('react', pd.exists() ? (pd.data().reactionCount || 1) : 1)).catch(() => {});
-                })
-            ).catch(() => {});
-        }
+        if (addedReaction) _recordReactionGiven();
     }
 };
 
@@ -2656,9 +2699,11 @@ window.toggleCommentReaction = async function(event, commentId, type, btnElement
     const snap = await getDoc(commentRef);
     if(snap.exists()) {
         let likes = snap.data().likes || []; let dislikes = snap.data().dislikes || [];
-        if(type === 'like') { if(likes.includes(auth.currentUser.uid)) likes = likes.filter(id => id !== auth.currentUser.uid); else { likes.push(auth.currentUser.uid); dislikes = dislikes.filter(id => id !== auth.currentUser.uid); } }
-        else { if(dislikes.includes(auth.currentUser.uid)) dislikes = dislikes.filter(id => id !== auth.currentUser.uid); else { dislikes.push(auth.currentUser.uid); likes = likes.filter(id => id !== auth.currentUser.uid); } }
+        let addedReaction = false;
+        if(type === 'like') { if(likes.includes(auth.currentUser.uid)) likes = likes.filter(id => id !== auth.currentUser.uid); else { likes.push(auth.currentUser.uid); dislikes = dislikes.filter(id => id !== auth.currentUser.uid); addedReaction = true; } }
+        else { if(dislikes.includes(auth.currentUser.uid)) dislikes = dislikes.filter(id => id !== auth.currentUser.uid); else { dislikes.push(auth.currentUser.uid); likes = likes.filter(id => id !== auth.currentUser.uid); addedReaction = true; } }
         await updateDoc(commentRef, { likes, dislikes });
+        if (addedReaction) _recordReactionGiven();
     }
 };
 
@@ -5128,8 +5173,10 @@ window.likeTierList = async function(id, btn) {
     try {
         const d=await getDoc(doc(db,"tier_lists",id)); if(!d.exists()) return;
         const likes=d.data().likes||[]; const uid=auth.currentUser.uid;
-        const newLikes=likes.includes(uid)?likes.filter(x=>x!==uid):[...likes,uid];
+        const hadLiked=likes.includes(uid);
+        const newLikes=hadLiked?likes.filter(x=>x!==uid):[...likes,uid];
         await updateDoc(doc(db,"tier_lists",id),{likes:newLikes});
+        if (!hadLiked) _recordReactionGiven();
         const liked=newLikes.includes(uid);
         btn.style.background=liked?'var(--accent-yellow)':'var(--bg-gray-darker)'; btn.style.color=liked?'':'var(--text-dark)';
         btn.innerHTML=`<span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">${liked?'favorite':'favorite_border'}</span> ${newLikes.length}`;
@@ -5150,11 +5197,22 @@ window.fetchHomepageTierLists = function() {
 };
 
 window.switchCommunityTab = function(event, tabId) {
-    if (tabId !== 'community-tab-opening') window._obStopAudio?.();
     document.querySelectorAll('#community-view .community-tab-content').forEach(el => el.style.display = 'none');
     document.querySelectorAll('#community-view .community-tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(tabId).style.display = 'block';
     if (event?.currentTarget) event.currentTarget.classList.add('active');
+};
+
+window.switchGamesTab = function(event, tabId) {
+    if (tabId !== 'games-tab-opening') window._obStopAudio?.();
+    document.querySelectorAll('#games-view .games-tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('#games-view .games-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(tabId).style.display = 'block';
+    if (event?.currentTarget) event.currentTarget.classList.add('active');
+    if (tabId === 'games-tab-wheel') {
+        window.loadWheelTab();
+        window._wheelRefreshBadges();
+    }
 };
 
 window.switchTcgTab = function(event, tabId) {
@@ -5191,11 +5249,11 @@ window.closeCreatePostModal = function() {
 };
 
 window.goToTriviaTab = function() {
-    window.switchView('community-view');
-    document.querySelectorAll('#community-view .community-tab-content').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('#community-view .community-tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById('community-tab-trivia').style.display = 'block';
-    const triviaBtn = document.querySelector('[onclick*="community-tab-trivia"]');
+    window.switchView('games-view');
+    document.querySelectorAll('#games-view .games-tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('#games-view .games-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('games-tab-trivia').style.display = 'block';
+    const triviaBtn = document.querySelector('[onclick*="games-tab-trivia"]');
     if (triviaBtn) triviaBtn.classList.add('active');
     window.loadTriviaFeed();
 };
@@ -5662,6 +5720,11 @@ const TCG_FOUNDER_CARDS = [
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FLuffy%20UR.gif?alt=media&token=1c145ceb-0a03-434b-9cb7-bb95cf257ae9',
         founder: true,
     },
+    {
+        id: 'no_face', name: 'No Face', anime: 'Spirited Away', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpirited%20Away%2FNo%20Face.gif?alt=media&token=bc7e49e4-c46d-4b80-8f14-8b718cb17e7b',
+        founder: true,
+    },
 ];
 
 window._amberLoadWallet = async function() {
@@ -5819,6 +5882,439 @@ const TCG_PACKS = [
     }
 ];
 
+// ── Prize Wheel ─────────────────────────────────────────────────────────────
+// Section ratios for a "full" wheel of WHEEL_BASELINE_NON_UR (33) non-UR
+// slots — scaled proportionally to fill whatever size wheel a given month
+// needs. Exactly one extra slot (the monthly UR) is always added on top.
+const WHEEL_REWARD_RATIOS = [
+    { type: 'extra_spin', count: 2 },
+    { type: 'pack', packId: 'premium', count: 4 },
+    { type: 'pack', packId: 'standard', count: 6 },
+    { type: 'nothing', count: 3 },
+    { type: 'amber', value: 50, count: 8 },
+    { type: 'amber', value: 100, count: 6 },
+    { type: 'amber', value: 200, count: 3 },
+    { type: 'amber', value: 500, count: 1 },
+];
+const WHEEL_BASELINE_NON_UR = 33;
+
+// Monthly UR card backlog — admin appends new cards here as they're created.
+// The card for a given calendar month is picked automatically based on how
+// many months have passed since the epoch below, cycling once the list ends.
+const WHEEL_MONTHLY_UR_BACKLOG = [
+    { name: 'Rock Lee', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FRock%20Lee.gif?alt=media&token=bb34d915-5b99-4f94-8d2c-9348ca1b2442' },
+];
+const WHEEL_UR_BACKLOG_EPOCH = { year: 2026, month: 6 }; // June 2026 = backlog[0]
+
+function _wheelGetMonthlyUrCard(d = new Date()) {
+    const monthsSince = (d.getFullYear() - WHEEL_UR_BACKLOG_EPOCH.year) * 12 + (d.getMonth() + 1 - WHEEL_UR_BACKLOG_EPOCH.month);
+    const len = WHEEL_MONTHLY_UR_BACKLOG.length;
+    const idx = ((monthsSince % len) + len) % len;
+    return WHEEL_MONTHLY_UR_BACKLOG[idx];
+}
+
+const WHEEL_ICONS = { monthly_ur: '🌟', extra_spin: '🔄', nothing: '💨', amber: '🟡' };
+// Vibrant rainbow palette cycled across amber/pack slices for a more colorful wheel
+const WHEEL_RAINBOW_PALETTE = ['#f43f5e', '#f59e0b', '#facc15', '#84cc16', '#22c55e', '#14b8a6', '#0ea5e9', '#6366f1', '#a855f7', '#ec4899'];
+
+function _wheelMonthKey(d = new Date()) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function _wheelTodayKey(d = new Date()) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function _wheelDaysInMonth(d = new Date()) {
+    return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+}
+
+function _wheelSectionLabel(section) {
+    switch (section.type) {
+        case 'monthly_ur': return "This Month's UR!";
+        case 'extra_spin': return 'Extra Spin';
+        case 'nothing': return 'Nothing';
+        case 'amber': return `${section.value} Amber`;
+        case 'pack': return section.packId === 'premium' ? 'Premium Pack' : 'Standard Pack';
+        default: return '';
+    }
+}
+function _wheelSectionIcon(section) {
+    if (section.type === 'pack') return section.packId === 'premium' ? '✨' : '🃏';
+    return WHEEL_ICONS[section.type] || '❔';
+}
+function _wheelSectionColor(section, index = 0) {
+    switch (section.type) {
+        case 'monthly_ur': return '#7c3aed';
+        case 'extra_spin': return '#06b6d4';
+        case 'nothing': return '#4b5563';
+        case 'amber':
+        case 'pack':
+            return WHEEL_RAINBOW_PALETTE[index % WHEEL_RAINBOW_PALETTE.length];
+        default: return '#374151';
+    }
+}
+
+// Builds the shuffled section layout for a user's wheel for the month.
+// `n` = total sections (days remaining in the month, inclusive of today,
+// plus 4). Exactly one section is the monthly UR; the rest are scaled
+// proportionally from WHEEL_REWARD_RATIOS to fill the other n-1 slots.
+function _wheelGenerateSections(n) {
+    const nonUr = Math.max(n - 1, WHEEL_REWARD_RATIOS.length);
+    const buckets = WHEEL_REWARD_RATIOS.map(r => ({
+        ...r,
+        count: Math.round(r.count * nonUr / WHEEL_BASELINE_NON_UR),
+    }));
+    let total = buckets.reduce((s, b) => s + b.count, 0);
+    const amber50 = buckets.find(b => b.type === 'amber' && b.value === 50);
+    const nothingBucket = buckets.find(b => b.type === 'nothing');
+    while (total !== nonUr) {
+        if (total < nonUr) { amber50.count++; total++; }
+        else {
+            const target = amber50.count > 0 ? amber50 : nothingBucket;
+            target.count = Math.max(0, target.count - 1);
+            total--;
+        }
+    }
+    const sections = [{ type: 'monthly_ur' }];
+    buckets.forEach(b => {
+        for (let i = 0; i < b.count; i++) {
+            if (b.type === 'pack') sections.push({ type: 'pack', packId: b.packId });
+            else if (b.type === 'amber') sections.push({ type: 'amber', value: b.value });
+            else sections.push({ type: b.type });
+        }
+    });
+    for (let i = sections.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [sections[i], sections[j]] = [sections[j], sections[i]];
+    }
+    return sections;
+}
+
+async function _wheelLoadConfig() {
+    if (window._wheelConfig) return window._wheelConfig;
+    try {
+        const snap = await getDoc(doc(db, 'wheel_config', 'current'));
+        window._wheelConfig = snap.exists() ? snap.data() : { enabled: false };
+    } catch(e) { window._wheelConfig = { enabled: false }; }
+    return window._wheelConfig;
+}
+
+async function _wheelLoadState(uid) {
+    const monthKey = _wheelMonthKey();
+    const ref = doc(db, 'wheel_state', uid);
+    const snap = await getDoc(ref);
+    let data = snap.exists() ? snap.data() : null;
+    if (!data || data.month !== monthKey) {
+        const now = new Date();
+        const remaining = _wheelDaysInMonth(now) - now.getDate() + 1;
+        data = {
+            month: monthKey,
+            sections: _wheelGenerateSections(remaining + 4),
+            usedIndices: {},
+            lastSpinDate: '',
+            extraSpinsAvailable: 0,
+            pendingUrClaim: false,
+        };
+        await setDoc(ref, data);
+    }
+    return data;
+}
+
+async function _wheelCanSpinToday(uid) {
+    try {
+        const snap = await getDoc(doc(db, 'wheel_state', uid));
+        if (!snap.exists()) return true;
+        const data = snap.data();
+        if (data.month !== _wheelMonthKey()) return true;
+        const today = _wheelTodayKey();
+        return data.lastSpinDate !== today || (data.extraSpinsAvailable || 0) > 0;
+    } catch(e) { return false; }
+}
+
+window._wheelRefreshBadges = async function() {
+    const dots = document.querySelectorAll('.wheel-notif-dot');
+    if (!dots.length) return;
+    const config = await _wheelLoadConfig();
+    if (!auth.currentUser || (!config.enabled && !window.isAdmin)) {
+        dots.forEach(d => d.style.display = 'none');
+        return;
+    }
+    const canSpin = await _wheelCanSpinToday(auth.currentUser.uid);
+    dots.forEach(d => d.style.display = canSpin ? 'block' : 'none');
+};
+
+window.loadWheelTab = async function() {
+    const el = document.getElementById('wheel-tab-content');
+    if (!el) return;
+    if (!auth.currentUser) {
+        el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">Sign in to spin the Prize Wheel!</div>`;
+        return;
+    }
+    el.innerHTML = `<div class="loading">Loading wheel...</div>`;
+    const uid = auth.currentUser.uid;
+    const [config, state] = await Promise.all([_wheelLoadConfig(), _wheelLoadState(uid)]);
+    window._wheelState = state;
+    _wheelRender(el, config, state);
+};
+
+function _wheelRender(el, config, state) {
+    if (!el) return;
+    const n = state.sections.length;
+    const sliceAngle = 360 / n;
+    const used = state.usedIndices || {};
+    const today = _wheelTodayKey();
+    const canSpin = state.lastSpinDate !== today || (state.extraSpinsAvailable || 0) > 0;
+    const remainingSpins = n - Object.keys(used).length;
+    const ur = _wheelGetMonthlyUrCard();
+
+    const isDesktop = window.matchMedia('(min-width: 900px)').matches;
+    const wheelSize = isDesktop ? 560 : 300;
+    const btnSize = isDesktop ? 120 : 68;
+    const iconBoxSize = isDesktop ? 46 : 30;
+    const iconFontSize = isDesktop ? 26 : 18;
+    const radius = wheelSize / 2 - (isDesktop ? 58 : 32);
+
+    const gradientStops = state.sections.map((s, i) => {
+        const color = used[i] ? '#2a2a2a' : _wheelSectionColor(s, i);
+        return `${color} ${i * sliceAngle}deg ${(i + 1) * sliceAngle}deg`;
+    }).join(', ');
+
+    const icons = state.sections.map((s, i) => {
+        const angle = (i + 0.5) * sliceAngle;
+        const dim = used[i] ? 'opacity:0.25;' : '';
+        return `<div class="wheel-slice-icon" style="${dim}width:${iconBoxSize}px;height:${iconBoxSize}px;margin:-${iconBoxSize / 2}px;font-size:${iconFontSize}px;transform:rotate(${angle}deg) translate(0, -${radius}px) rotate(-${angle}deg);">${_wheelSectionIcon(s)}</div>`;
+    }).join('');
+
+    const adminPanel = window.isAdmin ? `
+        <div style="margin-top:30px;padding:16px;border:1px solid var(--border-color);border-radius:12px;text-align:left;background:var(--bg-gray);">
+            <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">🛠️ Admin</div>
+            <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;font-weight:700;">
+                <input id="wheel-admin-enabled" type="checkbox" ${config.enabled ? 'checked' : ''}> Wheel enabled for all users
+            </label>
+            <button onclick="window._wheelSaveConfig()" class="action-btn" style="font-weight:800;">Save</button>
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color);">
+                <button onclick="window._wheelAdminReset()" class="cancel-btn" style="font-size:12px;opacity:0.75;">🔄 Reset My Wheel (Admin Testing)</button>
+            </div>
+        </div>` : '';
+
+    el.innerHTML = `
+        <div style="text-align:center;">
+            <div class="bw-banner-hero" style="border-radius:20px;padding:28px 24px;margin-bottom:20px;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
+                <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(124,58,237,0.3) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(245,158,11,0.25) 0%,transparent 60%);pointer-events:none;"></div>
+                <div style="position:relative;z-index:1;">
+                    <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
+                    <div style="font-size:42px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🎡 Prize Wheel 🎡</div>
+                    <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-top:10px;">Spin once a day — every section is yours once, all month long</div>
+                    ${ur.image ? `<div style="margin-top:14px;font-size:12px;color:#f59e0b;font-weight:700;">🌟 This month's grand prize: ${ur.name} (${ur.anime})</div>` : ''}
+                </div>
+            </div>
+
+            <div id="wheel-outer" class="wheel-outer" style="position:relative;width:${wheelSize}px;height:${wheelSize}px;margin:0 auto 24px;">
+                <div class="wheel-ring"></div>
+                <div class="wheel-sparkles">${[0, 1, 2, 3, 4, 5].map(i => `<span class="wheel-sparkle" style="--i:${i};">✨</span>`).join('')}</div>
+                <div id="wheel-flash" class="wheel-flash"></div>
+                <div id="wheel-container" style="position:relative;width:100%;height:100%;overflow:visible;">
+                    <div id="wheel-disc" style="width:100%;height:100%;border-radius:50%;background:conic-gradient(${gradientStops});position:relative;border:6px solid var(--bg-card);box-shadow:0 0 0 4px var(--border-color);">
+                        ${icons}
+                    </div>
+                    <div id="wheel-pointer" style="position:absolute;top:-${isDesktop ? 22 : 14}px;left:50%;transform:translateX(-50%);font-size:${isDesktop ? 48 : 32}px;transform-origin:top center;filter:drop-shadow(0 0 6px rgba(245,158,11,0.7));">🔻</div>
+                    <button id="wheel-spin-btn" onclick="window._wheelSpin()" ${canSpin ? '' : 'disabled'} class="wheel-spin-btn" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${btnSize}px;height:${btnSize}px;border-radius:50%;border:4px solid var(--bg-card);z-index:10;font-weight:900;font-size:${isDesktop ? '16px' : '11px'};line-height:1.2;color:#fff;box-shadow:0 0 24px rgba(245,158,11,0.55),0 0 0 4px var(--border-color);${canSpin ? 'background:linear-gradient(135deg,#f59e0b,#dc2626);cursor:pointer;' : 'background:var(--bg-gray);opacity:0.45;cursor:default;'}">
+                        ${canSpin ? (state.lastSpinDate === today ? 'EXTRA<br>SPIN' : '🎡<br>SPIN') : '✅'}
+                    </button>
+                </div>
+            </div>
+
+            <div style="margin-top:12px;font-size:13px;color:var(--text-muted);">${remainingSpins} of ${n} sections left this month</div>
+
+            ${window.isAdmin && !config.enabled ? `<div style="margin-top:16px;padding:10px 16px;background:rgba(239,68,68,0.12);border:1px solid #ef4444;border-radius:10px;color:#ef4444;font-size:12px;font-weight:700;display:inline-block;">⚠️ Wheel is hidden from regular users — admin preview only</div>` : ''}
+            ${adminPanel}
+        </div>`;
+}
+
+window._wheelSaveConfig = async function() {
+    if (!window.isAdmin) return;
+    const enabled = document.getElementById('wheel-admin-enabled')?.checked || false;
+    try {
+        await setDoc(doc(db, 'wheel_config', 'current'), { enabled, month: _wheelMonthKey() }, { merge: true });
+        window._wheelConfig = null;
+        await window.loadWheelTab();
+        window._wheelRefreshBadges();
+    } catch(e) { alert('Save failed: ' + e.message); }
+};
+
+window._wheelAdminReset = async function() {
+    if (!window.isAdmin || !auth.currentUser) return;
+    try {
+        await deleteDoc(doc(db, 'wheel_state', auth.currentUser.uid));
+        window._wheelState = null;
+        window._wheelCurrentRotation = 0;
+        await window.loadWheelTab();
+        window._wheelRefreshBadges();
+    } catch(e) { alert('Reset failed: ' + e.message); }
+};
+
+window._wheelSpin = async function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    const uid = auth.currentUser.uid;
+    const state = window._wheelState;
+    if (!state) return;
+    const today = _wheelTodayKey();
+    const canSpin = state.lastSpinDate !== today || (state.extraSpinsAvailable || 0) > 0;
+    if (!canSpin) return;
+
+    const usedIndices = state.usedIndices || {};
+    const available = state.sections.map((s, i) => i).filter(i => !usedIndices[i]);
+    if (!available.length) return;
+
+    const pickIdx = available[Math.floor(Math.random() * available.length)];
+    const section = state.sections[pickIdx];
+    const n = state.sections.length;
+    const sliceAngle = 360 / n;
+
+    const SPIN_DURATION = 8000;
+    const wheelEl = document.getElementById('wheel-disc');
+    const pointerEl = document.getElementById('wheel-pointer');
+    const outerEl = document.getElementById('wheel-outer');
+    const prevRotation = window._wheelCurrentRotation || 0;
+    const targetAngle = prevRotation + (360 * 12) - (pickIdx * sliceAngle) - (sliceAngle / 2) - (prevRotation % 360);
+    if (wheelEl) {
+        wheelEl.style.transition = `transform ${SPIN_DURATION}ms cubic-bezier(0.12,0.6,0.18,1)`;
+        wheelEl.style.transform = `rotate(${targetAngle}deg)`;
+        wheelEl.classList.add('wheel-spinning');
+        setTimeout(() => wheelEl.classList.remove('wheel-spinning'), SPIN_DURATION);
+    }
+    if (pointerEl) {
+        pointerEl.classList.add('wheel-pointer-bounce');
+        setTimeout(() => pointerEl.classList.remove('wheel-pointer-bounce'), SPIN_DURATION);
+    }
+    if (outerEl) {
+        outerEl.classList.add('wheel-active-spin');
+        setTimeout(() => outerEl.classList.remove('wheel-active-spin'), SPIN_DURATION);
+    }
+    window._wheelCurrentRotation = targetAngle;
+
+    const btn = document.getElementById('wheel-spin-btn');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; }
+
+    const isDailySpin = state.lastSpinDate !== today;
+    let extraSpins = state.extraSpinsAvailable || 0;
+    if (!isDailySpin) extraSpins = Math.max(0, extraSpins - 1);
+    if (section.type === 'extra_spin') extraSpins += 1;
+
+    const update = {
+        usedIndices: { ...usedIndices, [pickIdx]: true },
+        lastSpinDate: today,
+        extraSpinsAvailable: extraSpins,
+    };
+    if (section.type === 'monthly_ur') update.pendingUrClaim = true;
+
+    setTimeout(async () => {
+        try {
+            await updateDoc(doc(db, 'wheel_state', uid), update);
+        } catch(e) { console.error('Wheel spin save failed:', e); }
+        Object.assign(state, update);
+        const flashEl = document.getElementById('wheel-flash');
+        if (flashEl && section.type !== 'nothing') {
+            flashEl.classList.add('active');
+            setTimeout(() => flashEl.classList.remove('active'), 700);
+        }
+        _wheelConfettiBurst(section.type === 'monthly_ur' ? 120 : (section.type === 'nothing' ? 0 : 46), section);
+        await _wheelGrantReward(uid, section);
+        _wheelShowResultModal(section);
+        window._wheelRefreshBadges();
+        _wheelRender(document.getElementById('wheel-tab-content'), window._wheelConfig || {}, state);
+    }, SPIN_DURATION);
+};
+
+async function _wheelGrantReward(uid, section) {
+    switch (section.type) {
+        case 'amber':
+            await _awardAmber(section.value, 'wheel:spin').catch(() => {});
+            break;
+        case 'pack': {
+            const pack = TCG_PACKS.find(p => p.id === section.packId);
+            if (!pack) break;
+            try {
+                await _tcgEnsureCardPool();
+                const cards = _tcgRollPackCards(pack);
+                const enriched = await _tcgSavePackToCollection(uid, cards);
+                window._tcgCollectionCache.delete(uid);
+                window._wheelPendingPackReveal = { pack, cards: enriched };
+            } catch(e) { console.error('Wheel pack grant failed:', e); }
+            break;
+        }
+        case 'monthly_ur': {
+            const ur = _wheelGetMonthlyUrCard();
+            const now = new Date();
+            const stampText = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
+            try {
+                await addDoc(collection(db, 'card_collections', uid, 'cards'), {
+                    name: ur.name || 'Monthly UR', anime: ur.anime || '', rarity: 'ur', image: ur.image || '',
+                    monthlyUr: true, stampText, serial: null, edition: null, pulledAt: serverTimestamp(),
+                });
+                window._tcgCollectionCache.delete(uid);
+            } catch(e) { console.error('Monthly UR grant failed:', e); }
+            try { await setDoc(doc(db, 'wheel_state', uid), { pendingUrClaim: false }, { merge: true }); } catch(e) {}
+            break;
+        }
+        default: break;
+    }
+}
+
+function _wheelConfettiBurst(count, section) {
+    if (!count) return;
+    const container = document.getElementById('wheel-container');
+    if (!container) return;
+    const colors = section?.type === 'monthly_ur'
+        ? ['#7c3aed', '#f59e0b', '#fbbf24', '#a78bfa', '#ffffff']
+        : ['#f59e0b', '#fbbf24', '#06b6d4', '#4f46e5', '#22c55e', '#ffffff'];
+    for (let i = 0; i < count; i++) {
+        const piece = document.createElement('div');
+        const angle = Math.random() * 360;
+        const dist = 80 + Math.random() * 140;
+        const dx = Math.cos(angle * Math.PI / 180) * dist;
+        const dy = Math.sin(angle * Math.PI / 180) * dist;
+        const size = 6 + Math.random() * 6;
+        piece.style.cssText = `position:absolute;top:50%;left:50%;width:${size}px;height:${size}px;background:${colors[Math.floor(Math.random()*colors.length)]};border-radius:${Math.random()<0.5?'50%':'2px'};pointer-events:none;z-index:50;`;
+        piece.style.setProperty('--dx', `${dx}px`);
+        piece.style.setProperty('--dy', `${dy}px`);
+        piece.style.animation = `wheel-confetti-burst ${0.9 + Math.random() * 0.6}s ease-out forwards`;
+        container.appendChild(piece);
+        setTimeout(() => piece.remove(), 1600);
+    }
+}
+
+function _wheelShowResultModal(section) {
+    document.getElementById('wheel-result-modal')?.remove();
+    if (section.type === 'pack' && window._wheelPendingPackReveal) {
+        const { pack, cards } = window._wheelPendingPackReveal;
+        window._wheelPendingPackReveal = null;
+        _tcgShowPackOpening(pack, cards);
+        return;
+    }
+    const modal = document.createElement('div');
+    modal.id = 'wheel-result-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;';
+    let body;
+    switch (section.type) {
+        case 'monthly_ur':
+            body = `<div style="font-size:60px;">🌟</div><div style="font-size:22px;font-weight:900;color:#fff;margin-top:8px;">JACKPOT!</div><div style="color:rgba(255,255,255,0.7);margin-top:6px;">You won this month's exclusive UR card!</div>`;
+            break;
+        case 'extra_spin':
+            body = `<div style="font-size:60px;">🔄</div><div style="font-size:20px;font-weight:800;color:#fff;margin-top:8px;">Extra Spin!</div><div style="color:rgba(255,255,255,0.7);margin-top:6px;">Spin again right now.</div>`;
+            break;
+        case 'amber':
+            body = `<div style="font-size:60px;">🟡</div><div style="font-size:20px;font-weight:800;color:#fff;margin-top:8px;">+${section.value} Amber!</div>`;
+            break;
+        case 'nothing':
+            body = `<div style="font-size:60px;">💨</div><div style="font-size:20px;font-weight:800;color:#fff;margin-top:8px;">Better luck tomorrow!</div>`;
+            break;
+        default:
+            body = `<div style="font-size:20px;color:#fff;">You won: ${_wheelSectionLabel(section)}</div>`;
+    }
+    modal.innerHTML = `<div style="text-align:center;background:var(--bg-card);border-radius:16px;padding:36px 28px;max-width:360px;">${body}<button onclick="document.getElementById('wheel-result-modal')?.remove()" class="action-btn" style="margin-top:20px;">Nice!</button></div>`;
+    document.body.appendChild(modal);
+}
+
 function _normalizeSeriesName(title) {
     if (!title) return title;
     let t = title;
@@ -5875,9 +6371,10 @@ function _tcgFullCardPool() {
     const ssr = (window._tcgSSRPool && window._tcgSSRPool.length)
         ? window._tcgSSRPool.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'ssr' }))
         : TCG_SSR_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'ssr' }));
-    const ur = (window._tcgURPool && window._tcgURPool.length)
+    const ur = ((window._tcgURPool && window._tcgURPool.length)
         ? window._tcgURPool.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'ur' }))
-        : TCG_UR_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'ur' }));
+        : TCG_UR_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'ur' })))
+        .concat(TCG_FOUNDER_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'ur', founder: true })));
     return [
         ...ur,
         ...ssr,
@@ -6570,9 +7067,11 @@ function _tcgBuildCardFace(card) {
     const maxV = RARITY_MAX_VERSIONS[rarity] || 5000;
     const serialLine = card.founder
         ? `<div class="wb-founder-label">Founder</div>`
-        : (card.serial != null
-            ? `<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:0.5px;margin-top:4px;">${card.serial} / ${maxV}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>`
-            : '');
+        : (card.monthlyUr
+            ? `<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:0.5px;margin-top:4px;">${card.stampText}</div>`
+            : (card.serial != null
+                ? `<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:0.5px;margin-top:4px;">${card.serial} / ${maxV}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>`
+                : ''));
     return `<div class="wb-card rarity-${rarity}">
         <div class="wb-card-inner">
             <div class="wb-card-header">
@@ -6740,7 +7239,7 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
     } catch(e) { body.innerHTML = '<p style="color:var(--text-muted);">Failed to load card.</p>'; return; }
 
     const maxV = RARITY_MAX_VERSIONS[card.rarity] || 5000;
-    const versionText = card.founder ? 'Founder Edition · 1 of 1' : (card.serial != null ? `${card.serial} / ${maxV}${(card.edition||1)>1?` · Edition ${card.edition}`:''}` : '—');
+    const versionText = card.founder ? 'Founder Edition · 1 of 1' : (card.monthlyUr ? card.stampText : (card.serial != null ? `${card.serial} / ${maxV}${(card.edition||1)>1?` · Edition ${card.edition}`:''}` : '—'));
     const rarityLabel = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[card.rarity] || card.rarity;
     const safeOwnerUid = ownerUid.replace(/'/g,"\\'");
     const shareUrl = `${window.location.origin}${window.location.pathname}?card=${encodeURIComponent(ownerUid)}~${encodeURIComponent(cardId)}`;
@@ -6891,7 +7390,7 @@ window._tcgRenderProfileShowcase = async function(uid) {
                 ${cards.map(card => `
                     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
                         <div style="width:140px;height:196px;overflow:hidden;"><div style="transform:scale(0.636);transform-origin:top left;">${_tcgBuildCardFace(card)}</div></div>
-                        ${card.founder ? `<div style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : (card.serial != null ? `<div style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : '')}
+                        ${card.founder ? `<div style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : (card.monthlyUr ? `<div style="font-size:11px;color:#ffd700;font-weight:700;">${card.stampText}</div>` : (card.serial != null ? `<div style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''))}
                     </div>`).join('')}
             </div>
         </div>`;
@@ -7175,7 +7674,7 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
         </div>` : ''}
         <div class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;">
             ${filtered.map(card => {
-                const serial = card.founder ? 'Founder Edition' : (card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : '');
+                const serial = card.founder ? 'Founder Edition' : (card.monthlyUr ? card.stampText : (card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : ''));
                 const dismantleAmount = TCG_DISMANTLE_RATES[card.rarity] || 0;
                 const isPinned = pinnedIds.includes(card.id);
                 const selected = ms.active && ms.selected.has(card.id);
@@ -7264,11 +7763,11 @@ window._tcgOpenPremadeBinder = async function(animeName, page = 0) {
                 const copies = ownedMap[key] || [];
                 const isOwned = copies.length > 0;
                 const first = copies[0];
-                const serial = isOwned && first?.founder ? 'Founder Edition' : (isOwned && first?.serial != null ? `${first.serial} / ${RARITY_MAX_VERSIONS[c.rarity]||5000}${(first.edition||1)>1?` · Ed.${first.edition}`:''}` : '');
+                const serial = isOwned && first?.founder ? 'Founder Edition' : (isOwned && first?.monthlyUr ? first.stampText : (isOwned && first?.serial != null ? `${first.serial} / ${RARITY_MAX_VERSIONS[c.rarity]||5000}${(first.edition||1)>1?` · Ed.${first.edition}`:''}` : ''));
                 return `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;">
                     <div class="tcg-card-scale-wrap">
                         <div class="tcg-card-scale" style="${isOwned?'':'filter:grayscale(1) brightness(0.3);pointer-events:none;'}">
-                            ${_tcgBuildCardFace({ ...c, serial: first?.serial, edition: first?.edition, founder: first?.founder })}
+                            ${_tcgBuildCardFace({ ...c, serial: first?.serial, edition: first?.edition, founder: first?.founder, monthlyUr: first?.monthlyUr, stampText: first?.stampText })}
                         </div>
                     </div>
                     <div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${isOwned?(serial||'Collected'):'Not collected'}</div>
@@ -7450,7 +7949,7 @@ window._tcgOpenUserBinder = async function(binderId, uid, page = 0) {
                 `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;">
                     <span class="material-symbols-outlined" onclick="window._tcgRemoveCardFromBinder('${binderId}','${uid}','${card.id}')" style="position:absolute;top:8px;right:4px;font-size:18px;cursor:pointer;color:#ef4444;background:rgba(0,0,0,0.5);border-radius:50%;padding:2px;z-index:2;" title="Remove from binder">close</span>
                     <div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>
-                    ${card.founder ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : (card.serial != null ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : '')}
+                    ${card.founder ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : (card.monthlyUr ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">${card.stampText}</div>` : (card.serial != null ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''))}
                 </div>` :
                 `<div class="tcg-card-cell"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale" onclick="window._tcgAddCardsToBinderModal('${binderId}','${uid}')" style="width:220px;height:308px;border-radius:14px;background:var(--bg-gray-darker);border:2px dashed var(--border-color);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--text-muted);cursor:pointer;">+</div></div></div>`
             ).join('')}
@@ -7513,7 +8012,7 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
         </div>` : ''}
         ${cards.length ? `<div class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;">
             ${sortedCards.map(card => {
-                const serial = card.founder ? 'Founder Edition' : (card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : '');
+                const serial = card.founder ? 'Founder Edition' : (card.monthlyUr ? card.stampText : (card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : ''));
                 const dismantleAmount = TCG_DISMANTLE_RATES[card.rarity] || 0;
                 const isPinned = pinnedIds.includes(card.id);
                 const selected = isOwner && ms.active && ms.selected.has(card.id);
@@ -7571,7 +8070,7 @@ window._tcgOpenProfileBinder = async function(binderId, uid, page = 0) {
             ${pageCards.map(card => card ?
                 `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;">
                     <div class="tcg-card-scale-wrap" onclick="window._tcgOpenCardViewer('${uid}','${card.id}')" style="cursor:pointer;"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>
-                    ${card.founder ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : (card.serial != null ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : '')}
+                    ${card.founder ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : (card.monthlyUr ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">${card.stampText}</div>` : (card.serial != null ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''))}
                 </div>` :
                 `<div class="tcg-card-cell"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale" style="width:220px;height:308px;border-radius:14px;background:var(--bg-gray-darker);border:1px dashed var(--border-color);"></div></div></div>`
             ).join('')}
@@ -7587,7 +8086,7 @@ window._tcgOpenProfileBinder = async function(binderId, uid, page = 0) {
 // ── TCG Trading ─────────────────────────────────────────────────────────────
 function _tcgPickerCardHTML(card, selected) {
     return `<div onclick="window._tcgTogglePickerCard(this,'${card.id}')" data-card-id="${card.id}" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px;border-radius:10px;border:2px solid ${selected?'var(--accent-yellow)':'transparent'};background:${selected?'rgba(245,158,11,0.12)':'transparent'};">
-        <div style="width:88px;height:123px;overflow:hidden;"><div style="transform:scale(0.4);transform-origin:top left;">${_tcgBuildCardFace(card)}</div></div>
+        <div style="width:132px;height:184px;overflow:hidden;"><div style="transform:scale(0.6);transform-origin:top left;">${_tcgBuildCardFace(card)}</div></div>
     </div>`;
 }
 
@@ -7631,22 +8130,22 @@ window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
     const seedMyAmber = opts.seedMyAmber || 0;
     const seedTheirAmber = opts.seedTheirAmber || 0;
     modal.innerHTML = `
-        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:760px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:88vh;overflow-y:auto;">
+        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:1080px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                 <div style="font-size:17px;font-weight:800;color:var(--text-dark);">${opts.tradeId ? 'Counter Offer' : 'Propose Trade'} — ${otherName}</div>
                 <button onclick="document.getElementById('tcg-trade-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
             </div>
             <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Select cards from your collection to offer, and cards from theirs to request. You can also include Amber on either side.</p>
             <div style="display:flex;flex-wrap:wrap;gap:24px;">
-                <div style="flex:1;min-width:280px;">
+                <div style="flex:1;min-width:340px;">
                     <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">You Give</div>
-                    <div data-side="mine" id="tcg-trade-mine" style="display:flex;flex-wrap:wrap;gap:8px;max-height:340px;overflow-y:auto;margin-bottom:10px;"><div style="padding:20px;color:var(--text-muted);">Loading…</div></div>
+                    <div data-side="mine" id="tcg-trade-mine" style="display:flex;flex-wrap:wrap;gap:10px;max-height:460px;overflow-y:auto;margin-bottom:10px;"><div style="padding:20px;color:var(--text-muted);">Loading…</div></div>
                     <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">🟡 Amber to give (you have ${myAmber.toLocaleString()})</label>
                     <input type="number" id="tcg-trade-amber-give" min="0" max="1000" step="1" value="${seedMyAmber}" oninput="window._tcgUpdateTradeSummary()" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
                 </div>
-                <div style="flex:1;min-width:280px;">
+                <div style="flex:1;min-width:340px;">
                     <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">You Get</div>
-                    <div data-side="theirs" id="tcg-trade-theirs" style="display:flex;flex-wrap:wrap;gap:8px;max-height:340px;overflow-y:auto;margin-bottom:10px;"><div style="padding:20px;color:var(--text-muted);">Loading…</div></div>
+                    <div data-side="theirs" id="tcg-trade-theirs" style="display:flex;flex-wrap:wrap;gap:10px;max-height:460px;overflow-y:auto;margin-bottom:10px;"><div style="padding:20px;color:var(--text-muted);">Loading…</div></div>
                     <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">🟡 Amber to request</label>
                     <input type="number" id="tcg-trade-amber-get" min="0" max="1000" step="1" value="${seedTheirAmber}" oninput="window._tcgUpdateTradeSummary()" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
                 </div>
@@ -10229,14 +10728,18 @@ window.toggleArticleReaction = async function(type) {
     if (!pSnap.exists()) return;
     let likes = [...(pSnap.data().likes || [])];
     let dislikes = [...(pSnap.data().dislikes || [])];
+    let addedReaction = false;
     if (type === 'like') {
-        likes = likes.includes(uid) ? likes.filter(u => u !== uid) : [...likes.filter(u => u !== uid), uid];
+        if (likes.includes(uid)) { likes = likes.filter(u => u !== uid); }
+        else { likes = [...likes.filter(u => u !== uid), uid]; addedReaction = true; }
         dislikes = dislikes.filter(u => u !== uid);
     } else {
-        dislikes = dislikes.includes(uid) ? dislikes.filter(u => u !== uid) : [...dislikes.filter(u => u !== uid), uid];
+        if (dislikes.includes(uid)) { dislikes = dislikes.filter(u => u !== uid); }
+        else { dislikes = [...dislikes.filter(u => u !== uid), uid]; addedReaction = true; }
         likes = likes.filter(u => u !== uid);
     }
     await updateDoc(pRef, { likes, dislikes });
+    if (addedReaction) _recordReactionGiven();
     document.getElementById('article-like-count').innerText = likes.length;
     document.getElementById('article-dislike-count').innerText = dislikes.length;
     document.getElementById('article-like-btn').style.color = likes.includes(uid) ? 'var(--accent-yellow)' : 'var(--text-dark)';
@@ -11056,13 +11559,13 @@ window.searchAnime = async function(queryStr) {
 
 // --- Navigation ---
 window.switchView = function(targetId, isSearch = false, skipHistory = false) {
-    if (targetId !== 'community-view') window._obStopAudio?.();
+    if (targetId !== 'games-view') window._obStopAudio?.();
     window.closeMobileMenu?.();
     window.closeMobileSearch?.();
     if(targetId !== 'anime-detail-view') window.previousViewId = targetId;
     if(targetId !== 'profile-view') window.targetProfileUid = null;
     if (!skipHistory) {
-        const _tabHashes = { 'home-view': '', 'discover-view': 'discover', 'my-list-view': 'mylist', 'news-view': 'news', 'community-view': 'community', 'tcg-view': 'tcg' };
+        const _tabHashes = { 'home-view': '', 'discover-view': 'discover', 'my-list-view': 'mylist', 'news-view': 'news', 'community-view': 'community', 'games-view': 'games', 'tcg-view': 'tcg' };
         const _tabHash = _tabHashes[targetId];
         // Clear ?anime= or ?profile= params when navigating to non-detail views
         if (targetId !== 'anime-detail-view' && targetId !== 'profile-view') {
@@ -11085,6 +11588,8 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     if(targetId === 'home-view') { fetchHomepageReviews(); }
     if(targetId === 'community-view') {
         window.fetchCommunityTierLists();
+    }
+    if(targetId === 'games-view') {
         window.fetchBwCommunityFeed();
         window.loadBwBannerImages();
         // Update game thumbnail status texts (read from local cache so progress
@@ -11098,6 +11603,7 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
         if (blcStatusEl) blcStatusEl.innerText = _bwTileStatus('wb_bwblc', today, 'New puzzle available! ⚔️');
         const dbStatusEl = document.getElementById('bwdb-status-text');
         if (dbStatusEl) dbStatusEl.innerText = _bwTileStatus('wb_bwdb', today, 'New puzzle available! 🐉');
+        window._wheelRefreshBadges();
     }
     if(targetId === 'tcg-view') {
         window._tcgRenderStore();
@@ -11791,7 +12297,7 @@ window.onload = function() {
     };
     loadTrending(); fetchHomepageReviews();
 
-    const _hashToView = { 'discover': 'discover-view', 'mylist': 'my-list-view', 'news': 'news-view', 'community': 'community-view' };
+    const _hashToView = { 'discover': 'discover-view', 'mylist': 'my-list-view', 'news': 'news-view', 'community': 'community-view', 'games': 'games-view' };
     if (_initHash === 'trivia') {
         window.goToTriviaTab();
     } else if (_initHash === 'melobee') {
@@ -12490,6 +12996,9 @@ window.toggleBwPostReaction = async function(event, postId, postCollection, type
             const postAuthorUid = snap.exists() ? snap.data().uid : null;
             if (postAuthorUid && postAuthorUid !== uid) _awardAmberToUser(postAuthorUid, 1, 'like_received').catch(() => {});
         }
+
+        // Social achievements: track reactions given (likes and dislikes both count)
+        if (!hasReacted) _recordReactionGiven();
 
         // Write to Firestore
         if (snap.exists()) {
@@ -14152,6 +14661,11 @@ function bwGetDate() {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
+// Returns yesterday's date in America/New_York (for streak comparisons)
+function bwGetYesterday() {
+    return new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
 // Resolves a saved guesses array back into character objects.
 // Supports both the new format (full character snapshots, immune to later
 // edits/removals in the source character array) and the legacy format
@@ -14773,7 +15287,7 @@ function _triviaGetDaily() {
     const total = TRIVIA_QUESTIONS.length;
     const PER_DAY = 5;
     const CYCLE_DAYS = Math.floor(total / PER_DAY);
-    const dayIndex = Math.floor(Date.now() / 86400000);
+    const dayIndex = bwDayIndex(bwGetDate());
     const cycleNum = Math.floor(dayIndex / CYCLE_DAYS);
     const dayInCycle = dayIndex % CYCLE_DAYS;
 
@@ -14794,8 +15308,8 @@ window._triviaState = null;
 // Tracks consecutive daily-trivia play streak in localStorage
 function _triviaRecordPlay() {
     const stats = JSON.parse(localStorage.getItem('weebee_trivia_stats') || '{"streak":0,"lastPlayDate":""}');
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const today = bwGetDate();
+    const yesterday = bwGetYesterday();
     if (stats.lastPlayDate !== today) {
         stats.streak = stats.lastPlayDate === yesterday ? (stats.streak || 0) + 1 : 1;
         stats.lastPlayDate = today;
@@ -14809,7 +15323,7 @@ window.openTriviaGame = function() {
     const playBtn = document.getElementById('trivia-play-btn');
     if (!container) return;
     if (playBtn) playBtn.style.display = 'none';
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const saved = localStorage.getItem(`weebee_trivia_${today}`);
     if (saved) {
         const { score } = JSON.parse(saved);
@@ -14862,7 +15376,7 @@ window.triviaAnswer = function(idx) {
     setTimeout(() => {
         st.current++;
         if (st.current >= st.questions.length) {
-            const today = new Date().toISOString().split('T')[0];
+            const today = bwGetDate();
             window._saveGameState(`weebee_trivia_${today}`, JSON.stringify({ score: st.score }));
             _triviaRecordPlay();
             _triviaShowResult(st.score, false);
@@ -14878,7 +15392,7 @@ function _triviaShowResult(score, alreadyDone) {
     const emoji = score === 5 ? '🏆' : score >= 4 ? '🌟' : score >= 3 ? '👍' : score >= 2 ? '📚' : '💪';
     const msg = score === 5 ? 'Perfect score! You really know your anime!' : score >= 4 ? 'Excellent! Almost perfect!' : score >= 3 ? 'Not bad! Pretty solid anime knowledge!' : score >= 2 ? 'Keep watching and you\'ll get there!' : 'Time to hit the anime queue!';
     window._triviaShareText = '🧠 Anime Trivia — ' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '\n' + emoji + ' ' + score + '/5 on WeeBee Daily Trivia!\n\nPlay it here: https://weebee.buzz/#trivia';
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const alreadyPosted = (() => { try { return JSON.parse(localStorage.getItem('weebee_trivia_' + today) || '{}').posted; } catch(e) { return false; } })();
     const _triviaStreak = (() => { try { return JSON.parse(localStorage.getItem('weebee_trivia_stats')||'{}').streak || 0; } catch(e){ return 0; } })();
     container.innerHTML = `
@@ -15012,7 +15526,7 @@ window.deleteTriviaPost = async function(postId) {
 
 window.postTriviaToFeed = async function(btn, score) {
     if (!auth.currentUser) return window.openAuthModal();
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     btn.disabled = true; btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">campaign</span> Posting...';
     try {
         const existing = await getDocs(query(collection(db,'trivia_posts'), where('uid','==',auth.currentUser.uid), where('date','==',today)));
@@ -15120,10 +15634,10 @@ function _obSeed() {
 }
 
 function _obDaily() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const offset = parseInt(localStorage.getItem('weebee_ob_offset_' + today) || '0');
     const total = OB_POOL.length;
-    const dayIndex = Math.floor(Date.now() / 86400000);
+    const dayIndex = bwDayIndex(today);
     const cycleNum = Math.floor(dayIndex / total) + offset;
     const dayInCycle = dayIndex % total;
 
@@ -15164,7 +15678,7 @@ window.openOpeningBee = async function() {
     if (window._obState?.song?.playableAudio?.startsWith('blob:')) {
         URL.revokeObjectURL(window._obState.song.playableAudio);
     }
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const saved = JSON.parse(localStorage.getItem('weebee_ob_' + today) || 'null');
     const template = _obDaily();
     // Resolve Deezer songs fresh each load so URLs never expire
@@ -15197,7 +15711,7 @@ window.openOpeningBee = async function() {
 };
 
 function _obSave() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const st = window._obState;
     window._saveGameState('weebee_ob_' + today, JSON.stringify({ guesses: st.guesses, solved: st.solved, failed: st.failed }));
 }
@@ -15226,7 +15740,7 @@ function _obRender() {
         </div>`;
     }).join('');
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const alreadyPosted = !!localStorage.getItem('weebee_melobee_posted_' + today);
     const resultPanel = done ? `<div style="background:${st.solved ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)'};border:1px solid ${st.solved ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'};border-radius:12px;padding:20px;text-align:center;margin-top:16px;">
         <div style="font-size:28px;margin-bottom:8px;">${st.solved ? '🎉' : '😔'}</div>
@@ -15478,7 +15992,7 @@ window._obSubmitGuess = function() {
 
 window._obAdminReset = function() {
     if (!window.isAdmin) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     localStorage.removeItem('weebee_ob_' + today);
     localStorage.removeItem('weebee_melobee_posted_' + today);
     // Pick a random offset so each reset lands on a different song
@@ -15509,8 +16023,8 @@ window._obSkip = function() {
 // --- MeloBee Stats & Achievements ---
 function _mbRecordWin(guessCount) {
     const stats = JSON.parse(localStorage.getItem('weebee_mb_stats') || '{"totalWins":0,"streak":0,"lastWinDate":""}');
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const today = bwGetDate();
+    const yesterday = bwGetYesterday();
     stats.totalWins = (stats.totalWins || 0) + 1;
     stats.streak = stats.lastWinDate === yesterday ? (stats.streak || 0) + 1 : 1;
     stats.lastWinDate = today;
@@ -15543,7 +16057,7 @@ window.postMeloBeeToFeed = async function(btn) {
     if (!auth.currentUser) return window.openAuthModal();
     const st = window._obState;
     if (!st || (!st.solved && !st.failed)) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     btn.disabled = true;
     btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">campaign</span> Posting...';
     try {
@@ -15636,7 +16150,7 @@ window.loadMeloBeeFeed = async function() {
     const feed = document.getElementById('melobee-posts-feed');
     if (!feed) return;
     try {
-        const today = new Date().toISOString().split('T')[0];
+        const today = bwGetDate();
         const snap = await getDocs(query(collection(db,'melobee_posts'), where('date','==',today), limit(30)));
         if (snap.empty) { feed.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:24px;font-size:14px;">No results yet — be the first to post!</p>'; return; }
         feed.innerHTML = snap.docs.map(d => window.generateMeloBeePostCardHTML({ id: d.id, ...d.data() })).join('');
@@ -15644,17 +16158,17 @@ window.loadMeloBeeFeed = async function() {
 };
 
 window.goToMeloBeeTab = function() {
-    window.switchView('community-view');
-    document.querySelectorAll('#community-view .community-tab-content').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('#community-view .community-tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById('community-tab-opening').style.display = 'block';
+    window.switchView('games-view');
+    document.querySelectorAll('#games-view .games-tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('#games-view .games-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('games-tab-opening').style.display = 'block';
     document.getElementById('ob-tab-btn')?.classList.add('active');
     window.openOpeningBee();
 };
 
 // Mark today as done on load if already played
 (function _triviaInitStatus() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const saved = localStorage.getItem('weebee_trivia_' + today);
     if (saved) {
         const { score } = JSON.parse(saved);

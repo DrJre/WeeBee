@@ -391,12 +391,71 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 
 .review-header { display: flex; align-items: center; gap: 15px; margin-bottom: 15px; position: relative; z-index: 2; }
 .review-header span { color: var(--text-muted); font-size: 14px; }
-.review-text { font-size: 14px; line-height: 1.6; margin-bottom: 15px; position: relative; z-index: 2; }
+.review-text { font-size: 14px; line-height: 1.6; margin-bottom: 15px; position: relative; z-index: 2; white-space: pre-wrap; }
 .review-anime-thumb { position: absolute; top: 0; right: 0; height: 100%; width: 185px; object-fit: cover; opacity: 0.85; -webkit-mask-image: linear-gradient(to right, transparent 0%, black 55%); mask-image: linear-gradient(to right, transparent 0%, black 55%); z-index: 3; cursor: pointer; border-radius: 0 var(--border-radius) var(--border-radius) 0; transition: height 0.3s ease, border-radius 0.3s ease, opacity 0.2s; }
 .review-anime-thumb:hover { opacity: 1; }
 .review-anime-hint { position: absolute; bottom: 10px; right: 10px; z-index: 4; background: rgba(0,0,0,0.75); color: white; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; }
 .review-card:hover .review-anime-hint { opacity: 1; }
 .review-card.expanded .review-anime-thumb { height: 215px; border-radius: 0 var(--border-radius) 0 0; }
+
+/* Prize Wheel */
+.wheel-notif-dot { display: none; position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border-radius: 50%; background: #FF4444; box-shadow: 0 0 0 2px var(--bg-card); }
+.wheel-slice-icon { position: absolute; top: 50%; left: 50%; display: flex; align-items: center; justify-content: center; transform-origin: center; pointer-events: none; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
+.wheel-spinning { animation: wheel-glow-pulse 1s ease-in-out infinite; }
+@keyframes wheel-glow-pulse {
+    0% { box-shadow: 0 0 0 4px var(--border-color), 0 0 26px 6px rgba(244,63,94,0.55); }
+    25% { box-shadow: 0 0 0 4px var(--border-color), 0 0 32px 9px rgba(245,158,11,0.6); }
+    50% { box-shadow: 0 0 0 4px var(--border-color), 0 0 38px 12px rgba(124,58,237,0.65); }
+    75% { box-shadow: 0 0 0 4px var(--border-color), 0 0 32px 9px rgba(14,165,233,0.6); }
+    100% { box-shadow: 0 0 0 4px var(--border-color), 0 0 26px 6px rgba(244,63,94,0.55); }
+}
+.wheel-pointer-bounce { animation: wheel-pointer-bounce 0.18s ease-in-out infinite; }
+@keyframes wheel-pointer-bounce {
+    0%, 100% { transform: translateX(-50%) rotate(0deg); }
+    50% { transform: translateX(-50%) rotate(18deg); }
+}
+@keyframes wheel-confetti-burst {
+    0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.4); opacity: 0; }
+}
+
+/* Wheel outer wrapper: rotating rainbow ring + sparkles + landing flash */
+.wheel-outer { z-index: 0; }
+.wheel-ring {
+    position: absolute; inset: -14px; border-radius: 50%; z-index: -1;
+    background: conic-gradient(from 0deg, #f43f5e, #f59e0b, #facc15, #84cc16, #22c55e, #14b8a6, #0ea5e9, #6366f1, #a855f7, #ec4899, #f43f5e);
+    filter: blur(6px); opacity: 0.45;
+    animation: wheel-ring-spin 18s linear infinite;
+}
+@keyframes wheel-ring-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.wheel-active-spin .wheel-ring { animation-duration: 1.4s; opacity: 0.85; filter: blur(9px) brightness(1.3); }
+.wheel-sparkles { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.wheel-sparkle {
+    position: absolute; top: 50%; left: 50%; font-size: 18px;
+    transform: rotate(calc(var(--i) * 60deg)) translate(0, -53%);
+    animation: wheel-sparkle-twinkle 2.6s ease-in-out infinite;
+    animation-delay: calc(var(--i) * 0.4s);
+    opacity: 0.15;
+}
+@keyframes wheel-sparkle-twinkle {
+    0%, 100% { opacity: 0.1; filter: none; }
+    50% { opacity: 1; filter: drop-shadow(0 0 8px #fff); }
+}
+.wheel-flash {
+    position: absolute; inset: 0; border-radius: 50%; pointer-events: none; z-index: 6; opacity: 0;
+    background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0) 70%);
+}
+.wheel-flash.active { animation: wheel-flash-pop 0.7s ease-out; }
+@keyframes wheel-flash-pop {
+    0% { opacity: 0; transform: scale(0.6); }
+    30% { opacity: 1; transform: scale(1.08); }
+    100% { opacity: 0; transform: scale(1.35); }
+}
+.wheel-spin-btn:not(:disabled):hover { filter: brightness(1.12); transform: translate(-50%,-50%) scale(1.05); }
+.wheel-spin-btn { transition: filter 0.15s, transform 0.15s; }
 
 .source-badge { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 10px; vertical-align: middle; }
 .badge-weebee { background-color: var(--accent-yellow); color: var(--text-dark); }

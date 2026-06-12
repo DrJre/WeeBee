@@ -54,6 +54,10 @@
                     <button class="nav-btn" data-target="community-view" onclick="switchView('community-view')">
                         <span class="material-symbols-outlined">groups</span><span class="nav-label"> Community</span>
                     </button>
+                    <button class="nav-btn" data-target="games-view" onclick="switchView('games-view')" style="position:relative;">
+                        <span class="material-symbols-outlined">stadia_controller</span><span class="nav-label"> Games</span>
+                        <span class="wheel-notif-dot" style="display:none;"></span>
+                    </button>
                     <button id="tcg-nav-btn" class="nav-btn" data-target="tcg-view" onclick="switchView('tcg-view')">
                         <span class="material-symbols-outlined">style</span><span class="nav-label"> TCG</span>
                     </button>
@@ -102,6 +106,10 @@
             </button>
             <button class="nav-btn" data-target="community-view" onclick="switchView('community-view'); closeMobileMenu()">
                 <span class="material-symbols-outlined">groups</span> Community
+            </button>
+            <button class="nav-btn" data-target="games-view" onclick="switchView('games-view'); closeMobileMenu()" style="position:relative;">
+                <span class="material-symbols-outlined">stadia_controller</span> Games
+                <span class="wheel-notif-dot" style="display:none;"></span>
             </button>
             <button id="tcg-nav-btn-mobile" class="nav-btn" data-target="tcg-view" onclick="switchView('tcg-view'); closeMobileMenu()">
                 <span class="material-symbols-outlined">style</span> TCG
@@ -474,16 +482,7 @@
 
                     <!-- COMMUNITY TABS -->
                     <div class="detail-tabs" style="margin-bottom:24px;">
-                        <button class="detail-tab active community-tab-btn" onclick="switchCommunityTab(event,'community-tab-buzzword')">
-                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">grid_view</span> BuzzWord
-                        </button>
-                        <button id="ob-tab-btn" class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-opening'); window.openOpeningBee(); window.loadMeloBeeFeed();">
-                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">music_note</span> MeloBee
-                        </button>
-                        <button class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-trivia'); window.loadTriviaFeed();">
-                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">quiz</span> Trivia
-                        </button>
-                        <button class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-tierlists')">
+                        <button class="detail-tab active community-tab-btn" onclick="switchCommunityTab(event,'community-tab-tierlists')">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">leaderboard</span> Tier Lists
                         </button>
                         <button class="detail-tab community-tab-btn" onclick="switchCommunityTab(event,'community-tab-hottakes'); window.loadHotTakes();">
@@ -500,111 +499,8 @@
                         </button>
                     </div>
 
-                    <!-- BUZZWORD TAB -->
-                    <div id="community-tab-buzzword" class="community-tab-content">
-
-                    <!-- BUZZWORD HERO BANNER -->
-                    <div class="bw-banner-hero" style="border-radius:20px; padding:36px 32px; margin-bottom:20px; text-align:center; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden;">
-                        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%, rgba(139,0,0,0.25) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(0,96,128,0.2) 0%, transparent 60%); pointer-events:none;"></div>
-                        <div style="position:relative; z-index:1;">
-                            <div style="font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:8px;">WeeBee</div>
-                            <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">🟨 BuzzWord 🟨</div>
-                            <div style="font-size:15px; color:rgba(255,255,255,0.55); margin-top:10px;">Guess the daily anime characters — new puzzles every day</div>
-                        </div>
-                    </div>
-
-                    <!-- BUZZWORD: ONE PIECE CHARACTERS THUMBNAIL -->
-                    <div class="bw-banner-op" onclick="window.openBwOpModal()" style="cursor:pointer; border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid #8B0000; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
-                        <img id="bwop-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:0; height:100%; width:160px; object-fit:cover; object-position:center 20%; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
-                        <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">⚓</div>
-                        <div style="flex:1; min-width:0; position:relative; z-index:1;">
-                            <div style="font-size:20px; font-weight:800; color:#FFD700; margin-bottom:4px;">BuzzWord: One Piece Characters</div>
-                            <div style="font-size:13px; color:rgba(255,255,255,0.75);">Guess today's One Piece character — new puzzle every day!</div>
-                            <div id="bwop-status-text" style="font-size:12px; color:#FFD700; margin-top:6px; font-weight:600;"></div>
-                        </div>
-                        <div class="action-btn" style="pointer-events:none; background:#FFD700; color:#111; flex-shrink:0; font-weight:800; position:relative; z-index:1;">Play →</div>
-                    </div>
-
-                    <!-- BUZZWORD: NARUTO CHARACTERS THUMBNAIL -->
-                    <div class="bw-banner-nrt" onclick="window.openBwNrtModal()" style="cursor:pointer; border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid var(--accent-yellow); transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
-                        <img id="bwnrt-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:0; height:100%; width:160px; object-fit:cover; object-position:center 20%; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
-                        <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">🍃</div>
-                        <div style="flex:1; min-width:0; position:relative; z-index:1;">
-                            <div style="font-size:20px; font-weight:800; color:#FF8C00; margin-bottom:4px;">BuzzWord: Naruto Characters</div>
-                            <div style="font-size:13px; color:rgba(255,255,255,0.75);">Guess today's Naruto character — new puzzle every day!</div>
-                            <div id="bwnrt-status-text" style="font-size:12px; color:#FF8C00; margin-top:6px; font-weight:600;"></div>
-                        </div>
-                        <div class="action-btn" style="pointer-events:none; background:#FF8C00; color:#111; flex-shrink:0; font-weight:800; position:relative; z-index:1;">Play →</div>
-                    </div>
-
-                    <!-- BUZZWORD: BLEACH CHARACTERS THUMBNAIL -->
-                    <div class="bw-banner-blc" onclick="window.openBwBlcModal()" style="cursor:pointer; border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid #006080; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
-                        <img id="bwblc-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:0; height:100%; width:160px; object-fit:cover; object-position:center 20%; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
-                        <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">⚔️</div>
-                        <div style="flex:1; min-width:0; position:relative; z-index:1;">
-                            <div style="font-size:20px; font-weight:800; color:#00BCD4; margin-bottom:4px;">BuzzWord: Bleach Characters</div>
-                            <div style="font-size:13px; color:rgba(255,255,255,0.75);">Guess today's Bleach character — new puzzle every day!</div>
-                            <div id="bwblc-status-text" style="font-size:12px; color:#00BCD4; margin-top:6px; font-weight:600;"></div>
-                        </div>
-                        <div class="action-btn" style="pointer-events:none; background:#00BCD4; color:#111; flex-shrink:0; font-weight:800; position:relative; z-index:1;">Play →</div>
-                    </div>
-
-                    <!-- BUZZWORD: DRAGON BALL CHARACTERS THUMBNAIL -->
-                    <div class="bw-banner-db" onclick="window.openBwDbModal()" style="cursor:pointer; border-radius:16px; padding:20px 24px; margin-bottom:20px; display:flex; align-items:center; gap:18px; border:2px solid #FF6F00; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
-                        <img id="bwdb-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:-30px; height:130%; width:160px; object-fit:cover; object-position:center top; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
-                        <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">🐉</div>
-                        <div style="flex:1; min-width:0; position:relative; z-index:1;">
-                            <div style="font-size:20px; font-weight:800; color:#FF6F00; margin-bottom:4px;">BuzzWord: Dragon Ball Characters</div>
-                            <div style="font-size:13px; color:rgba(255,255,255,0.75);">Guess today's Dragon Ball character — new puzzle every day!</div>
-                            <div id="bwdb-status-text" style="font-size:12px; color:#FF6F00; margin-top:6px; font-weight:600;"></div>
-                        </div>
-                        <div class="action-btn" style="pointer-events:none; background:#FF6F00; color:#111; flex-shrink:0; font-weight:800; position:relative; z-index:1;">Play →</div>
-                    </div>
-
-                    <!-- BUZZWORD — TODAY'S COMMUNITY RESULTS (ALL GAMES) -->
-                    <div style="margin-bottom: 40px;">
-                        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-                            <h3 style="margin:0; font-size:15px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">🎮 Today's Results</h3>
-                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                <button onclick="window.openBwOpLeaderboard()" class="action-btn" style="font-size:12px; padding:6px 12px;">
-                                    <span class="material-symbols-outlined" style="font-size:14px;">leaderboard</span> ⚓ OP Board
-                                </button>
-                                <button onclick="window.openBwNrtLeaderboard()" class="action-btn" style="font-size:12px; padding:6px 12px; background:#7a3300; color:#FF8C00;">
-                                    <span class="material-symbols-outlined" style="font-size:14px;">leaderboard</span> 🍃 NRT Board
-                                </button>
-                                <button onclick="window.openBwBlcLeaderboard()" class="action-btn" style="font-size:12px; padding:6px 12px; background:#006080; color:#00BCD4;">
-                                    <span class="material-symbols-outlined" style="font-size:14px;">leaderboard</span> ⚔️ BLC Board
-                                </button>
-                                <button onclick="window.openBwDbLeaderboard()" class="action-btn" style="font-size:12px; padding:6px 12px; background:#4a1f00; color:#FF6F00;">
-                                    <span class="material-symbols-outlined" style="font-size:14px;">leaderboard</span> 🐉 DB Board
-                                </button>
-                            </div>
-                        </div>
-                        <div id="bw-community-feed"><div class="loading">Loading results...</div></div>
-                    </div>
-
-                    </div><!-- /community-tab-buzzword -->
-
-                    <!-- TRIVIA TAB -->
-                    <div id="community-tab-trivia" class="community-tab-content" style="display:none;">
-                        <div class="trivia-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:20px;text-align:center;position:relative;overflow:hidden;">
-                            <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(156,39,176,0.35) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(103,58,183,0.25) 0%,transparent 60%);pointer-events:none;"></div>
-                            <div style="position:relative;z-index:1;">
-                                <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
-                                <div style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🧠 Daily Trivia 🧠</div>
-                                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;">5 questions · New quiz every day · How much do you know?</div>
-                            </div>
-                        </div>
-                        <button onclick="window.openTriviaGame()" id="trivia-play-btn" class="action-btn" style="width:100%;justify-content:center;padding:16px;font-size:16px;font-weight:800;background:#9C27B0;color:white;border-radius:12px;margin-bottom:20px;">Play Today's Trivia →</button>
-                        <div id="trivia-game-container"></div>
-                        <div style="margin-top:28px;padding-top:24px;border-top:1px solid var(--border-color);">
-                            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:14px;">Today's Scores</div>
-                            <div id="trivia-posts-feed"><div class="loading">Loading scores...</div></div>
-                        </div>
-                    </div><!-- /community-tab-trivia -->
-
                     <!-- TIER LISTS TAB -->
-                    <div id="community-tab-tierlists" class="community-tab-content" style="display:none;">
+                    <div id="community-tab-tierlists" class="community-tab-content">
 
                     <!-- TIER LISTS HERO BANNER -->
                     <div class="tl-banner-hero" style="border-radius:20px; padding:36px 32px; margin-bottom:20px; text-align:center; position:relative; overflow:hidden;">
@@ -796,8 +692,132 @@
                         <div id="leaderboard-container"></div>
                     </div><!-- /community-tab-leaderboard -->
 
+
+                </div><!-- /community-view -->
+                <div id="games-view" class="view">
+
+                    <!-- GAMES TABS -->
+                    <div class="detail-tabs" style="margin-bottom:24px;">
+                        <button class="detail-tab active games-tab-btn" onclick="switchGamesTab(event,'games-tab-buzzword')">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">grid_view</span> BuzzWord
+                        </button>
+                        <button id="ob-tab-btn" class="detail-tab games-tab-btn" onclick="switchGamesTab(event,'games-tab-opening'); window.openOpeningBee(); window.loadMeloBeeFeed();">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">music_note</span> MeloBee
+                        </button>
+                        <button class="detail-tab games-tab-btn" onclick="switchGamesTab(event,'games-tab-trivia'); window.loadTriviaFeed();">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">quiz</span> Trivia
+                        </button>
+                        <button id="games-tab-wheel-btn" class="detail-tab games-tab-btn" style="display:none;position:relative;" onclick="switchGamesTab(event,'games-tab-wheel')">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">casino</span> Wheel
+                            <span class="wheel-notif-dot" style="display:none;"></span>
+                        </button>
+                    </div>
+
+                    <!-- BUZZWORD TAB -->
+                    <div id="games-tab-buzzword" class="games-tab-content">
+
+                    <!-- BUZZWORD HERO BANNER -->
+                    <div class="bw-banner-hero" style="border-radius:20px; padding:36px 32px; margin-bottom:20px; text-align:center; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden;">
+                        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%, rgba(139,0,0,0.25) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(0,96,128,0.2) 0%, transparent 60%); pointer-events:none;"></div>
+                        <div style="position:relative; z-index:1;">
+                            <div style="font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:8px;">WeeBee</div>
+                            <div style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">🟨 BuzzWord 🟨</div>
+                            <div style="font-size:15px; color:rgba(255,255,255,0.55); margin-top:10px;">Guess the daily anime characters — new puzzles every day</div>
+                        </div>
+                    </div>
+
+                    <!-- BUZZWORD: ONE PIECE CHARACTERS THUMBNAIL -->
+                    <div class="bw-banner-op" onclick="window.openBwOpModal()" style="cursor:pointer; border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid #8B0000; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+                        <img id="bwop-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:0; height:100%; width:160px; object-fit:cover; object-position:center 20%; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
+                        <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">⚓</div>
+                        <div style="flex:1; min-width:0; position:relative; z-index:1;">
+                            <div style="font-size:20px; font-weight:800; color:#FFD700; margin-bottom:4px;">BuzzWord: One Piece Characters</div>
+                            <div style="font-size:13px; color:rgba(255,255,255,0.75);">Guess today's One Piece character — new puzzle every day!</div>
+                            <div id="bwop-status-text" style="font-size:12px; color:#FFD700; margin-top:6px; font-weight:600;"></div>
+                        </div>
+                        <div class="action-btn" style="pointer-events:none; background:#FFD700; color:#111; flex-shrink:0; font-weight:800; position:relative; z-index:1;">Play →</div>
+                    </div>
+
+                    <!-- BUZZWORD: NARUTO CHARACTERS THUMBNAIL -->
+                    <div class="bw-banner-nrt" onclick="window.openBwNrtModal()" style="cursor:pointer; border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid var(--accent-yellow); transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+                        <img id="bwnrt-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:0; height:100%; width:160px; object-fit:cover; object-position:center 20%; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
+                        <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">🍃</div>
+                        <div style="flex:1; min-width:0; position:relative; z-index:1;">
+                            <div style="font-size:20px; font-weight:800; color:#FF8C00; margin-bottom:4px;">BuzzWord: Naruto Characters</div>
+                            <div style="font-size:13px; color:rgba(255,255,255,0.75);">Guess today's Naruto character — new puzzle every day!</div>
+                            <div id="bwnrt-status-text" style="font-size:12px; color:#FF8C00; margin-top:6px; font-weight:600;"></div>
+                        </div>
+                        <div class="action-btn" style="pointer-events:none; background:#FF8C00; color:#111; flex-shrink:0; font-weight:800; position:relative; z-index:1;">Play →</div>
+                    </div>
+
+                    <!-- BUZZWORD: BLEACH CHARACTERS THUMBNAIL -->
+                    <div class="bw-banner-blc" onclick="window.openBwBlcModal()" style="cursor:pointer; border-radius:16px; padding:20px 24px; margin-bottom:12px; display:flex; align-items:center; gap:18px; border:2px solid #006080; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+                        <img id="bwblc-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:0; height:100%; width:160px; object-fit:cover; object-position:center 20%; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
+                        <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">⚔️</div>
+                        <div style="flex:1; min-width:0; position:relative; z-index:1;">
+                            <div style="font-size:20px; font-weight:800; color:#00BCD4; margin-bottom:4px;">BuzzWord: Bleach Characters</div>
+                            <div style="font-size:13px; color:rgba(255,255,255,0.75);">Guess today's Bleach character — new puzzle every day!</div>
+                            <div id="bwblc-status-text" style="font-size:12px; color:#00BCD4; margin-top:6px; font-weight:600;"></div>
+                        </div>
+                        <div class="action-btn" style="pointer-events:none; background:#00BCD4; color:#111; flex-shrink:0; font-weight:800; position:relative; z-index:1;">Play →</div>
+                    </div>
+
+                    <!-- BUZZWORD: DRAGON BALL CHARACTERS THUMBNAIL -->
+                    <div class="bw-banner-db" onclick="window.openBwDbModal()" style="cursor:pointer; border-radius:16px; padding:20px 24px; margin-bottom:20px; display:flex; align-items:center; gap:18px; border:2px solid #FF6F00; transition:filter 0.2s; position:relative; overflow:hidden; min-height:90px;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+                        <img id="bwdb-banner-img" src="" alt="" style="display:none; position:absolute; right:0; top:-30px; height:130%; width:160px; object-fit:cover; object-position:center top; opacity:0.4; mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,0.9) 50%); pointer-events:none;">
+                        <div style="font-size:44px; flex-shrink:0; position:relative; z-index:1;">🐉</div>
+                        <div style="flex:1; min-width:0; position:relative; z-index:1;">
+                            <div style="font-size:20px; font-weight:800; color:#FF6F00; margin-bottom:4px;">BuzzWord: Dragon Ball Characters</div>
+                            <div style="font-size:13px; color:rgba(255,255,255,0.75);">Guess today's Dragon Ball character — new puzzle every day!</div>
+                            <div id="bwdb-status-text" style="font-size:12px; color:#FF6F00; margin-top:6px; font-weight:600;"></div>
+                        </div>
+                        <div class="action-btn" style="pointer-events:none; background:#FF6F00; color:#111; flex-shrink:0; font-weight:800; position:relative; z-index:1;">Play →</div>
+                    </div>
+
+                    <!-- BUZZWORD — TODAY'S COMMUNITY RESULTS (ALL GAMES) -->
+                    <div style="margin-bottom: 40px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                            <h3 style="margin:0; font-size:15px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">🎮 Today's Results</h3>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                <button onclick="window.openBwOpLeaderboard()" class="action-btn" style="font-size:12px; padding:6px 12px;">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">leaderboard</span> ⚓ OP Board
+                                </button>
+                                <button onclick="window.openBwNrtLeaderboard()" class="action-btn" style="font-size:12px; padding:6px 12px; background:#7a3300; color:#FF8C00;">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">leaderboard</span> 🍃 NRT Board
+                                </button>
+                                <button onclick="window.openBwBlcLeaderboard()" class="action-btn" style="font-size:12px; padding:6px 12px; background:#006080; color:#00BCD4;">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">leaderboard</span> ⚔️ BLC Board
+                                </button>
+                                <button onclick="window.openBwDbLeaderboard()" class="action-btn" style="font-size:12px; padding:6px 12px; background:#4a1f00; color:#FF6F00;">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">leaderboard</span> 🐉 DB Board
+                                </button>
+                            </div>
+                        </div>
+                        <div id="bw-community-feed"><div class="loading">Loading results...</div></div>
+                    </div>
+
+                    </div><!-- /games-tab-buzzword -->
+
+                    <!-- TRIVIA TAB -->
+                    <div id="games-tab-trivia" class="games-tab-content" style="display:none;">
+                        <div class="trivia-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:20px;text-align:center;position:relative;overflow:hidden;">
+                            <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(156,39,176,0.35) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(103,58,183,0.25) 0%,transparent 60%);pointer-events:none;"></div>
+                            <div style="position:relative;z-index:1;">
+                                <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
+                                <div style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🧠 Daily Trivia 🧠</div>
+                                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;">5 questions · New quiz every day · How much do you know?</div>
+                            </div>
+                        </div>
+                        <button onclick="window.openTriviaGame()" id="trivia-play-btn" class="action-btn" style="width:100%;justify-content:center;padding:16px;font-size:16px;font-weight:800;background:#9C27B0;color:white;border-radius:12px;margin-bottom:20px;">Play Today's Trivia →</button>
+                        <div id="trivia-game-container"></div>
+                        <div style="margin-top:28px;padding-top:24px;border-top:1px solid var(--border-color);">
+                            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:14px;">Today's Scores</div>
+                            <div id="trivia-posts-feed"><div class="loading">Loading scores...</div></div>
+                        </div>
+                    </div><!-- /games-tab-trivia -->
+
                     <!-- OPENING BEE TAB (admin test) -->
-                    <div id="community-tab-opening" class="community-tab-content" style="display:none;">
+                    <div id="games-tab-opening" class="games-tab-content" style="display:none;">
                         <!-- Banner -->
                         <div class="melobee-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:24px;text-align:center;position:relative;overflow:hidden;">
                             <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(34,197,94,0.35) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(16,185,129,0.25) 0%,transparent 60%);pointer-events:none;"></div>
@@ -815,9 +835,15 @@
                             <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:14px;">Today's Results</div>
                             <div id="melobee-posts-feed"><div class="loading">Loading results...</div></div>
                         </div>
-                    </div><!-- /community-tab-opening -->
+                    </div><!-- /games-tab-opening -->
 
-                </div><!-- /community-view -->
+                    <!-- PRIZE WHEEL TAB -->
+                    <div id="games-tab-wheel" class="games-tab-content" style="display:none;">
+                        <div id="wheel-tab-content"><div class="loading">Loading wheel...</div></div>
+                    </div><!-- /games-tab-wheel -->
+
+                </div><!-- /games-view -->
+
 
                 <div id="tcg-view" class="view">
 
@@ -1010,6 +1036,7 @@
                                 <option value="rock_lee">Rock Lee (Naruto, UR)</option>
                                 <option value="zoro">Zoro (One Piece, UR)</option>
                                 <option value="luffy">Luffy (One Piece, UR)</option>
+                                <option value="no_face">No Face (Spirited Away, UR)</option>
                             </select>
                             <div id="founder-card-preview" style="margin-bottom:14px;"></div>
                             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
