@@ -174,12 +174,15 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     .profile-side-deck { order: 0; width: 100%; min-width: 0; }
     .profile-card { width: 100%; box-sizing: border-box; }
 
-    /* Profile header */
-    .profile-banner { min-height: 200px; }
+    /* Profile header — stack into a centered column on mobile */
+    .profile-banner { min-height: 230px; }
     .profile-banner-overlay { padding: 14px 14px 16px; }
-    .profile-banner-overlay > div { width: 100%; }
-    .profile-banner-overlay > div > div:last-child { padding-right: 84px; }
-    .profile-avatar-large { width: 60px; height: 60px; }
+    .profile-banner-overlay > div { width: 100%; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+    .profile-banner-overlay > div > div:last-child { padding-right: 0; width: 100%; display: flex; flex-direction: column; align-items: center; }
+    .profile-banner-overlay > div > div:last-child > div:first-child,
+    .profile-banner-overlay > div > div:last-child > div { justify-content: center; }
+    #profile-follow-counts { justify-content: center; }
+    .profile-avatar-large { width: 64px; height: 64px; }
 
     /* Review cards */
     .review-anime-thumb { display: none; }
@@ -242,6 +245,8 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     /* Profile card showcase — fit 2 columns on narrow phones */
     #profile-card-showcase > div { padding: 14px 10px; }
     .profile-showcase-grid { gap: 10px !important; }
+    .showcase-card-frame { width: 110px !important; height: 154px !important; }
+    .showcase-card-scale { transform: scale(0.5) !important; }
 
     /* Carousel arrows — pull them in so they don't clip */
     .carousel-arrow.left { left: -8px; }

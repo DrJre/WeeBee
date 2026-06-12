@@ -7488,8 +7488,8 @@ window._tcgRenderProfileShowcase = async function(uid) {
             </div>
             <div class="profile-showcase-grid" style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;">
                 ${cards.map(card => `
-                    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-                        <div style="width:140px;height:196px;overflow:hidden;"><div style="transform:scale(0.636);transform-origin:top left;">${_tcgBuildCardFace(card)}</div></div>
+                    <div class="showcase-card-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                        <div class="showcase-card-frame" style="width:140px;height:196px;overflow:hidden;"><div class="showcase-card-scale" style="transform:scale(0.636);transform-origin:top left;">${_tcgBuildCardFace(card)}</div></div>
                         ${card.founder ? `<div style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : (card.monthlyUr ? `<div style="font-size:11px;color:#ffd700;font-weight:700;">${card.stampText}</div>` : (card.serial != null ? `<div style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''))}
                     </div>`).join('')}
             </div>
@@ -7514,7 +7514,7 @@ window._tcgOpenShowcasePicker = async function() {
                 <div style="font-size:17px;font-weight:800;color:var(--text-dark);">Edit Card Showcase</div>
                 <button onclick="document.getElementById('tcg-showcase-picker-modal').remove();window._tcgRenderProfileShowcase('${uid}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
             </div>
-            <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Pick up to 5 cards to feature on your profile.</p>
+            <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Pick up to 6 cards to feature on your profile.</p>
             <div id="tcg-showcase-picker-grid" style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;"><div style="padding:40px;color:var(--text-muted);">Loading…</div></div>
         </div>`;
     document.body.appendChild(modal);
@@ -7554,7 +7554,7 @@ window._tcgOpenShowcasePicker = async function() {
     };
 };
 
-// Pins/unpins a card for the current user's profile showcase (max 5).
+// Pins/unpins a card for the current user's profile showcase (max 6).
 window._tcgTogglePin = async function(cardId, profileUid) {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
@@ -7564,7 +7564,7 @@ window._tcgTogglePin = async function(cardId, profileUid) {
         if (pins.includes(cardId)) {
             pins = pins.filter(id => id !== cardId);
         } else {
-            if (pins.length >= 5) { alert('You can only showcase up to 5 cards — unpin one first.'); return; }
+            if (pins.length >= 6) { alert('You can only showcase up to 6 cards — unpin one first.'); return; }
             pins = [...pins, cardId];
         }
         await setDoc(doc(db, 'profiles', uid), { pinnedTcgCardIds: pins }, { merge: true });
