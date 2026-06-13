@@ -8,6 +8,8 @@
     --text-muted: #888888;
     --border-radius: 16px;
     --border-color: #E0E0E0;
+    --stats-bg: #eef0f2;
+    --stats-ink: 0, 0, 0;
 }
 
 [data-theme="dark"] {
@@ -19,6 +21,8 @@
     --text-dark: #E8E8E8;
     --text-muted: #888888;
     --border-color: #2e2e2e;
+    --stats-bg: var(--bg-gray);
+    --stats-ink: 255, 255, 255;
 }
 
 [data-theme="dark"] body { background-color: var(--bg-white); color: var(--text-dark); }

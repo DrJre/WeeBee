@@ -3393,31 +3393,36 @@ window.loadProfileStats = async function(uid) {
             </div>` : '';
 
         // Wrapped section helper
+        // These "Wrapped"-style sections use --stats-bg/--stats-ink, which
+        // intentionally differ from the normal theme vars: light mode gets a
+        // light card with dark text (the default bg-gray was unreadably pale
+        // with the white text these sections used to have), while dark mode
+        // keeps its original dark card with light text.
         const wSection = (glow, content) =>
-            `<div style="border-radius:20px;padding:28px 22px;margin-bottom:14px;position:relative;overflow:hidden;background:var(--bg-gray);">
+            `<div style="border-radius:20px;padding:28px 22px;margin-bottom:14px;position:relative;overflow:hidden;background:var(--stats-bg);">
                 <div style="position:absolute;inset:0;${glow};pointer-events:none;"></div>
                 <div style="position:relative;z-index:1;">${content}</div>
             </div>`;
 
         const bigStat = (value, label, sub='') =>
             `<div style="text-align:center;">
-                <div style="font-size:56px;font-weight:900;color:white;letter-spacing:-2px;line-height:1;">${value}</div>
-                <div style="font-size:15px;font-weight:700;color:rgba(255,255,255,0.65);margin-top:4px;">${label}</div>
-                ${sub ? `<div style="font-size:12px;color:rgba(255,255,255,0.38);margin-top:4px;">${sub}</div>` : ''}
+                <div style="font-size:56px;font-weight:900;color:rgb(var(--stats-ink));letter-spacing:-2px;line-height:1;">${value}</div>
+                <div style="font-size:15px;font-weight:700;color:rgba(var(--stats-ink),0.65);margin-top:4px;">${label}</div>
+                ${sub ? `<div style="font-size:12px;color:rgba(var(--stats-ink),0.38);margin-top:4px;">${sub}</div>` : ''}
             </div>`;
 
         const pill = (text, accent='var(--bg-gray-darker)') =>
-            `<span style="background:${accent};border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;color:white;">${text}</span>`;
+            `<span style="background:${accent};border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;color:rgb(var(--stats-ink));">${text}</span>`;
 
         container.innerHTML = `
             <!-- ── HERO ── -->
             ${wSection('background:radial-gradient(ellipse at 25% 50%,rgba(99,102,241,0.4) 0%,transparent 55%),radial-gradient(ellipse at 75% 50%,rgba(139,92,246,0.3) 0%,transparent 55%)', `
-                <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.35);margin-bottom:14px;text-align:center;">Your WeeBee Stats</div>
+                <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(var(--stats-ink),0.35);margin-bottom:14px;text-align:center;">Your WeeBee Stats</div>
                 <div style="display:flex;justify-content:center;gap:32px;flex-wrap:wrap;">
                     ${bigStat(reviews.length, 'reviews written', memberLabel ? `member for ${memberLabel}` : '')}
                     ${avgScore ? bigStat(avgScore, 'average score', 'out of 10') : ''}
                 </div>
-                ${topMonthLabel ? `<div style="text-align:center;margin-top:18px;font-size:13px;color:rgba(255,255,255,0.4);">Most active month: <strong style="color:rgba(255,255,255,0.75);">${topMonthLabel}</strong></div>` : ''}
+                ${topMonthLabel ? `<div style="text-align:center;margin-top:18px;font-size:13px;color:rgba(var(--stats-ink),0.4);">Most active month: <strong style="color:rgba(var(--stats-ink),0.75);">${topMonthLabel}</strong></div>` : ''}
             `)}
 
             <!-- ── WATCH TIME ── -->
@@ -3428,13 +3433,13 @@ window.loadProfileStats = async function(uid) {
                     ${bigStat(completed, 'completed', 'anime finished')}
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                    <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:14px;text-align:center;">
-                        <div style="font-size:24px;font-weight:900;color:white;">${watching}</div>
-                        <div style="font-size:11px;color:rgba(255,255,255,0.45);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;">Watching</div>
+                    <div style="background:rgba(var(--stats-ink),0.06);border-radius:12px;padding:14px;text-align:center;">
+                        <div style="font-size:24px;font-weight:900;color:rgb(var(--stats-ink));">${watching}</div>
+                        <div style="font-size:11px;color:rgba(var(--stats-ink),0.45);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;">Watching</div>
                     </div>
-                    <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:14px;text-align:center;">
-                        <div style="font-size:24px;font-weight:900;color:white;">${planToWatch}</div>
-                        <div style="font-size:11px;color:rgba(255,255,255,0.45);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;">Plan to Watch</div>
+                    <div style="background:rgba(var(--stats-ink),0.06);border-radius:12px;padding:14px;text-align:center;">
+                        <div style="font-size:24px;font-weight:900;color:rgb(var(--stats-ink));">${planToWatch}</div>
+                        <div style="font-size:11px;color:rgba(var(--stats-ink),0.45);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;">Plan to Watch</div>
                     </div>
                 </div>
             `)}
@@ -3442,39 +3447,39 @@ window.loadProfileStats = async function(uid) {
             <!-- ── TASTE ── -->
             ${topGenres.length ? wSection('background:radial-gradient(ellipse at 20% 50%,rgba(236,72,153,0.28) 0%,transparent 55%),radial-gradient(ellipse at 80% 50%,rgba(249,115,22,0.2) 0%,transparent 55%)', `
                 <div style="font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(249,115,22,0.75);margin-bottom:10px;">Your Taste</div>
-                <div style="font-size:28px;font-weight:900;color:white;margin-bottom:16px;">Your #1 genre is <span style="color:#f97316;">${topGenres[0][0]}</span></div>
+                <div style="font-size:28px;font-weight:900;color:rgb(var(--stats-ink));margin-bottom:16px;">Your #1 genre is <span style="color:#f97316;">${topGenres[0][0]}</span></div>
                 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:${topStudios.length ? '18px' : '0'};">
-                    ${topGenres.map(([g,c], i) => `<span style="background:${i===0?'rgba(249,115,22,0.35)':'rgba(255,255,255,0.08)'};border:1px solid ${i===0?'rgba(249,115,22,0.5)':'rgba(255,255,255,0.1)'};border-radius:20px;padding:6px 14px;font-size:13px;font-weight:700;color:white;">${g} <span style="opacity:0.5;font-weight:400;">${c}</span></span>`).join('')}
+                    ${topGenres.map(([g,c], i) => `<span style="background:${i===0?'rgba(249,115,22,0.35)':'rgba(var(--stats-ink),0.08)'};border:1px solid ${i===0?'rgba(249,115,22,0.5)':'rgba(var(--stats-ink),0.1)'};border-radius:20px;padding:6px 14px;font-size:13px;font-weight:700;color:rgb(var(--stats-ink));">${g} <span style="opacity:0.5;font-weight:400;">${c}</span></span>`).join('')}
                 </div>
-                ${topStudios.length ? `<div style="font-size:12px;color:rgba(255,255,255,0.35);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Favourite Studios</div>
+                ${topStudios.length ? `<div style="font-size:12px;color:rgba(var(--stats-ink),0.35);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Favourite Studios</div>
                 <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                    ${topStudios.map(([s,c], i) => `<span style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;color:white;">${s}</span>`).join('')}
+                    ${topStudios.map(([s,c], i) => `<span style="background:rgba(var(--stats-ink),0.07);border:1px solid rgba(var(--stats-ink),0.1);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;color:rgb(var(--stats-ink));">${s}</span>`).join('')}
                 </div>` : ''}
             `) : ''}
 
             <!-- ── SCORE STORY ── -->
             ${scoredReviews.length ? wSection('background:radial-gradient(ellipse at 50% 80%,rgba(234,179,8,0.2) 0%,transparent 60%)', `
                 <div style="font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(234,179,8,0.7);margin-bottom:10px;">Score Story</div>
-                ${mostCommonScore && mostCommonScore[1] > 0 ? `<div style="font-size:20px;font-weight:800;color:white;margin-bottom:18px;">You most often give a <span style="color:#FFC107;">${mostCommonScore[0]}/10</span></div>` : ''}
+                ${mostCommonScore && mostCommonScore[1] > 0 ? `<div style="font-size:20px;font-weight:800;color:rgb(var(--stats-ink));margin-bottom:18px;">You most often give a <span style="color:#FFC107;">${mostCommonScore[0]}/10</span></div>` : ''}
                 <div style="display:flex;align-items:flex-end;gap:4px;height:80px;margin-bottom:6px;">
                     ${Object.entries(dist).map(([score, count]) => `
                         <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
-                            <div style="font-size:8px;color:rgba(255,255,255,0.4);font-weight:700;">${count||''}</div>
+                            <div style="font-size:8px;color:rgba(var(--stats-ink),0.4);font-weight:700;">${count||''}</div>
                             <div style="width:100%;background:#FFC107;border-radius:3px 3px 0 0;height:${Math.round((count/maxDist)*58)}px;min-height:${count>0?3:0}px;opacity:${count>0?1:0.15};"></div>
                         </div>`).join('')}
                 </div>
                 <div style="display:flex;gap:4px;">
-                    ${Object.keys(dist).map(s => `<div style="flex:1;text-align:center;font-size:10px;font-weight:700;color:rgba(255,255,255,0.35);">${s}</div>`).join('')}
+                    ${Object.keys(dist).map(s => `<div style="flex:1;text-align:center;font-size:10px;font-weight:700;color:rgba(var(--stats-ink),0.35);">${s}</div>`).join('')}
                 </div>
                 ${(highReview || lowReview) ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">
-                    ${highReview ? `<div style="background:rgba(255,255,255,0.06);border-radius:10px;padding:12px;">
-                        <div style="font-size:10px;color:rgba(255,255,255,0.35);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Highest Rated</div>
-                        <div style="font-size:13px;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${highReview.animeTitle||'—'}</div>
+                    ${highReview ? `<div style="background:rgba(var(--stats-ink),0.06);border-radius:10px;padding:12px;">
+                        <div style="font-size:10px;color:rgba(var(--stats-ink),0.35);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Highest Rated</div>
+                        <div style="font-size:13px;font-weight:700;color:rgb(var(--stats-ink));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${highReview.animeTitle||'—'}</div>
                         <div style="font-size:18px;font-weight:900;color:#FFC107;">${highReview.score}</div>
                     </div>` : ''}
-                    ${lowReview && lowReview.mal_id !== highReview?.mal_id ? `<div style="background:rgba(255,255,255,0.06);border-radius:10px;padding:12px;">
-                        <div style="font-size:10px;color:rgba(255,255,255,0.35);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Lowest Rated</div>
-                        <div style="font-size:13px;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${lowReview.animeTitle||'—'}</div>
+                    ${lowReview && lowReview.mal_id !== highReview?.mal_id ? `<div style="background:rgba(var(--stats-ink),0.06);border-radius:10px;padding:12px;">
+                        <div style="font-size:10px;color:rgba(var(--stats-ink),0.35);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Lowest Rated</div>
+                        <div style="font-size:13px;font-weight:700;color:rgb(var(--stats-ink));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${lowReview.animeTitle||'—'}</div>
                         <div style="font-size:18px;font-weight:900;color:rgba(255,100,100,0.9);">${lowReview.score}</div>
                     </div>` : ''}
                 </div>` : ''}
@@ -3486,14 +3491,14 @@ window.loadProfileStats = async function(uid) {
                 <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
                     <span class="material-symbols-outlined" style="font-size:40px;color:${rankInfo.color};">${rankInfo.icon}</span>
                     <div>
-                        <div style="font-size:26px;font-weight:900;color:white;">${rankInfo.name}</div>
-                        <div style="font-size:13px;color:rgba(255,255,255,0.45);">${reviews.length} review${reviews.length !== 1 ? 's' : ''} written</div>
+                        <div style="font-size:26px;font-weight:900;color:rgb(var(--stats-ink));">${rankInfo.name}</div>
+                        <div style="font-size:13px;color:rgba(var(--stats-ink),0.45);">${reviews.length} review${reviews.length !== 1 ? 's' : ''} written</div>
                     </div>
                 </div>
-                ${rankInfo.next ? `<div style="background:rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;height:10px;margin-bottom:8px;">
+                ${rankInfo.next ? `<div style="background:rgba(var(--stats-ink),0.08);border-radius:8px;overflow:hidden;height:10px;margin-bottom:8px;">
                     <div style="height:100%;background:linear-gradient(90deg,#FFC107,#f97316);border-radius:8px;width:${rankPct}%;transition:width .5s;"></div>
                 </div>
-                <div style="font-size:12px;color:rgba(255,255,255,0.4);">${rankInfo.next - reviews.length} more review${rankInfo.next - reviews.length !== 1 ? 's' : ''} to next rank</div>`
+                <div style="font-size:12px;color:rgba(var(--stats-ink),0.4);">${rankInfo.next - reviews.length} more review${rankInfo.next - reviews.length !== 1 ? 's' : ''} to next rank</div>`
                 : `<div style="font-size:14px;color:#FFC107;font-weight:700;">💎 Max Rank Achieved</div>`}
             `)}
 
@@ -3513,9 +3518,9 @@ window.loadProfileStats = async function(uid) {
                         ['Polls', pollSnap.size, 'bar_chart'],
                         ['Posts', gpSnap.size, 'edit_note'],
                         ['Trivia', triviaPlayed, 'quiz'],
-                    ].map(([label, val]) => `<div style="background:rgba(255,255,255,0.06);border-radius:10px;padding:12px;text-align:center;">
-                        <div style="font-size:22px;font-weight:900;color:white;">${val}</div>
-                        <div style="font-size:10px;color:rgba(255,255,255,0.4);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;">${label}</div>
+                    ].map(([label, val]) => `<div style="background:rgba(var(--stats-ink),0.06);border-radius:10px;padding:12px;text-align:center;">
+                        <div style="font-size:22px;font-weight:900;color:rgb(var(--stats-ink));">${val}</div>
+                        <div style="font-size:10px;color:rgba(var(--stats-ink),0.4);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;">${label}</div>
                     </div>`).join('')}
                 </div>
             `)}
@@ -6334,18 +6339,15 @@ async function _wheelGrantReward(uid, section) {
             const pack = TCG_PACKS.find(p => p.id === section.packId);
             if (!pack) return true;
             for (let attempt = 0; attempt < 2; attempt++) {
-                _tcgDebugLog('wheelPack:attempt', { packId: section.packId, attempt });
                 try {
                     await _tcgEnsureCardPool();
                     const cards = _tcgRollPackCards(pack);
                     const enriched = await _withTimeout(_tcgSavePackToCollection(uid, cards), 10000, 'Pack save');
                     window._tcgCollectionCache.delete(uid);
                     window._wheelPendingPackReveal = { pack, cards: enriched };
-                    _tcgDebugLog('wheelPack:success', { packId: section.packId, cardCount: enriched.length });
                     return true;
                 } catch(e) {
                     console.error(`Wheel pack grant failed (attempt ${attempt + 1}):`, e);
-                    _tcgDebugLog('wheelPack:attemptFailed', { packId: section.packId, attempt, error: e.message });
                 }
             }
             return false;
@@ -7055,7 +7057,6 @@ window._tcgBuyPack = async function(packId) {
 
     let enrichedCards = null;
     for (let attempt = 0; attempt < 2 && !enrichedCards; attempt++) {
-        _tcgDebugLog('buyPack:attempt', { packId, attempt });
         try {
             await _tcgEnsureCardPool();
             const cards = _tcgRollPackCards(pack);
@@ -7063,7 +7064,6 @@ window._tcgBuyPack = async function(packId) {
             window._tcgCollectionCache.delete(uid);
         } catch(e) {
             console.error(`Failed to save pack to collection (attempt ${attempt + 1}):`, e);
-            _tcgDebugLog('buyPack:attemptFailed', { packId, attempt, error: e.message });
         }
     }
 
@@ -7074,12 +7074,10 @@ window._tcgBuyPack = async function(packId) {
         try { await updateDoc(doc(db, 'profiles', uid), { amber: increment(cost) }); } catch(e) { console.error('Pack refund failed:', e); }
         document.getElementById('tcg-pack-modal')?.remove();
         window._tcgBuyInProgress = false;
-        _tcgDebugLog('buyPack:refunded', { packId, cost });
         alert("Hmm, something went wrong opening that pack. You've been refunded — please try again.");
         return;
     }
 
-    _tcgDebugLog('buyPack:success', { packId, cardCount: enrichedCards.length });
     _tcgShowPackOpening(pack, enrichedCards);
     window._tcgRenderStore();
     window._tcgBuyInProgress = false;
@@ -7464,17 +7462,6 @@ async function _tcgAssignSerial(card) {
     });
 }
 
-// Temporary diagnostic logging for the mobile pack-opening bug — writes to
-// `debug_logs` (admin-readable only) so we can see what actually happened on
-// a device we can't attach devtools to. Safe to remove once resolved.
-function _tcgDebugLog(step, data) {
-    if (!auth.currentUser) return;
-    addDoc(collection(db, 'debug_logs'), {
-        uid: auth.currentUser.uid, step, data: data || null,
-        ts: serverTimestamp(), userAgent: navigator.userAgent, online: navigator.onLine,
-    }).catch(() => {});
-}
-
 // Rejects after `ms` if `promise` hasn't settled — used so a stalled Firestore
 // write (e.g. dropped mobile connection) is treated as a failure instead of
 // hanging forever while the UI moves on as if it succeeded.
@@ -7491,16 +7478,14 @@ async function _tcgSavePackToCollection(uid, cards) {
             const { version, edition } = await _tcgAssignSerial(card);
             return { ...card, serial: version, edition };
         } catch(e) {
-            _tcgDebugLog('assignSerial:failed', { card: card.name, rarity: card.rarity, error: e.message });
             return { ...card, serial: null, edition: null };
         }
     }));
     const colRef = collection(db, 'card_collections', uid, 'cards');
-    const docIds = await Promise.all(enriched.map(c => addDoc(colRef, {
+    await Promise.all(enriched.map(c => addDoc(colRef, {
         name: c.name, anime: c.anime, rarity: c.rarity, image: c.image,
         serial: c.serial, edition: c.edition, pulledAt: serverTimestamp(),
-    }).then(ref => ref.id)));
-    _tcgDebugLog('savePack:written', { uid, docIds, cards: enriched.map(c => ({ name: c.name, rarity: c.rarity, serial: c.serial })) });
+    })));
     // addDoc() resolves as soon as the write is queued locally — on a dead/
     // flaky mobile connection that happens instantly even though the write
     // never reaches Firestore. Confirm the writes actually made it to the
@@ -7508,7 +7493,6 @@ async function _tcgSavePackToCollection(uid, cards) {
     // stuck offline queue into a clear failure (refund + retry) instead of a
     // silent "looks fine but nothing saved" result.
     await waitForPendingWrites(db);
-    _tcgDebugLog('savePack:confirmed', { uid, docIds });
     return enriched;
 }
 
@@ -7643,6 +7627,19 @@ window._tcgTogglePin = async function(cardId, profileUid) {
 
 // ── Multiselect: bulk dismantle / bulk pin ──────────────────────────────────
 window._tcgMultiSelect = { active: false, selected: new Set() };
+
+// Sort preference for "My Cards" — persists across re-renders/filter changes
+// within the session. 'rarity' (default), 'newest', or 'oldest' (by pulledAt).
+window._tcgCardSort = 'rarity';
+
+window._tcgSetCardSort = function(sort, uid, filter) {
+    window._tcgCardSort = sort;
+    window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'), uid, filter);
+};
+
+function _tcgPulledAtMillis(card) {
+    return card.pulledAt && typeof card.pulledAt.toMillis === 'function' ? card.pulledAt.toMillis() : 0;
+}
 
 window._tcgToggleMultiSelect = function(uid, filter, profileUid) {
     window._tcgMultiSelect.active = !window._tcgMultiSelect.active;
@@ -7810,8 +7807,13 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
     try { const pd = await getDoc(doc(db, 'profiles', uid)); pinnedIds = pd.exists() ? (pd.data().pinnedTcgCardIds || []) : []; } catch(e) {}
 
     const rarityOrder = { ur:-1, ssr:0, sr:1, rare:2, common:3 };
+    const sort = window._tcgCardSort;
     const filtered = (filter === 'all' ? [...cards] : cards.filter(c => c.rarity === filter))
-        .sort((a,b) => (rarityOrder[a.rarity]??9) - (rarityOrder[b.rarity]??9));
+        .sort((a,b) => {
+            if (sort === 'newest') return _tcgPulledAtMillis(b) - _tcgPulledAtMillis(a);
+            if (sort === 'oldest') return _tcgPulledAtMillis(a) - _tcgPulledAtMillis(b);
+            return (rarityOrder[a.rarity]??9) - (rarityOrder[b.rarity]??9);
+        });
     const counts = { ur:0, ssr:0, sr:0, rare:0, common:0 };
     cards.forEach(c => { if (c.rarity in counts) counts[c.rarity]++; });
 
@@ -7828,7 +7830,14 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
                     return `<button onclick="window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'),'${uid}','${f}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
                 }).join('')}
             </div>
-            <button onclick="window._tcgToggleMultiSelect('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${ms.active?'var(--accent-yellow)':'var(--border-color)'};background:${ms.active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${ms.active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${ms.active ? '✕ Cancel' : '☑ Multiselect'}</button>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <select onchange="window._tcgSetCardSort(this.value,'${uid}','${filter}')" style="padding:6px 10px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;">
+                    <option value="rarity" ${sort==='rarity'?'selected':''}>Sort: Rarity</option>
+                    <option value="newest" ${sort==='newest'?'selected':''}>Sort: Newest</option>
+                    <option value="oldest" ${sort==='oldest'?'selected':''}>Sort: Oldest</option>
+                </select>
+                <button onclick="window._tcgToggleMultiSelect('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${ms.active?'var(--accent-yellow)':'var(--border-color)'};background:${ms.active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${ms.active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${ms.active ? '✕ Cancel' : '☑ Multiselect'}</button>
+            </div>
         </div>
         ${ms.active ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;padding:10px 14px;background:var(--bg-gray);border-radius:10px;border:1px solid var(--border-color);">
             <span style="font-size:13px;font-weight:700;">${selCount} selected</span>
@@ -15868,7 +15877,10 @@ window.openOpeningBee = async function() {
         guesses: saved?.guesses || [],
         solved: saved?.solved || false,
         failed: saved?.failed || false,
-        clipIdx: 0
+        clipIdx: 0,
+        // If today's puzzle was already completed in a previous visit, don't
+        // auto-play the full opening again on this fresh page load.
+        _autoPlayedFull: !!(saved?.solved || saved?.failed),
     };
     window._obState.clipIdx = Math.min(window._obState.guesses.length, OB_CLIPS.length - 1);
     _obRender();
