@@ -349,7 +349,7 @@ service cloud.firestore {
       // fake monthly UR directly.
       allow create: if isAdmin() || (
         isOwner(uid) && (
-          request.resource.data.monthlyUr != true ||
+          request.resource.data.get('monthlyUr', false) != true ||
           get(/databases/$(database)/documents/wheel_state/$(uid)).data.pendingUrClaim == true
         )
       );
