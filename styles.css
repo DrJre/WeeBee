@@ -93,10 +93,21 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
 .mobile-search-inner input { flex: 1; border: none; background: transparent; outline: none; font-size: 14px; color: var(--text-dark); min-width: 0; }
 .search-close-btn { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 2px; display: flex; align-items: center; flex-shrink: 0; }
 
+/* ── PWA-only tweaks: no custom cursor / bee trail settings in standalone mode ── */
+@media (display-mode: standalone) {
+    .pwa-hide { display: none !important; }
+}
+
 /* ── Mobile slide-down menu ── */
 .mobile-menu { display: none; flex-direction: column; gap: 4px; background: var(--bg-white); border-bottom: 1px solid var(--border-color); padding: 10px 16px; position: sticky; top: 64px; z-index: 99; }
 .mobile-menu.open { display: flex; }
 .mobile-menu .nav-btn { width: 100%; justify-content: flex-start; padding: 10px 14px; color: var(--text-dark); }
+
+/* ── Mobile bottom navigation bar ── */
+.bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; background: var(--bg-white); border-top: 1px solid var(--border-color); padding-bottom: env(safe-area-inset-bottom); }
+.bottom-nav .nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 56px; background: none; border: none; color: var(--text-muted); font-size: 11px; font-weight: 600; cursor: pointer; }
+.bottom-nav .nav-btn .material-symbols-outlined { font-size: 22px; }
+.bottom-nav .nav-btn.active { color: #FFC107; }
 
 /* ── Search bar ── */
 .search-bar { position: relative; width: 260px; }
@@ -152,6 +163,32 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     .logo { margin-right: 0; font-size: 20px; }
     .content-views { padding: 20px; }
     .app-container { overflow-x: hidden; }
+
+    /* Bottom nav bar */
+    .bottom-nav { display: flex; }
+    .main-content { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+
+    /* Never allow the page itself to scroll sideways */
+    html, body, .main-content { overflow-x: hidden; }
+
+    /* Tab bars (community, games, etc.) — shrink tabs to equal widths so they
+       all fit on screen without scrolling */
+    .detail-tabs { flex-wrap: nowrap !important; gap: 0 !important; }
+    .detail-tab {
+        flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 2px;
+        padding: 6px 0 !important; font-size: 8.5px !important; text-align: center; white-space: normal; line-height: 1.1;
+        word-break: break-word; overflow-wrap: break-word;
+    }
+    .detail-tab .material-symbols-outlined { font-size: 16px !important; }
+
+    /* Hero banner titles (Tier Lists, BuzzWord, Trivia, etc.) — shrink to fit one line */
+    .banner-hero-title { font-size: 28px !important; }
+
+    /* BuzzWord game thumbnail rows — shrink title/icon/CTA to fit one line */
+    .banner-thumb-title { font-size: 15px !important; }
+    .banner-thumb-icon { font-size: 32px !important; }
+    .banner-thumb-cta { padding: 6px 10px !important; font-size: 12px !important; }
 
     /* ── Anime detail: force single-column, sidebar compact strip at top ── */
     .detail-layout { display: flex !important; flex-direction: column !important; gap: 16px; align-items: stretch !important; }
@@ -266,8 +303,11 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     /* Keep the logo from being squeezed/overlapped by the right-side icons
        (DM, notifications, amber balance, avatar, hamburger) */
     .topbar-left { flex-shrink: 0; }
-    .topbar-amber-badge { padding: 3px 7px !important; font-size: 11px !important; gap: 2px !important; }
-    .topbar-amber-badge span:first-child { font-size: 12px !important; }
+
+    /* Merge DM + Notifications into one "Activity" bell — frees up enough
+       room to keep the amber balance pill next to the avatar */
+    .topbar-dm-wrap { display: none !important; }
+    .activity-tabs { display: flex !important; }
 
     /* ── Notification + DM dropdowns: fix to viewport on mobile ── */
     #notification-dropdown, #dm-dropdown { position: fixed !important; top: 60px !important; right: 14px !important; left: 14px !important; width: auto !important; max-height: 70vh !important; }
@@ -278,6 +318,12 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     .review-anime-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: calc(100vw - 120px); display: inline-block; vertical-align: middle; }
     .review-header { min-width: 0; }
     .review-header > div:first-child { min-width: 0; flex: 1; overflow: hidden; }
+
+    /* ── Prize Wheel: prizes list becomes a 3-column grid ── */
+    .wheel-prizes-panel { flex: 1 1 100% !important; max-width: none !important; }
+    .wheel-prizes-list { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
+    .wheel-prizes-list > div { flex-direction: column !important; text-align: center !important; gap: 4px !important; padding: 10px 4px !important; }
+    .wheel-prizes-list > div span[style*="margin-left:auto"] { margin-left: 0 !important; }
 }
 
 @media (max-width: 500px) {
@@ -594,6 +640,12 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 .dropdown-divider { height: 1px; background-color: #F0F0F0; margin: 8px 0; }
 .dropdown-item.logout { color: #FF4444; }
 .dropdown-item.logout .material-symbols-outlined { color: #FF4444; }
+
+/* ── Merged "Activity" bell (notifications + messages) — mobile only ── */
+.activity-tabs { display: none; }
+.activity-tab { flex: 1; background: none; border: none; padding: 10px; font-weight: 700; font-size: 12px; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; }
+.activity-tab.active { color: var(--text-dark); border-bottom-color: var(--accent-yellow); }
+.activity-combined-badge { display: none; }
 
 /* ── Direct Messages ── */
 .chat-modal-content { max-width: 480px; width: 90%; height: 78vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
@@ -1668,8 +1720,21 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     opacity: 0;
 }
 
+/* ── TCG pack store — 2-column grid on narrow phones ──────────── */
+@media (max-width: 860px) {
+    .tcg-pack-grid { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
+    .tcg-pack-card { width: 100% !important; }
+    .tcg-pack-card .wb-card {
+        width: 100% !important; height: auto !important; aspect-ratio: 220 / 240;
+        padding: 12px !important;
+    }
+    .tcg-pack-card .wb-card > div:first-child { font-size: 38px !important; }
+    .tcg-pack-card .wb-card > div:nth-child(2) { font-size: 14px !important; }
+    .tcg-pack-card .wb-card > div:nth-child(3) { font-size: 11px !important; }
+}
+
 /* ── TCG card grids — 2-column shrunk layout on narrow phones ──── */
-@media (max-width: 500px) {
+@media (max-width: 860px) {
     .tcg-card-grid { display: flex !important; flex-wrap: wrap !important; gap: 10px !important; justify-content: center !important; }
     .tcg-card-cell { width: 141px !important; }
     .tcg-card-scale-wrap { width: 141px; height: 197px; overflow: hidden; }

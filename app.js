@@ -14,6 +14,15 @@ const firebaseConfig = {
     measurementId: "G-MJS9P8BCMQ"
 };
 
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(e => console.error('SW registration failed:', e));
+    });
+}
+
+// True when running as an installed PWA (standalone window, no browser chrome)
+window._isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
 // Capture shared-link URL params immediately — window.onload strips
 // window.location.search via history.replaceState before onAuthStateChanged
 // fires, so anything reading location.search later would see it already gone.
@@ -417,6 +426,7 @@ async function _awardLoginBonus() {
         const pd = await getDoc(doc(db, 'profiles', uid));
         const p = pd.exists() ? pd.data() : {};
         const lastDate = p.lastLoginDate || null;
+        if (lastDate === today) { localStorage.setItem(storageKey, '1'); return; }
         const streak = p.loginStreak || 0;
         const yesterday = new Date(Date.now() - 864e5).toISOString().split('T')[0];
         const newStreak = lastDate === yesterday ? streak + 1 : 1;
@@ -666,10 +676,20 @@ onAuthStateChanged(auth, (user) => {
             <div class="topbar-notif-wrap" style="position:relative; display:flex; align-items:center;">
                 <span class="material-symbols-outlined" style="font-size:24px; cursor:pointer; color:var(--text-dark);" onclick="toggleNotifications(event)">notifications</span>
                 <span class="notification-badge" id="notif-badge" style="display:none; position:absolute; top:-5px; right:-5px; background:#FF4444; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; font-weight:bold; align-items:center; justify-content:center; pointer-events:none;">0</span>
-                
+                <span class="notification-badge activity-combined-badge" id="activity-combined-badge" style="display:none; position:absolute; top:-5px; right:-5px; background:#FF4444; color:white; border-radius:50%; min-width:18px; height:18px; font-size:10px; font-weight:bold; align-items:center; justify-content:center; padding:0 3px; pointer-events:none;">0</span>
                 <div id="notification-dropdown" class="dropdown-menu notification-menu" style="display: none; right:-10px; top:40px; width:320px; padding:0; max-height:400px; overflow-y:auto; cursor:default;" onclick="event.stopPropagation()">
-                    <div class="notif-header" style="padding:12px 15px; font-weight:bold; border-bottom:1px solid #E0E0E0; position:sticky; top:0; background:var(--bg-white); z-index:10; display:flex; align-items:center; justify-content:space-between;">Notifications<button onclick="clearAllNotifications()" style="font-size:11px; font-weight:500; color:var(--text-muted); background:none; border:none; cursor:pointer; padding:4px 8px; border-radius:6px;">Clear All</button></div>
-                    <div id="notif-list"><div class="loading" style="font-size:12px; padding: 15px;">Loading...</div></div>
+                    <div class="activity-tabs">
+                        <button class="activity-tab active" data-tab="notif" onclick="window._switchActivityTab('notif')">Notifications</button>
+                        <button class="activity-tab" data-tab="dm" onclick="window._switchActivityTab('dm')">Messages</button>
+                    </div>
+                    <div id="activity-notif-panel">
+                        <div class="notif-header" style="padding:12px 15px; font-weight:bold; border-bottom:1px solid #E0E0E0; position:sticky; top:0; background:var(--bg-white); z-index:10; display:flex; align-items:center; justify-content:space-between;">Notifications<button onclick="clearAllNotifications()" style="font-size:11px; font-weight:500; color:var(--text-muted); background:none; border:none; cursor:pointer; padding:4px 8px; border-radius:6px;">Clear All</button></div>
+                        <div id="notif-list"><div class="loading" style="font-size:12px; padding: 15px;">Loading...</div></div>
+                    </div>
+                    <div id="activity-dm-panel" style="display:none;">
+                        <div style="padding:15px; font-weight:bold; border-bottom:1px solid var(--border-color); position:sticky; top:0; background:var(--bg-white); z-index:10;">Messages</div>
+                        <div id="dm-conversation-list-mobile"></div>
+                    </div>
                 </div>
             </div>
             <div style="display:flex; align-items:center; gap: 10px;">
@@ -699,7 +719,7 @@ onAuthStateChanged(auth, (user) => {
         // follows the user across devices instead of defaulting to dark).
         getDoc(doc(db, 'profiles', user.uid)).then(pd => {
             const data = pd.exists() ? pd.data() : {};
-            if (data.customCursor) window.applyCursor(data.customCursor);
+            if (data.customCursor && !window._isPWA) window.applyCursor(data.customCursor);
             if (data.theme === 'light' || data.theme === 'dark') {
                 document.documentElement.setAttribute('data-theme', data.theme);
                 localStorage.setItem('weebee-theme', data.theme);
@@ -822,6 +842,7 @@ window.toggleNotifications = function(e) {
             });
             window.unreadNotifDocs = [];
             document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
+            window._updateActivityBadge?.();
         }
     } else { nd.style.display = 'none'; }
 };
@@ -845,6 +866,7 @@ window.subscribeToDMBadge = function() {
             snap.forEach(d => { const n = d.data(); if (n.type === 'dm' && !n.read) total++; });
             const badge = document.getElementById('dm-badge');
             if (badge) { badge.innerText = total > 9 ? '9+' : total; badge.style.display = total > 0 ? 'flex' : 'none'; }
+            window._updateActivityBadge?.();
         }
     );
 };
@@ -862,9 +884,38 @@ window.toggleDMDropdown = function(e) {
     if (opening) window.loadDMList();
 };
 
-window.loadDMList = async function() {
+// Combined unread badge for the merged mobile "Activity" bell (notifications + DMs)
+window._updateActivityBadge = function() {
+    const combined = document.getElementById('activity-combined-badge');
+    if (!combined) return;
+    const readCount = (el) => {
+        if (!el || el.style.display === 'none') return 0;
+        const txt = el.textContent.trim();
+        return txt.endsWith('+') ? 10 : (parseInt(txt) || 0);
+    };
+    const total = readCount(document.getElementById('notif-badge')) + readCount(document.getElementById('dm-badge'));
+    combined.textContent = total > 9 ? '9+' : String(total);
+    combined.style.display = total > 0 ? 'flex' : 'none';
+};
+
+// Switches the merged mobile "Activity" dropdown between Notifications and Messages
+window._switchActivityTab = function(tab) {
+    document.querySelectorAll('.activity-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    const notifPanel = document.getElementById('activity-notif-panel');
+    const dmPanel = document.getElementById('activity-dm-panel');
+    if (tab === 'dm') {
+        if (notifPanel) notifPanel.style.display = 'none';
+        if (dmPanel) dmPanel.style.display = 'block';
+        window.loadDMList('dm-conversation-list-mobile');
+    } else {
+        if (dmPanel) dmPanel.style.display = 'none';
+        if (notifPanel) notifPanel.style.display = 'block';
+    }
+};
+
+window.loadDMList = async function(targetId = 'dm-conversation-list') {
     if (!auth.currentUser) return;
-    const list = document.getElementById('dm-conversation-list');
+    const list = document.getElementById(targetId);
     if (!list) return;
     list.innerHTML = '<div class="loading" style="font-size:12px; padding:15px;">Loading...</div>';
     try {
@@ -1015,6 +1066,7 @@ window.fetchNotifications = function() {
         if(notifs.length === 0) {
             list.innerHTML = '<div style="padding:15px; text-align:center; color:var(--text-muted); font-size:13px;">No notifications yet.</div>';
             badge.style.display = 'none';
+            window._updateActivityBadge?.();
             return;
         }
 
@@ -1072,6 +1124,7 @@ window.fetchNotifications = function() {
 
         if(unreadCount > 0) { badge.innerText = unreadCount; badge.style.display = 'flex'; }
         else { badge.style.display = 'none'; }
+        window._updateActivityBadge?.();
     }, (e) => console.error("Notif error", e));
 };
 
@@ -1161,6 +1214,7 @@ window.toggleDarkMode = function() {
 
 // --- BEE TRAIL ---
 (function initBeeTrail() {
+    if (window._isPWA) return;
     const canvas = document.getElementById('bee-trail-canvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -6182,7 +6236,7 @@ function _wheelRender(el, config, state) {
                 <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(124,58,237,0.3) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(245,158,11,0.25) 0%,transparent 60%);pointer-events:none;"></div>
                 <div style="position:relative;z-index:1;">
                     <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
-                    <div style="font-size:42px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🎡 Prize Wheel 🎡</div>
+                    <div class="banner-hero-title" style="font-size:42px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🎡 Prize Wheel 🎡</div>
                     <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-top:10px;">Spin once a day — every section is yours once, all month long</div>
                     ${ur.image ? `<div style="margin-top:14px;font-size:12px;color:#f59e0b;font-weight:700;">🌟 This month's grand prize: ${ur.name} (${ur.anime})</div>` : ''}
                 </div>
@@ -6209,9 +6263,9 @@ function _wheelRender(el, config, state) {
                     </div>
                 </div>
 
-                <div style="flex:0 0 220px;max-width:220px;text-align:left;">
+                <div class="wheel-prizes-panel" style="flex:0 0 220px;max-width:220px;text-align:left;">
                     <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">🎁 Prizes</div>
-                    <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div class="wheel-prizes-list" style="display:flex;flex-direction:column;gap:6px;">
                         ${sidebarRows}
                     </div>
                 </div>
@@ -6903,7 +6957,7 @@ window._tcgRenderStore = async function() {
             ? `<span style="text-decoration:line-through;text-decoration-color:#ef4444;color:var(--text-muted);font-weight:700;margin-right:8px;">🟡 ${pack.cost.toLocaleString()}</span><span style="color:#f59e0b;">🟡 ${pack.salePrice.toLocaleString()}</span>`
             : `🟡 ${pack.cost.toLocaleString()}`);
         return `
-        <div class="wb-card-wrap">
+        <div class="wb-card-wrap tcg-pack-card">
             <div class="wb-card" style="background:${pack.gradient};display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;text-align:center;${isComingSoon ? 'opacity:0.55;' : ''}">
                 <div style="font-size:54px;margin-bottom:10px;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.4));">${isComingSoon ? '🔒' : '🃏'}</div>
                 <div style="font-size:17px;font-weight:800;color:white;">${pack.name}</div>
@@ -6931,7 +6985,7 @@ window._tcgRenderStore = async function() {
             </div>
         </div>
         ${saleActive ? `<div style="background:linear-gradient(135deg,#dc2626,#f59e0b);color:white;border-radius:10px;padding:10px 16px;margin-bottom:18px;text-align:center;font-weight:800;font-size:14px;letter-spacing:0.5px;">🎉 FLASH SALE — Pack prices rolled back for 72 hours! 🎉</div>` : ''}
-        <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
+        <div class="tcg-pack-grid" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
             ${packCard(TCG_PACKS[0])}
             ${packCard(TCG_PACKS[1])}
             ${packCard(comingSoonPack, true)}
@@ -9245,9 +9299,9 @@ window._renderGeneralPostCard = function(post, uid) {
                 </div>
             </div>
         </div>` : ''}
-        <div class="review-header" style="margin-bottom:12px;justify-content:space-between;">
-            <div style="display:flex;gap:15px;">
-                <img src="${post.authorAvatar||''}" class="avatar" onclick="event.stopPropagation();viewUserProfile('${post.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.authorName||'U')}&backgroundColor=ffc107&fontColor=333333'" style="cursor:pointer;">
+        <div class="review-header" style="margin-bottom:12px;justify-content:space-between;flex-wrap:wrap;">
+            <div style="display:flex;gap:15px;min-width:0;">
+                <img src="${post.authorAvatar||''}" class="avatar" onclick="event.stopPropagation();viewUserProfile('${post.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.authorName||'U')}&backgroundColor=ffc107&fontColor=333333'" style="cursor:pointer;flex-shrink:0;">
                 <div style="min-width:0;">
                     <strong style="color:var(--text-dark);">${post.authorName||'Anonymous'}</strong>
                     ${window.getRankBadgeHTML ? window.getRankBadgeHTML(window.userRankCache[post.uid]||0,14) : ''}
@@ -9256,12 +9310,12 @@ window._renderGeneralPostCard = function(post, uid) {
                     <span style="font-size:12px;color:var(--text-muted);">${ago}</span>
                 </div>
             </div>
-            ${post.packCards?.length ? `<button onclick="event.stopPropagation();window.switchView('tcg-view')" class="action-btn" style="background:var(--accent-yellow);color:#222;font-weight:700;flex-shrink:0;${isOwner ? 'margin-right:36px;' : ''}">🃏 Open Packs in the TCG Store</button>` : ''}
+            ${post.packCards?.length ? `<button onclick="event.stopPropagation();window.switchView('tcg-view')" class="action-btn" style="background:var(--accent-yellow);color:#222;font-weight:700;flex:1 1 100%;margin-top:8px;">🃏 Open Packs in the TCG Store</button>` : ''}
         </div>
         <p id="gp-text-${post.id}" style="font-size:15px;line-height:1.55;margin:0 0 12px;color:var(--text-dark);white-space:pre-wrap;">${post.text}${post.edited ? ' <span style="font-size:11px;color:var(--text-muted);font-style:italic;">(edited)</span>' : ''}</p>
         ${post.imageUrl ? `<img src="${post.imageUrl}" style="width:100%;max-height:400px;object-fit:contain;border-radius:10px;margin-bottom:12px;background:rgba(0,0,0,0.04);" loading="lazy">` : ''}
-        ${post.packCards?.length ? `<div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;padding:14px 0;margin-bottom:12px;">
-            ${post.packCards.map(c => `<div style="width:165px;height:231px;overflow:hidden;flex-shrink:0;"><div style="transform:scale(0.75);transform-origin:top left;">${_tcgBuildCardFace(c)}</div></div>`).join('')}
+        ${post.packCards?.length ? `<div class="tcg-card-grid" style="justify-content:center;padding:14px 0;margin-bottom:12px;">
+            ${post.packCards.map(c => `<div class="tcg-card-cell"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(c)}</div></div></div>`).join('')}
         </div>` : ''}
         <div class="review-actions">
             <div class="action-stat">
