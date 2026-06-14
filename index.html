@@ -738,6 +738,10 @@
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">casino</span> Wheel
                             <span class="wheel-notif-dot" style="display:none;"></span>
                         </button>
+                        <button id="games-tab-plinko-btn" class="detail-tab games-tab-btn" style="display:none;position:relative;" onclick="switchGamesTab(event,'games-tab-plinko')">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">scatter_plot</span> Plinko
+                            <span class="wheel-notif-dot plinko-notif-dot" style="display:none;"></span>
+                        </button>
                     </div>
 
                     <!-- BUZZWORD TAB -->
@@ -869,6 +873,11 @@
                         <div id="wheel-tab-content"><div class="loading">Loading wheel...</div></div>
                     </div><!-- /games-tab-wheel -->
 
+                    <!-- PLINKO TAB -->
+                    <div id="games-tab-plinko" class="games-tab-content" style="display:none;">
+                        <div id="plinko-tab-content"><div class="loading">Loading Plinko...</div></div>
+                    </div><!-- /games-tab-plinko -->
+
                 </div><!-- /games-view -->
 
 
@@ -963,6 +972,18 @@
                                 <h2 style="margin:0 0 4px;">TCG Admin Tools <span style="font-size:12px; font-weight:700; color:var(--accent-yellow); border:1px solid var(--accent-yellow); border-radius:6px; padding:2px 8px; vertical-align:middle;">ADMIN</span></h2>
                                 <p style="color:var(--text-muted); font-size:13px; margin:0;">Card generator, pool seeder, and pool browser. Only visible to admins.</p>
                             </div>
+                        </div>
+
+                        <!-- Flash Sale Toggle -->
+                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                            <div>
+                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">🎉 Pack Store Flash Sale</div>
+                                <div style="font-size:12px; color:var(--text-muted);">Rolls pack prices back to their sale price. Stays on until toggled off.</div>
+                            </div>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700;">
+                                <input id="tcg-sale-enabled" type="checkbox" onchange="window._tcgSaveSaleConfig()"> Flash sale active
+                            </label>
+                            <span id="tcg-sale-status" style="font-size:13px; color:var(--text-muted);"></span>
                         </div>
 
                         <div style="background:var(--bg-gray); border-radius:12px; padding:18px; margin:18px 0; display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;">
@@ -2269,6 +2290,6 @@
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=291"></script>
+    <script type="module" src="app.js?v=309"></script>
 </body>
 </html>

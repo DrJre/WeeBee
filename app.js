@@ -755,6 +755,11 @@ onAuthStateChanged(auth, (user) => {
                 if (wheelTabBtn) wheelTabBtn.style.display = (config.enabled || window.isAdmin) ? '' : 'none';
                 window._wheelRefreshBadges();
             });
+            _plinkoLoadConfig().then(config => {
+                const plinkoTabBtn = document.getElementById('games-tab-plinko-btn');
+                if (plinkoTabBtn) plinkoTabBtn.style.display = (config.enabled || window.isAdmin) ? '' : 'none';
+                window._plinkoRefreshBadge();
+            });
         });
         // Handle shared URL params
         const _urlParams = _initialUrlParams;
@@ -797,6 +802,10 @@ onAuthStateChanged(auth, (user) => {
         _wheelLoadConfig().then(config => {
             const wheelTabBtn = document.getElementById('games-tab-wheel-btn');
             if (wheelTabBtn) wheelTabBtn.style.display = config.enabled ? '' : 'none';
+        });
+        _plinkoLoadConfig().then(config => {
+            const plinkoTabBtn = document.getElementById('games-tab-plinko-btn');
+            if (plinkoTabBtn) plinkoTabBtn.style.display = config.enabled ? '' : 'none';
         });
         // Shared card links work without signing in (card_collections + profiles are publicly readable)
         const _cardId = _initialUrlParams.get('card');
@@ -5310,6 +5319,9 @@ window.switchGamesTab = function(event, tabId) {
         window.loadWheelTab();
         window._wheelRefreshBadges();
     }
+    if (tabId === 'games-tab-plinko') {
+        window.loadPlinkoTab();
+    }
 };
 
 window.switchTcgTab = function(event, tabId) {
@@ -5319,7 +5331,7 @@ window.switchTcgTab = function(event, tabId) {
     if (event?.currentTarget) event.currentTarget.classList.add('active');
     if (tabId === 'tcg-tab-collection') window._tcgRenderMyCollection();
     if (tabId === 'tcg-tab-trading') window._tcgRenderMyTrades();
-    if (tabId === 'tcg-tab-admin') window._tcgRenderFounderPreview();
+    if (tabId === 'tcg-tab-admin') { window._tcgRenderFounderPreview(); window._tcgLoadSaleConfigUI(); }
 };
 
 // Renders a preview of the currently-selected Founder gift card so admins
@@ -5952,9 +5964,37 @@ window._tcgAdminGiftFounderCard = async function(uid, name) {
 
 // ── TCG Pack Store ────────────────────────────────────────────────────────────
 
-// Flash sale: packs return to their old prices for 72 hours to celebrate the price update
-const TCG_FLASH_SALE_END = new Date('2026-06-13T18:00:00');
-function _tcgFlashSaleActive() { return Date.now() < TCG_FLASH_SALE_END.getTime(); }
+// Flash sale: packs return to their old prices. Admin-controlled — stays on
+// indefinitely until toggled off in the TCG Admin tab.
+async function _tcgLoadSaleConfig() {
+    if (window._tcgSaleConfig) return window._tcgSaleConfig;
+    try {
+        const snap = await getDoc(doc(db, 'tcg_sale_config', 'current'));
+        window._tcgSaleConfig = snap.exists() ? snap.data() : { enabled: true };
+    } catch(e) { window._tcgSaleConfig = { enabled: true }; }
+    return window._tcgSaleConfig;
+}
+async function _tcgFlashSaleActive() {
+    const config = await _tcgLoadSaleConfig();
+    return !!config.enabled;
+}
+window._tcgLoadSaleConfigUI = async function() {
+    if (!window.isAdmin) return;
+    window._tcgSaleConfig = null;
+    const config = await _tcgLoadSaleConfig();
+    const checkbox = document.getElementById('tcg-sale-enabled');
+    if (checkbox) checkbox.checked = !!config.enabled;
+};
+window._tcgSaveSaleConfig = async function() {
+    if (!window.isAdmin) return;
+    const enabled = document.getElementById('tcg-sale-enabled')?.checked || false;
+    const status = document.getElementById('tcg-sale-status');
+    try {
+        await setDoc(doc(db, 'tcg_sale_config', 'current'), { enabled }, { merge: true });
+        window._tcgSaleConfig = { enabled };
+        if (status) { status.textContent = 'Saved!'; setTimeout(() => status.textContent = '', 2000); }
+    } catch(e) { alert('Save failed: ' + e.message); }
+};
 
 const TCG_PACKS = [
     {
@@ -6482,6 +6522,635 @@ function _wheelShowResultModal(section, grantOk = true) {
     document.body.appendChild(modal);
 }
 
+// ─── Plinko ──────────────────────────────────────────────────────────────────
+const PLINKO_ROWS = 12;
+// Symmetric payout table, one entry per bottom bin (11 bins).
+// Center bins are the most likely landing spots in a real peg board, so they
+// pay out the least; the rare outer bins pay the jackpot amounts.
+const PLINKO_PRIZES = [50, 75, 100, 75, 25, 10, 25, 75, 100, 75, 50];
+const PLINKO_DROP_COST = 100;
+// Multiplier "bridges" — gaps between two adjacent pegs that multiply the
+// final prize if the ball passes through them. One of each per day.
+const PLINKO_MULTIPLIERS = [1.5, 2, 3];
+const PLINKO_MULTIPLIER_COLORS = { 1.5: '#22d3ee', 2: '#a855f7', 3: '#facc15' };
+// Star bridge — a 4th bridge, separate from the multiplier bridges, that
+// doesn't pay out on its own. If the ball passes through it AND lands in
+// today's star slot (marked with a star under one of the bins), it pays a
+// flat bonus. Both the bridge position and the slot reshuffle daily.
+const PLINKO_STAR_BONUS = 1500;
+const PLINKO_STAR_COLOR = '#ff5e9c';
+
+function _plinkoTodayKey(d = new Date()) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Small deterministic PRNG so every player sees the same multiplier bridge
+// layout on a given day, and it reshuffles automatically at midnight.
+function _plinkoSeedFromString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+    return Math.abs(hash) || 1;
+}
+function _plinkoSeededRandom(seed) {
+    let s = seed % 2147483647;
+    if (s <= 0) s += 2147483646;
+    return function() {
+        s = (s * 16807) % 2147483647;
+        return (s - 1) / 2147483646;
+    };
+}
+
+// Builds today's multiplier bridges plus the star bridge/slot. Each bridge
+// spans the gap between two adjacent pegs on a given row; rows in the top
+// 40% of the board are excluded so a bridge can't be dropped straight into
+// from the top. Returns { bridges, starBridge, starSlot }.
+function _plinkoGetBridges(width, gap) {
+    const rand = _plinkoSeededRandom(_plinkoSeedFromString('plinko-bridges-' + _plinkoTodayKey()));
+    const binCount = PLINKO_PRIZES.length;
+    const minRow = Math.ceil(PLINKO_ROWS * 0.4);
+    const used = new Set();
+    const bridges = [];
+
+    const pickBridgeSpot = () => {
+        let row, gapIdx, key, attempts = 0;
+        do {
+            row = minRow + Math.floor(rand() * (PLINKO_ROWS - minRow));
+            const isEven = row % 2 === 0;
+            const maxGapIdx = isEven ? binCount - 2 : binCount - 1;
+            gapIdx = Math.floor(rand() * (maxGapIdx + 1));
+            key = `${row}-${gapIdx}`;
+            attempts++;
+        } while (used.has(key) && attempts < 20);
+        used.add(key);
+
+        const y = (row + 1) * gap;
+        const isEven = row % 2 === 0;
+        const x1 = isEven ? (gapIdx + 0.5) * gap : gapIdx * gap;
+        const x2 = isEven ? (gapIdx + 1.5) * gap : (gapIdx + 1) * gap;
+        return { y, x1, x2 };
+    };
+
+    for (const multiplier of PLINKO_MULTIPLIERS) {
+        const { y, x1, x2 } = pickBridgeSpot();
+        bridges.push({ multiplier, y, x1, x2, triggered: false, flashFrames: 0 });
+    }
+
+    const starSpot = pickBridgeSpot();
+    const starBridge = { y: starSpot.y, x1: starSpot.x1, x2: starSpot.x2, triggered: false, flashFrames: 0, isStar: true };
+    const starSlot = Math.floor(rand() * binCount);
+
+    return { bridges, starBridge, starSlot };
+}
+
+async function _plinkoLoadConfig() {
+    if (window._plinkoConfig) return window._plinkoConfig;
+    try {
+        const snap = await getDoc(doc(db, 'plinko_config', 'current'));
+        window._plinkoConfig = snap.exists() ? snap.data() : { enabled: false };
+    } catch(e) { window._plinkoConfig = { enabled: false }; }
+    return window._plinkoConfig;
+}
+
+async function _plinkoLoadState(uid) {
+    try {
+        const snap = await getDoc(doc(db, 'plinko_state', uid));
+        return snap.exists() ? snap.data() : { lastDropDate: '' };
+    } catch(e) { return { lastDropDate: '' }; }
+}
+
+window.loadPlinkoTab = async function() {
+    const el = document.getElementById('plinko-tab-content');
+    if (!el) return;
+    if (!auth.currentUser) {
+        el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">Sign in to play Plinko!</div>`;
+        return;
+    }
+    el.innerHTML = `<div class="loading">Loading Plinko...</div>`;
+    const uid = auth.currentUser.uid;
+    const [config, state] = await Promise.all([_plinkoLoadConfig(), _plinkoLoadState(uid)]);
+    window._plinkoState = state;
+    _plinkoRender(el, config, state);
+};
+
+// Shows a red notification dot on the Plinko tab when the user has their
+// free daily drop available — mirrors the wheel's notif-dot pattern.
+window._plinkoRefreshBadge = async function() {
+    const dots = document.querySelectorAll('.plinko-notif-dot');
+    if (!dots.length) return;
+    const config = await _plinkoLoadConfig();
+    if (!auth.currentUser || (!config.enabled && !window.isAdmin)) {
+        dots.forEach(d => d.style.display = 'none');
+        return;
+    }
+    const state = await _plinkoLoadState(auth.currentUser.uid);
+    window._plinkoState = state;
+    const freeAvailable = state.lastDropDate !== _plinkoTodayKey();
+    dots.forEach(d => d.style.display = freeAvailable ? 'block' : 'none');
+};
+
+// Full-width alternating peg lattice (classic Galton board) — every row
+// spans the entire board, including the outer edges, so a ball can't fall
+// straight down the sides into the outer (jackpot) bins without bouncing
+// through pegs first. Even rows sit at bin centers, odd rows sit at bin
+// boundaries (including x=0 and x=width).
+function _plinkoGetPegPositions(width, gap) {
+    const pegs = [];
+    const binCount = PLINKO_PRIZES.length;
+    for (let i = 0; i < PLINKO_ROWS; i++) {
+        const y = (i + 1) * gap;
+        if (i % 2 === 0) {
+            for (let j = 0; j < binCount; j++) pegs.push({ x: (j + 0.5) * gap, y });
+        } else {
+            for (let j = 0; j <= binCount; j++) pegs.push({ x: j * gap, y });
+        }
+    }
+    return pegs;
+}
+
+function _plinkoDrawFrame(ctx, width, height, gap, pegs, pegR, ball, dropX, features, trail) {
+    ctx.clearRect(0, 0, width, height);
+    const binCount = PLINKO_PRIZES.length;
+    const binTop = (PLINKO_ROWS + 1) * gap;
+    const bridges = features?.bridges;
+    const starBridge = features?.starBridge;
+    const starSlot = features?.starSlot;
+
+    // Prize bins
+    ctx.textAlign = 'center';
+    ctx.font = `700 ${Math.max(9, gap * 0.28)}px sans-serif`;
+    for (let i = 0; i < binCount; i++) {
+        const x = i * gap;
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(245,158,11,0.12)' : 'rgba(124,58,237,0.12)';
+        ctx.fillRect(x, binTop, gap, height - binTop);
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillText(String(PLINKO_PRIZES[i]), x + gap / 2, binTop + (height - binTop) / 2 + 4);
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= binCount; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * gap, binTop);
+        ctx.lineTo(i * gap, height);
+        ctx.stroke();
+    }
+
+    // Star slot marker — a pink bridge across the bin's opening plus a star
+    // floating just above it, so it's clearly distinct from the prize number.
+    if (starSlot != null) {
+        const sx = starSlot * gap;
+        ctx.save();
+        ctx.strokeStyle = PLINKO_STAR_COLOR;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = PLINKO_STAR_COLOR;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.moveTo(sx, binTop);
+        ctx.lineTo(sx + gap, binTop);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = PLINKO_STAR_COLOR;
+        ctx.font = `700 ${Math.max(11, gap * 0.34)}px sans-serif`;
+        ctx.fillText('★', sx + gap / 2, binTop - gap * 0.15);
+        ctx.font = `700 ${Math.max(9, gap * 0.28)}px sans-serif`;
+    }
+
+    // Pegs
+    ctx.fillStyle = '#facc15';
+    for (const p of pegs) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, pegR, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Multiplier bridges
+    if (bridges) {
+        for (const b of bridges) {
+            const color = PLINKO_MULTIPLIER_COLORS[b.multiplier] || '#fff';
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = b.flashFrames > 0 ? 4 : 2.5;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = b.flashFrames > 0 ? 20 : 5;
+            ctx.beginPath();
+            ctx.moveTo(b.x1, b.y);
+            ctx.lineTo(b.x2, b.y);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.fillStyle = color;
+            ctx.font = `800 ${Math.max(9, gap * 0.24)}px sans-serif`;
+            ctx.fillText(`${b.multiplier}x`, (b.x1 + b.x2) / 2, b.y - gap * 0.18);
+
+            // Expanding glow ring when the ball just crossed this bridge
+            if (b.flashFrames > 0) {
+                const r = (24 - b.flashFrames) * (gap * 0.07);
+                ctx.save();
+                ctx.globalAlpha = b.flashFrames / 24;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc((b.x1 + b.x2) / 2, b.y, r, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+                b.flashFrames--;
+            }
+        }
+    }
+
+    // Star bridge — same look as multiplier bridges but labeled with a star
+    // and its own color; doesn't pay out unless the ball also lands in the
+    // star slot below.
+    if (starBridge) {
+        const color = PLINKO_STAR_COLOR;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = starBridge.flashFrames > 0 ? 4 : 2.5;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = starBridge.flashFrames > 0 ? 20 : 5;
+        ctx.beginPath();
+        ctx.moveTo(starBridge.x1, starBridge.y);
+        ctx.lineTo(starBridge.x2, starBridge.y);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = color;
+        ctx.font = `800 ${Math.max(9, gap * 0.26)}px sans-serif`;
+        ctx.fillText('★', (starBridge.x1 + starBridge.x2) / 2, starBridge.y - gap * 0.18);
+
+        if (starBridge.flashFrames > 0) {
+            const r = (24 - starBridge.flashFrames) * (gap * 0.07);
+            ctx.save();
+            ctx.globalAlpha = starBridge.flashFrames / 24;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc((starBridge.x1 + starBridge.x2) / 2, starBridge.y, r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+            starBridge.flashFrames--;
+        }
+    }
+
+    // Drop position marker
+    if (dropX != null && !ball) {
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.moveTo(dropX - gap * 0.18, 0);
+        ctx.lineTo(dropX + gap * 0.18, 0);
+        ctx.lineTo(dropX, gap * 0.3);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // Fading ball trail
+    if (trail) {
+        for (let i = 0; i < trail.length; i++) {
+            const t = trail[i];
+            ctx.globalAlpha = (1 - i / trail.length) * 0.35;
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, t.r * 0.75, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    // Ball
+    if (ball) {
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+// Runs a real gravity + peg-collision simulation on the canvas and resolves
+// with the bin index the ball lands in, the combined multiplier from any
+// bridges it crossed, which multipliers were hit, and whether the star
+// bridge was crossed. `startX` lets the player choose where the ball drops from.
+function _plinkoRunSimulation(canvas, startX) {
+    return new Promise(resolve => {
+        if (!canvas) return resolve({ bin: Math.floor(PLINKO_PRIZES.length / 2), multiplier: 1, hitBridges: [], hitStar: false });
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width, height = canvas.height;
+        const gap = width / PLINKO_PRIZES.length;
+        const pegs = _plinkoGetPegPositions(width, gap);
+        const features = _plinkoGetBridges(width, gap);
+        const { bridges, starBridge } = features;
+        const pegR = gap * 0.13;
+        const ballR = gap * 0.16;
+        const gravity = gap * 0.0009;
+        const maxVy = gap * 0.26;
+        const restitution = 0.5;
+
+        let x = startX != null ? startX : width / 2;
+        x = Math.max(ballR, Math.min(width - ballR, x));
+        let y = ballR + 2;
+        let vx = (Math.random() - 0.5) * 0.5;
+        let vy = 0;
+        let multiplier = 1;
+        let hitStar = false;
+        const hitBridges = [];
+        const trail = [];
+
+        function step() {
+            const prevY = y;
+            vy = Math.min(vy + gravity, maxVy);
+            x += vx; y += vy;
+
+            if (x - ballR < 0) { x = ballR; vx = Math.abs(vx) * restitution; }
+            if (x + ballR > width) { x = width - ballR; vx = -Math.abs(vx) * restitution; }
+
+            for (const p of pegs) {
+                const dx = x - p.x, dy = y - p.y;
+                const dist = Math.hypot(dx, dy);
+                const minDist = pegR + ballR;
+                if (dist < minDist && dist > 0.001) {
+                    const nx = dx / dist, ny = dy / dist;
+                    const overlap = minDist - dist;
+                    x += nx * overlap; y += ny * overlap;
+                    const dot = vx * nx + vy * ny;
+                    vx -= (1 + restitution) * dot * nx;
+                    vy -= (1 + restitution) * dot * ny;
+                    // Small random kick on every bounce — same as a real peg
+                    // board, where the exact contact point is never perfectly
+                    // centered, keeps the outcome from being deterministic.
+                    vx += (Math.random() - 0.5) * gap * 0.06;
+                }
+            }
+            vx *= 0.99;
+
+            // Multiplier bridges — crossing the gap between a bridge's two
+            // pegs (moving downward) multiplies the final prize. Multiple
+            // bridges in one drop stack together.
+            for (const b of bridges) {
+                if (!b.triggered && prevY < b.y && y >= b.y) {
+                    const lo = Math.min(b.x1, b.x2), hi = Math.max(b.x1, b.x2);
+                    if (x + ballR > lo && x - ballR < hi) {
+                        b.triggered = true;
+                        b.flashFrames = 24;
+                        multiplier *= b.multiplier;
+                        hitBridges.push(b.multiplier);
+                    }
+                }
+            }
+
+            // Star bridge — doesn't affect the multiplier; just flags that the
+            // ball passed through it. The bonus only pays out if it also
+            // lands in today's star slot.
+            if (!starBridge.triggered && prevY < starBridge.y && y >= starBridge.y) {
+                const lo = Math.min(starBridge.x1, starBridge.x2), hi = Math.max(starBridge.x1, starBridge.x2);
+                if (x + ballR > lo && x - ballR < hi) {
+                    starBridge.triggered = true;
+                    starBridge.flashFrames = 24;
+                    hitStar = true;
+                }
+            }
+
+            trail.unshift({ x, y, r: ballR });
+            if (trail.length > 7) trail.pop();
+
+            _plinkoDrawFrame(ctx, width, height, gap, pegs, pegR, { x, y, r: ballR }, null, features, trail);
+
+            if (y + ballR >= height - 2) {
+                let bin = Math.floor(x / gap);
+                bin = Math.max(0, Math.min(PLINKO_PRIZES.length - 1, bin));
+                resolve({ bin, multiplier, hitBridges, hitStar: hitStar && bin === features.starSlot });
+                return;
+            }
+            requestAnimationFrame(step);
+        }
+        step();
+    });
+}
+
+function _plinkoRender(el, config, state) {
+    if (!el) return;
+    const today = _plinkoTodayKey();
+    const freeAvailable = state.lastDropDate !== today;
+
+    const isDesktop = window.matchMedia('(min-width: 900px)').matches;
+    const gap = isDesktop ? 46 : 30;
+    const width = gap * PLINKO_PRIZES.length;
+    const height = gap * (PLINKO_ROWS + 1) + 30;
+
+    const adminPanel = window.isAdmin ? `
+        <div style="margin-top:30px;padding:16px;border:1px solid var(--border-color);border-radius:12px;text-align:left;background:var(--bg-gray);">
+            <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">🛠️ Admin</div>
+            <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;font-weight:700;">
+                <input id="plinko-admin-enabled" type="checkbox" ${config.enabled ? 'checked' : ''}> Plinko enabled for all users
+            </label>
+            <button onclick="window._plinkoSaveConfig()" class="action-btn" style="font-weight:800;">Save</button>
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color);">
+                <button onclick="window._plinkoAdminReset()" class="cancel-btn" style="font-size:12px;opacity:0.75;">🔄 Reset My Free Ball (Admin Testing)</button>
+            </div>
+        </div>` : '';
+
+    el.innerHTML = `
+        <div style="text-align:center;">
+            <div class="bw-banner-hero" style="border-radius:20px;padding:28px 24px;margin-bottom:20px;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
+                <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(245,158,11,0.3) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(124,58,237,0.25) 0%,transparent 60%);pointer-events:none;"></div>
+                <div style="position:relative;z-index:1;">
+                    <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
+                    <div class="banner-hero-title" style="font-size:42px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🟡 Plinko 🟡</div>
+                    <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-top:10px;">Drops cost ${PLINKO_DROP_COST} Amber</div>
+                    <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:4px;">${freeAvailable ? 'You have a free drop available today!' : 'Your free daily drop resets at midnight'}</div>
+                    <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:10px;line-height:1.6;">
+                        🌉 Colored bridges multiply your prize 1.5x–3x — hit more than one and they stack!<br>
+                        ★ Cross the pink star bridge and land in today's ★ slot for a +${PLINKO_STAR_BONUS} Amber bonus
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex;justify-content:center;margin-bottom:16px;">
+                <button id="plinko-drop-btn" onclick="window._plinkoArmDrop()" class="action-btn" style="font-weight:800;font-size:15px;padding:12px 28px;">
+                    ${freeAvailable ? '🟡 Drop Ball (Free)' : `🟡 Drop Ball (${PLINKO_DROP_COST} Amber)`}
+                </button>
+            </div>
+
+            <div id="plinko-hint" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Press "Drop Ball", then tap where on the board you want it to fall</div>
+            <div id="plinko-board-wrap" style="position:relative;display:inline-block;max-width:100%;border-radius:16px;box-shadow:0 0 24px rgba(245,158,11,0.25),0 0 48px rgba(124,58,237,0.15);">
+                <canvas id="plinko-canvas" width="${width}" height="${height}" style="background:var(--bg-gray);border-radius:12px;max-width:100%;height:auto;border:1px solid var(--border-color);"></canvas>
+            </div>
+            <div>
+            ${window.isAdmin && !config.enabled ? `<div style="margin-top:16px;padding:10px 16px;background:rgba(239,68,68,0.12);border:1px solid #ef4444;border-radius:10px;color:#ef4444;font-size:12px;font-weight:700;display:inline-block;">⚠️ Plinko is hidden from regular users — admin preview only</div>` : ''}
+            </div>
+            ${adminPanel}
+        </div>`;
+
+    const canvas = document.getElementById('plinko-canvas');
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        const pegGap = width / PLINKO_PRIZES.length;
+        const pegs = _plinkoGetPegPositions(width, pegGap);
+        const features = _plinkoGetBridges(width, pegGap);
+        _plinkoDrawFrame(ctx, width, height, pegGap, pegs, pegGap * 0.13, null, null, features, null);
+
+        canvas.addEventListener('click', (e) => {
+            if (!window._plinkoAiming || window._plinkoDropInProgress) return;
+            window._plinkoAiming = false;
+            const ballR = pegGap * 0.16;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            let px = (e.clientX - rect.left) * scaleX;
+            px = Math.max(ballR, Math.min(width - ballR, px));
+            window._plinkoExecuteDrop(px);
+        });
+    }
+}
+
+// Step 1: pressing the "Drop Ball" button arms the board — the next click
+// on the canvas is where the ball falls from.
+window._plinkoArmDrop = function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    if (window._plinkoDropInProgress || window._plinkoAiming) return;
+    window._plinkoAiming = true;
+    const btn = document.getElementById('plinko-drop-btn');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = '🎯 Tap the board to drop!'; }
+    const hint = document.getElementById('plinko-hint');
+    if (hint) hint.textContent = 'Tap anywhere on the board to drop the ball there';
+    const canvas = document.getElementById('plinko-canvas');
+    if (canvas) canvas.style.cursor = 'pointer';
+};
+
+// Restores the drop button / hint / cursor after a failed drop attempt
+// (e.g. not enough Amber) so the player can try again.
+function _plinkoResetAimUI(btn) {
+    window._plinkoAiming = false;
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '🟡 Drop Ball'; }
+    const hint = document.getElementById('plinko-hint');
+    if (hint) hint.textContent = 'Press "Drop Ball", then tap where on the board you want it to fall';
+    const canvas = document.getElementById('plinko-canvas');
+    if (canvas) canvas.style.cursor = 'default';
+}
+
+window._plinkoSaveConfig = async function() {
+    if (!window.isAdmin) return;
+    const enabled = document.getElementById('plinko-admin-enabled')?.checked || false;
+    try {
+        await setDoc(doc(db, 'plinko_config', 'current'), { enabled }, { merge: true });
+        window._plinkoConfig = null;
+        const config = await _plinkoLoadConfig();
+        const plinkoTabBtn = document.getElementById('games-tab-plinko-btn');
+        if (plinkoTabBtn) plinkoTabBtn.style.display = (config.enabled || window.isAdmin) ? '' : 'none';
+        await window.loadPlinkoTab();
+    } catch(e) { alert('Save failed: ' + e.message); }
+};
+
+window._plinkoAdminReset = async function() {
+    if (!window.isAdmin || !auth.currentUser) return;
+    try {
+        await deleteDoc(doc(db, 'plinko_state', auth.currentUser.uid));
+        window._plinkoState = { lastDropDate: '' };
+        await window.loadPlinkoTab();
+        window._plinkoRefreshBadge();
+    } catch(e) { alert('Reset failed: ' + e.message); }
+};
+
+window._plinkoExecuteDrop = async function(dropX) {
+    if (!auth.currentUser) return window.openAuthModal();
+    if (window._plinkoDropInProgress) return;
+    const uid = auth.currentUser.uid;
+    const state = window._plinkoState || { lastDropDate: '' };
+    const today = _plinkoTodayKey();
+    const freeAvailable = state.lastDropDate !== today;
+
+    const btn = document.getElementById('plinko-drop-btn');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+
+    if (!freeAvailable) {
+        let amber = 0;
+        try {
+            const pd = await getDoc(doc(db, 'profiles', uid));
+            amber = pd.exists() ? (pd.data().amber || 0) : 0;
+        } catch(e) {}
+        if (amber < PLINKO_DROP_COST) {
+            _plinkoResetAimUI(btn);
+            return alert(`Not enough Amber! Drops cost ${PLINKO_DROP_COST} Amber.`);
+        }
+        try {
+            await updateDoc(doc(db, 'profiles', uid), { amber: increment(-PLINKO_DROP_COST) });
+            addDoc(collection(db, 'amber_log'), { uid, amount: -PLINKO_DROP_COST, reason: 'plinko:drop', timestamp: new Date() }).catch(() => {});
+        } catch(e) {
+            _plinkoResetAimUI(btn);
+            return alert('Purchase failed: ' + e.message);
+        }
+    }
+
+    window._plinkoDropInProgress = true;
+    const canvas = document.getElementById('plinko-canvas');
+    const { bin, multiplier, hitBridges, hitStar } = await _plinkoRunSimulation(canvas, dropX);
+    window._plinkoDropInProgress = false;
+
+    const prize = Math.round(PLINKO_PRIZES[bin] * multiplier) + (hitStar ? PLINKO_STAR_BONUS : 0);
+    try { await _awardAmber(prize, 'plinko:drop'); } catch(e) { console.error('Plinko prize grant failed:', e); }
+
+    if (freeAvailable) {
+        try {
+            await setDoc(doc(db, 'plinko_state', uid), { lastDropDate: today }, { merge: true });
+        } catch(e) { console.error('Plinko state save failed:', e); }
+        state.lastDropDate = today;
+    }
+
+    const burstCount = hitStar ? 80 : (multiplier > 1 ? 50 : 24);
+    _plinkoConfettiBurst(burstCount, multiplier, hitStar);
+    _plinkoShowResultModal(prize, multiplier, hitBridges, hitStar);
+    window._plinkoRefreshBadge();
+    setTimeout(() => _plinkoRender(document.getElementById('plinko-tab-content'), window._plinkoConfig || {}, state), 1200);
+};
+
+// Confetti burst over the plinko board when the ball lands — reuses the same
+// keyframe as the Prize Wheel, with brighter colors and more pieces when a
+// multiplier was hit.
+function _plinkoConfettiBurst(count, multiplier, hitStar) {
+    const container = document.getElementById('plinko-board-wrap');
+    if (!container) return;
+    const colors = hitStar
+        ? ['#ff5e9c', '#facc15', '#a855f7', '#22d3ee', '#ffffff']
+        : multiplier > 1
+            ? ['#facc15', '#a855f7', '#22d3ee', '#f59e0b', '#ffffff']
+            : ['#f59e0b', '#fbbf24', '#06b6d4', '#4f46e5', '#22c55e', '#ffffff'];
+    for (let i = 0; i < count; i++) {
+        const piece = document.createElement('div');
+        const angle = Math.random() * 360;
+        const dist = 60 + Math.random() * 160;
+        const dx = Math.cos(angle * Math.PI / 180) * dist;
+        const dy = Math.sin(angle * Math.PI / 180) * dist;
+        const size = 6 + Math.random() * 6;
+        piece.style.cssText = `position:absolute;top:80%;left:50%;width:${size}px;height:${size}px;background:${colors[Math.floor(Math.random()*colors.length)]};border-radius:${Math.random()<0.5?'50%':'2px'};pointer-events:none;z-index:50;`;
+        piece.style.setProperty('--dx', `${dx}px`);
+        piece.style.setProperty('--dy', `${dy}px`);
+        piece.style.animation = `wheel-confetti-burst ${0.9 + Math.random() * 0.6}s ease-out forwards`;
+        container.appendChild(piece);
+        setTimeout(() => piece.remove(), 1600);
+    }
+}
+
+function _plinkoShowResultModal(prize, multiplier, hitBridges, hitStar) {
+    document.getElementById('plinko-result-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'plinko-result-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;';
+    const multiplierBadges = (hitBridges && hitBridges.length) ? `
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap;">
+            ${hitBridges.map(m => `<span style="background:${PLINKO_MULTIPLIER_COLORS[m] || '#fff'};color:#111;font-weight:900;font-size:13px;padding:4px 12px;border-radius:999px;">${m}x</span>`).join('')}
+        </div>
+        <div style="font-size:14px;font-weight:800;color:${PLINKO_MULTIPLIER_COLORS[hitBridges[hitBridges.length-1]] || '#fff'};margin-top:6px;">${multiplier}x Multiplier!</div>
+    ` : '';
+    const starBadge = hitStar ? `
+        <div style="font-size:16px;font-weight:900;color:${PLINKO_STAR_COLOR};margin-top:10px;">★ Star Bonus: +${PLINKO_STAR_BONUS} Amber! ★</div>
+    ` : '';
+    modal.innerHTML = `<div style="text-align:center;background:var(--bg-card);border-radius:16px;padding:36px 28px;max-width:360px;">
+        <div style="font-size:60px;">${hitStar ? '⭐' : (multiplier > 1 ? '🎉' : '🟡')}</div>
+        <div style="font-size:22px;font-weight:900;color:#fff;margin-top:8px;">+${prize} Amber!</div>
+        ${multiplierBadges}
+        ${starBadge}
+        <button onclick="document.getElementById('plinko-result-modal')?.remove()" class="action-btn" style="margin:20px auto 0;">Nice!</button>
+    </div>`;
+    document.body.appendChild(modal);
+}
+
 function _normalizeSeriesName(title) {
     if (!title) return title;
     let t = title;
@@ -6947,7 +7616,7 @@ window._tcgRenderStore = async function() {
         }
     } catch(e) {}
 
-    const saleActive = _tcgFlashSaleActive();
+    const saleActive = await _tcgFlashSaleActive();
 
     const packCard = (pack, isComingSoon = false) => {
         const onSale = !isComingSoon && saleActive && pack.salePrice != null;
@@ -7087,7 +7756,7 @@ window._tcgBuyPack = async function(packId) {
     const pack = TCG_PACKS.find(p => p.id === packId);
     if (!pack) return;
     const uid = auth.currentUser.uid;
-    const cost = (_tcgFlashSaleActive() && pack.salePrice != null) ? pack.salePrice : pack.cost;
+    const cost = (await _tcgFlashSaleActive() && pack.salePrice != null) ? pack.salePrice : pack.cost;
 
     window._tcgBuyInProgress = true;
     _tcgShowPackLoading(pack);
@@ -7866,6 +8535,8 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
         .sort((a,b) => {
             if (sort === 'newest') return _tcgPulledAtMillis(b) - _tcgPulledAtMillis(a);
             if (sort === 'oldest') return _tcgPulledAtMillis(a) - _tcgPulledAtMillis(b);
+            if (sort === 'serial-low') return (a.serial ?? Infinity) - (b.serial ?? Infinity);
+            if (sort === 'serial-high') return (b.serial ?? -Infinity) - (a.serial ?? -Infinity);
             return (rarityOrder[a.rarity]??9) - (rarityOrder[b.rarity]??9);
         });
     const counts = { ur:0, ssr:0, sr:0, rare:0, common:0 };
@@ -7889,6 +8560,8 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
                     <option value="rarity" ${sort==='rarity'?'selected':''}>Sort: Rarity</option>
                     <option value="newest" ${sort==='newest'?'selected':''}>Sort: Newest</option>
                     <option value="oldest" ${sort==='oldest'?'selected':''}>Sort: Oldest</option>
+                    <option value="serial-low" ${sort==='serial-low'?'selected':''}>Sort: Serial # (Low-High)</option>
+                    <option value="serial-high" ${sort==='serial-high'?'selected':''}>Sort: Serial # (High-Low)</option>
                 </select>
                 <button onclick="window._tcgToggleMultiSelect('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${ms.active?'var(--accent-yellow)':'var(--border-color)'};background:${ms.active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${ms.active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${ms.active ? '✕ Cancel' : '☑ Multiselect'}</button>
             </div>
@@ -8365,25 +9038,25 @@ window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
             <div style="display:flex;flex-wrap:wrap;gap:24px;">
                 <div style="flex:1;min-width:340px;">
                     <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">You Give</div>
-                    <div data-side="mine" id="tcg-trade-mine" style="display:flex;flex-wrap:wrap;gap:10px;max-height:460px;overflow-y:auto;margin-bottom:10px;"><div style="padding:20px;color:var(--text-muted);">Loading…</div></div>
+                    <div id="tcg-trade-mine-wrap"><div style="padding:20px;color:var(--text-muted);">Loading…</div></div>
                     <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">🟡 Amber to give (you have ${myAmber.toLocaleString()})</label>
                     <input type="number" id="tcg-trade-amber-give" min="0" max="1000" step="1" value="${seedMyAmber}" oninput="window._tcgUpdateTradeSummary()" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
                 </div>
                 <div style="flex:1;min-width:340px;">
                     <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">You Get</div>
-                    <div data-side="theirs" id="tcg-trade-theirs" style="display:flex;flex-wrap:wrap;gap:10px;max-height:460px;overflow-y:auto;margin-bottom:10px;"><div style="padding:20px;color:var(--text-muted);">Loading…</div></div>
+                    <div id="tcg-trade-theirs-wrap"><div style="padding:20px;color:var(--text-muted);">Loading…</div></div>
                     <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">🟡 Amber to request</label>
                     <input type="number" id="tcg-trade-amber-get" min="0" max="1000" step="1" value="${seedTheirAmber}" oninput="window._tcgUpdateTradeSummary()" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
                 </div>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding-top:14px;border-top:1px solid var(--border-color);flex-wrap:wrap;gap:10px;">
                 <span id="tcg-trade-summary" style="font-size:13px;color:var(--text-muted);font-weight:700;">You give 0 card(s) · You get 0 card(s)</span>
-                <button onclick="window._tcgSubmitTradeProposal('${otherUid}','${opts.tradeId||''}','${safeOtherName}')" style="padding:10px 22px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">${opts.tradeId ? 'Send Counter' : 'Send Trade Offer'}</button>
+                <button onclick="window._tcgOpenTradeConfirm('${otherUid}','${opts.tradeId||''}','${safeOtherName}')" style="padding:10px 22px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">${opts.tradeId ? 'Send Counter' : 'Send Trade Offer'}</button>
             </div>
         </div>`;
     document.body.appendChild(modal);
 
-    window._tcgTradePickerState = { myIds: new Set(opts.seedMyIds||[]), theirIds: new Set(opts.seedTheirIds||[]) };
+    window._tcgTradePickerState = { myIds: new Set(opts.seedMyIds||[]), theirIds: new Set(opts.seedTheirIds||[]), mineFilter: 'all', mineSort: 'rarity', mineSearch: '', theirsFilter: 'all', theirsSort: 'rarity', theirsSearch: '' };
     window._tcgTradeMyAmber = myAmber;
 
     let myCards = [], theirCards = [];
@@ -8391,19 +9064,10 @@ window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
         [myCards, theirCards] = await Promise.all([_tcgLoadCollection(myUid, true), _tcgLoadCollection(otherUid, true)]);
     } catch(e) {}
 
-    const mineEl = document.getElementById('tcg-trade-mine');
-    const theirsEl = document.getElementById('tcg-trade-theirs');
-    if (mineEl) {
-        mineEl.innerHTML = myCards.length ? myCards.map(c => _tcgPickerCardHTML(c, window._tcgTradePickerState.myIds.has(c.id))).join('') : `<p style="color:var(--text-muted);">You have no cards.</p>`;
-        _tcgObserveSSRCards(mineEl);
-    }
-    if (theirsEl) {
-        theirsEl.innerHTML = theirCards.length ? theirCards.map(c => _tcgPickerCardHTML(c, window._tcgTradePickerState.theirIds.has(c.id))).join('') : `<p style="color:var(--text-muted);">This user has no cards.</p>`;
-        _tcgObserveSSRCards(theirsEl);
-    }
-    window._tcgUpdateTradeSummary();
-
     window._tcgTradeContext = { myUid, otherUid, myCards, theirCards };
+    _tcgRenderTradeSide('mine');
+    _tcgRenderTradeSide('theirs');
+    window._tcgUpdateTradeSummary();
 };
 
 window._tcgUpdateTradeSummary = function() {
@@ -8417,6 +9081,156 @@ window._tcgUpdateTradeSummary = function() {
         const getPart = get > 0 ? ` + 🟡 ${get.toLocaleString()}` : '';
         summary.textContent = `You give ${state.myIds.size} card(s)${givePart} · You get ${state.theirIds.size} card(s)${getPart}`;
     }
+};
+
+// Filter/sort controls for each side of the trade picker (mirrors the
+// collection page's rarity filters + sort dropdown).
+const TCG_TRADE_RARITY_ORDER = { ur:-1, ssr:0, sr:1, rare:2, common:3 };
+
+function _tcgTradeSideFilteredCards(side) {
+    const ctx = window._tcgTradeContext;
+    const state = window._tcgTradePickerState;
+    const cards = side === 'mine' ? ctx.myCards : ctx.theirCards;
+    const filter = state[`${side}Filter`];
+    const sort = state[`${side}Sort`];
+    const search = (state[`${side}Search`] || '').trim().toLowerCase();
+
+    return (filter === 'all' ? [...cards] : cards.filter(c => c.rarity === filter))
+        .filter(c => !search || (c.name||'').toLowerCase().includes(search) || (c.anime||'').toLowerCase().includes(search))
+        .sort((a,b) => {
+            if (sort === 'newest') return _tcgPulledAtMillis(b) - _tcgPulledAtMillis(a);
+            if (sort === 'oldest') return _tcgPulledAtMillis(a) - _tcgPulledAtMillis(b);
+            if (sort === 'serial-low') return (a.serial ?? Infinity) - (b.serial ?? Infinity);
+            if (sort === 'serial-high') return (b.serial ?? -Infinity) - (a.serial ?? -Infinity);
+            return (TCG_TRADE_RARITY_ORDER[a.rarity]??9) - (TCG_TRADE_RARITY_ORDER[b.rarity]??9);
+        });
+}
+
+function _tcgTradeGridHTML(side) {
+    const ctx = window._tcgTradeContext;
+    const state = window._tcgTradePickerState;
+    const cards = side === 'mine' ? ctx.myCards : ctx.theirCards;
+    const selectedIds = side === 'mine' ? state.myIds : state.theirIds;
+    const filtered = _tcgTradeSideFilteredCards(side);
+    const noCardsMsg = side === 'mine' ? 'You have no cards.' : 'This user has no cards.';
+    return cards.length ? (filtered.length ? filtered.map(c => _tcgPickerCardHTML(c, selectedIds.has(c.id))).join('') : `<p style="color:var(--text-muted);">No cards match this search/filter.</p>`) : `<p style="color:var(--text-muted);">${noCardsMsg}</p>`;
+}
+
+function _tcgTradeSideHTML(side) {
+    const ctx = window._tcgTradeContext;
+    const state = window._tcgTradePickerState;
+    const cards = side === 'mine' ? ctx.myCards : ctx.theirCards;
+    const filter = state[`${side}Filter`];
+    const sort = state[`${side}Sort`];
+    const search = state[`${side}Search`] || '';
+
+    const counts = { ur:0, ssr:0, sr:0, rare:0, common:0 };
+    cards.forEach(c => { if (c.rarity in counts) counts[c.rarity]++; });
+
+    return `
+        <input type="text" id="tcg-trade-${side}-search" value="${search.replace(/"/g,'&quot;')}" placeholder="Search by character or anime…" oninput="window._tcgSearchTradeSide('${side}',this.value)" style="width:100%;padding:6px 10px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:12px;box-sizing:border-box;margin-bottom:8px;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                ${['all','ur','ssr','sr','rare','common'].map(f => {
+                    const labels = { all:`All (${cards.length})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
+                    const active = f === filter;
+                    return `<button onclick="window._tcgFilterTradeSide('${side}','${f}')" style="padding:4px 10px;border-radius:14px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
+                }).join('')}
+            </div>
+            <select onchange="window._tcgSortTradeSide('${side}',this.value)" style="padding:4px 8px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;">
+                <option value="rarity" ${sort==='rarity'?'selected':''}>Sort: Rarity</option>
+                <option value="newest" ${sort==='newest'?'selected':''}>Sort: Newest</option>
+                <option value="oldest" ${sort==='oldest'?'selected':''}>Sort: Oldest</option>
+                <option value="serial-low" ${sort==='serial-low'?'selected':''}>Sort: Serial # (Low-High)</option>
+                <option value="serial-high" ${sort==='serial-high'?'selected':''}>Sort: Serial # (High-Low)</option>
+            </select>
+        </div>
+        <div data-side="${side}" id="tcg-trade-${side}" style="display:flex;flex-wrap:wrap;gap:10px;max-height:420px;overflow-y:auto;margin-bottom:10px;">
+            ${_tcgTradeGridHTML(side)}
+        </div>`;
+}
+
+function _tcgRenderTradeSide(side) {
+    const wrap = document.getElementById(`tcg-trade-${side}-wrap`);
+    if (!wrap) return;
+    wrap.innerHTML = _tcgTradeSideHTML(side);
+    _tcgObserveSSRCards(wrap);
+}
+
+// Re-render only the card grid (preserves focus in the search input while typing)
+function _tcgRenderTradeGrid(side) {
+    const grid = document.getElementById(`tcg-trade-${side}`);
+    if (!grid) return;
+    grid.innerHTML = _tcgTradeGridHTML(side);
+    _tcgObserveSSRCards(grid);
+}
+
+window._tcgSearchTradeSide = function(side, value) {
+    window._tcgTradePickerState[`${side}Search`] = value;
+    _tcgRenderTradeGrid(side);
+};
+
+window._tcgFilterTradeSide = function(side, filter) {
+    window._tcgTradePickerState[`${side}Filter`] = filter;
+    _tcgRenderTradeSide(side);
+};
+
+window._tcgSortTradeSide = function(side, sort) {
+    window._tcgTradePickerState[`${side}Sort`] = sort;
+    _tcgRenderTradeSide(side);
+};
+
+function _tcgConfirmCardThumbHTML(card) {
+    return `<div style="width:100px;height:140px;overflow:hidden;"><div style="transform:scale(0.455);transform-origin:top left;">${_tcgBuildCardFace(card)}</div></div>`;
+}
+
+// Modal — shows a clear summary of the proposed trade before it's sent
+window._tcgOpenTradeConfirm = function(otherUid, existingTradeId, otherName) {
+    const ctx = window._tcgTradeContext;
+    const state = window._tcgTradePickerState;
+    if (!ctx || !state || !auth.currentUser) return;
+
+    const offerAmber = Math.max(0, Math.min(1000, parseInt(document.getElementById('tcg-trade-amber-give')?.value, 10) || 0));
+    const requestAmber = Math.max(0, Math.min(1000, parseInt(document.getElementById('tcg-trade-amber-get')?.value, 10) || 0));
+
+    if (state.myIds.size === 0 && state.theirIds.size === 0 && offerAmber === 0 && requestAmber === 0) { alert('Select at least one card or amount of Amber on either side.'); return; }
+    if (offerAmber > (window._tcgTradeMyAmber || 0)) { alert(`You only have 🟡 ${(window._tcgTradeMyAmber||0).toLocaleString()} Amber.`); return; }
+
+    const giveCards = ctx.myCards.filter(c => state.myIds.has(c.id));
+    const getCards = ctx.theirCards.filter(c => state.theirIds.has(c.id));
+
+    document.getElementById('tcg-trade-confirm-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'tcg-trade-confirm-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+    const sideHTML = (title, cards, amber) => `
+        <div style="flex:1;min-width:260px;">
+            <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">${title}</div>
+            ${cards.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">${cards.map(c => _tcgConfirmCardThumbHTML(c)).join('')}</div>` : ''}
+            ${amber > 0 ? `<div style="font-size:14px;font-weight:800;color:var(--text-dark);">🟡 ${amber.toLocaleString()} Amber</div>` : ''}
+            ${cards.length === 0 && amber === 0 ? `<div style="font-size:13px;color:var(--text-muted);">Nothing</div>` : ''}
+        </div>`;
+
+    modal.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:700px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <div style="font-size:17px;font-weight:800;color:var(--text-dark);">Confirm Trade — ${otherName}</div>
+                <button onclick="document.getElementById('tcg-trade-confirm-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Double check the details below before sending.</p>
+            <div style="display:flex;flex-wrap:wrap;gap:24px;">
+                ${sideHTML('You Give', giveCards, offerAmber)}
+                ${sideHTML('You Get', getCards, requestAmber)}
+            </div>
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border-color);">
+                <button onclick="document.getElementById('tcg-trade-confirm-modal').remove()" style="padding:10px 22px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-weight:800;font-size:13px;cursor:pointer;">Back</button>
+                <button onclick="window._tcgSubmitTradeProposal('${otherUid}','${existingTradeId||''}','${otherName.replace(/'/g, "\\'")}')" style="padding:10px 22px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">Confirm Trade and Send</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    _tcgObserveSSRCards(modal);
 };
 
 window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, otherName) {
@@ -8476,6 +9290,7 @@ window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, other
                 message: 'sent you a trade offer', timestamp: new Date(), read: false
             });
         }
+        document.getElementById('tcg-trade-confirm-modal')?.remove();
         document.getElementById('tcg-trade-modal')?.remove();
         alert('Trade offer sent!');
     } catch(e) { alert('Failed to send trade offer: ' + e.message); }
@@ -9314,7 +10129,7 @@ window._renderGeneralPostCard = function(post, uid) {
         </div>
         <p id="gp-text-${post.id}" style="font-size:15px;line-height:1.55;margin:0 0 12px;color:var(--text-dark);white-space:pre-wrap;">${post.text}${post.edited ? ' <span style="font-size:11px;color:var(--text-muted);font-style:italic;">(edited)</span>' : ''}</p>
         ${post.imageUrl ? `<img src="${post.imageUrl}" style="width:100%;max-height:400px;object-fit:contain;border-radius:10px;margin-bottom:12px;background:rgba(0,0,0,0.04);" loading="lazy">` : ''}
-        ${post.packCards?.length ? `<div class="tcg-card-grid" style="justify-content:center;padding:14px 0;margin-bottom:12px;">
+        ${post.packCards?.length ? `<div class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;justify-content:center;padding:14px 0;margin-bottom:12px;">
             ${post.packCards.map(c => `<div class="tcg-card-cell"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(c)}</div></div></div>`).join('')}
         </div>` : ''}
         <div class="review-actions">
@@ -9905,7 +10720,7 @@ window.setPollSort = function(sort) {
 window.addPollOption = function() {
     const container = document.getElementById('poll-options-inputs');
     const current = container.querySelectorAll('.poll-option-input').length;
-    if (current >= 4) { document.getElementById('poll-add-option-btn').style.display = 'none'; return; }
+    if (current >= 10) { document.getElementById('poll-add-option-btn').style.display = 'none'; return; }
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'poll-option-input';
@@ -9913,7 +10728,7 @@ window.addPollOption = function() {
     input.maxLength = 100;
     input.style.cssText = 'width:100%; padding:9px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; box-sizing:border-box; margin-bottom:8px;';
     container.appendChild(input);
-    if (current + 1 >= 4) document.getElementById('poll-add-option-btn').style.display = 'none';
+    if (current + 1 >= 10) document.getElementById('poll-add-option-btn').style.display = 'none';
 };
 
 window.loadPolls = async function() {

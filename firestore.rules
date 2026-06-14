@@ -381,6 +381,28 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── Plinko ─────────────────────────────────────────────────────────────
+    // Admin-managed config: enabled toggle (hidden behind admin while in dev).
+    match /plinko_config/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Per-user plinko state — just tracks the date of the last free drop.
+    match /plinko_state/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid);
+      // Admin-only "reset my free ball" testing tool deletes this doc.
+      allow delete: if isAdmin();
+    }
+
+    // ── TCG Pack Store flash sale toggle ───────────────────────────────────
+    match /tcg_sale_config/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ── TCG card serial pools (global, transactionally updated on pack open) ──
     match /card_serials/{doc} {
       allow read: if isAuth();
