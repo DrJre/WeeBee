@@ -220,6 +220,15 @@ const ACHIEVEMENTS = [
     { id: 'wheel_total_30',   name: 'Wheel Regular',       desc: 'Spun the Prize Wheel 30 times total',                 icon: 'military_tech',         cat: 'Community', subcat: 'Prize Wheel', color: '#f59e0b' },
     { id: 'wheel_streak_100', name: "Fortune's Favorite",  desc: 'Spun the Prize Wheel 100 days in a row',              icon: 'diamond',               cat: 'Community', subcat: 'Prize Wheel', color: '#FFD700' },
     { id: 'wheel_ur',         name: 'Jackpot!',            desc: 'Landed a Monthly UR card from the Prize Wheel',       icon: 'auto_awesome',          cat: 'Community', subcat: 'Prize Wheel', color: '#a855f7' },
+    // Community: TCG Dungeon
+    { id: 'dungeon_first',       name: 'Into the Dungeon',  desc: 'Completed your first dungeon gate',                  icon: 'meeting_room',          cat: 'Community', subcat: 'TCG Dungeon', color: '#8e44ad' },
+    { id: 'dungeon_recruit',     name: 'New Recruit',       desc: 'Found a bonus card on a raid',                       icon: 'group_add',             cat: 'Community', subcat: 'TCG Dungeon', color: '#8e44ad' },
+    { id: 'dungeon_share',       name: 'Glory Hound',       desc: 'Shared a raid result to the feed',                   icon: 'campaign',              cat: 'Community', subcat: 'TCG Dungeon', color: '#8e44ad' },
+    { id: 'dungeon_streak_7',    name: 'Raid Regular',      desc: 'Completed a raid 7 days in a row',                   icon: 'local_fire_department', cat: 'Community', subcat: 'TCG Dungeon', color: '#8e44ad' },
+    { id: 'dungeon_total_30',    name: 'Dungeon Crawler',   desc: 'Completed 30 gate raids total',                      icon: 'military_tech',         cat: 'Community', subcat: 'TCG Dungeon', color: '#8e44ad' },
+    { id: 'dungeon_s_clear',     name: 'S-Rank Slayer',     desc: 'Successfully cleared an S-Rank gate',                icon: 'workspace_premium',     cat: 'Community', subcat: 'TCG Dungeon', color: '#8e44ad' },
+    { id: 'dungeon_perfect_day', name: 'Flawless Run',      desc: "Won all 5 gates in a single day's pool",             icon: 'verified',              cat: 'Community', subcat: 'TCG Dungeon', color: '#a855f7' },
+    { id: 'dungeon_streak_100',  name: 'Dungeon Master',    desc: 'Completed a raid 100 days in a row',                 icon: 'diamond',               cat: 'Community', subcat: 'TCG Dungeon', color: '#FFD700' },
 ];
 
 // Returns the set of all achievement ids the user has unlocked (existing + newly awarded this call).
@@ -274,6 +283,7 @@ const ACHIEVEMENT_AMBER = {
     feed_showtime:25, tl_first:25, trivia_first:25, trivia_7:25,
     ht_first:25, ht_10:25, poll_first:25, mb_first:25,
     plinko_first:25, wheel_first:25,
+    dungeon_first:25, dungeon_recruit:25, dungeon_share:25,
     // Uncommon
     review_25:50, review_50:50, indepth_25:50, indepth_50:50, react_25:50, react_50:50,
     complete_25:50, complete_50:50, suggestor_5:50,
@@ -282,19 +292,21 @@ const ACHIEVEMENT_AMBER = {
     trivia_perfect:50, trivia_30:50, ht_controversial:50, poll_popular:50,
     mb_perfect_pitch:50, mb_streak_7:50,
     plinko_streak_7:50, wheel_streak_7:50,
+    dungeon_streak_7:50,
     // Rare
     review_100:100, indepth_100:100, react_100:100, complete_100:100,
     bwop_total_30:100, bwnrt_total_30:100, bwblc_total_30:100, bwdb_total_30:100,
     bw_multiverse:100, ht_popular:100, mb_total_30:100,
     bwop_1guess:100, bwnrt_1guess:100, bwblc_1guess:100, bwdb_1guess:100,
     plinko_total_30:100, wheel_total_30:100, plinko_star:100,
+    dungeon_total_30:100, dungeon_s_clear:100,
     // Epic
     review_250:250, indepth_250:250, react_250:250, complete_250:250,
-    wheel_ur:250,
+    wheel_ur:250, dungeon_perfect_day:250,
     // Legendary
     review_500:500, indepth_500:500, react_500:500, complete_500:500,
     founder:500, top_reviewer:500, bwop_streak_100:500,
-    plinko_streak_100:500, wheel_streak_100:500,
+    plinko_streak_100:500, wheel_streak_100:500, dungeon_streak_100:500,
     // Mythic
     review_1000:1000, indepth_1000:1000, react_1000:1000, complete_1000:1000,
 };
@@ -17834,6 +17846,18 @@ async function _dungeonSaveProgress(uid, progress) {
     try { await setDoc(doc(db, 'dungeon_progress', uid), progress); } catch(e) {}
 }
 
+// Rolls progress over to a fresh day's pool, keeping lifetime stats
+// (totalRaids/streak/lastRaidDate) intact — only the pool, fatigue,
+// and per-gate results reset.
+function _dungeonResetForNewDay(progress, todayKey) {
+    return {
+        date: todayKey, poolIndex: 0, results: [],
+        totalRaids: progress?.totalRaids || 0,
+        streak: progress?.streak || 0,
+        lastRaidDate: progress?.lastRaidDate || null,
+    };
+}
+
 window._dungeonStopRefresh = function() {
     clearTimeout(window._dungeonRefreshTimer);
 };
@@ -17861,7 +17885,7 @@ window.loadDungeonTab = async function() {
         if (!state) await _dungeonSaveProgress(uid, progress);
     } else if (!state && progress.date !== todayKey) {
         // Safe to roll over to the new day's pool — no active raid to disturb.
-        progress = { date: todayKey, poolIndex: 0, results: [] };
+        progress = _dungeonResetForNewDay(progress, todayKey);
         await _dungeonSaveProgress(uid, progress);
     }
     window._dungeonProgress = progress;
@@ -18257,16 +18281,35 @@ window._dungeonClaim = async function() {
         const todayKey = _dungeonTodayKey();
         let progress = window._dungeonProgress || await _dungeonLoadProgress(uid) || { date: todayKey, poolIndex: 0, results: [] };
         if (progress.date !== todayKey) {
-            progress = { date: todayKey, poolIndex: 0, results: [] };
+            progress = _dungeonResetForNewDay(progress, todayKey);
         } else {
             progress = {
                 ...progress,
                 poolIndex: Math.min(5, progress.poolIndex + 1),
-                results: [...progress.results, { gateId: state.gateId, success: state.success, reward: state.reward }],
+                results: [...progress.results, { gateId: state.gateId, success: state.success, reward: state.reward, party: state.party, bonusCards: state.bonusCards || [] }],
             };
         }
+
+        // Lifetime totals + daily streak, tracked independent of the pool reset above.
+        const totalRaids = (progress.totalRaids || 0) + 1;
+        let streak = progress.streak || 0;
+        if (progress.lastRaidDate !== todayKey) {
+            const yesterdayKey = _dungeonTodayKey(new Date(Date.now() - 86400000));
+            streak = (progress.lastRaidDate === yesterdayKey) ? streak + 1 : 1;
+        }
+        progress = { ...progress, totalRaids, streak, lastRaidDate: todayKey };
+
         await _dungeonSaveProgress(uid, progress);
         window._dungeonProgress = progress;
+
+        const dungeonAch = ['dungeon_first'];
+        if (totalRaids >= 30) dungeonAch.push('dungeon_total_30');
+        if (streak >= 7) dungeonAch.push('dungeon_streak_7');
+        if (streak >= 100) dungeonAch.push('dungeon_streak_100');
+        if (state.gateId === 's' && state.success) dungeonAch.push('dungeon_s_clear');
+        if (state.bonusCards?.length) dungeonAch.push('dungeon_recruit');
+        if (progress.results.length === 5 && progress.results.every(r => r.success)) dungeonAch.push('dungeon_perfect_day');
+        window.awardAchievements(dungeonAch).catch(() => {});
     } catch(e) { return alert('Claim failed: ' + e.message); }
     window._dungeonState = null;
     window.loadDungeonTab();
@@ -18281,12 +18324,19 @@ window._dungeonShareSummary = async function() {
     const pool = _dungeonGeneratePool(progress.date);
     const totalAmber = progress.results.reduce((s,r) => s + r.reward, 0);
     const wins = progress.results.filter(r => r.success).length;
+    const foundCards = progress.results.flatMap(r => r.bonusCards || []).map(c => ({ name: c.name, image: c.image, rarity: c.rarity }));
     const post = {
         uid,
         displayName: profile.displayName || auth.currentUser.displayName || 'WeeBee User',
         avatar: profile.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName||'WeeBee')}&backgroundColor=ffc107&fontColor=333333`,
         type: 'summary',
-        gates: pool.map((gateId, i) => ({ gateId, success: progress.results[i].success, reward: progress.results[i].reward })),
+        gates: pool.map((gateId, i) => ({
+            gateId,
+            success: progress.results[i].success,
+            reward: progress.results[i].reward,
+            party: (progress.results[i].party || []).map(c => ({ name: c.name, image: c.image, rarity: c.rarity })),
+        })),
+        foundCards,
         totalAmber, wins,
         timestamp: new Date(),
         likes: [], dislikes: [], commentCount: 0,
@@ -18295,6 +18345,7 @@ window._dungeonShareSummary = async function() {
         await addDoc(collection(db, 'dungeon_posts'), post);
         progress.summaryShared = true;
         await _dungeonSaveProgress(uid, progress);
+        window.awardAchievements(['dungeon_share']).catch(() => {});
     } catch(e) { return alert('Failed to share: ' + e.message); }
     _dungeonRenderGateSelect(document.getElementById('dungeon-tab-content'));
     window.fetchHomeActivityFeed?.();
@@ -18323,6 +18374,7 @@ window._dungeonShareResult = async function() {
         await addDoc(collection(db, 'dungeon_posts'), post);
         state.shared = true;
         await setDoc(doc(db, 'raid_state', auth.currentUser.uid), { shared: true }, { merge: true });
+        window.awardAchievements(['dungeon_share']).catch(() => {});
     } catch(e) { return alert('Failed to share: ' + e.message); }
     _dungeonRenderActive(document.getElementById('dungeon-tab-content'), state);
     window.fetchHomeActivityFeed?.();
@@ -18341,13 +18393,27 @@ function _dungeonGenerateSummaryPostHTML(post) {
 
     const gatesHTML = (post.gates||[]).map(g => {
         const gate = DUNGEON_GATES[g.gateId] || {};
+        const partyHTML = (g.party||[]).map(c => `<img src="${c.image||''}" title="${c.name||''}" style="width:18px;height:24px;object-fit:cover;border-radius:3px;border:1px solid rgba(255,255,255,0.3);">`).join('');
         return `<div style="flex:1;min-width:55px;text-align:center;background:var(--bg-gray);border-radius:8px;padding:8px 4px;">
             <div style="font-size:20px;">${gate.icon||''}</div>
             <div style="font-size:9px;font-weight:700;color:var(--text-muted);">${(g.gateId||'').toUpperCase()}-Rank</div>
             <div style="font-size:13px;margin-top:2px;">${g.success?'✅':'💀'}</div>
             <div style="font-size:10px;color:#FFD700;font-weight:800;">+${g.reward}</div>
+            ${partyHTML ? `<div style="display:flex;justify-content:center;gap:2px;margin-top:6px;flex-wrap:wrap;">${partyHTML}</div>` : ''}
         </div>`;
     }).join('');
+
+    const foundHTML = (post.foundCards||[]).length ? `
+        <div style="margin-top:12px;">
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;text-align:center;">🎁 New Teammates Found Today</div>
+            <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;">
+                ${post.foundCards.map(c => `
+                    <div style="width:50px;">
+                        <img src="${c.image||''}" title="${c.name||''}" style="width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:6px;display:block;">
+                        <div style="font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;">${c.name||''}</div>
+                    </div>`).join('')}
+            </div>
+        </div>` : '';
 
     return `<div class="review-card feed-post-card" style="position:relative;">
         ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
@@ -18371,6 +18437,7 @@ function _dungeonGenerateSummaryPostHTML(post) {
         <div style="margin:14px 0 8px;">
             <div style="font-size:15px;font-weight:800;text-align:center;margin-bottom:10px;">🏁 ${post.wins}/5 Gates Cleared · 🟡 ${post.totalAmber} Amber</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">${gatesHTML}</div>
+            ${foundHTML}
         </div>
         <div class="review-actions">
             <div class="action-stat">
