@@ -3005,6 +3005,8 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                 </div>`;
         }
 
+        const safeAnimeTitle = (rev.animeTitle || '').replace(/'/g, "\\'");
+        const safeAnimeImage = (rev.animeImage || '').replace(/'/g, "\\'");
         innerContent = `
             <img src="${rev.animeImage}" class="review-anime-thumb" alt="Cover" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">
             <span class="review-anime-hint">View Anime →</span>
@@ -3015,7 +3017,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                     <span style="font-size: 12px; color: var(--text-muted); display:flex; align-items:center; gap:6px; margin-top:3px; min-width:0;">${rev.animeImage ? `<img src="${rev.animeImage}" class="review-cover-mobile" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">` : ''}${rev.type === 'series'
                         ? `<span style="background:var(--accent-yellow); color:#111; font-size:10px; font-weight:800; padding:2px 7px; border-radius:4px; text-transform:uppercase; letter-spacing:0.5px;">Series Rating</span>`
                         : `Season Review: <strong class="review-anime-title" style="cursor:pointer; color:var(--text-dark);" onclick="event.stopPropagation(); loadAnimeDetails(${rev.mal_id})">${rev.animeTitle}</strong>`
-                    } <span style="color:var(--text-muted); flex-shrink:0;">· ${formatTimeAgo(rev.timestamp)}</span></span></div>
+                    } <span style="color:var(--text-muted); flex-shrink:0;">· ${formatTimeAgo(rev.timestamp)} · <span onclick="event.stopPropagation();window.openReviewFromList(${rev.mal_id},'${safeAnimeTitle}','${safeAnimeImage}')" style="color:#4CAF50;cursor:pointer;font-weight:700;">Review this anime →</span></span></span></div>
                 </div>
                 ${window.getFollowBtnHTML(safeUid)}
             </div>
@@ -4758,6 +4760,7 @@ const TL_DEFAULT_TIERS = () => [
 window.openTierListCreator = function() {
     if (!auth.currentUser) return window.openAuthModal();
     window.tierListState = { editingId:null, type:null, sourceAnimeId:null, sourceAnimeTitle:null, tiers:TL_DEFAULT_TIERS(), unranked:[], isPublic:true };
+    window._tlBulkChars = [];
     window.closeAllModals();
     document.getElementById('tier-list-creator').style.display = 'flex';
     document.getElementById('tl-template-toggle').checked = false;
@@ -5076,6 +5079,10 @@ window.renderTierEditor = function() {
     uz.innerHTML = st.unranked.length === 0
         ? '<div style="color:var(--text-muted);font-size:13px;padding:8px;">Use the search below to add items, then drag them into tiers</div>'
         : st.unranked.map(item => window.renderTlItem(item,'unranked')).join('');
+
+    const bulkSection = document.getElementById('tl-bulk-section');
+    if (bulkSection) bulkSection.style.display = (st.type === 'characters' || st.type === 'blank') ? 'block' : 'none';
+    window._renderTierBulkChars();
 };
 
 window.renderTlItem = function(item, zone) {
@@ -5314,6 +5321,102 @@ window.addToTierPool = function(item) {
     st.unranked.push(item);
     document.getElementById('tl-pool-search').value='';
     document.getElementById('tl-pool-results').innerHTML='';
+    window.renderTierEditor();
+};
+
+// ─── Bulk-add characters from another anime (characters tier lists) ──────────
+let _tierBulkAnimeTimer = null, _tierBulkAnimeReqId = 0;
+window._tlBulkChars = [];
+window.searchTierBulkAnime = async function() {
+    clearTimeout(_tierBulkAnimeTimer);
+    const q = document.getElementById('tl-bulk-anime-search').value.trim();
+    const results = document.getElementById('tl-bulk-anime-results');
+    if (q.length < 2) { results.innerHTML = ''; return; }
+    results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">Searching...</div>';
+    _tierBulkAnimeTimer = setTimeout(async () => {
+        const reqId = ++_tierBulkAnimeReqId;
+        try {
+            const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8&type=tv`);
+            const { data } = await res.json();
+            if (reqId !== _tierBulkAnimeReqId) return;
+            if (!(data||[]).length) { results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">No results.</div>'; return; }
+            results.innerHTML = (data||[]).map(a => {
+                const title = (a.title_english || a.title).replace(/'/g,"\\'");
+                const image = a.images?.jpg?.image_url || '';
+                return `<div onclick="selectTierBulkAnime(${a.mal_id},'${title}','${image}')"
+                    style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;margin-bottom:2px;"
+                    onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='transparent'">
+                    <img src="${image}" style="width:32px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;" onerror="this.style.background='var(--bg-gray-darker)'">
+                    <span style="font-size:13px;">${a.title_english || a.title}</span>
+                </div>`;
+            }).join('');
+        } catch(e) { if (reqId === _tierBulkAnimeReqId) results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">Search failed.</div>'; }
+    }, 300);
+};
+
+window.selectTierBulkAnime = async function(malId, title, imageUrl) {
+    document.getElementById('tl-bulk-anime-search').value = title;
+    document.getElementById('tl-bulk-anime-results').innerHTML = '';
+    const wrap = document.getElementById('tl-bulk-chars-wrap');
+    const label = document.getElementById('tl-bulk-chars-label');
+    const grid = document.getElementById('tl-bulk-chars-grid');
+    wrap.style.display = 'block';
+    label.textContent = `Characters from ${title}`;
+    grid.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">Loading characters...</div>';
+    try {
+        const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}/characters`);
+        const { data } = await res.json();
+        const validChar = c => !/^(narrator|singer|announcer|voice actor)$/i.test(c.character.name.trim());
+        const toItem = c => ({ id:`char_${c.character.mal_id}`, title:c.character.name, image:c.character.images?.jpg?.image_url||'', animeTitle: title });
+        const mains = (data||[]).filter(c=>c.role==='Main' && validChar(c)).sort((a,b)=>(b.favorites||0)-(a.favorites||0)).map(toItem);
+        const supporting = (data||[]).filter(c=>c.role==='Supporting' && validChar(c)).sort((a,b)=>(b.favorites||0)-(a.favorites||0)).map(toItem);
+        window._tlBulkChars = [...mains, ...supporting].slice(0, 50).map(c => ({ ...c, selected: false }));
+        window._renderTierBulkChars();
+    } catch(e) {
+        grid.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">Failed to load characters.</div>';
+    }
+};
+
+window._renderTierBulkChars = function() {
+    const grid = document.getElementById('tl-bulk-chars-grid');
+    if (!grid) return;
+    const st = window.tierListState;
+    const all = [...st.unranked, ...st.tiers.flatMap(t=>t.items)];
+    grid.innerHTML = window._tlBulkChars.map((c, i) => {
+        const already = all.some(x => x.id === c.id);
+        const safeTitle = c.title.replace(/"/g,'&quot;');
+        const badge = already
+            ? `<div style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.7);color:white;border-radius:50%;width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;">✓</div>`
+            : `<div style="position:absolute;top:2px;right:2px;background:${c.selected?'var(--accent-yellow)':'rgba(0,0,0,0.5)'};color:${c.selected?'#333':'white'};border-radius:50%;width:16px;height:16px;font-size:11px;display:flex;align-items:center;justify-content:center;">${c.selected?'✓':''}</div>`;
+        return `<div onclick="${already ? '' : `window._tlBulkToggle(${i})`}"
+            style="width:65px;flex-shrink:0;cursor:${already?'default':'pointer'};position:relative;user-select:none;opacity:${already?0.4:1};" title="${safeTitle}">
+            <img src="${c.image}" style="width:65px;height:88px;object-fit:cover;border-radius:6px;display:block;background:var(--bg-gray-darker);border:2px solid ${c.selected?'var(--accent-yellow)':'transparent'};" onerror="this.style.background='var(--bg-gray-darker)'">
+            <div style="font-size:9px;color:var(--text-dark);text-align:center;line-height:1.2;margin-top:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${c.title}</div>
+            ${badge}
+        </div>`;
+    }).join('');
+};
+
+window._tlBulkToggle = function(i) {
+    if (!window._tlBulkChars[i]) return;
+    window._tlBulkChars[i].selected = !window._tlBulkChars[i].selected;
+    window._renderTierBulkChars();
+};
+
+window._tlBulkSelectAll = function() {
+    const st = window.tierListState;
+    const all = [...st.unranked, ...st.tiers.flatMap(t=>t.items)];
+    window._tlBulkChars.forEach(c => { if (!all.some(x=>x.id===c.id)) c.selected = true; });
+    window._renderTierBulkChars();
+};
+
+window.addSelectedTierBulkChars = function() {
+    const st = window.tierListState;
+    const all = [...st.unranked, ...st.tiers.flatMap(t=>t.items)];
+    const toAdd = (window._tlBulkChars||[]).filter(c => c.selected && !all.some(x=>x.id===c.id));
+    if (!toAdd.length) return;
+    st.unranked.push(...toAdd.map(({selected, ...c}) => c));
+    window._tlBulkChars.forEach(c => { c.selected = false; });
     window.renderTierEditor();
 };
 
@@ -6829,7 +6932,22 @@ function _plinkoGetBridges(width, gap) {
 
     const starSpot = pickBridgeSpot();
     const starBridge = { y: starSpot.y, x1: starSpot.x1, x2: starSpot.x2, triggered: false, flashFrames: 0, isStar: true };
-    const starSlot = Math.floor(rand() * binCount);
+
+    // Constrain the star slot to bins the ball can actually reach from the
+    // star gate — each remaining row of pegs below the gate lets the ball
+    // drift by roughly half a bin, so a gate near the bottom can only pair
+    // with a bin almost directly below it.
+    const starRow = Math.round(starSpot.y / gap) - 1;
+    const remainingRows = PLINKO_ROWS - 1 - starRow;
+    const maxDrift = Math.max(1, remainingRows * 0.5);
+    const bridgeCenter = (starSpot.x1 + starSpot.x2) / 2 / gap;
+    const reachableSlots = [];
+    for (let j = 0; j < binCount; j++) {
+        if (Math.abs((j + 0.5) - bridgeCenter) <= maxDrift) reachableSlots.push(j);
+    }
+    const starSlot = reachableSlots.length
+        ? reachableSlots[Math.floor(rand() * reachableSlots.length)]
+        : Math.max(0, Math.min(binCount - 1, Math.round(bridgeCenter - 0.5)));
 
     return { bridges, starBridge, starSlot };
 }
@@ -7074,6 +7192,7 @@ function _plinkoRunSimulation(canvas, startX) {
         const ballR = gap * 0.16;
         const gravity = gap * 0.0009;
         const maxVy = gap * 0.26;
+        const maxVx = gap * 0.22;
         const restitution = 0.5;
 
         let x = startX != null ? startX : width / 2;
@@ -7112,6 +7231,14 @@ function _plinkoRunSimulation(canvas, startX) {
                 }
             }
             vx *= 0.99;
+            // When the ball settles into the V between two pegs, gravity keeps
+            // pushing it back into both every frame, so the collision loop above
+            // resolves against each peg in turn — stacking velocity reflections
+            // and random kicks frame after frame. Without a cap that energy
+            // builds up silently (since vx alone never triggers the landing
+            // check) until the ball finally pops free and shoots sideways.
+            // Clamping vx keeps that buildup bounded like maxVy already does for vy.
+            vx = Math.max(-maxVx, Math.min(maxVx, vx));
 
             // Multiplier bridges — crossing the gap between a bridge's two
             // pegs (moving downward) multiplies the final prize. Multiple
@@ -7190,7 +7317,7 @@ function _plinkoRender(el, config, state) {
                     <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:4px;">${freeAvailable ? 'You have a free drop available today!' : 'Your free daily drop resets at midnight'}</div>
                     <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:10px;line-height:1.6;">
                         🌉 Colored bridges multiply your prize 1.5x–3x — hit more than one and they stack!<br>
-                        ★ Cross the pink star bridge and land in today's ★ slot for a +${PLINKO_STAR_BONUS} Amber bonus
+                        Pass the ball through both <span style="color:${PLINKO_STAR_COLOR};font-weight:800;">★</span> gates to land the <span style="color:${PLINKO_STAR_COLOR};font-weight:800;">★</span> Bonus (+${PLINKO_STAR_BONUS} Amber)
                     </div>
                 </div>
             </div>
@@ -7386,7 +7513,7 @@ function _plinkoShowResultModal(prize, multiplier, hitBridges, hitStar) {
         <div style="font-size:14px;font-weight:800;color:${PLINKO_MULTIPLIER_COLORS[hitBridges[hitBridges.length-1]] || '#fff'};margin-top:6px;">${multiplier}x Multiplier!</div>
     ` : '';
     const starBadge = hitStar ? `
-        <div style="font-size:16px;font-weight:900;color:${PLINKO_STAR_COLOR};margin-top:10px;">★ Star Bonus: +${PLINKO_STAR_BONUS} Amber! ★</div>
+        <div style="font-size:16px;font-weight:900;color:${PLINKO_STAR_COLOR};margin-top:10px;">★ Bonus: +${PLINKO_STAR_BONUS} Amber! ★</div>
     ` : '';
     modal.innerHTML = `<div style="text-align:center;background:var(--bg-card);border-radius:16px;padding:36px 28px;max-width:360px;">
         <div style="font-size:60px;">${hitStar ? '⭐' : (multiplier > 1 ? '🎉' : '🟡')}</div>
@@ -7701,6 +7828,46 @@ window._tcgMigrateSRSSRToPool = async function() {
         }
         _tcgClearPoolCache();
         if (statusEl) statusEl.textContent = `Done — migrated ${all.length} SR/SSR/UR cards into the pool.`;
+        window._tcgBrowsePool('all', '', 0);
+    } catch(e) {
+        if (statusEl) statusEl.textContent = `Failed: ${e.message}`;
+    }
+};
+
+// Removes stale SR/SSR/UR entries left behind in the `characters` pool from
+// earlier versions of TCG_SR_CARDS/SSR_CARDS/UR_CARDS — when a card's name or
+// anime label changes, _tcgMigrateSRSSRToPool writes it under a *new* doc id
+// but never deletes the old one. Those leftover docs still match
+// rarityTier sr/ssr/ur and have a `series`, so they stay in the pull pool —
+// meaning whichever character has both an old and current entry gets pulled
+// roughly twice as often as everyone else. Run this after "Sync Cards to Pool".
+window._tcgPurgeStaleSRSSR = async function() {
+    if (!window.isAdmin) return;
+    const statusEl = document.getElementById('tcg-srssr-migrate-status');
+    const slug = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+    const all = [
+        ...TCG_SR_CARDS.map(c => ({ ...c, rarityTier: 'sr' })),
+        ...TCG_SSR_CARDS.map(c => ({ ...c, rarityTier: 'ssr' })),
+        ...TCG_UR_CARDS.map(c => ({ ...c, rarityTier: 'ur' })),
+    ];
+    const validIds = new Set(all.map(c => `${c.rarityTier}_${slug(c.name)}_${slug(c.anime)}`));
+    if (statusEl) statusEl.textContent = 'Scanning SR/SSR/UR pool for stale entries…';
+    try {
+        const snap = await getDocs(query(collection(db, 'characters'), where('rarityTier', 'in', ['sr', 'ssr', 'ur'])));
+        const stale = [];
+        snap.forEach(d => { if (!validIds.has(d.id)) stale.push(d.ref); });
+        if (!stale.length) {
+            if (statusEl) statusEl.textContent = 'No stale SR/SSR/UR entries found — pool is clean!';
+            return;
+        }
+        const BATCH_SIZE = 400;
+        for (let i = 0; i < stale.length; i += BATCH_SIZE) {
+            const b = writeBatch(db);
+            stale.slice(i, i + BATCH_SIZE).forEach(ref => b.delete(ref));
+            await b.commit();
+        }
+        _tcgClearPoolCache();
+        if (statusEl) statusEl.textContent = `Removed ${stale.length} stale SR/SSR/UR entries — these were causing uneven pull rates.`;
         window._tcgBrowsePool('all', '', 0);
     } catch(e) {
         if (statusEl) statusEl.textContent = `Failed: ${e.message}`;
@@ -8466,7 +8633,7 @@ async function _tcgSavePackToCollection(uid, cards) {
     return enriched;
 }
 
-// ── Profile "Card Showcase" — up to 5 manually pinned cards shown on a user's profile ──
+// ── Profile "Card Showcase" — up to 6 manually pinned cards shown on a user's profile ──
 function _tcgShowcaseEmptyHTML(isMe) {
     return `
         <div style="margin-top:14px;padding:10px 20px;background:var(--bg-gray);border:1px solid var(--border-color);border-radius:var(--border-radius);display:flex;align-items:center;justify-content:space-between;">
@@ -8572,19 +8739,24 @@ window._tcgOpenShowcasePicker = async function() {
 };
 
 // Pins/unpins a card for the current user's profile showcase (max 6).
+// Uses a transaction so rapid-fire clicks in the picker (each calling this
+// independently) can't read-modify-write over each other and drop pins.
 window._tcgTogglePin = async function(cardId, profileUid) {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
+    const ref = doc(db, 'profiles', uid);
     try {
-        const pd = await getDoc(doc(db, 'profiles', uid));
-        let pins = pd.exists() ? (pd.data().pinnedTcgCardIds || []) : [];
-        if (pins.includes(cardId)) {
-            pins = pins.filter(id => id !== cardId);
-        } else {
-            if (pins.length >= 6) { alert('You can only showcase up to 6 cards — unpin one first.'); return; }
-            pins = [...pins, cardId];
-        }
-        await setDoc(doc(db, 'profiles', uid), { pinnedTcgCardIds: pins }, { merge: true });
+        await runTransaction(db, async (tx) => {
+            const pd = await tx.get(ref);
+            let pins = pd.exists() ? (pd.data().pinnedTcgCardIds || []) : [];
+            if (pins.includes(cardId)) {
+                pins = pins.filter(id => id !== cardId);
+            } else {
+                if (pins.length >= 6) throw new Error('LIMIT_REACHED');
+                pins = [...pins, cardId];
+            }
+            tx.set(ref, { pinnedTcgCardIds: pins }, { merge: true });
+        });
         if (profileUid) {
             const el = document.getElementById('user-tcg-binders-container');
             if (el) await window._tcgRenderProfileBindersList(el, profileUid);
@@ -8592,7 +8764,10 @@ window._tcgTogglePin = async function(cardId, profileUid) {
         } else {
             window._tcgRenderMyCollection('mycards', true);
         }
-    } catch(e) { alert('Failed to update showcase: ' + e.message); }
+    } catch(e) {
+        if (e.message === 'LIMIT_REACHED') { alert('You can only showcase up to 6 cards — unpin one first.'); return; }
+        alert('Failed to update showcase: ' + e.message);
+    }
 };
 
 // ── Multiselect: bulk dismantle / bulk pin ──────────────────────────────────
@@ -8671,8 +8846,8 @@ window._tcgBulkPin = async function(uid, profileUid) {
         let pins = pd.exists() ? (pd.data().pinnedTcgCardIds || []) : [];
         const toAdd = [...sel].filter(id => !pins.includes(id));
         if (!toAdd.length) { alert('All selected cards are already pinned.'); return; }
-        if (pins.length + toAdd.length > 5) {
-            alert(`You can only showcase up to 5 cards total. You currently have ${pins.length} pinned and selected ${toAdd.length} new card(s) — unpin some first or select fewer.`);
+        if (pins.length + toAdd.length > 6) {
+            alert(`You can only showcase up to 6 cards total. You currently have ${pins.length} pinned and selected ${toAdd.length} new card(s) — unpin some first or select fewer.`);
             return;
         }
         pins = [...pins, ...toAdd];
@@ -17470,13 +17645,45 @@ window.goToMeloBeeTab = function() {
 // Gate config: duration, party size, difficulty (vs party "Power"), and
 // amber reward ranges. Success chance = clamp(50 + (partyPower-difficulty)*4, 15, 95).
 const DUNGEON_GATES = {
-    e: { id:'e', name:'E-Rank Gate', icon:'🟢', durationMs: 1*3600e3,  partySize:1, difficulty:1,  rewardMin:20,  rewardMax:50,   failReward:5 },
-    d: { id:'d', name:'D-Rank Gate', icon:'🔵', durationMs: 2*3600e3,  partySize:1, difficulty:3,  rewardMin:50,  rewardMax:75,   failReward:15 },
-    c: { id:'c', name:'C-Rank Gate', icon:'🟣', durationMs: 4*3600e3,  partySize:2, difficulty:6,  rewardMin:75,  rewardMax:100,  failReward:20 },
-    b: { id:'b', name:'B-Rank Gate', icon:'🟠', durationMs: 8*3600e3,  partySize:2, difficulty:12, rewardMin:300, rewardMax:400,  failReward:75 },
-    a: { id:'a', name:'A-Rank Gate', icon:'🔴', durationMs: 12*3600e3, partySize:3, difficulty:18, rewardMin:500, rewardMax:800,  failReward:125 },
-    s: { id:'s', name:'S-Rank Gate', icon:'⚫', durationMs: 24*3600e3, partySize:5, difficulty:33, rewardMin:800, rewardMax:1200, failReward:200 },
+    e: { id:'e', name:'E-Rank Gate', icon:'🟢', durationMs: 1*3600e3, partySize:1, difficulty:1,  rewardMin:20,  rewardMax:50,   failReward:5 },
+    d: { id:'d', name:'D-Rank Gate', icon:'🔵', durationMs: 1*3600e3, partySize:1, difficulty:3,  rewardMin:50,  rewardMax:75,   failReward:15 },
+    c: { id:'c', name:'C-Rank Gate', icon:'🟣', durationMs: 1*3600e3, partySize:2, difficulty:6,  rewardMin:75,  rewardMax:100,  failReward:20 },
+    b: { id:'b', name:'B-Rank Gate', icon:'🟠', durationMs: 1*3600e3, partySize:2, difficulty:12, rewardMin:300, rewardMax:400,  failReward:75 },
+    a: { id:'a', name:'A-Rank Gate', icon:'🔴', durationMs: 1*3600e3, partySize:3, difficulty:18, rewardMin:500, rewardMax:600,  failReward:125 },
+    s: { id:'s', name:'S-Rank Gate', icon:'⚫', durationMs: 1*3600e3, partySize:5, difficulty:33, rewardMin:800, rewardMax:1200, failReward:200 },
 };
+
+// Daily 5-gate pool: every player gets the same pool, seeded by the
+// America/New_York calendar date so it rotates at midnight EST/EDT
+// regardless of the player's local timezone. At most one S-Rank gate
+// per pool; the pool is sorted easiest-to-hardest for a natural ramp.
+function _dungeonTodayKey(d = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+    const map = {};
+    parts.forEach(p => map[p.type] = p.value);
+    return `${map.year}-${map.month}-${map.day}`;
+}
+
+function _dungeonMsUntilReset() {
+    const estNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const estMidnight = new Date(estNow);
+    estMidnight.setHours(24, 0, 0, 0);
+    return estMidnight - estNow;
+}
+
+function _dungeonGeneratePool(dateKey) {
+    const rng = _plinkoSeededRandom(_plinkoSeedFromString('dungeon-' + dateKey));
+    const tiers = ['e', 'd', 'c', 'b', 'a', 's'];
+    const pool = [];
+    let sUsed = false;
+    while (pool.length < 5) {
+        const tier = tiers[Math.floor(rng() * tiers.length)];
+        if (tier === 's' && sUsed) continue;
+        if (tier === 's') sUsed = true;
+        pool.push(tier);
+    }
+    return pool.sort((a, b) => DUNGEON_GATES[a].difficulty - DUNGEON_GATES[b].difficulty);
+}
 
 // Card "Power" — rarity baseline plus a bonus for low serial numbers
 // (single-digit serials, Founder/Monthly URs all count as the strongest).
@@ -17614,6 +17821,19 @@ async function _dungeonLoadState(uid) {
     } catch(e) { return null; }
 }
 
+// Tracks a player's progress through today's 5-gate pool:
+// { date: '<EST date key>', poolIndex: 0-5, results: [{gateId,success,reward}], summaryShared }
+async function _dungeonLoadProgress(uid) {
+    try {
+        const snap = await getDoc(doc(db, 'dungeon_progress', uid));
+        return snap.exists() ? snap.data() : null;
+    } catch(e) { return null; }
+}
+
+async function _dungeonSaveProgress(uid, progress) {
+    try { await setDoc(doc(db, 'dungeon_progress', uid), progress); } catch(e) {}
+}
+
 window._dungeonStopRefresh = function() {
     clearTimeout(window._dungeonRefreshTimer);
 };
@@ -17634,6 +17854,17 @@ window.loadDungeonTab = async function() {
     const uid = auth.currentUser.uid;
     const state = await _dungeonLoadState(uid);
     window._dungeonState = state;
+    const todayKey = _dungeonTodayKey();
+    let progress = await _dungeonLoadProgress(uid);
+    if (!progress) {
+        progress = { date: todayKey, poolIndex: 0, results: [] };
+        if (!state) await _dungeonSaveProgress(uid, progress);
+    } else if (!state && progress.date !== todayKey) {
+        // Safe to roll over to the new day's pool — no active raid to disturb.
+        progress = { date: todayKey, poolIndex: 0, results: [] };
+        await _dungeonSaveProgress(uid, progress);
+    }
+    window._dungeonProgress = progress;
     if (state) {
         _dungeonRenderActive(el, state);
     } else {
@@ -17649,27 +17880,70 @@ window._dungeonToggleTestMode = function() {
 
 function _dungeonRenderGateSelect(el) {
     const testMode = window.isAdmin && localStorage.getItem('weebee_dungeon_testmode') === '1';
-    const rows = Object.values(DUNGEON_GATES).map(g => `
-        <div style="background:var(--bg-gray);border-radius:14px;padding:18px 20px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-            <div>
-                <div style="font-weight:800;font-size:16px;margin-bottom:4px;">${g.icon} ${g.name}</div>
-                <div style="font-size:12px;color:var(--text-muted);">
-                    ⏱️ ${testMode ? `<span style="color:#FFD700;">30s (test)</span> <s>${_dungeonFormatDuration(g.durationMs)}</s>` : _dungeonFormatDuration(g.durationMs)} · 👥 ${g.partySize} card${g.partySize>1?'s':''} · 🟡 ${g.rewardMin}-${g.rewardMax} amber on success, ${g.failReward} on failure
+    const progress = window._dungeonProgress || { date: _dungeonTodayKey(), poolIndex: 0, results: [] };
+    const pool = _dungeonGeneratePool(progress.date);
+    const poolIndex = progress.poolIndex;
+
+    const poolStripHTML = pool.map((gid, i) => {
+        const g = DUNGEON_GATES[gid];
+        const result = progress.results[i];
+        // Gates beyond the current one stay a mystery until unlocked.
+        if (i > poolIndex) {
+            return `<div style="flex:1;min-width:60px;text-align:center;background:rgba(255,255,255,0.02);border-radius:10px;padding:10px 6px;">
+                <div style="font-size:22px;opacity:0.4;">🔒</div>
+                <div style="font-size:10px;font-weight:700;margin-top:2px;color:var(--text-muted);">Locked</div>
+                <div style="font-size:14px;margin-top:2px;">&nbsp;</div>
+            </div>`;
+        }
+        let icon, bg, border = '';
+        if (result) { icon = result.success ? '✅' : '💀'; bg = 'rgba(255,255,255,0.04)'; }
+        else { icon = '▶️'; bg = 'rgba(255,215,0,0.12)'; border = 'border:2px solid var(--accent-yellow);'; }
+        return `<div style="flex:1;min-width:60px;text-align:center;background:${bg};border-radius:10px;padding:10px 6px;${border}">
+            <div style="font-size:22px;">${g.icon}</div>
+            <div style="font-size:10px;font-weight:700;margin-top:2px;">${g.id.toUpperCase()}-Rank</div>
+            <div style="font-size:14px;margin-top:2px;">${icon}</div>
+        </div>`;
+    }).join('');
+
+    let mainHTML;
+    if (poolIndex >= 5) {
+        const totalAmber = progress.results.reduce((s, r) => s + r.reward, 0);
+        const wins = progress.results.filter(r => r.success).length;
+        mainHTML = `
+            <div style="background:var(--bg-gray);border-radius:14px;padding:28px 20px;text-align:center;">
+                <div style="font-size:20px;font-weight:800;margin-bottom:8px;">🏁 Today's Gates Cleared!</div>
+                <div style="font-size:14px;color:var(--text-muted);margin-bottom:6px;">${wins}/5 gates won · 🟡 ${totalAmber} Amber earned today</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:18px;">New gates unlock in ${_dungeonFormatRemaining(_dungeonMsUntilReset())}</div>
+                ${progress.summaryShared
+                    ? `<div style="color:var(--text-muted);font-size:13px;">✅ Shared today's run!</div>`
+                    : `<button class="action-btn" style="font-weight:800;" onclick="window._dungeonShareSummary()">📤 Post Today's Run</button>`}
+            </div>`;
+    } else {
+        const g = DUNGEON_GATES[pool[poolIndex]];
+        mainHTML = `
+            <div style="background:var(--bg-gray);border-radius:14px;padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+                <div>
+                    <div style="font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">Gate ${poolIndex + 1} of 5</div>
+                    <div style="font-weight:800;font-size:16px;margin-bottom:4px;">${g.icon} ${g.name}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">
+                        ⏱️ ${testMode ? `<span style="color:#FFD700;">30s (test)</span> <s>${_dungeonFormatDuration(g.durationMs)}</s>` : _dungeonFormatDuration(g.durationMs)} · 👥 ${g.partySize} card${g.partySize>1?'s':''} · 🟡 ${g.rewardMin}-${g.rewardMax} amber on success, ${g.failReward} on failure
+                    </div>
                 </div>
-            </div>
-            <button class="action-btn" onclick="window._dungeonOpenPartySelect('${g.id}')" style="font-weight:800;">Enter Gate →</button>
-        </div>
-    `).join('');
+                <button class="action-btn" onclick="window._dungeonOpenPartySelect('${g.id}')" style="font-weight:800;">Enter Gate →</button>
+            </div>`;
+    }
+
     el.innerHTML = `
         <div class="bw-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:20px;text-align:center;border:1px solid rgba(255,255,255,0.08);position:relative;overflow:hidden;">
             <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(139,69,19,0.3) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(75,0,130,0.25) 0%,transparent 60%);pointer-events:none;"></div>
             <div style="position:relative;z-index:1;">
                 <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
                 <div class="banner-hero-title" style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">⚔️ TCG Dungeon ⚔️</div>
-                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;">Send your cards on a raid — come back later for amber rewards</div>
+                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;">Clear today's 5 gates one at a time for amber rewards</div>
             </div>
         </div>
-        <div id="dungeon-gate-list">${rows}</div>
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">${poolStripHTML}</div>
+        <div id="dungeon-gate-list">${mainHTML}</div>
         <div id="dungeon-party-select" style="display:none;"></div>
         ${window.isAdmin ? `
         <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);text-align:center;">
@@ -17699,6 +17973,18 @@ window._dungeonOpenPartySelect = async function(gateId) {
     window._dungeonPickState = { gateId, selected: new Set(), cards, sort: 'power-desc' };
     _dungeonRenderPartySelect(panel);
 };
+
+// A card sent on a gate run is "fatigued" — it can't be used for the very
+// next gate in the pool, and rests back to normal for the one after that.
+// Fatigue is stored as { cardId: poolIndex } meaning "unusable until the
+// pool reaches this index"; tracked per-user so a traded/dismantled card
+// simply has no entry for its new owner (loses the status for now).
+function _dungeonIsFatigued(cardId) {
+    const progress = window._dungeonProgress;
+    if (!progress?.fatigue) return false;
+    const restUntil = progress.fatigue[cardId];
+    return restUntil != null && restUntil > progress.poolIndex;
+}
 
 const DUNGEON_RARITY_ORDER = { ur:5, ssr:4, sr:3, rare:2, common:1 };
 
@@ -17736,13 +18022,15 @@ function _dungeonRenderPartySelect(panel) {
     const sortedCards = _dungeonSortCards(cards, sort);
     const cardsHTML = sortedCards.length ? sortedCards.map(c => {
         const isSel = selected.has(c.id);
+        const fatigued = _dungeonIsFatigued(c.id);
         return `
-        <div onclick="window._dungeonTogglePick('${c.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${isSel?'var(--accent-yellow)':'transparent'};position:relative;background:var(--bg-gray);">
-            <img src="${c.image||''}" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;" loading="lazy">
+        <div onclick="${fatigued?'':`window._dungeonTogglePick('${c.id}')`}" style="cursor:${fatigued?'not-allowed':'pointer'};border-radius:10px;overflow:hidden;border:3px solid ${isSel?'var(--accent-yellow)':'transparent'};position:relative;background:var(--bg-gray);${fatigued?'opacity:0.45;':''}">
+            <img src="${c.image||''}" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;${fatigued?'filter:grayscale(0.6);':''}" loading="lazy">
             <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);color:#fff;font-size:10px;padding:4px 6px;text-align:center;">
                 <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
                 <div style="color:#FFD700;">${rarityLabels[c.rarity]||c.rarity} · Power ${_dungeonCardPower(c)}</div>
             </div>
+            ${fatigued ? `<div style="position:absolute;top:0;left:0;right:0;background:rgba(0,0,0,0.7);color:#FFD700;font-size:10px;font-weight:800;text-align:center;padding:4px 0;">😴 Resting</div>` : ''}
             ${isSel ? `<div style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:var(--accent-yellow);color:#222;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:13px;">✓</div>` : ''}
         </div>`;
     }).join('') : `<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:24px;">No cards in your collection yet — open some packs first!</div>`;
@@ -17756,6 +18044,7 @@ function _dungeonRenderPartySelect(panel) {
             <div style="font-size:13px;">Selected: <strong>${selected.size}/${gate.partySize}</strong> · Party Power: <strong>${partyPower}</strong></div>
             <div style="font-size:13px;">Success Chance: <strong style="color:${chance>=70?'#4caf50':chance>=40?'#FFD700':'#f44336'};">${chance}%</strong></div>
         </div>
+        <div style="font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:10px;">😴 Cards sent on a raid rest for the next gate before they can be used again.</div>
         <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:10px;">
             <label style="font-size:12px;color:var(--text-muted);">Sort by</label>
             <select onchange="window._dungeonSetSort(this.value)" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:12px;">
@@ -17775,6 +18064,7 @@ function _dungeonRenderPartySelect(panel) {
 window._dungeonTogglePick = function(cardId) {
     const ps = window._dungeonPickState;
     if (!ps) return;
+    if (_dungeonIsFatigued(cardId)) return;
     const gate = DUNGEON_GATES[ps.gateId];
     if (ps.selected.has(cardId)) ps.selected.delete(cardId);
     else {
@@ -17818,8 +18108,16 @@ window._dungeonStartRaid = async function() {
         bonusCards,
         startTime: now, endTime: now + durationMs,
     };
+    const uid = auth.currentUser.uid;
     try {
-        await setDoc(doc(db, 'raid_state', auth.currentUser.uid), state);
+        await setDoc(doc(db, 'raid_state', uid), state);
+
+        // Send these cards "resting" for the next gate in the pool.
+        const progress = window._dungeonProgress || { date: _dungeonTodayKey(), poolIndex: 0, results: [] };
+        const fatigue = { ...(progress.fatigue || {}) };
+        for (const c of cards) fatigue[c.id] = progress.poolIndex + 2;
+        window._dungeonProgress = { ...progress, fatigue };
+        await _dungeonSaveProgress(uid, window._dungeonProgress);
     } catch(e) { return alert('Failed to start raid: ' + e.message); }
     window._dungeonState = state;
     window._dungeonPickState = null;
@@ -17842,7 +18140,24 @@ function _dungeonRenderActive(el, state) {
         </div>`;
     }).join('');
 
-    const pathSVG = `<polyline points="${path.map(p=>`${p.x},${p.y}`).join(' ')}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="0.8" stroke-dasharray="2,1.5" vector-effect="non-scaling-stroke"/>`;
+    // "Map route" look: a faint thick trail underneath a glowing dashed line,
+    // with waypoint markers that light up as the party passes them and a
+    // gold "destination" marker at the gate.
+    const pointsAttr = path.map(p=>`${p.x},${p.y}`).join(' ');
+    const waypointsSVG = path.map((p, i) => {
+        const t = i / (path.length - 1);
+        const reached = progress >= t - 0.001;
+        const isEnd = i === path.length - 1;
+        if (isEnd) {
+            return `<circle cx="${p.x}" cy="${p.y}" r="3.2" fill="${reached?'#FFD700':'rgba(255,215,0,0.3)'}" stroke="#fff" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+                    <text x="${p.x}" y="${p.y - 5}" text-anchor="middle" font-size="5" fill="${reached?'#FFD700':'rgba(255,255,255,0.4)'}">🏁</text>`;
+        }
+        return `<circle cx="${p.x}" cy="${p.y}" r="1.8" fill="${reached?'#fff':'rgba(255,255,255,0.2)'}" stroke="rgba(0,0,0,0.35)" stroke-width="0.4" vector-effect="non-scaling-stroke"/>`;
+    }).join('');
+    const pathSVG = `
+        <polyline points="${pointsAttr}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+        <polyline points="${pointsAttr}" fill="none" stroke="rgba(255,215,0,0.55)" stroke-width="1" stroke-dasharray="2.5,2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+        ${waypointsSVG}`;
 
     const flavor = ready
         ? (state.success ? "The crew emerges victorious!" : "The crew limps back, battered but alive...")
@@ -17927,16 +18242,62 @@ function _dungeonStatsHTML(state) {
 window._dungeonClaim = async function() {
     const state = window._dungeonState;
     if (!state || Date.now() < state.endTime) return;
+    const uid = auth.currentUser.uid;
     try {
         await _awardAmber(state.reward, `dungeon:${state.gateId}:${state.success?'success':'fail'}`);
         if (state.bonusCards?.length) {
-            await _tcgSavePackToCollection(auth.currentUser.uid, state.bonusCards);
-            window._tcgCollectionCache.delete(auth.currentUser.uid);
+            await _tcgSavePackToCollection(uid, state.bonusCards);
+            window._tcgCollectionCache.delete(uid);
         }
-        await deleteDoc(doc(db, 'raid_state', auth.currentUser.uid));
+        await deleteDoc(doc(db, 'raid_state', uid));
+
+        // Advance the daily pool — unless the date rolled over while this
+        // raid was in progress, in which case it belonged to a pool that's
+        // already over and the player just starts fresh on today's pool.
+        const todayKey = _dungeonTodayKey();
+        let progress = window._dungeonProgress || await _dungeonLoadProgress(uid) || { date: todayKey, poolIndex: 0, results: [] };
+        if (progress.date !== todayKey) {
+            progress = { date: todayKey, poolIndex: 0, results: [] };
+        } else {
+            progress = {
+                ...progress,
+                poolIndex: Math.min(5, progress.poolIndex + 1),
+                results: [...progress.results, { gateId: state.gateId, success: state.success, reward: state.reward }],
+            };
+        }
+        await _dungeonSaveProgress(uid, progress);
+        window._dungeonProgress = progress;
     } catch(e) { return alert('Claim failed: ' + e.message); }
     window._dungeonState = null;
     window.loadDungeonTab();
+};
+
+// Shares a condensed view of all 5 of today's gate results in one post.
+window._dungeonShareSummary = async function() {
+    const progress = window._dungeonProgress;
+    if (!progress || progress.poolIndex < 5 || progress.summaryShared) return;
+    const uid = auth.currentUser.uid;
+    const profile = window._myProfile || {};
+    const pool = _dungeonGeneratePool(progress.date);
+    const totalAmber = progress.results.reduce((s,r) => s + r.reward, 0);
+    const wins = progress.results.filter(r => r.success).length;
+    const post = {
+        uid,
+        displayName: profile.displayName || auth.currentUser.displayName || 'WeeBee User',
+        avatar: profile.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName||'WeeBee')}&backgroundColor=ffc107&fontColor=333333`,
+        type: 'summary',
+        gates: pool.map((gateId, i) => ({ gateId, success: progress.results[i].success, reward: progress.results[i].reward })),
+        totalAmber, wins,
+        timestamp: new Date(),
+        likes: [], dislikes: [], commentCount: 0,
+    };
+    try {
+        await addDoc(collection(db, 'dungeon_posts'), post);
+        progress.summaryShared = true;
+        await _dungeonSaveProgress(uid, progress);
+    } catch(e) { return alert('Failed to share: ' + e.message); }
+    _dungeonRenderGateSelect(document.getElementById('dungeon-tab-content'));
+    window.fetchHomeActivityFeed?.();
 };
 
 // Shares a finished raid's results as a standard post (dungeon_posts), reusing
@@ -17967,9 +18328,78 @@ window._dungeonShareResult = async function() {
     window.fetchHomeActivityFeed?.();
 };
 
+// Condensed "daily run" post showing all 5 of today's gate results at once.
+function _dungeonGenerateSummaryPostHTML(post) {
+    const uid = auth.currentUser?.uid;
+    const isOwner = uid && post.uid === uid;
+    const likes = post.likes || [];
+    const dislikes = post.dislikes || [];
+    const isLiked = uid && likes.includes(uid);
+    const isDisliked = uid && dislikes.includes(uid);
+    const safeId = post.id;
+    const col = 'dungeon_posts';
+
+    const gatesHTML = (post.gates||[]).map(g => {
+        const gate = DUNGEON_GATES[g.gateId] || {};
+        return `<div style="flex:1;min-width:55px;text-align:center;background:var(--bg-gray);border-radius:8px;padding:8px 4px;">
+            <div style="font-size:20px;">${gate.icon||''}</div>
+            <div style="font-size:9px;font-weight:700;color:var(--text-muted);">${(g.gateId||'').toUpperCase()}-Rank</div>
+            <div style="font-size:13px;margin-top:2px;">${g.success?'✅':'💀'}</div>
+            <div style="font-size:10px;color:#FFD700;font-weight:800;">+${g.reward}</div>
+        </div>`;
+    }).join('');
+
+    return `<div class="review-card feed-post-card" style="position:relative;">
+        ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
+            <div style="position:relative;">
+                <button onclick="window.togglePostMenu('${safeId}')" style="background:rgba(0,0,0,0.35);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:white;"><span class="material-symbols-outlined" style="font-size:16px;">more_vert</span></button>
+                <div id="post-menu-${safeId}" style="display:none;position:absolute;top:32px;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:140px;overflow:hidden;z-index:20;">
+                    <button onclick="event.stopPropagation();window.deleteBwPost('${safeId}','${col}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
+                </div>
+            </div>
+        </div>` : ''}
+        <div class="review-header">
+            <img src="${post.avatar}" class="avatar" style="cursor:pointer;" onclick="event.stopPropagation();viewUserProfile('${post.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.displayName)}&backgroundColor=ffc107&fontColor=333333'">
+            <div style="min-width:0;">
+                <strong style="color:var(--text-dark);">${post.displayName}</strong>
+                ${window.getRankBadgeHTML ? window.getRankBadgeHTML(window.userRankCache[post.uid]||0,14) : ''}
+                ${window.getPinnedBadgesHTML ? window.getPinnedBadgesHTML(post.uid) : ''}
+                <span style="display:inline-block;background:#8e44ad;color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">⚔️ TCG Dungeon — Daily Run</span><br>
+                <span style="font-size:12px;color:var(--text-muted);">${formatTimeAgo(post.timestamp)}</span>
+            </div>
+        </div>
+        <div style="margin:14px 0 8px;">
+            <div style="font-size:15px;font-weight:800;text-align:center;margin-bottom:10px;">🏁 ${post.wins}/5 Gates Cleared · 🟡 ${post.totalAmber} Amber</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">${gatesHTML}</div>
+        </div>
+        <div class="review-actions">
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostComments(event,this,'${safeId}')"><span class="material-symbols-outlined">chat_bubble</span></button>
+                <span class="action-label bw-comment-count">${post.commentCount || 0} Comments</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${safeId}','${col}','like',this)" style="${isLiked?'color:var(--accent-yellow);':''}"><span class="material-symbols-outlined">thumb_up</span></button>
+                <span class="action-label" id="bw-likes-${safeId}">${likes.length} Likes</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${safeId}','${col}','dislike',this)" style="${isDisliked?'color:red;':''}"><span class="material-symbols-outlined">thumb_down</span></button>
+                <span class="action-label" id="bw-dislikes-${safeId}">${dislikes.length} Dislikes</span>
+            </div>
+        </div>
+        <div class="bw-post-comments" data-post-collection="${col}" style="display:none;margin-top:15px;padding-top:15px;border-top:1px solid var(--border-color);" onclick="event.stopPropagation();">
+            <div class="bw-comments-list"></div>
+            <div style="display:flex;gap:10px;margin-top:10px;">
+                <input type="text" class="bw-comment-input" placeholder="Add a comment..." style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
+                <button class="action-btn" onclick="window.submitBwPostComment(event,this,'${safeId}','${col}')">Send</button>
+            </div>
+        </div>
+    </div>`;
+}
+
 // Standard post card for a shared dungeon raid result — same action bar
 // (comment/like/dislike) and comment section as bw_posts/melobee_posts.
 window.generateDungeonPostCardHTML = function(post) {
+    if (post.type === 'summary') return _dungeonGenerateSummaryPostHTML(post);
     const gate = DUNGEON_GATES[post.gateId] || {};
     const uid = auth.currentUser?.uid;
     const isOwner = uid && post.uid === uid;

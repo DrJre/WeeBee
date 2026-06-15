@@ -417,7 +417,14 @@ service cloud.firestore {
     match /raid_state/{uid} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid);
+      allow update: if isOwner(uid);
       allow delete: if isOwner(uid);
+    }
+
+    // Tracks each player's progress through the daily 5-gate pool.
+    match /dungeon_progress/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if isOwner(uid);
     }
 
     // ── TCG Pack Store flash sale toggle ───────────────────────────────────
