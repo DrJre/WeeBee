@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=86">
+    <link rel="stylesheet" href="styles.css?v=90">
 </head>
 <body>
     <div class="app-container">
@@ -742,6 +742,9 @@
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">scatter_plot</span> Plinko
                             <span class="wheel-notif-dot plinko-notif-dot" style="display:none;"></span>
                         </button>
+                        <button id="games-tab-dungeon-btn" class="detail-tab games-tab-btn" style="display:none;position:relative;" onclick="switchGamesTab(event,'games-tab-dungeon')">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">fort</span> TCG Dungeon
+                        </button>
                     </div>
 
                     <!-- BUZZWORD TAB -->
@@ -877,6 +880,11 @@
                     <div id="games-tab-plinko" class="games-tab-content" style="display:none;">
                         <div id="plinko-tab-content"><div class="loading">Loading Plinko...</div></div>
                     </div><!-- /games-tab-plinko -->
+
+                    <!-- TCG DUNGEON TAB (admin only for now) -->
+                    <div id="games-tab-dungeon" class="games-tab-content" style="display:none;">
+                        <div id="dungeon-tab-content"><div class="loading">Loading TCG Dungeon...</div></div>
+                    </div><!-- /games-tab-dungeon -->
 
                 </div><!-- /games-view -->
 
@@ -1085,6 +1093,7 @@
                                 <option value="zoro">Zoro (One Piece, UR)</option>
                                 <option value="luffy">Luffy (One Piece, UR)</option>
                                 <option value="no_face">No Face (Spirited Away, UR)</option>
+                                <option value="sung_jinwoo">Sung Jinwoo (Solo Leveling, UR)</option>
                             </select>
                             <div id="founder-card-preview" style="margin-bottom:14px;"></div>
                             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
@@ -1109,7 +1118,7 @@
                     <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
                 </div>
                 <p style="color:var(--text-muted); margin-bottom:24px;">What would you like to rank?</p>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; max-width:480px; margin-bottom:24px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; max-width:720px; margin-bottom:24px;">
                     <div onclick="selectTierListType('anime')" style="padding:24px; border-radius:12px; background:var(--bg-gray); cursor:pointer; text-align:center; border:2px solid transparent;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='transparent'">
                         <span class="material-symbols-outlined" style="font-size:40px; color:var(--accent-yellow); display:block; margin-bottom:8px;">movie</span>
                         <div style="font-weight:700; font-size:16px; margin-bottom:4px;">Anime</div>
@@ -1119,6 +1128,11 @@
                         <span class="material-symbols-outlined" style="font-size:40px; color:var(--accent-yellow); display:block; margin-bottom:8px;">person</span>
                         <div style="font-weight:700; font-size:16px; margin-bottom:4px;">Characters</div>
                         <div style="font-size:12px; color:var(--text-muted);">Rank characters from an anime</div>
+                    </div>
+                    <div onclick="selectTierListType('blank')" style="padding:24px; border-radius:12px; background:var(--bg-gray); cursor:pointer; text-align:center; border:2px solid transparent;" onmouseover="this.style.borderColor='var(--accent-yellow)'" onmouseout="this.style.borderColor='transparent'">
+                        <span class="material-symbols-outlined" style="font-size:40px; color:var(--accent-yellow); display:block; margin-bottom:8px;">edit_note</span>
+                        <div style="font-weight:700; font-size:16px; margin-bottom:4px;">Blank</div>
+                        <div style="font-size:12px; color:var(--text-muted);">Start from scratch with your own images</div>
                     </div>
                 </div>
                 <div style="margin-top:32px;">
@@ -1183,7 +1197,11 @@
                         <div style="background:var(--bg-gray); border-radius:10px; padding:12px;">
                             <div style="font-weight:700; font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Add to Pool</div>
                             <input type="text" id="tl-pool-search" placeholder="Search to add..." oninput="searchTierPool()" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; box-sizing:border-box; margin-bottom:6px;">
-                            <div id="tl-pool-results" style="max-height:200px; overflow-y:auto;"></div>
+                            <div id="tl-pool-results" style="max-height:200px; overflow-y:auto; margin-bottom:6px;"></div>
+                            <input type="file" id="tl-pool-image-input" accept="image/*" style="display:none;" onchange="tlUploadPoolImage(this)">
+                            <button type="button" onclick="document.getElementById('tl-pool-image-input').click()" class="action-btn" style="width:100%; font-size:13px; background:var(--bg-gray-darker); color:var(--text-dark);">
+                                <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">upload</span> Upload Image
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1795,13 +1813,16 @@
             <h3 style="margin-bottom:20px;">Edit Profile</h3>
             <div id="edit-profile-error" style="color:red; font-size:12px; margin-bottom:12px;"></div>
 
+            <div class="modal-section-title"><span class="material-symbols-outlined">badge</span> Basic Info</div>
+
             <label>Display Name</label>
             <input type="text" id="edit-profile-name" placeholder="Your display name" maxlength="30">
 
             <label>Bio <span style="font-weight:400; color:var(--text-muted); font-size:12px;">(Optional)</span></label>
             <textarea id="edit-profile-bio" rows="3" placeholder="Tell the community a bit about yourself..." style="resize:vertical;"></textarea>
 
-            <label>Profile Picture</label>
+            <div class="modal-section-title"><span class="material-symbols-outlined">account_circle</span> Profile Picture</div>
+
             <div style="display:flex; align-items:center; gap:16px; margin-bottom:12px;">
                 <img id="edit-avatar-preview" src="" alt="Preview" style="width:64px; height:64px; border-radius:50%; object-fit:cover; border:2px solid var(--border-color); flex-shrink:0;">
                 <div>
@@ -1813,9 +1834,10 @@
                 </div>
             </div>
             <label style="font-size:12px; color:var(--text-muted); font-weight:400;">Or paste an image URL</label>
-            <input type="url" id="edit-profile-avatar" placeholder="https://..." style="margin-bottom:20px;">
+            <input type="url" id="edit-profile-avatar" placeholder="https://...">
 
-            <label>Profile Banner</label>
+            <div class="modal-section-title"><span class="material-symbols-outlined">image</span> Profile Banner</div>
+
             <div id="edit-banner-preview" style="width:100%;height:100px;border-radius:10px;background-size:cover;background-position:center;background-color:var(--bg-gray-darker);margin-bottom:10px;border:1px solid var(--border-color);"></div>
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
                 <button type="button" onclick="document.getElementById('banner-file-input').click()" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);">
@@ -1824,20 +1846,37 @@
                 <input type="file" id="banner-file-input" accept="image/*" style="display:none;" onchange="previewBannerUpload(this)">
                 <span style="font-size:12px;color:var(--text-muted);">JPG, PNG, GIF · Max 10MB · Recommended 1400×400px</span>
             </div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;" id="banner-presets"></div>
+            <label style="font-size:12px; color:var(--text-muted); font-weight:400;">Or choose a preset</label>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;" id="banner-presets"></div>
             <label style="font-size:12px; color:var(--text-muted); font-weight:400;">Or paste an image URL</label>
-            <input type="url" id="edit-profile-banner" placeholder="https://..." style="margin-bottom:20px;" oninput="window.selectedBannerPreset='';previewBannerFromUrl(this.value);">
+            <input type="url" id="edit-profile-banner" placeholder="https://..." oninput="window.selectedBannerPreset='';previewBannerFromUrl(this.value);">
 
-            <label>Favorite Genres <span style="font-weight:400; color:var(--text-muted); font-size:12px;">(pick up to 3)</span></label>
-            <div id="edit-genre-chips" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px;"></div>
+            <div class="modal-section-title"><span class="material-symbols-outlined">palette</span> Profile Theme</div>
+            <p class="modal-section-hint">Pick a color to recolor your profile's accents, post cards, and background.</p>
 
-            <label>Badge Showcase <span style="font-weight:400; color:var(--text-muted); font-size:12px;">(pin up to 3 earned badges to your profile)</span></label>
-            <div id="edit-badge-picker" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; max-height:180px; overflow-y:auto;">
+            <label style="font-size:12px; color:var(--text-muted); font-weight:400;">Color</label>
+            <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px;">
+                <div id="theme-color-preview" style="width:32px; height:32px; border-radius:50%; border:2px solid var(--border-color); flex-shrink:0; background:var(--accent-yellow);"></div>
+                <input type="range" id="edit-profile-theme-hue" class="theme-hue-slider" min="0" max="360" value="45" style="flex:1;" oninput="window.previewProfileTheme()">
+                <button type="button" onclick="window.resetProfileTheme()" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark); padding:6px 10px; font-size:12px; flex-shrink:0;">Default</button>
+            </div>
+            <label style="font-size:12px; color:var(--text-muted); font-weight:400;">Shade (dark ↔ light)</label>
+            <div style="display:flex; align-items:center; gap:14px;">
+                <span class="material-symbols-outlined" style="font-size:18px; color:var(--text-muted); flex-shrink:0;">dark_mode</span>
+                <input type="range" id="edit-profile-theme-light" class="theme-light-slider" min="15" max="85" value="50" style="flex:1;" oninput="window.previewProfileTheme()">
+                <span class="material-symbols-outlined" style="font-size:18px; color:var(--text-muted); flex-shrink:0;">light_mode</span>
+            </div>
+
+            <div class="modal-section-title"><span class="material-symbols-outlined">interests</span> Favorite Genres <span style="font-weight:400; text-transform:none; letter-spacing:normal; font-size:12px;">(pick up to 3)</span></div>
+            <div id="edit-genre-chips" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+
+            <div class="modal-section-title"><span class="material-symbols-outlined">military_tech</span> Badge Showcase <span style="font-weight:400; text-transform:none; letter-spacing:normal; font-size:12px;">(pin up to 3 earned badges)</span></div>
+            <div id="edit-badge-picker" style="display:flex; flex-wrap:wrap; gap:8px; max-height:180px; overflow-y:auto;">
                 <span style="font-size:13px; color:var(--text-muted);">Loading your achievements...</span>
             </div>
 
             <div class="modal-actions">
-                <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
+                <button onclick="window.cancelEditProfile()" class="cancel-btn">Cancel</button>
                 <button onclick="saveEditProfile()" class="submit-btn" id="edit-profile-save-btn">Save</button>
             </div>
         </div>
@@ -2290,6 +2329,6 @@
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=309"></script>
+    <script type="module" src="app.js?v=326"></script>
 </body>
 </html>

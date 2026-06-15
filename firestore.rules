@@ -152,6 +152,14 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.uid);
     }
 
+    // ── TCG Dungeon raid result shares ────────────────────────────────────────
+    match /dungeon_posts/{doc} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if isOwner(resource.data.uid);
+    }
+
     match /patch_notes/{doc} {
       allow read: if true;
       // Posting/deleting official patch notes is admin-only (UI is gated by
@@ -392,9 +400,24 @@ service cloud.firestore {
     match /plinko_state/{uid} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid);
-      allow update: if isOwner(uid);
+      // totalDrops must advance by exactly one drop, and the free-daily-drop
+      // date can never move backwards — stops a stale/replayed client from
+      // re-claiming a previous day's free drop.
+      allow update: if isOwner(uid) &&
+        request.resource.data.totalDrops == resource.data.get('totalDrops', 0) + 1 &&
+        request.resource.data.lastDropDate >= resource.data.get('lastDropDate', '');
       // Admin-only "reset my free ball" testing tool deletes this doc.
       allow delete: if isAdmin();
+    }
+
+    // ── TCG Dungeon Raid (admin-only while in dev) ────────────────────────────
+    // Gate, party snapshot, and success/reward roll are all written client-side
+    // at raid start (same trust model as Plinko/Wheel); claim deletes the doc
+    // and grants amber via profiles.amber increment.
+    match /raid_state/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid);
+      allow delete: if isOwner(uid);
     }
 
     // ── TCG Pack Store flash sale toggle ───────────────────────────────────

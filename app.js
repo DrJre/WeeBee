@@ -16,7 +16,22 @@ const firebaseConfig = {
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(e => console.error('SW registration failed:', e));
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(reg => {
+            // PWAs are often left open/backgrounded for days without a fresh
+            // navigation, so the browser's automatic SW update check rarely
+            // fires. Check whenever the app comes back into view instead.
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') reg.update().catch(() => {});
+            });
+        }).catch(e => console.error('SW registration failed:', e));
+    });
+    // Once a new service worker takes control, reload so this page picks up
+    // the fresh app.js/styles.css instead of running stale code until the
+    // user manually closes and reopens the app.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (window._swReloaded) return;
+        window._swReloaded = true;
+        window.location.reload();
     });
 }
 
@@ -193,6 +208,18 @@ const ACHIEVEMENTS = [
     { id: 'mb_perfect_pitch', name: 'Perfect Pitch',       desc: 'Solved the MeloBee puzzle on the very first clip',   icon: 'bolt',                  cat: 'Community', subcat: 'MeloBee',    color: '#22c55e' },
     { id: 'mb_streak_7',      name: 'On the Charts',       desc: 'Solved MeloBee 7 days in a row',                     icon: 'local_fire_department', cat: 'Community', subcat: 'MeloBee',    color: '#22c55e' },
     { id: 'mb_total_30',      name: 'Music Junkie',        desc: 'Solved MeloBee 30 times total',                      icon: 'military_tech',         cat: 'Community', subcat: 'MeloBee',    color: '#22c55e' },
+    // Community: Plinko
+    { id: 'plinko_first',     name: 'First Drop',          desc: 'Played your first game of Plinko',                   icon: 'scatter_plot',          cat: 'Community', subcat: 'Plinko',     color: '#facc15' },
+    { id: 'plinko_streak_7',  name: 'On a Roll',           desc: 'Played Plinko 7 days in a row',                       icon: 'local_fire_department', cat: 'Community', subcat: 'Plinko',     color: '#facc15' },
+    { id: 'plinko_total_30',  name: 'Peg Pro',             desc: 'Dropped 30 balls total',                              icon: 'military_tech',         cat: 'Community', subcat: 'Plinko',     color: '#facc15' },
+    { id: 'plinko_streak_100', name: 'Plinko Legend',      desc: 'Played Plinko 100 days in a row',                     icon: 'diamond',               cat: 'Community', subcat: 'Plinko',     color: '#FFD700' },
+    { id: 'plinko_star',      name: 'Star Struck',         desc: 'Hit the star bonus on Plinko',                        icon: 'star',                  cat: 'Community', subcat: 'Plinko',     color: '#ff5e9c' },
+    // Community: Prize Wheel
+    { id: 'wheel_first',      name: 'Lucky Spin',          desc: 'Played your first Prize Wheel spin',                  icon: 'casino',                cat: 'Community', subcat: 'Prize Wheel', color: '#f59e0b' },
+    { id: 'wheel_streak_7',   name: 'Spin Streak',         desc: 'Spun the Prize Wheel 7 days in a row',                icon: 'local_fire_department', cat: 'Community', subcat: 'Prize Wheel', color: '#f59e0b' },
+    { id: 'wheel_total_30',   name: 'Wheel Regular',       desc: 'Spun the Prize Wheel 30 times total',                 icon: 'military_tech',         cat: 'Community', subcat: 'Prize Wheel', color: '#f59e0b' },
+    { id: 'wheel_streak_100', name: "Fortune's Favorite",  desc: 'Spun the Prize Wheel 100 days in a row',              icon: 'diamond',               cat: 'Community', subcat: 'Prize Wheel', color: '#FFD700' },
+    { id: 'wheel_ur',         name: 'Jackpot!',            desc: 'Landed a Monthly UR card from the Prize Wheel',       icon: 'auto_awesome',          cat: 'Community', subcat: 'Prize Wheel', color: '#a855f7' },
 ];
 
 // Returns the set of all achievement ids the user has unlocked (existing + newly awarded this call).
@@ -246,6 +273,7 @@ const ACHIEVEMENT_AMBER = {
     bwop_first:25, bwnrt_first:25, bwblc_first:25, bwdb_first:25,
     feed_showtime:25, tl_first:25, trivia_first:25, trivia_7:25,
     ht_first:25, ht_10:25, poll_first:25, mb_first:25,
+    plinko_first:25, wheel_first:25,
     // Uncommon
     review_25:50, review_50:50, indepth_25:50, indepth_50:50, react_25:50, react_50:50,
     complete_25:50, complete_50:50, suggestor_5:50,
@@ -253,16 +281,20 @@ const ACHIEVEMENT_AMBER = {
     bw_double_agent:50, feed_trending:50, tl_10:50, tl_crowd_pleaser:50,
     trivia_perfect:50, trivia_30:50, ht_controversial:50, poll_popular:50,
     mb_perfect_pitch:50, mb_streak_7:50,
+    plinko_streak_7:50, wheel_streak_7:50,
     // Rare
     review_100:100, indepth_100:100, react_100:100, complete_100:100,
     bwop_total_30:100, bwnrt_total_30:100, bwblc_total_30:100, bwdb_total_30:100,
     bw_multiverse:100, ht_popular:100, mb_total_30:100,
     bwop_1guess:100, bwnrt_1guess:100, bwblc_1guess:100, bwdb_1guess:100,
+    plinko_total_30:100, wheel_total_30:100, plinko_star:100,
     // Epic
     review_250:250, indepth_250:250, react_250:250, complete_250:250,
+    wheel_ur:250,
     // Legendary
     review_500:500, indepth_500:500, react_500:500, complete_500:500,
     founder:500, top_reviewer:500, bwop_streak_100:500,
+    plinko_streak_100:500, wheel_streak_100:500,
     // Mythic
     review_1000:1000, indepth_1000:1000, react_1000:1000, complete_1000:1000,
 };
@@ -750,6 +782,8 @@ onAuthStateChanged(auth, (user) => {
             if (obAdminControls) obAdminControls.style.display = window.isAdmin ? 'block' : 'none';
             const tcgAdminTabBtn = document.getElementById('tcg-tab-admin-btn');
             if (tcgAdminTabBtn) tcgAdminTabBtn.style.display = window.isAdmin ? '' : 'none';
+            const dungeonTabBtn = document.getElementById('games-tab-dungeon-btn');
+            if (dungeonTabBtn) dungeonTabBtn.style.display = window.isAdmin ? '' : 'none';
             _wheelLoadConfig().then(config => {
                 const wheelTabBtn = document.getElementById('games-tab-wheel-btn');
                 if (wheelTabBtn) wheelTabBtn.style.display = (config.enabled || window.isAdmin) ? '' : 'none';
@@ -3046,6 +3080,87 @@ const BANNER_PRESETS = [
     { label: 'Sakura',   value: 'linear-gradient(135deg, #ffb7c5, #d4548a)' },
 ];
 
+// --- Profile Theme (per-user accent color override) ---
+function _hslToRgb(h, s, l) {
+    s /= 100; l /= 100;
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+}
+
+function _parseColorToRgb(str) {
+    str = str.trim();
+    if (str.startsWith('#')) {
+        let hex = str.slice(1);
+        if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+        return [parseInt(hex.slice(0,2),16), parseInt(hex.slice(2,4),16), parseInt(hex.slice(4,6),16)];
+    }
+    const m = str.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
+    if (m) return [Math.round(+m[1]), Math.round(+m[2]), Math.round(+m[3])];
+    return [128, 128, 128];
+}
+
+const PROFILE_THEME_PROPS = ['--accent-yellow','--accent-yellow-light','--post-bw-rgb','--post-tl-rgb','--post-melo-rgb','--post-trivia-rgb','--bg-gray','--bg-white','--bg-gray-darker'];
+
+window._applyProfileTheme = function(hue, lightness) {
+    const el = document.body;
+    if (!el) return;
+    PROFILE_THEME_PROPS.forEach(p => el.style.removeProperty(p));
+    if (hue === null || hue === undefined || hue === '') return;
+    if (lightness === null || lightness === undefined || lightness === '') lightness = 50;
+
+    const [r,g,b] = _hslToRgb(hue, 70, lightness);
+    const rgbStr = `${r},${g},${b}`;
+    el.style.setProperty('--accent-yellow', `hsl(${hue}, 85%, ${lightness}%)`);
+    el.style.setProperty('--accent-yellow-light', `hsla(${hue}, 85%, ${lightness}%, 0.08)`);
+    el.style.setProperty('--post-bw-rgb', rgbStr);
+    el.style.setProperty('--post-tl-rgb', rgbStr);
+    el.style.setProperty('--post-melo-rgb', rgbStr);
+    el.style.setProperty('--post-trivia-rgb', rgbStr);
+
+    const cs = getComputedStyle(el);
+    const mixIntoBg = (varName, ratio) => {
+        const [br,bg,bb] = _parseColorToRgb(cs.getPropertyValue(varName));
+        const mr = Math.round(br * (1 - ratio) + r * ratio);
+        const mg = Math.round(bg * (1 - ratio) + g * ratio);
+        const mb = Math.round(bb * (1 - ratio) + b * ratio);
+        el.style.setProperty(varName, `rgb(${mr}, ${mg}, ${mb})`);
+    };
+    mixIntoBg('--bg-gray', 0.10);
+    mixIntoBg('--bg-white', 0.06);
+    mixIntoBg('--bg-gray-darker', 0.13);
+};
+
+window.previewProfileTheme = function() {
+    const hueSlider = document.getElementById('edit-profile-theme-hue');
+    const lightSlider = document.getElementById('edit-profile-theme-light');
+    const hue = parseInt(hueSlider.value);
+    const lightness = parseInt(lightSlider.value);
+    window._editThemeHue = hue;
+    window._editThemeLightness = lightness;
+    const swatch = document.getElementById('theme-color-preview');
+    if (swatch) swatch.style.background = `hsl(${hue}, 85%, ${lightness}%)`;
+    window._applyProfileTheme(hue, lightness);
+};
+
+window.cancelEditProfile = function() {
+    window._applyProfileTheme(window._editProfileOriginalThemeHue ?? null, window._editProfileOriginalThemeLightness ?? 50);
+    window.closeAllModals();
+};
+
+window.resetProfileTheme = function() {
+    window._editThemeHue = null;
+    window._editThemeLightness = 50;
+    const hueSlider = document.getElementById('edit-profile-theme-hue');
+    const lightSlider = document.getElementById('edit-profile-theme-light');
+    if (hueSlider) hueSlider.value = 45;
+    if (lightSlider) lightSlider.value = 50;
+    const swatch = document.getElementById('theme-color-preview');
+    if (swatch) swatch.style.background = 'var(--accent-yellow)';
+    window._applyProfileTheme(null);
+};
+
 window.toggleGenreChip = function(el) {
     const selected = document.querySelectorAll('#edit-genre-chips .genre-chip.active');
     if (el.classList.contains('active')) { el.classList.remove('active'); }
@@ -3156,6 +3271,19 @@ window.openEditProfileModal = async function() {
     chipsContainer.innerHTML = EDIT_GENRES.map(g =>
         `<button type="button" class="genre-chip ${currentGenres.includes(g) ? 'active' : ''}" onclick="toggleGenreChip(this)">${g}</button>`
     ).join('');
+    const currentThemeHue = (typeof pd.themeHue === 'number') ? pd.themeHue : null;
+    const currentThemeLightness = (typeof pd.themeLightness === 'number') ? pd.themeLightness : 50;
+    window._editThemeHue = currentThemeHue;
+    window._editThemeLightness = currentThemeLightness;
+    window._editProfileOriginalThemeHue = currentThemeHue;
+    window._editProfileOriginalThemeLightness = currentThemeLightness;
+    const themeSlider = document.getElementById('edit-profile-theme-hue');
+    const lightSlider = document.getElementById('edit-profile-theme-light');
+    const themeSwatch = document.getElementById('theme-color-preview');
+    if (themeSlider) themeSlider.value = currentThemeHue ?? 45;
+    if (lightSlider) lightSlider.value = currentThemeLightness;
+    if (themeSwatch) themeSwatch.style.background = currentThemeHue !== null ? `hsl(${currentThemeHue}, 85%, ${currentThemeLightness}%)` : 'var(--accent-yellow)';
+
     window.selectedBannerPreset = BANNER_PRESETS.some(p => p.value === currentBanner) ? currentBanner : '';
     const bannerUrlInput = document.getElementById('edit-profile-banner');
     if (bannerUrlInput) {
@@ -3287,7 +3415,9 @@ window.saveEditProfile = async function() {
         const bannerInput = document.getElementById('edit-profile-banner')?.value.trim();
         const bannerUrl = uploadedBannerUrl || window.selectedBannerPreset || (bannerInput ? `url(${bannerInput})` : '');
         const pinnedBadges = window._editPinnedBadges || [];
-        await setDoc(doc(db, "profiles", uid), { displayName: newName, displayNameLower: newName.toLowerCase(), bio, avatar: avatar || auth.currentUser.photoURL, genres, bannerUrl, pinnedBadges }, { merge: true });
+        const themeHue = (typeof window._editThemeHue === 'number') ? window._editThemeHue : null;
+        const themeLightness = (typeof window._editThemeLightness === 'number') ? window._editThemeLightness : 50;
+        await setDoc(doc(db, "profiles", uid), { displayName: newName, displayNameLower: newName.toLowerCase(), bio, avatar: avatar || auth.currentUser.photoURL, genres, bannerUrl, pinnedBadges, themeHue, themeLightness }, { merge: true });
         window.userPinnedBadgesCache[uid] = pinnedBadges;
 
         window.closeAllModals();
@@ -3705,6 +3835,7 @@ window.fetchUserProfile = async function(targetUid = null) {
     pBio = profileData.bio || '';
     pGenres = profileData.genres || [];
     window.userPinnedBadgesCache[uidToFetch] = profileData.pinnedBadges || [];
+    window._applyProfileTheme(typeof profileData.themeHue === 'number' ? profileData.themeHue : null, typeof profileData.themeLightness === 'number' ? profileData.themeLightness : 50);
 
     window.currentProfileName = pName;
     document.getElementById('top-anime-title').innerText = `${pName}'s Top Anime`;
@@ -4292,6 +4423,8 @@ function renderActivityBatch() {
             else if (item._type === 'poll') html = window._renderPollCard(item, uid);
             else if (item._type === 'bracket') html = window._renderBracketFeedCard(item);
             else if (item._type === 'trivia') html = window.generateTriviaPostCardHTML(item);
+            else if (item._type === 'melobee') html = window.generateMeloBeePostCardHTML(item);
+            else if (item._type === 'dungeon') html = window.generateDungeonPostCardHTML(item);
             else if (item._type === 'general_post') html = window._renderGeneralPostCard(item, uid);
             if (html) feed.innerHTML += `<div data-fid="${item.id}">${html}</div>`;
         } catch(e) { console.error('Feed render error:', item._type, e); }
@@ -4392,6 +4525,11 @@ window.fetchHomeActivityFeed = async function() {
         mbHomSnap.forEach(d => {
             const data = d.data();
             items.push({ ...data, id: d.id, _type: 'melobee', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) });
+        });
+        const dungeonHomSnap = await getDocs(query(collection(db,'dungeon_posts'), orderBy('timestamp','desc'), limit(30))).catch(()=>({forEach:()=>{}}));
+        dungeonHomSnap.forEach(d => {
+            const data = d.data();
+            items.push({ ...data, id: d.id, _type: 'dungeon', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) });
         });
 
         await window.prefetchRankCache([...new Set(items.map(i => i.uid).filter(Boolean))]);
@@ -4857,7 +4995,11 @@ window.showTierStep = function(step) {
 window.selectTierListType = function(type) {
     window.tierListState.type = type;
     if (type === 'characters') { window.showTierStep('source'); }
-    else { window.showTierStep('editor'); document.getElementById('tl-source-label').innerText = 'Anime tier list'; window.renderTierEditor(); }
+    else {
+        window.showTierStep('editor');
+        document.getElementById('tl-source-label').innerText = type === 'blank' ? 'Custom tier list' : 'Anime tier list';
+        window.renderTierEditor();
+    }
 };
 
 let _tierSourceTimer = null, _tierSourceReqId = 0;
@@ -5124,6 +5266,47 @@ window.searchTierPool = async function() {
     }, 300);
 };
 
+// Compresses a user-uploaded image for use as a tier list pool item —
+// downscales to a reasonable max width without cropping (items are
+// rendered with object-fit:cover so any aspect ratio works).
+async function compressTierImage(file, maxWidth = 500, quality = 0.85) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const scale = Math.min(1, maxWidth / img.width);
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * scale);
+                canvas.height = Math.round(img.height * scale);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob(resolve, 'image/jpeg', quality);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+window.tlUploadPoolImage = async function(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (!auth.currentUser) { input.value = ''; return window.openAuthModal(); }
+    try {
+        const compressed = await compressTierImage(file);
+        const uid = auth.currentUser.uid;
+        const sRef = storageRef(storage, `post_images/${uid}/tierlist_${Date.now()}.jpg`);
+        await uploadBytes(sRef, compressed);
+        const image = await getDownloadURL(sRef);
+        const title = (prompt('Add a title for this image (optional):', '') || '').trim();
+        window.addToTierPool({ id: `custom_${Date.now()}`, title, image, animeTitle: '', custom: true });
+    } catch(e) {
+        alert('Upload failed: ' + e.message);
+    } finally {
+        input.value = '';
+    }
+};
+
 window.addToTierPool = function(item) {
     const st = window.tierListState;
     const all = [...st.unranked, ...st.tiers.flatMap(t=>t.items)];
@@ -5321,6 +5504,11 @@ window.switchGamesTab = function(event, tabId) {
     }
     if (tabId === 'games-tab-plinko') {
         window.loadPlinkoTab();
+    }
+    if (tabId === 'games-tab-dungeon') {
+        window.loadDungeonTab();
+    } else {
+        window._dungeonStopRefresh?.();
     }
 };
 
@@ -5706,6 +5894,22 @@ const TCG_SR_CARDS = [
     { name: 'Sung Jin-Woo', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSR%2FSung%20Jin-Woo.webp?alt=media&token=ace45778-8d98-411b-807c-39a04e62c03e' },
     { name: 'Gabimaru', anime: "Hell's Paradise", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHell\'s%20Paradise%2FSR%2FGabimaru.webp?alt=media&token=dbd97df1-28f5-4237-a832-d7aa79de6276' },
     { name: 'Luck Voltia', anime: 'Black Clover', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlack%20Clover%2FLuck%20Voltia.jpg?alt=media&token=f94e904e-8394-49ca-869e-72e4b5c73c50' },
+    { name: 'Baek Yoon-ho', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSR%2FBaek%20Yoon-ho.jpg?alt=media&token=44008747-3a71-49a9-97c0-5f2c2c8392b3' },
+    { name: 'Cha Hae-in', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSR%2FCha%20Hae-in.jpg?alt=media&token=a2a9d158-f00d-43ab-84b9-157c29df6bb8' },
+    { name: 'Choi Jong-in', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSR%2FChoi%20Jong-in.jpg?alt=media&token=f5ea5399-a698-4532-8f54-ad06726161f9' },
+    { name: 'Elinalise Dragonroad', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSR%2FElinalise%20Dragonroad.jpg?alt=media&token=827cf456-7a87-48d7-8430-078705e24267' },
+    { name: 'Eris Greyrat', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSR%2FEris%20Greyrat.webp?alt=media&token=ae615846-c2b4-4f2b-bd0a-93ff2a716240' },
+    { name: 'Roxy', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSR%2FRoxy.jpg?alt=media&token=8fe22ce8-a1a2-41ad-ba21-9a7bc38a2c80' },
+    { name: 'Rudeus Greyrat', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSR%2FRudeus%20Greyrat.jpg?alt=media&token=60cda122-1d16-4f2a-9e0d-946b313450e1' },
+    { name: 'Ruijerd Superdia', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSR%2FRuijerd%20Superdia.jpg?alt=media&token=81cbda42-200c-4d21-9d19-20e08130e461' },
+    { name: 'Sylphiette', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSR%2FSylphiette.jpg?alt=media&token=280889cf-9004-4f2a-9ada-9e7446a64c5b' },
+    { name: 'Chrome', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FChrome.jpg?alt=media&token=242446a2-582c-460d-b963-481e3b5a9e74' },
+    { name: 'Homura Momiji', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FHomura%20Momiji.jpg?alt=media&token=0baaa2b7-09bb-4bfe-bca1-6989f1ab470a' },
+    { name: 'Hyoga', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FHyoga.jpg?alt=media&token=93488a7c-6ffe-42fd-bb6e-eef85e5e5044' },
+    { name: 'Kohaku', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FKohaku.jpg?alt=media&token=9f6c3fc1-2def-4a25-ab27-33a919c219f6' },
+    { name: 'Minami Hokutozai', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FMinami%20Hokutozai.jpg?alt=media&token=3374004a-4bac-4839-830e-189313041b86' },
+    { name: 'Senku', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FSenku.jpg?alt=media&token=09e3473c-aa25-4324-ab1a-8e462c3e2b25' },
+    { name: 'Tsukasa Shishio', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FTsukasa%20Shishio.jpg?alt=media&token=75b67840-b565-48ba-93e5-571b26815d15' },
 ];
 
 // SSR art — hand-curated, prismatic rainbow border + holographic hover shimmer
@@ -5759,6 +5963,9 @@ const TCG_SSR_CARDS = [
     { name: 'Yor Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSSR%2FYor%20Forger.webp?alt=media&token=84fead07-4f1a-4b87-afa0-c20ab3314bef' },
     { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FGoku.webp?alt=media&token=2a908b50-04b5-49ed-84d3-c49a654a06b9' },
     { name: 'Kid Gohan', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FKid%20Gohan.webp?alt=media&token=1aec64a8-66b7-45d6-a063-1729d41951de' },
+    { name: 'Sung Jin-woo', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSSR%2FSung%20Jin-woo.jpg?alt=media&token=848623b2-bea0-4deb-a78d-cd179913ee1a' },
+    { name: 'Rudeus Greyrat', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSSR%2FRudeus%20Greyrat.jpg?alt=media&token=16331065-9096-45a9-aa6f-8e4da1266299' },
+    { name: 'Senku', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSSR%2FSenku.jpg?alt=media&token=53d7f68d-fd6a-4ac8-a930-eb775d74eba4' },
 ];
 
 // UR art — top rarity, hand-curated. Animated art (e.g. animated WebP) encouraged.
@@ -5832,6 +6039,11 @@ const TCG_FOUNDER_CARDS = [
     {
         id: 'no_face', name: 'No Face', anime: 'Spirited Away', rarity: 'ur',
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpirited%20Away%2FNo%20Face.gif?alt=media&token=bc7e49e4-c46d-4b80-8f14-8b718cb17e7b',
+        founder: true,
+    },
+    {
+        id: 'sung_jinwoo', name: 'Sung Jinwoo', anime: 'Solo Leveling', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FUR%2FSung%20Jinwoo.gif?alt=media&token=b50514ce-3ebe-4d71-a692-eec8bdb89bd2',
         founder: true,
     },
 ];
@@ -6000,8 +6212,8 @@ const TCG_PACKS = [
     {
         id: 'standard',
         name: 'Standard Pack',
-        cost: 500,
-        salePrice: 300,
+        cost: 150,
+        salePrice: 100,
         gradient: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
         description: '5 cards · 1 guaranteed Rare+',
         odds: 'Common 90% · Rare 9.5% · SR 0.4% · SSR 0.1%\nGuaranteed slot: Rare 95% · SR 4.5% · SSR 0.5%\n+0.1% chance per pack for a bonus UR card',
@@ -6171,6 +6383,9 @@ async function _wheelLoadState(uid) {
             lastSpinDate: '',
             extraSpinsAvailable: 0,
             pendingUrClaim: false,
+            streak: data?.streak || 0,
+            totalSpins: data?.totalSpins || 0,
+            streakDate: data?.streakDate || '',
         };
         await setDoc(ref, data);
     }
@@ -6389,11 +6604,21 @@ window._wheelSpin = async function() {
     if (!isDailySpin) extraSpins = Math.max(0, extraSpins - 1);
     if (section.type === 'extra_spin') extraSpins += 1;
 
+    const totalSpins = (state.totalSpins || 0) + 1;
+    let streak = state.streak || 0;
+    if (isDailySpin) {
+        const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+        streak = (state.streakDate === _wheelTodayKey(yesterday)) ? streak + 1 : 1;
+    }
+
     const update = {
         usedIndices: { ...usedIndices, [pickIdx]: true },
         lastSpinDate: today,
         extraSpinsAvailable: extraSpins,
+        totalSpins,
+        streak,
     };
+    if (isDailySpin) update.streakDate = today;
     if (section.type === 'monthly_ur') update.pendingUrClaim = true;
 
     setTimeout(async () => {
@@ -6414,6 +6639,13 @@ window._wheelSpin = async function() {
                 await updateDoc(doc(db, 'wheel_state', uid), update);
             } catch(e) { console.error('Wheel spin save failed:', e); }
             Object.assign(state, update);
+
+            const wheelAch = ['wheel_first'];
+            if (totalSpins >= 30) wheelAch.push('wheel_total_30');
+            if (streak >= 7) wheelAch.push('wheel_streak_7');
+            if (streak >= 100) wheelAch.push('wheel_streak_100');
+            if (section.type === 'monthly_ur') wheelAch.push('wheel_ur');
+            window.awardAchievements(wheelAch).catch(() => {});
         }
         _wheelShowResultModal(section, grantOk);
         window._wheelRefreshBadges();
@@ -7086,12 +7318,27 @@ window._plinkoExecuteDrop = async function(dropX) {
     const prize = Math.round(PLINKO_PRIZES[bin] * multiplier) + (hitStar ? PLINKO_STAR_BONUS : 0);
     try { await _awardAmber(prize, 'plinko:drop'); } catch(e) { console.error('Plinko prize grant failed:', e); }
 
+    const totalDrops = (state.totalDrops || 0) + 1;
+    let streak = state.streak || 0;
     if (freeAvailable) {
-        try {
-            await setDoc(doc(db, 'plinko_state', uid), { lastDropDate: today }, { merge: true });
-        } catch(e) { console.error('Plinko state save failed:', e); }
-        state.lastDropDate = today;
+        const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+        streak = (state.lastDropDate === _plinkoTodayKey(yesterday)) ? streak + 1 : 1;
     }
+    try {
+        const update = { totalDrops, streak };
+        if (freeAvailable) update.lastDropDate = today;
+        await setDoc(doc(db, 'plinko_state', uid), update, { merge: true });
+    } catch(e) { console.error('Plinko state save failed:', e); }
+    state.totalDrops = totalDrops;
+    state.streak = streak;
+    if (freeAvailable) state.lastDropDate = today;
+
+    const plinkoAch = ['plinko_first'];
+    if (totalDrops >= 30) plinkoAch.push('plinko_total_30');
+    if (streak >= 7) plinkoAch.push('plinko_streak_7');
+    if (streak >= 100) plinkoAch.push('plinko_streak_100');
+    if (hitStar) plinkoAch.push('plinko_star');
+    window.awardAchievements(plinkoAch).catch(() => {});
 
     const burstCount = hitStar ? 80 : (multiplier > 1 ? 50 : 24);
     _plinkoConfettiBurst(burstCount, multiplier, hitStar);
@@ -12604,7 +12851,7 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     window.closeMobileMenu?.();
     window.closeMobileSearch?.();
     if(targetId !== 'anime-detail-view') window.previousViewId = targetId;
-    if(targetId !== 'profile-view') window.targetProfileUid = null;
+    if(targetId !== 'profile-view') { window.targetProfileUid = null; window._applyProfileTheme(null); }
     if (!skipHistory) {
         const _tabHashes = { 'home-view': '', 'discover-view': 'discover', 'my-list-view': 'mylist', 'news-view': 'news', 'community-view': 'community', 'games-view': 'games', 'tcg-view': 'tcg' };
         const _tabHash = _tabHashes[targetId];
@@ -16325,24 +16572,32 @@ const TRIVIA_QUESTIONS = [
     {q:"Who is the Upper Rank 4 demon in Demon Slayer?",opts:["Gyokko","Hantengu","Doma","Nakime"],a:1},
 ];
 
-function _triviaGetDaily() {
+// One fixed shuffle of the whole question pool, then walk it with a 5-wide
+// window that advances by 5 each day and wraps around (mod total). Since the
+// window is 5 consecutive positions in a single permutation, a day's 5
+// questions are always distinct, and because gcd(5, total) === 1 every
+// question gets an equal turn before any repeats — guaranteeing every
+// question is shown roughly once per ~total/5 days with no early repeats
+// (the previous per-cycle-reshuffle approach could repeat a question on back
+// to back days at cycle boundaries).
+const _TRIVIA_ORDER = (() => {
     const total = TRIVIA_QUESTIONS.length;
-    const PER_DAY = 5;
-    const CYCLE_DAYS = Math.floor(total / PER_DAY);
-    const dayIndex = bwDayIndex(bwGetDate());
-    const cycleNum = Math.floor(dayIndex / CYCLE_DAYS);
-    const dayInCycle = dayIndex % CYCLE_DAYS;
-
-    // Fisher-Yates shuffle seeded by cycleNum — same shuffle all day, new shuffle each cycle
     const order = [...Array(total).keys()];
-    let s = (cycleNum ^ 0x9e3779b9) >>> 0;
+    let s = 0x9e3779b9;
     for (let i = order.length - 1; i > 0; i--) {
         s = (Math.imul(s ^ (s >>> 16), 0x45d9f3b) ^ (s >>> 11)) >>> 0;
         const j = s % (i + 1);
         [order[i], order[j]] = [order[j], order[i]];
     }
+    return order;
+})();
 
-    return order.slice(dayInCycle * PER_DAY, dayInCycle * PER_DAY + PER_DAY).map(i => TRIVIA_QUESTIONS[i]);
+function _triviaGetDaily() {
+    const total = TRIVIA_QUESTIONS.length;
+    const PER_DAY = 5;
+    const dayIndex = bwDayIndex(bwGetDate());
+    const start = dayIndex * PER_DAY;
+    return Array.from({ length: PER_DAY }, (_, k) => TRIVIA_QUESTIONS[_TRIVIA_ORDER[(start + k) % total]]);
 }
 
 window._triviaState = null;
@@ -17209,6 +17464,588 @@ window.goToMeloBeeTab = function() {
     document.getElementById('games-tab-opening').style.display = 'block';
     document.getElementById('ob-tab-btn')?.classList.add('active');
     window.openOpeningBee();
+};
+
+// ── TCG Dungeon Raid (admin-only while in dev) ────────────────────────────────
+// Gate config: duration, party size, difficulty (vs party "Power"), and
+// amber reward ranges. Success chance = clamp(50 + (partyPower-difficulty)*4, 15, 95).
+const DUNGEON_GATES = {
+    e: { id:'e', name:'E-Rank Gate', icon:'🟢', durationMs: 1*3600e3,  partySize:1, difficulty:1,  rewardMin:20,  rewardMax:50,   failReward:5 },
+    d: { id:'d', name:'D-Rank Gate', icon:'🔵', durationMs: 2*3600e3,  partySize:1, difficulty:3,  rewardMin:50,  rewardMax:75,   failReward:15 },
+    c: { id:'c', name:'C-Rank Gate', icon:'🟣', durationMs: 4*3600e3,  partySize:2, difficulty:6,  rewardMin:75,  rewardMax:100,  failReward:20 },
+    b: { id:'b', name:'B-Rank Gate', icon:'🟠', durationMs: 8*3600e3,  partySize:2, difficulty:12, rewardMin:300, rewardMax:400,  failReward:75 },
+    a: { id:'a', name:'A-Rank Gate', icon:'🔴', durationMs: 12*3600e3, partySize:3, difficulty:18, rewardMin:500, rewardMax:800,  failReward:125 },
+    s: { id:'s', name:'S-Rank Gate', icon:'⚫', durationMs: 24*3600e3, partySize:5, difficulty:33, rewardMin:800, rewardMax:1200, failReward:200 },
+};
+
+// Card "Power" — rarity baseline plus a bonus for low serial numbers
+// (single-digit serials, Founder/Monthly URs all count as the strongest).
+const DUNGEON_RARITY_POWER = { common:1, rare:2, sr:4, ssr:8, ur:16 };
+
+function _dungeonCardPower(card) {
+    let power = DUNGEON_RARITY_POWER[card.rarity] || 1;
+    if (card.founder || card.monthlyUr) power += 3;
+    else if (card.serial != null) {
+        if (card.serial < 10) power += 3;
+        else if (card.serial < 100) power += 2;
+        else if (card.serial < 1000) power += 1;
+    }
+    return power;
+}
+
+function _dungeonSuccessChance(partyPower, difficulty) {
+    return Math.max(15, Math.min(95, 50 + (partyPower - difficulty) * 4));
+}
+
+// Rotating "what's the crew up to" flavor text, bucketed by raid progress.
+// `idle` is only used for long (8hr+) gates in the middle stretch.
+const DUNGEON_FLAVOR = {
+    early: [
+        "The crew steps through the gate, weapons drawn.",
+        "Scouting the entrance for traps...",
+        "The party regroups and checks their gear one last time.",
+        "Something stirs in the darkness ahead.",
+    ],
+    mid: [
+        "The crew battles through a swarm of lesser monsters.",
+        "A narrow escape from a collapsing corridor!",
+        "The party stops to patch up some scrapes and bruises.",
+        "Strange runes glow on the walls as the crew passes.",
+        "The crew is taking a quick breather by a torch-lit alcove.",
+        "Loud roars echo from somewhere deeper in the dungeon...",
+    ],
+    idle: [
+        "The crew sets up camp for the night.",
+        "Quiet snoring echoes through the dungeon as the party rests.",
+        "Someone's on watch duty while the others sleep.",
+        "The crew shares rations around a small fire.",
+    ],
+    late: [
+        "The crew senses a powerful presence nearby.",
+        "Heavy doors creak open ahead — this must be it.",
+        "The party steels themselves before the final chamber.",
+        "The boss has noticed them...",
+    ],
+};
+
+// Picks a flavor line based on progress; rotates roughly every 20 minutes
+// (based on raid start time) so it's stable across re-renders.
+function _dungeonFlavorText(gate, startTime, progress) {
+    let pool;
+    if (progress >= 0.85) pool = DUNGEON_FLAVOR.late;
+    else if (progress <= 0.15) pool = DUNGEON_FLAVOR.early;
+    else if (gate.durationMs >= 8*3600e3 && progress > 0.3 && progress < 0.75) pool = DUNGEON_FLAVOR.idle;
+    else pool = DUNGEON_FLAVOR.mid;
+    const tick = Math.floor((Date.now() - startTime) / (20*60e3));
+    return pool[tick % pool.length];
+}
+
+// A small pool of pre-made winding path layouts (percentage coordinates),
+// randomly assigned per raid so it's not the same exact route every time.
+const DUNGEON_PATHS = [
+    [{x:5,y:80},{x:20,y:40},{x:40,y:65},{x:60,y:25},{x:80,y:50},{x:95,y:20}],
+    [{x:5,y:30},{x:25,y:70},{x:45,y:35},{x:65,y:60},{x:85,y:30},{x:95,y:55}],
+    [{x:5,y:55},{x:22,y:20},{x:42,y:50},{x:62,y:15},{x:80,y:45},{x:95,y:75}],
+];
+
+// Linear-interpolates a point along a multi-segment path at fraction `t` (0-1).
+function _dungeonPointAtProgress(points, t) {
+    t = Math.max(0, Math.min(1, t));
+    let total = 0;
+    const segs = [];
+    for (let i = 0; i < points.length - 1; i++) {
+        segs.push(Math.hypot(points[i+1].x-points[i].x, points[i+1].y-points[i].y));
+        total += segs[i];
+    }
+    let dist = t * total;
+    for (let i = 0; i < segs.length; i++) {
+        if (dist <= segs[i] || i === segs.length - 1) {
+            const segT = segs[i] ? Math.min(1, dist/segs[i]) : 0;
+            const a = points[i], b = points[i+1];
+            return { x: a.x + (b.x-a.x)*segT, y: a.y + (b.y-a.y)*segT };
+        }
+        dist -= segs[i];
+    }
+    return points[points.length-1];
+}
+
+function _dungeonFormatDuration(ms) {
+    const h = ms / 3600e3;
+    return h >= 24 ? `${h/24}d` : `${h}hr`;
+}
+
+function _dungeonFormatRemaining(ms) {
+    const totalMin = Math.ceil(ms/60000);
+    const h = Math.floor(totalMin/60), m = totalMin%60;
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+// Small chance for the party to recruit 1-2 bonus common/rare cards on top
+// of the amber reward. Rolled once at raid start; actually saved to the
+// collection when the raid is claimed.
+async function _dungeonGenerateBonusCards() {
+    if (Math.random() > 0.3) return [];
+    await _tcgEnsureCardPool();
+    const count = Math.random() < 0.7 ? 1 : 2;
+    const cards = [];
+    for (let i = 0; i < count; i++) {
+        cards.push(_tcgPickCard(Math.random() < 0.8 ? 'common' : 'rare'));
+    }
+    return cards.filter(c => c.image);
+}
+
+// Purely cosmetic "what happened in there" stats, rolled once at raid start
+// and stored so they stay consistent for the whole raid. Scales loosely with
+// gate length so longer raids feel like a bigger adventure.
+function _dungeonGenerateStats(gate, party) {
+    const scale = gate.durationMs / 3600e3; // hours
+    const monsters = Math.round((5 + Math.random()*15) * Math.sqrt(scale));
+    const distance = Math.round((1 + Math.random()*4) * scale * 10) / 10;
+    const treasure = Math.round(Math.random() * (2 + scale/4));
+    const closeCalls = Math.round(Math.random() * (1 + scale/6));
+    const mvp = party[Math.floor(Math.random()*party.length)];
+    return { monsters, distance, treasure, closeCalls, mvpName: mvp.name };
+}
+
+async function _dungeonLoadState(uid) {
+    try {
+        const snap = await getDoc(doc(db, 'raid_state', uid));
+        return snap.exists() ? snap.data() : null;
+    } catch(e) { return null; }
+}
+
+window._dungeonStopRefresh = function() {
+    clearTimeout(window._dungeonRefreshTimer);
+};
+
+window.loadDungeonTab = async function() {
+    const el = document.getElementById('dungeon-tab-content');
+    if (!el) return;
+    window._dungeonStopRefresh();
+    if (!window.isAdmin) {
+        el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">🚧 TCG Dungeon is in development — admin preview only.</div>`;
+        return;
+    }
+    if (!auth.currentUser) {
+        el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">Sign in to raid dungeons!</div>`;
+        return;
+    }
+    el.innerHTML = `<div class="loading">Loading TCG Dungeon...</div>`;
+    const uid = auth.currentUser.uid;
+    const state = await _dungeonLoadState(uid);
+    window._dungeonState = state;
+    if (state) {
+        _dungeonRenderActive(el, state);
+    } else {
+        _dungeonRenderGateSelect(el);
+    }
+};
+
+window._dungeonToggleTestMode = function() {
+    const on = localStorage.getItem('weebee_dungeon_testmode') === '1';
+    localStorage.setItem('weebee_dungeon_testmode', on ? '0' : '1');
+    window.loadDungeonTab();
+};
+
+function _dungeonRenderGateSelect(el) {
+    const testMode = window.isAdmin && localStorage.getItem('weebee_dungeon_testmode') === '1';
+    const rows = Object.values(DUNGEON_GATES).map(g => `
+        <div style="background:var(--bg-gray);border-radius:14px;padding:18px 20px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+            <div>
+                <div style="font-weight:800;font-size:16px;margin-bottom:4px;">${g.icon} ${g.name}</div>
+                <div style="font-size:12px;color:var(--text-muted);">
+                    ⏱️ ${testMode ? `<span style="color:#FFD700;">30s (test)</span> <s>${_dungeonFormatDuration(g.durationMs)}</s>` : _dungeonFormatDuration(g.durationMs)} · 👥 ${g.partySize} card${g.partySize>1?'s':''} · 🟡 ${g.rewardMin}-${g.rewardMax} amber on success, ${g.failReward} on failure
+                </div>
+            </div>
+            <button class="action-btn" onclick="window._dungeonOpenPartySelect('${g.id}')" style="font-weight:800;">Enter Gate →</button>
+        </div>
+    `).join('');
+    el.innerHTML = `
+        <div class="bw-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:20px;text-align:center;border:1px solid rgba(255,255,255,0.08);position:relative;overflow:hidden;">
+            <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(139,69,19,0.3) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(75,0,130,0.25) 0%,transparent 60%);pointer-events:none;"></div>
+            <div style="position:relative;z-index:1;">
+                <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
+                <div class="banner-hero-title" style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">⚔️ TCG Dungeon ⚔️</div>
+                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;">Send your cards on a raid — come back later for amber rewards</div>
+            </div>
+        </div>
+        <div id="dungeon-gate-list">${rows}</div>
+        <div id="dungeon-party-select" style="display:none;"></div>
+        ${window.isAdmin ? `
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);text-align:center;">
+            <button onclick="window._dungeonToggleTestMode()" class="cancel-btn" style="font-size:12px;${testMode?'opacity:1;color:#FFD700;':'opacity:0.6;'}">
+                ${testMode ? '✅ Test Mode: Gates take 30s (Admin)' : '🔧 Enable Test Mode: Gates take 30s (Admin)'}
+            </button>
+        </div>` : ''}
+        <div style="margin-top:24px;">
+            <div style="font-weight:800;font-size:15px;margin-bottom:12px;">📜 Recent Raids</div>
+            <div id="dungeon-posts-feed"><div class="loading">Loading raid results...</div></div>
+        </div>
+    `;
+    window.loadDungeonFeed();
+}
+
+window._dungeonOpenPartySelect = async function(gateId) {
+    const listEl = document.getElementById('dungeon-gate-list');
+    const panel = document.getElementById('dungeon-party-select');
+    if (!listEl || !panel) return;
+    listEl.style.display = 'none';
+    panel.style.display = 'block';
+    panel.innerHTML = `<div class="loading">Loading your cards...</div>`;
+    const uid = auth.currentUser.uid;
+    // Founder UR cards are excluded for now — there are no other URs in the
+    // game yet, so they'd be the only UR-power option available.
+    const cards = (await _tcgLoadCollection(uid)).filter(c => !c.founder);
+    window._dungeonPickState = { gateId, selected: new Set(), cards, sort: 'power-desc' };
+    _dungeonRenderPartySelect(panel);
+};
+
+const DUNGEON_RARITY_ORDER = { ur:5, ssr:4, sr:3, rare:2, common:1 };
+
+window._dungeonSetSort = function(sort) {
+    const ps = window._dungeonPickState;
+    if (!ps) return;
+    ps.sort = sort;
+    _dungeonRenderPartySelect(document.getElementById('dungeon-party-select'));
+};
+
+function _dungeonSortCards(cards, sort) {
+    const sorted = [...cards];
+    switch (sort) {
+        case 'power-asc': sorted.sort((a,b) => _dungeonCardPower(a) - _dungeonCardPower(b)); break;
+        case 'power-desc': sorted.sort((a,b) => _dungeonCardPower(b) - _dungeonCardPower(a)); break;
+        case 'rarity-asc': sorted.sort((a,b) => (DUNGEON_RARITY_ORDER[a.rarity]||0) - (DUNGEON_RARITY_ORDER[b.rarity]||0)); break;
+        case 'rarity-desc': sorted.sort((a,b) => (DUNGEON_RARITY_ORDER[b.rarity]||0) - (DUNGEON_RARITY_ORDER[a.rarity]||0)); break;
+        case 'name-asc': sorted.sort((a,b) => a.name.localeCompare(b.name)); break;
+        case 'name-desc': sorted.sort((a,b) => b.name.localeCompare(a.name)); break;
+    }
+    return sorted;
+}
+
+function _dungeonRenderPartySelect(panel) {
+    const { gateId, selected, cards, sort } = window._dungeonPickState;
+    const gate = DUNGEON_GATES[gateId];
+    const partyPower = [...selected].reduce((sum,id) => {
+        const c = cards.find(c=>c.id===id);
+        return sum + (c ? _dungeonCardPower(c) : 0);
+    }, 0);
+    const chance = _dungeonSuccessChance(partyPower, gate.difficulty);
+    const canStart = selected.size === gate.partySize;
+    const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
+
+    const sortedCards = _dungeonSortCards(cards, sort);
+    const cardsHTML = sortedCards.length ? sortedCards.map(c => {
+        const isSel = selected.has(c.id);
+        return `
+        <div onclick="window._dungeonTogglePick('${c.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${isSel?'var(--accent-yellow)':'transparent'};position:relative;background:var(--bg-gray);">
+            <img src="${c.image||''}" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;" loading="lazy">
+            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);color:#fff;font-size:10px;padding:4px 6px;text-align:center;">
+                <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
+                <div style="color:#FFD700;">${rarityLabels[c.rarity]||c.rarity} · Power ${_dungeonCardPower(c)}</div>
+            </div>
+            ${isSel ? `<div style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:var(--accent-yellow);color:#222;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:13px;">✓</div>` : ''}
+        </div>`;
+    }).join('') : `<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:24px;">No cards in your collection yet — open some packs first!</div>`;
+
+    panel.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+            <button onclick="window._dungeonCancelPartySelect()" class="cancel-btn" style="font-size:13px;">← Back to Gates</button>
+            <div style="font-weight:800;font-size:16px;">${gate.icon} ${gate.name} — Pick ${gate.partySize} card${gate.partySize>1?'s':''}</div>
+        </div>
+        <div style="background:var(--bg-gray);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+            <div style="font-size:13px;">Selected: <strong>${selected.size}/${gate.partySize}</strong> · Party Power: <strong>${partyPower}</strong></div>
+            <div style="font-size:13px;">Success Chance: <strong style="color:${chance>=70?'#4caf50':chance>=40?'#FFD700':'#f44336'};">${chance}%</strong></div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:10px;">
+            <label style="font-size:12px;color:var(--text-muted);">Sort by</label>
+            <select onchange="window._dungeonSetSort(this.value)" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:12px;">
+                <option value="power-desc" ${sort==='power-desc'?'selected':''}>Power (High → Low)</option>
+                <option value="power-asc" ${sort==='power-asc'?'selected':''}>Power (Low → High)</option>
+                <option value="rarity-desc" ${sort==='rarity-desc'?'selected':''}>Rarity (High → Low)</option>
+                <option value="rarity-asc" ${sort==='rarity-asc'?'selected':''}>Rarity (Low → High)</option>
+                <option value="name-asc" ${sort==='name-asc'?'selected':''}>Name (A → Z)</option>
+                <option value="name-desc" ${sort==='name-desc'?'selected':''}>Name (Z → A)</option>
+            </select>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-bottom:20px;">${cardsHTML}</div>
+        <button class="action-btn" style="width:100%;justify-content:center;padding:14px;font-size:15px;font-weight:800;${canStart?'':'opacity:0.5;cursor:not-allowed;'}" ${canStart?`onclick="window._dungeonStartRaid()"`:''}>Begin Raid (${_dungeonFormatDuration(gate.durationMs)})</button>
+    `;
+}
+
+window._dungeonTogglePick = function(cardId) {
+    const ps = window._dungeonPickState;
+    if (!ps) return;
+    const gate = DUNGEON_GATES[ps.gateId];
+    if (ps.selected.has(cardId)) ps.selected.delete(cardId);
+    else {
+        if (ps.selected.size >= gate.partySize) return;
+        ps.selected.add(cardId);
+    }
+    _dungeonRenderPartySelect(document.getElementById('dungeon-party-select'));
+};
+
+window._dungeonCancelPartySelect = function() {
+    const listEl = document.getElementById('dungeon-gate-list');
+    const panel = document.getElementById('dungeon-party-select');
+    if (listEl) listEl.style.display = 'block';
+    if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+    window._dungeonPickState = null;
+};
+
+// Rolls the raid outcome immediately (same trust model as Plinko/Wheel) and
+// stores it in raid_state — the result is only revealed/paid out once the
+// gate's duration has actually elapsed.
+window._dungeonStartRaid = async function() {
+    const ps = window._dungeonPickState;
+    if (!ps) return;
+    const gate = DUNGEON_GATES[ps.gateId];
+    const cards = ps.cards.filter(c => ps.selected.has(c.id));
+    const partyPower = cards.reduce((sum,c) => sum + _dungeonCardPower(c), 0);
+    const chance = _dungeonSuccessChance(partyPower, gate.difficulty);
+    const success = Math.random()*100 < chance;
+    const reward = success ? Math.round(gate.rewardMin + Math.random()*(gate.rewardMax-gate.rewardMin)) : gate.failReward;
+    const testMode = window.isAdmin && localStorage.getItem('weebee_dungeon_testmode') === '1';
+    const durationMs = testMode ? 30000 : gate.durationMs;
+    const now = Date.now();
+    const party = cards.map(c => ({ id: c.id, name: c.name, image: c.image||'', rarity: c.rarity }));
+    const bonusCards = await _dungeonGenerateBonusCards();
+    const state = {
+        gateId: gate.id,
+        party,
+        partyPower, successChance: chance, success, reward,
+        pathIndex: Math.floor(Math.random()*DUNGEON_PATHS.length),
+        stats: _dungeonGenerateStats(gate, party),
+        bonusCards,
+        startTime: now, endTime: now + durationMs,
+    };
+    try {
+        await setDoc(doc(db, 'raid_state', auth.currentUser.uid), state);
+    } catch(e) { return alert('Failed to start raid: ' + e.message); }
+    window._dungeonState = state;
+    window._dungeonPickState = null;
+    _dungeonRenderActive(document.getElementById('dungeon-tab-content'), state);
+};
+
+function _dungeonRenderActive(el, state) {
+    const gate = DUNGEON_GATES[state.gateId];
+    const now = Date.now();
+    const progress = Math.min(1, (now - state.startTime) / (state.endTime - state.startTime));
+    const remaining = Math.max(0, state.endTime - now);
+    const ready = now >= state.endTime;
+    const path = DUNGEON_PATHS[state.pathIndex || 0];
+    const pt = _dungeonPointAtProgress(path, progress);
+
+    const tokens = state.party.map((c, i) => {
+        const offsetX = (i - (state.party.length-1)/2) * 4;
+        return `<div style="position:absolute;left:${pt.x+offsetX}%;top:${pt.y}%;transform:translate(-50%,-50%);width:34px;height:46px;border-radius:50%/35%;overflow:hidden;border:2px solid var(--accent-yellow);box-shadow:0 0 8px rgba(0,0,0,0.5);">
+            <img src="${c.image}" style="width:100%;height:100%;object-fit:cover;display:block;">
+        </div>`;
+    }).join('');
+
+    const pathSVG = `<polyline points="${path.map(p=>`${p.x},${p.y}`).join(' ')}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="0.8" stroke-dasharray="2,1.5" vector-effect="non-scaling-stroke"/>`;
+
+    const flavor = ready
+        ? (state.success ? "The crew emerges victorious!" : "The crew limps back, battered but alive...")
+        : _dungeonFlavorText(gate, state.startTime, progress);
+
+    el.innerHTML = `
+        <div style="background:var(--bg-gray);border-radius:16px;padding:20px;margin-bottom:16px;">
+            <div style="font-weight:800;font-size:16px;margin-bottom:10px;">${gate.icon} ${gate.name} — Raid in Progress</div>
+            <div style="position:relative;width:100%;aspect-ratio:16/7;background:linear-gradient(135deg,#2a1f3d,#1a2a3d);border-radius:12px;overflow:hidden;margin-bottom:12px;">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;">${pathSVG}</svg>
+                ${tokens}
+            </div>
+            <div style="font-size:13px;font-style:italic;color:var(--text-muted);margin-bottom:10px;min-height:18px;">${flavor}</div>
+            <div style="background:var(--bg-white);border-radius:8px;height:8px;overflow:hidden;margin-bottom:8px;">
+                <div style="height:100%;width:${Math.round(progress*100)}%;background:var(--accent-yellow);transition:width 1s linear;"></div>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);text-align:center;">
+                ${ready ? 'Ready to claim!' : `Time remaining: ${_dungeonFormatRemaining(remaining)}`}
+            </div>
+        </div>
+        ${ready ? `
+        <div style="background:var(--bg-gray);border-radius:14px;padding:20px;text-align:center;margin-bottom:16px;">
+            <div style="font-size:18px;font-weight:800;margin-bottom:6px;">${state.success ? '🎉 Success!' : '💀 Failed'}</div>
+            <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;">${state.success ? `Your party cleared the gate and found loot!` : `Your party survived, but came up empty-handed.`}</div>
+            <div style="font-size:24px;font-weight:900;color:#FFD700;margin-bottom:16px;">🟡 ${state.reward} Amber</div>
+            <button class="action-btn" style="padding:12px 32px;font-weight:800;" onclick="window._dungeonClaim()">Claim Reward</button>
+        </div>
+        ${_dungeonBonusCardsHTML(state)}
+        ${_dungeonStatsHTML(state)}
+        <div style="text-align:center;margin-top:16px;">
+            ${state.shared
+                ? `<div style="color:var(--text-muted);font-size:13px;">✅ Shared to your feed!</div>`
+                : `<button class="action-btn" style="font-weight:800;" onclick="window._dungeonShareResult()">📤 Share Result</button>`}
+        </div>` : ''}
+    `;
+
+    if (!ready) {
+        clearTimeout(window._dungeonRefreshTimer);
+        const interval = Math.min(30000, Math.max(1000, remaining));
+        window._dungeonRefreshTimer = setTimeout(() => {
+            const liveEl = document.getElementById('dungeon-tab-content');
+            const tabVisible = document.getElementById('games-tab-dungeon')?.style.display !== 'none';
+            if (liveEl && tabVisible) _dungeonRenderActive(liveEl, state);
+        }, interval);
+    }
+}
+
+function _dungeonBonusCardsHTML(state) {
+    const bonus = state.bonusCards;
+    if (!bonus || !bonus.length) return '';
+    const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
+    return `
+        <div style="background:var(--bg-gray);border-radius:14px;padding:18px 20px;text-align:center;margin-bottom:16px;border:2px solid var(--accent-yellow);">
+            <div style="font-size:15px;font-weight:800;margin-bottom:12px;">🎁 Your party found ${bonus.length} new teammate${bonus.length>1?'s':''}!</div>
+            <div style="display:flex;justify-content:center;gap:14px;flex-wrap:wrap;">
+                ${bonus.map(c => `
+                    <div style="width:90px;">
+                        <img src="${c.image}" style="width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:8px;display:block;margin-bottom:4px;">
+                        <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
+                        <div style="font-size:10px;color:var(--text-muted);">${rarityLabels[c.rarity]||c.rarity}</div>
+                    </div>`).join('')}
+            </div>
+        </div>`;
+}
+
+function _dungeonStatsHTML(state) {
+    const s = state.stats;
+    if (!s) return '';
+    return `
+        <div style="background:var(--bg-gray);border-radius:14px;padding:18px 20px;">
+            <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">📜 Raid Report</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px;text-align:center;margin-bottom:12px;">
+                <div><div style="font-size:22px;font-weight:900;">${s.monsters}</div><div style="font-size:11px;color:var(--text-muted);">Monsters Defeated</div></div>
+                <div><div style="font-size:22px;font-weight:900;">${s.distance} km</div><div style="font-size:11px;color:var(--text-muted);">Distance Traveled</div></div>
+                <div><div style="font-size:22px;font-weight:900;">${s.treasure}</div><div style="font-size:11px;color:var(--text-muted);">Treasure Chests Found</div></div>
+                <div><div style="font-size:22px;font-weight:900;">${s.closeCalls}</div><div style="font-size:11px;color:var(--text-muted);">Close Calls</div></div>
+            </div>
+            <div style="font-size:13px;text-align:center;color:var(--text-muted);">⭐ MVP: <strong style="color:var(--text-dark);">${s.mvpName}</strong></div>
+        </div>`;
+}
+
+window._dungeonClaim = async function() {
+    const state = window._dungeonState;
+    if (!state || Date.now() < state.endTime) return;
+    try {
+        await _awardAmber(state.reward, `dungeon:${state.gateId}:${state.success?'success':'fail'}`);
+        if (state.bonusCards?.length) {
+            await _tcgSavePackToCollection(auth.currentUser.uid, state.bonusCards);
+            window._tcgCollectionCache.delete(auth.currentUser.uid);
+        }
+        await deleteDoc(doc(db, 'raid_state', auth.currentUser.uid));
+    } catch(e) { return alert('Claim failed: ' + e.message); }
+    window._dungeonState = null;
+    window.loadDungeonTab();
+};
+
+// Shares a finished raid's results as a standard post (dungeon_posts), reusing
+// the existing like/dislike/comment infrastructure that powers bw_posts etc.
+window._dungeonShareResult = async function() {
+    const state = window._dungeonState;
+    if (!state || !auth.currentUser || state.shared) return;
+    const profile = window._myProfile || {};
+    const post = {
+        uid: auth.currentUser.uid,
+        displayName: profile.displayName || auth.currentUser.displayName || 'WeeBee User',
+        avatar: profile.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName||'WeeBee')}&backgroundColor=ffc107&fontColor=333333`,
+        gateId: state.gateId,
+        party: state.party,
+        success: state.success,
+        reward: state.reward,
+        stats: state.stats || null,
+        bonusCards: state.bonusCards || [],
+        timestamp: new Date(),
+        likes: [], dislikes: [], commentCount: 0,
+    };
+    try {
+        await addDoc(collection(db, 'dungeon_posts'), post);
+        state.shared = true;
+        await setDoc(doc(db, 'raid_state', auth.currentUser.uid), { shared: true }, { merge: true });
+    } catch(e) { return alert('Failed to share: ' + e.message); }
+    _dungeonRenderActive(document.getElementById('dungeon-tab-content'), state);
+    window.fetchHomeActivityFeed?.();
+};
+
+// Standard post card for a shared dungeon raid result — same action bar
+// (comment/like/dislike) and comment section as bw_posts/melobee_posts.
+window.generateDungeonPostCardHTML = function(post) {
+    const gate = DUNGEON_GATES[post.gateId] || {};
+    const uid = auth.currentUser?.uid;
+    const isOwner = uid && post.uid === uid;
+    const likes = post.likes || [];
+    const dislikes = post.dislikes || [];
+    const isLiked = uid && likes.includes(uid);
+    const isDisliked = uid && dislikes.includes(uid);
+    const safeId = post.id;
+    const col = 'dungeon_posts';
+
+    const tokens = (post.party||[]).map(c => `
+        <div style="width:50px;height:68px;border-radius:50%/35%;overflow:hidden;border:2px solid var(--accent-yellow);box-shadow:0 0 6px rgba(0,0,0,0.4);">
+            <img src="${c.image}" style="width:100%;height:100%;object-fit:cover;display:block;">
+        </div>`).join('');
+
+    return `<div class="review-card feed-post-card" style="position:relative;">
+        ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
+            <div style="position:relative;">
+                <button onclick="window.togglePostMenu('${safeId}')" style="background:rgba(0,0,0,0.35);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:white;"><span class="material-symbols-outlined" style="font-size:16px;">more_vert</span></button>
+                <div id="post-menu-${safeId}" style="display:none;position:absolute;top:32px;right:0;background:var(--bg-white);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:140px;overflow:hidden;z-index:20;">
+                    <button onclick="event.stopPropagation();window.deleteBwPost('${safeId}','${col}')" style="width:100%;padding:10px 14px;background:none;border:none;text-align:left;cursor:pointer;color:#FF5252;font-size:13px;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</button>
+                </div>
+            </div>
+        </div>` : ''}
+        <div class="review-header">
+            <img src="${post.avatar}" class="avatar" style="cursor:pointer;" onclick="event.stopPropagation();viewUserProfile('${post.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.displayName)}&backgroundColor=ffc107&fontColor=333333'">
+            <div style="min-width:0;">
+                <strong style="color:var(--text-dark);">${post.displayName}</strong>
+                ${window.getRankBadgeHTML ? window.getRankBadgeHTML(window.userRankCache[post.uid]||0,14) : ''}
+                ${window.getPinnedBadgesHTML ? window.getPinnedBadgesHTML(post.uid) : ''}
+                <span style="display:inline-block;background:#8e44ad;color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">⚔️ TCG Dungeon</span><br>
+                <span style="font-size:12px;color:var(--text-muted);">${gate.icon||''} ${gate.name||'Dungeon Raid'} · ${formatTimeAgo(post.timestamp)}</span>
+            </div>
+        </div>
+        <div style="margin:14px 0 8px;">
+            <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;">${tokens}</div>
+            <div style="font-size:15px;font-weight:700;text-align:center;margin-bottom:4px;">${post.success ? '🎉 Success!' : '💀 Failed'}</div>
+            <div style="font-size:20px;font-weight:900;color:#FFD700;text-align:center;">🟡 ${post.reward} Amber</div>
+        </div>
+        ${_dungeonBonusCardsHTML(post)}
+        ${_dungeonStatsHTML(post)}
+        <div class="review-actions">
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostComments(event,this,'${safeId}')"><span class="material-symbols-outlined">chat_bubble</span></button>
+                <span class="action-label bw-comment-count">${post.commentCount || 0} Comments</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${safeId}','${col}','like',this)" style="${isLiked?'color:var(--accent-yellow);':''}"><span class="material-symbols-outlined">thumb_up</span></button>
+                <span class="action-label" id="bw-likes-${safeId}">${likes.length} Likes</span>
+            </div>
+            <div class="action-stat">
+                <button onclick="window.toggleBwPostReaction(event,'${safeId}','${col}','dislike',this)" style="${isDisliked?'color:red;':''}"><span class="material-symbols-outlined">thumb_down</span></button>
+                <span class="action-label" id="bw-dislikes-${safeId}">${dislikes.length} Dislikes</span>
+            </div>
+        </div>
+        <div class="bw-post-comments" data-post-collection="${col}" style="display:none;margin-top:15px;padding-top:15px;border-top:1px solid var(--border-color);" onclick="event.stopPropagation();">
+            <div class="bw-comments-list"></div>
+            <div style="display:flex;gap:10px;margin-top:10px;">
+                <input type="text" class="bw-comment-input" placeholder="Add a comment..." style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
+                <button class="action-btn" onclick="window.submitBwPostComment(event,this,'${safeId}','${col}')">Send</button>
+            </div>
+        </div>
+    </div>`;
+};
+
+// Recent dungeon raid shares, shown beneath the gate list.
+window.loadDungeonFeed = async function() {
+    const feed = document.getElementById('dungeon-posts-feed');
+    if (!feed) return;
+    try {
+        const snap = await getDocs(query(collection(db,'dungeon_posts'), orderBy('timestamp','desc'), limit(10)));
+        if (snap.empty) { feed.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:24px;font-size:14px;">No raid results shared yet.</p>'; return; }
+        const posts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        await window.prefetchRankCache?.([...new Set(posts.map(p => p.uid))]);
+        feed.innerHTML = posts.map(p => window.generateDungeonPostCardHTML(p)).join('');
+    } catch(e) { console.error('loadDungeonFeed', e); feed.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:24px;">Failed to load raid results.</p>'; }
 };
 
 // Mark today as done on load if already played
