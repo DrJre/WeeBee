@@ -742,7 +742,7 @@
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">scatter_plot</span> Plinko
                             <span class="wheel-notif-dot plinko-notif-dot" style="display:none;"></span>
                         </button>
-                        <button id="games-tab-dungeon-btn" class="detail-tab games-tab-btn" style="display:none;position:relative;" onclick="switchGamesTab(event,'games-tab-dungeon')">
+                        <button id="games-tab-dungeon-btn" class="detail-tab games-tab-btn" style="position:relative;" onclick="switchGamesTab(event,'games-tab-dungeon')">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">fort</span> TCG Dungeon
                         </button>
                     </div>
@@ -954,7 +954,13 @@
 
                         <div id="tcg-showcase" style="margin-top:40px;"></div>
                         <div id="tcg-search-section" style="margin-top:40px;">
-                            <h3 style="margin:0 0 14px;">Search Cards</h3>
+                            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+                                <h3 style="margin:0;">Search Cards</h3>
+                                <select id="tcg-store-sort" onchange="window._tcgStoreSort=this.value;window._tcgSearchCards(document.getElementById('tcg-search-input').value)" style="padding:6px 10px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;">
+                                    <option value="default">Sort: Default</option>
+                                    <option value="new">Sort: New</option>
+                                </select>
+                            </div>
                             <input id="tcg-search-input" type="text" placeholder="Search by character or series..."
                                 oninput="clearTimeout(window._tcgSearchTimer);window._tcgSearchTimer=setTimeout(()=>window._tcgSearchCards(this.value),300)"
                                 style="width:100%; max-width:400px; padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; box-sizing:border-box; margin-bottom:14px;">
@@ -2345,6 +2351,6 @@
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=326"></script>
+    <script type="module" src="app.js?v=335"></script>
 </body>
 </html>

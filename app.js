@@ -794,8 +794,6 @@ onAuthStateChanged(auth, (user) => {
             if (obAdminControls) obAdminControls.style.display = window.isAdmin ? 'block' : 'none';
             const tcgAdminTabBtn = document.getElementById('tcg-tab-admin-btn');
             if (tcgAdminTabBtn) tcgAdminTabBtn.style.display = window.isAdmin ? '' : 'none';
-            const dungeonTabBtn = document.getElementById('games-tab-dungeon-btn');
-            if (dungeonTabBtn) dungeonTabBtn.style.display = window.isAdmin ? '' : 'none';
             _wheelLoadConfig().then(config => {
                 const wheelTabBtn = document.getElementById('games-tab-wheel-btn');
                 if (wheelTabBtn) wheelTabBtn.style.display = (config.enabled || window.isAdmin) ? '' : 'none';
@@ -6025,6 +6023,32 @@ const TCG_SR_CARDS = [
     { name: 'Minami Hokutozai', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FMinami%20Hokutozai.jpg?alt=media&token=3374004a-4bac-4839-830e-189313041b86' },
     { name: 'Senku', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FSenku.jpg?alt=media&token=09e3473c-aa25-4324-ab1a-8e462c3e2b25' },
     { name: 'Tsukasa Shishio', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FTsukasa%20Shishio.jpg?alt=media&token=75b67840-b565-48ba-93e5-571b26815d15' },
+    { name: 'Nirei Akihiko', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2FNirei%20Akihiko.jpg?alt=media&token=0ce2797a-1ca0-4fef-af47-6141723d9979' },
+    { name: 'Suo Hayato', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2FSuo%20Hayato.jpg?alt=media&token=f6241155-e0c0-4151-99c1-4adc49968a71' },
+    { name: 'Taiga Tsugeura', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2FTaiga%20Tsugeura.jpg?alt=media&token=970b5329-ccf6-4828-9b97-70b1d45fba8a' },
+    { name: 'Hiiragi Touma', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2F%F0%9D%97%9B%F0%9D%97%B6%F0%9D%97%B6%F0%9D%97%BF%F0%9D%97%AE%F0%9D%97%B4%F0%9D%97%B6%20%F0%9D%97%A7%F0%9D%97%BC%F0%9D%98%82%F0%9D%97%BA%F0%9D%97%AE.jpg?alt=media&token=a372b2ed-177c-48b9-83aa-51cd9ecfcd07' },
+    { name: 'Kaji Ren', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2F%F0%9D%97%9E%F0%9D%97%AE%F0%9D%97%B7%F0%9D%97%B6%20%F0%9D%97%A5%F0%9D%97%B2%F0%9D%97%BB.jpg?alt=media&token=dd72c175-6b96-4d71-a134-75cb859a824f' },
+    { name: 'Kiryu Mitsuki', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2F%F0%9D%97%9E%F0%9D%97%B6%F0%9D%97%BF%F0%9D%98%86%F0%9D%98%82%20%F0%9D%97%A0%F0%9D%97%B6%F0%9D%98%81%F0%9D%98%80%F0%9D%98%82%F0%9D%97%B8%F0%9D%97%B6.jpg?alt=media&token=2bffa679-e80e-4045-b4a8-c32ca4534497' },
+    { name: 'Sakura Haruka', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2F%F0%9D%97%A6%F0%9D%97%AE%F0%9D%97%B8%F0%9D%98%82%F0%9D%97%BF%F0%9D%97%AE%20%F0%9D%97%9B%F0%9D%97%AE%F0%9D%97%BF%F0%9D%98%82%F0%9D%97%B8%F0%9D%97%AE.jpg?alt=media&token=fdd73aff-3651-4388-ac89-d8350b4b1a8d' },
+    { name: 'Sugishita Kyotarou', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2F%F0%9D%97%A6%F0%9D%98%82%F0%9D%97%B4%F0%9D%97%B6%F0%9D%98%80%F0%9D%97%B5%F0%9D%97%B6%F0%9D%98%81%F0%9D%97%AE%20%F0%9D%97%9E%F0%9D%98%86%F0%9D%97%BC%F0%9D%98%81%F0%9D%97%AE%F0%9D%97%BF%F0%9D%97%BC%F0%9D%98%82.jpg?alt=media&token=b54fec38-0138-44b7-98fb-f0be74cbf683' },
+    { name: 'Umemiya Hajime', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2F%F0%9D%97%A8%F0%9D%97%BA%F0%9D%97%B2%F0%9D%97%BA%F0%9D%97%B6%F0%9D%98%86%F0%9D%97%AE%20%F0%9D%97%9B%F0%9D%97%AE%F0%9D%97%B7%F0%9D%97%B6%F0%9D%97%BA%F0%9D%97%B2.jpg?alt=media&token=45570967-4760-44e7-85ef-0f8ef55147ac' },
+    { name: 'Asui Tsuyu', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSR%2FAsui%20Tsuyu.jpg?alt=media&token=36c498ba-e937-4cc7-965d-f7c254fd6446' },
+    { name: 'Ochaco Uraraka', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSR%2FOchaco%20Uraraka.jpg?alt=media&token=512b5433-d07c-4a38-b4fe-4bea3933cf89' },
+    { name: 'Aizawa Shota', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSR%2FAizawa.jpg?alt=media&token=250c2317-ef48-4169-b2cf-83236f651a32' },
+    { name: 'Sailor Jupiter', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSR%2FSailor%20Jupiter.jpg?alt=media&token=1a3e52f4-14bd-42bf-886d-014fb6fd3fcb' },
+    { name: 'Sailor Mars', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSR%2FSailor%20Mars.jpg?alt=media&token=7043214c-2cd3-4eb6-a8a4-560db5e1726a' },
+    { name: 'Sailor Mercury', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSR%2FSailor%20Mercury.jpg?alt=media&token=93f8cfdf-886b-4234-8d7f-a5a2095ddd41' },
+    { name: 'Sailor Moon', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSR%2FSailor%20Moon.jpg?alt=media&token=af8698ef-bb57-49e9-961b-5d473437d5e5' },
+    { name: 'Sailor Pluto', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSR%2FSailor%20Pluto.jpg?alt=media&token=ec40d72c-72fa-479d-873d-d0bf5fcca760' },
+    { name: 'Sailor Saturn', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSR%2FSailor%20Saturn.jpg?alt=media&token=adfdb34f-225c-40a2-b1b8-133ad50538b6' },
+    { name: 'Bojji', anime: 'Ranking of Kings', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FRanking%20of%20Kings%2FSR%2FBojji.jpg?alt=media&token=f8cb0e31-b348-4ecb-a629-b536902f97f8' },
+    { name: 'Chigiri Hyoma', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FChigiri%20Hyoma.jpg?alt=media&token=3f855e42-37f3-49e4-b163-bd29a4573150' },
+    { name: 'Itoshi Rin', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FItoshi%20Rin.jpg?alt=media&token=b012af8d-d1cf-4320-bd71-f92b71e0d397' },
+    { name: 'Karasu Tabito', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FKarasu%20Tabito.jpg?alt=media&token=fbdc3e31-b0a0-4b18-bd94-81261a7a8d80' },
+    { name: 'Meguru Bachira', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FMeguru%20Bachira.jpg?alt=media&token=519ea599-522a-47dc-874d-ad35595ea938' },
+    { name: 'Reo Mikage', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FReo%20Mikage.jpg?alt=media&token=838284a7-9ba3-4e35-8c95-17b86010aaa8' },
+    { name: 'Sae Itoshi', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FSae%20itoshi.jpg?alt=media&token=7a86abb8-b095-409c-b2af-19d537b847dc' },
+    { name: 'Seishiro Nagi', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FSeishiro%20Nagi.jpg?alt=media&token=501e74c4-940c-4f0d-a777-05b89540379e' },
 ];
 
 // SSR art — hand-curated, prismatic rainbow border + holographic hover shimmer
@@ -6078,9 +6102,24 @@ const TCG_SSR_CARDS = [
     { name: 'Yor Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSSR%2FYor%20Forger.webp?alt=media&token=84fead07-4f1a-4b87-afa0-c20ab3314bef' },
     { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FGoku.webp?alt=media&token=2a908b50-04b5-49ed-84d3-c49a654a06b9' },
     { name: 'Kid Gohan', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FKid%20Gohan.webp?alt=media&token=1aec64a8-66b7-45d6-a063-1729d41951de' },
+    { name: 'Vegeta', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FVegeta.jpg?alt=media&token=4e68f056-5150-4cb0-a0b2-cf2bc3103e3a' },
     { name: 'Sung Jin-woo', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSSR%2FSung%20Jin-woo.jpg?alt=media&token=848623b2-bea0-4deb-a78d-cd179913ee1a' },
     { name: 'Rudeus Greyrat', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSSR%2FRudeus%20Greyrat.jpg?alt=media&token=16331065-9096-45a9-aa6f-8e4da1266299' },
     { name: 'Senku', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSSR%2FSenku.jpg?alt=media&token=53d7f68d-fd6a-4ac8-a930-eb775d74eba4' },
+    { name: 'Asui Tsuyu', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FAsui%20Tsuyu.jpg?alt=media&token=0d3d24e3-ebb0-47fc-9b92-84c953f9145f' },
+    { name: 'Mina Ashido', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FMina%20Aishido.jpg?alt=media&token=28f8c2ba-b0e6-4702-99a0-f238a8ed7e85' },
+    { name: 'Ochaco Uraraka', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FOchaco%20Uraraka.jpg?alt=media&token=52e54d86-6548-47b5-bbc2-bdcb8152a4c5' },
+    { name: 'Bakugo', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FBakugo.jpg?alt=media&token=6d4f28e8-cc30-4d60-ba32-368b9ce03522' },
+    { name: 'Todoroki', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FTodoroki.jpg?alt=media&token=cd8b60b5-d087-4bfb-97e5-299c0130819f' },
+    { name: 'Stain', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FStain.jpg?alt=media&token=a2c10146-57cd-4801-91a2-107024dabeab' },
+    { name: 'Dabi', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FDabi.jpg?alt=media&token=dbbb0381-b65b-4856-abeb-57ebe2e5f277' },
+    { name: 'Aizawa Shota', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FAizawa%20Shota.jpg?alt=media&token=787a4c67-efd3-425c-a327-bbf859ebed41' },
+    { name: 'Sailor Moon', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSSR%2FSailor%20Moon.jpg?alt=media&token=13497778-0659-4f23-9cd4-4fcc4401c799' },
+    { name: 'Bojji', anime: 'Ranking of Kings', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FRanking%20of%20Kings%2FSSR%2FBojji.jpg?alt=media&token=fd74df4a-cc32-4834-8420-48f6bd592020' },
+    { name: 'Chigiri Hyoma', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSSR%2FChigiri%20Hyoma.jpg?alt=media&token=abdb5d8b-c5ba-4a30-8363-004965916732' },
+    { name: 'Kunigami Rensuke', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSSR%2FKunigami%20Rensuke.jpg?alt=media&token=bc35559e-ee4b-455a-8e9b-1065b351e0aa' },
+    { name: 'Seishiro Nagi', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSSR%2FNagi.jpg?alt=media&token=ff302357-82cd-48fa-8d1d-74d2d4608c67' },
+    { name: 'Rin Itoshi', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSSR%2FRin%20Itoshi.jpg?alt=media&token=5924e019-90d6-427e-b56a-bd1de365565f' },
 ];
 
 // UR art — top rarity, hand-curated. Animated art (e.g. animated WebP) encouraged.
@@ -8111,6 +8150,7 @@ window._tcgRenderShowcaseCarousel = async function() {
 };
 
 window._tcgSearchRarity = 'all';
+window._tcgStoreSort = 'default';
 window._tcgRenderSearchRarityFilters = function() {
     const el = document.getElementById('tcg-search-rarity-filters');
     if (!el) return;
@@ -8127,20 +8167,23 @@ window._tcgSearchCards = async function(queryStr) {
     if (!el) return;
 
     const rarity = window._tcgSearchRarity || 'all';
+    const sort = window._tcgStoreSort || 'default';
     const q = (queryStr || '').trim().toLowerCase();
-    // Require either a search term or a specific rarity to be picked — "All" with
-    // an empty box would dump the entire pool, which isn't useful.
-    if (!q && rarity === 'all') { el.innerHTML = ''; return; }
+    // Require a search term, a specific rarity, or "New" sort to show results —
+    // "All" + empty query + default sort would dump the entire pool unhelpfully.
+    if (!q && rarity === 'all' && sort !== 'new') { el.innerHTML = ''; return; }
 
     await _tcgEnsureCardPool();
 
     let pool = _tcgFullCardPool();
     if (rarity !== 'all') pool = pool.filter(c => c.rarity === rarity);
 
-    const results = q ? pool.filter(c =>
+    let results = q ? pool.filter(c =>
         (c.name && c.name.toLowerCase().includes(q)) ||
         (c.anime && c.anime.toLowerCase().includes(q))
     ) : pool;
+
+    if (sort === 'new') results = [...results].reverse();
 
     if (!results.length) {
         el.innerHTML = '<p style="color:var(--text-muted);">No cards found.</p>';
@@ -8674,6 +8717,14 @@ window._tcgRenderProfileShowcase = async function(uid) {
         const all = await _tcgLoadCollection(uid, true);
         cards = pinnedIds.map(id => all.find(c => c.id === id)).filter(Boolean);
     } catch(e) { return; }
+
+    // Prune pins for cards that no longer exist (dismantled/traded away) so
+    // they stop silently eating slots in the 6-card showcase limit.
+    if (isMe && cards.length !== pinnedIds.length) {
+        const cleanedIds = cards.map(c => c.id);
+        setDoc(doc(db, 'profiles', uid), { pinnedTcgCardIds: cleanedIds }, { merge: true }).catch(() => {});
+    }
+
     if (!cards.length) { el.innerHTML = isMe ? _tcgShowcaseEmptyHTML(true) : ''; return; }
 
     el.innerHTML = `
@@ -8758,9 +8809,13 @@ window._tcgTogglePin = async function(cardId, profileUid) {
     const uid = auth.currentUser.uid;
     const ref = doc(db, 'profiles', uid);
     try {
+        // Drop pins for cards no longer in the collection (dismantled/traded)
+        // first, so they don't silently eat slots in the 6-card limit.
+        const validIds = new Set((await _tcgLoadCollection(uid, true)).map(c => c.id));
         await runTransaction(db, async (tx) => {
             const pd = await tx.get(ref);
             let pins = pd.exists() ? (pd.data().pinnedTcgCardIds || []) : [];
+            pins = pins.filter(id => validIds.has(id) || id === cardId);
             if (pins.includes(cardId)) {
                 pins = pins.filter(id => id !== cardId);
             } else {
@@ -8788,10 +8843,20 @@ window._tcgMultiSelect = { active: false, selected: new Set() };
 // Sort preference for "My Cards" — persists across re-renders/filter changes
 // within the session. 'rarity' (default), 'newest', or 'oldest' (by pulledAt).
 window._tcgCardSort = 'rarity';
+window._tcgCardSearch = '';
 
 window._tcgSetCardSort = function(sort, uid, filter) {
     window._tcgCardSort = sort;
     window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'), uid, filter);
+};
+
+window._tcgSetCardSearch = async function(uid, filter) {
+    const input = document.getElementById('tcg-collection-search');
+    const cursor = input ? input.selectionStart : 0;
+    if (input) window._tcgCardSearch = input.value;
+    await window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'), uid, filter);
+    const fresh = document.getElementById('tcg-collection-search');
+    if (fresh) { fresh.focus(); fresh.setSelectionRange(cursor, cursor); }
 };
 
 function _tcgPulledAtMillis(card) {
@@ -8856,6 +8921,10 @@ window._tcgBulkPin = async function(uid, profileUid) {
     try {
         const pd = await getDoc(doc(db, 'profiles', uid));
         let pins = pd.exists() ? (pd.data().pinnedTcgCardIds || []) : [];
+        // Drop pins for cards no longer in the collection so they don't
+        // silently eat slots in the 6-card limit.
+        const validIds = new Set((await _tcgLoadCollection(uid, true)).map(c => c.id));
+        pins = pins.filter(id => validIds.has(id));
         const toAdd = [...sel].filter(id => !pins.includes(id));
         if (!toAdd.length) { alert('All selected cards are already pinned.'); return; }
         if (pins.length + toAdd.length > 6) {
@@ -8965,7 +9034,9 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
 
     const rarityOrder = { ur:-1, ssr:0, sr:1, rare:2, common:3 };
     const sort = window._tcgCardSort;
+    const searchQ = (window._tcgCardSearch || '').toLowerCase().trim();
     const filtered = (filter === 'all' ? [...cards] : cards.filter(c => c.rarity === filter))
+        .filter(c => !searchQ || (c.name||'').toLowerCase().includes(searchQ) || (c.anime||'').toLowerCase().includes(searchQ))
         .sort((a,b) => {
             if (sort === 'newest') return _tcgPulledAtMillis(b) - _tcgPulledAtMillis(a);
             if (sort === 'oldest') return _tcgPulledAtMillis(a) - _tcgPulledAtMillis(b);
@@ -8981,12 +9052,12 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
     const selTotal = selCount ? cards.filter(c => ms.selected.has(c.id)).reduce((sum,c) => sum + (TCG_DISMANTLE_RATES[c.rarity]||0), 0) : 0;
 
     el.innerHTML = `
-        <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 ${['all','ur','ssr','sr','rare','common'].map(f => {
                     const labels = { all:`All (${cards.length})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
                     const active = f === filter;
-                    return `<button onclick="window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'),'${uid}','${f}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
+                    return `<button onclick="window._tcgCardSearch='';window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'),'${uid}','${f}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
                 }).join('')}
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
@@ -8999,6 +9070,14 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
                 </select>
                 <button onclick="window._tcgToggleMultiSelect('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${ms.active?'var(--accent-yellow)':'var(--border-color)'};background:${ms.active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${ms.active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${ms.active ? '✕ Cancel' : '☑ Multiselect'}</button>
             </div>
+        </div>
+        <div style="margin-bottom:14px;">
+            <div style="position:relative;max-width:320px;">
+                <span class="material-symbols-outlined" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:17px;color:var(--text-muted);pointer-events:none;">search</span>
+                <input id="tcg-collection-search" type="text" value="${(window._tcgCardSearch||'').replace(/"/g,'&quot;')}" oninput="window._tcgSetCardSearch('${uid}','${filter}')" placeholder="Search by name or anime…" style="width:100%;box-sizing:border-box;padding:7px 12px 7px 34px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;outline:none;">
+                ${searchQ ? `<button onclick="window._tcgCardSearch='';window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'),'${uid}','${filter}')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:15px;line-height:1;">✕</button>` : ''}
+            </div>
+            ${searchQ ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px;margin-left:4px;">${filtered.length} result${filtered.length!==1?'s':''} for "<strong>${searchQ}</strong>"</div>` : ''}
         </div>
         ${ms.active ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;padding:10px 14px;background:var(--bg-gray);border-radius:10px;border:1px solid var(--border-color);">
             <span style="font-size:13px;font-weight:700;">${selCount} selected</span>
@@ -17694,7 +17773,7 @@ function _dungeonGeneratePool(dateKey) {
         if (tier === 's') sUsed = true;
         pool.push(tier);
     }
-    return pool.sort((a, b) => DUNGEON_GATES[a].difficulty - DUNGEON_GATES[b].difficulty);
+    return pool;
 }
 
 // Card "Power" — rarity baseline plus a bonus for low serial numbers
@@ -17855,6 +17934,7 @@ function _dungeonResetForNewDay(progress, todayKey) {
         totalRaids: progress?.totalRaids || 0,
         streak: progress?.streak || 0,
         lastRaidDate: progress?.lastRaidDate || null,
+        lifetime: progress?.lifetime || null,
     };
 }
 
@@ -17866,10 +17946,6 @@ window.loadDungeonTab = async function() {
     const el = document.getElementById('dungeon-tab-content');
     if (!el) return;
     window._dungeonStopRefresh();
-    if (!window.isAdmin) {
-        el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">🚧 TCG Dungeon is in development — admin preview only.</div>`;
-        return;
-    }
     if (!auth.currentUser) {
         el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">Sign in to raid dungeons!</div>`;
         return;
@@ -17899,6 +17975,43 @@ window.loadDungeonTab = async function() {
 window._dungeonToggleTestMode = function() {
     const on = localStorage.getItem('weebee_dungeon_testmode') === '1';
     localStorage.setItem('weebee_dungeon_testmode', on ? '0' : '1');
+    window.loadDungeonTab();
+};
+
+// Admin-only: wipes today's gate pool progress (and cancels any active raid)
+// so the daily run can be replayed immediately without waiting for the
+// EST midnight rollover.
+window._dungeonResetDaily = async function() {
+    if (!window.isAdmin || !auth.currentUser) return;
+    if (!confirm("Reset today's TCG Dungeon run? This clears your gate progress and any in-progress raid.")) return;
+    const uid = auth.currentUser.uid;
+    try {
+        const reset = _dungeonResetForNewDay(window._dungeonProgress, _dungeonTodayKey());
+        await _dungeonSaveProgress(uid, reset);
+        await deleteDoc(doc(db, 'raid_state', uid));
+    } catch(e) { return alert('Failed to reset: ' + e.message); }
+    window._dungeonState = null;
+    window.loadDungeonTab();
+};
+
+// Admin-only: cancels an in-progress raid with no payout and no effect on
+// the daily pool progress — for backing out of a gate started by mistake.
+window._dungeonStopRaid = async function() {
+    if (!window.isAdmin || !auth.currentUser) return;
+    if (!confirm('Cancel this raid? No rewards will be given and this gate stays available.')) return;
+    const uid = auth.currentUser.uid;
+    try {
+        await deleteDoc(doc(db, 'raid_state', uid));
+        // Undo the "resting" fatigue applied to this party at raid start.
+        const progress = window._dungeonProgress;
+        if (progress?.fatigue) {
+            const fatigue = { ...progress.fatigue };
+            for (const c of window._dungeonState?.party || []) delete fatigue[c.id];
+            window._dungeonProgress = { ...progress, fatigue };
+            await _dungeonSaveProgress(uid, window._dungeonProgress);
+        }
+    } catch(e) { return alert('Failed to cancel: ' + e.message); }
+    window._dungeonState = null;
     window.loadDungeonTab();
 };
 
@@ -17963,16 +18076,20 @@ function _dungeonRenderGateSelect(el) {
             <div style="position:relative;z-index:1;">
                 <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
                 <div class="banner-hero-title" style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">⚔️ TCG Dungeon ⚔️</div>
-                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;">Clear today's 5 gates one at a time for amber rewards</div>
+                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:520px;margin-left:auto;margin-right:auto;">New gates have torn open across the realm! Treasure waits for whoever's bold enough to go in after them. Assemble a team and clear them out!</div>
             </div>
         </div>
+        ${_dungeonLifetimeSummaryHTML(progress)}
         <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">${poolStripHTML}</div>
         <div id="dungeon-gate-list">${mainHTML}</div>
         <div id="dungeon-party-select" style="display:none;"></div>
         ${window.isAdmin ? `
-        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);text-align:center;">
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);text-align:center;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
             <button onclick="window._dungeonToggleTestMode()" class="cancel-btn" style="font-size:12px;${testMode?'opacity:1;color:#FFD700;':'opacity:0.6;'}">
                 ${testMode ? '✅ Test Mode: Gates take 30s (Admin)' : '🔧 Enable Test Mode: Gates take 30s (Admin)'}
+            </button>
+            <button onclick="window._dungeonResetDaily()" class="cancel-btn" style="font-size:12px;opacity:0.6;">
+                🔄 Reset Today's Gates (Admin)
             </button>
         </div>` : ''}
         <div style="margin-top:24px;">
@@ -18068,7 +18185,10 @@ function _dungeonRenderPartySelect(panel) {
             <div style="font-size:13px;">Selected: <strong>${selected.size}/${gate.partySize}</strong> · Party Power: <strong>${partyPower}</strong></div>
             <div style="font-size:13px;">Success Chance: <strong style="color:${chance>=70?'#4caf50':chance>=40?'#FFD700':'#f44336'};">${chance}%</strong></div>
         </div>
-        <div style="font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:10px;">😴 Cards sent on a raid rest for the next gate before they can be used again.</div>
+        <div style="font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:6px;">😴 Cards sent on a raid need to rest for the next gate before they can be used again.</div>
+        <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-bottom:10px;line-height:1.5;max-width:560px;margin-left:auto;margin-right:auto;">
+            Each card's <strong>Power</strong> is based on its rarity (Common → UR) plus a bonus for low serial numbers. Your party's total Power is weighed against the gate's difficulty to determine your Success Chance — higher rank gates (D → S) hit harder, need bigger parties, and pay out more. Every gate after the first is hidden until you reach it, so spread your strongest cards out and don't blow your whole roster on Gate 1. Cards rest for one gate after a raid, so plan ahead for what might be coming.
+        </div>
         <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:10px;">
             <label style="font-size:12px;color:var(--text-muted);">Sort by</label>
             <select onchange="window._dungeonSetSort(this.value)" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:12px;">
@@ -18130,6 +18250,7 @@ window._dungeonStartRaid = async function() {
         pathIndex: Math.floor(Math.random()*DUNGEON_PATHS.length),
         stats: _dungeonGenerateStats(gate, party),
         bonusCards,
+        testMode,
         startTime: now, endTime: now + durationMs,
     };
     const uid = auth.currentUser.uid;
@@ -18202,6 +18323,10 @@ function _dungeonRenderActive(el, state) {
                 ${ready ? 'Ready to claim!' : `Time remaining: ${_dungeonFormatRemaining(remaining)}`}
             </div>
         </div>
+        ${(window.isAdmin && !ready) ? `
+        <div style="text-align:center;margin-bottom:16px;">
+            <button onclick="window._dungeonStopRaid()" class="cancel-btn" style="font-size:12px;opacity:0.6;">🛑 Cancel Raid (Admin)</button>
+        </div>` : ''}
         ${ready ? `
         <div style="background:var(--bg-gray);border-radius:14px;padding:20px;text-align:center;margin-bottom:16px;">
             <div style="font-size:18px;font-weight:800;margin-bottom:6px;">${state.success ? '🎉 Success!' : '💀 Failed'}</div>
@@ -18247,6 +18372,51 @@ function _dungeonBonusCardsHTML(state) {
         </div>`;
 }
 
+// "Dungeon Wrapped"-style lifetime summary, shown above the daily gate pool.
+// Mirrors the look of the profile Stats tab (--stats-bg/--stats-ink vars).
+function _dungeonLifetimeSummaryHTML(progress) {
+    const l = progress?.lifetime;
+    if (!l || !l.totalRaids) {
+        return `<div style="border-radius:20px;padding:24px 22px;margin-bottom:16px;text-align:center;background:var(--stats-bg);color:rgba(var(--stats-ink),0.5);font-size:13px;">
+            📜 Complete a raid to start building your Dungeon stats!
+        </div>`;
+    }
+    const bigStat = (value, label) =>
+        `<div style="text-align:center;">
+            <div style="font-size:32px;font-weight:900;color:rgb(var(--stats-ink));letter-spacing:-1px;line-height:1;">${value}</div>
+            <div style="font-size:12px;font-weight:700;color:rgba(var(--stats-ink),0.55);margin-top:4px;">${label}</div>
+        </div>`;
+
+    const winRate = Math.round((l.wins / l.totalRaids) * 100);
+    const totalHours = Math.round(l.totalHours * 10) / 10;
+    const lengthLabel = totalHours >= 24 ? `${Math.round(totalHours/24*10)/10} days` : `${totalHours} hrs`;
+
+    let topPerformer = '';
+    const mvpEntries = Object.entries(l.mvpCounts || {});
+    if (mvpEntries.length) {
+        mvpEntries.sort((a,b) => b[1]-a[1]);
+        topPerformer = `${mvpEntries[0][0]} (MVP ${mvpEntries[0][1]}x)`;
+    }
+
+    return `
+        <div style="border-radius:20px;padding:26px 22px;margin-bottom:16px;position:relative;overflow:hidden;background:var(--stats-bg);">
+            <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 25% 50%,rgba(139,69,19,0.18) 0%,transparent 55%),radial-gradient(ellipse at 75% 50%,rgba(75,0,130,0.15) 0%,transparent 55%);pointer-events:none;"></div>
+            <div style="position:relative;z-index:1;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(var(--stats-ink),0.35);margin-bottom:16px;text-align:center;">⚔️ Dungeon Career Stats</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:16px;margin-bottom:${topPerformer ? '16px' : '0'};">
+                    ${bigStat(l.totalRaids, 'Raids Completed')}
+                    ${bigStat(winRate + '%', 'Gates Cleared')}
+                    ${bigStat(lengthLabel, 'Total Raid Time')}
+                    ${bigStat((l.totalAmber||0).toLocaleString(), 'Amber Earned')}
+                    ${bigStat(l.totalMonsters||0, 'Monsters Slain')}
+                    ${bigStat(l.totalCloseCalls||0, 'Close Calls')}
+                    ${bigStat(l.totalBonusCards||0, 'New Teammates')}
+                </div>
+                ${topPerformer ? `<div style="text-align:center;font-size:13px;color:rgba(var(--stats-ink),0.6);">⭐ Top Performer: <strong style="color:rgb(var(--stats-ink));">${topPerformer}</strong></div>` : ''}
+            </div>
+        </div>`;
+}
+
 function _dungeonStatsHTML(state) {
     const s = state.stats;
     if (!s) return '';
@@ -18268,10 +18438,14 @@ window._dungeonClaim = async function() {
     if (!state || Date.now() < state.endTime) return;
     const uid = auth.currentUser.uid;
     try {
-        await _awardAmber(state.reward, `dungeon:${state.gateId}:${state.success?'success':'fail'}`);
-        if (state.bonusCards?.length) {
-            await _tcgSavePackToCollection(uid, state.bonusCards);
-            window._tcgCollectionCache.delete(uid);
+        // Test-mode raids (admin 30s gates) don't pay out — they're only for
+        // testing the flow, not for racking up real amber/cards/stats.
+        if (!state.testMode) {
+            await _awardAmber(state.reward, `dungeon:${state.gateId}:${state.success?'success':'fail'}`);
+            if (state.bonusCards?.length) {
+                await _tcgSavePackToCollection(uid, state.bonusCards);
+                window._tcgCollectionCache.delete(uid);
+            }
         }
         await deleteDoc(doc(db, 'raid_state', uid));
 
@@ -18290,26 +18464,46 @@ window._dungeonClaim = async function() {
             };
         }
 
-        // Lifetime totals + daily streak, tracked independent of the pool reset above.
-        const totalRaids = (progress.totalRaids || 0) + 1;
-        let streak = progress.streak || 0;
-        if (progress.lastRaidDate !== todayKey) {
-            const yesterdayKey = _dungeonTodayKey(new Date(Date.now() - 86400000));
-            streak = (progress.lastRaidDate === yesterdayKey) ? streak + 1 : 1;
+        let dungeonAch = [];
+        if (!state.testMode) {
+            // Lifetime totals + daily streak, tracked independent of the pool reset above.
+            const totalRaids = (progress.totalRaids || 0) + 1;
+            let streak = progress.streak || 0;
+            if (progress.lastRaidDate !== todayKey) {
+                const yesterdayKey = _dungeonTodayKey(new Date(Date.now() - 86400000));
+                streak = (progress.lastRaidDate === yesterdayKey) ? streak + 1 : 1;
+            }
+
+            // Career stats shown on the Dungeon Career Stats summary.
+            const lifetime = progress.lifetime || { totalRaids:0, wins:0, totalAmber:0, totalHours:0, totalMonsters:0, totalCloseCalls:0, totalBonusCards:0, mvpCounts:{} };
+            lifetime.totalRaids++;
+            if (state.success) lifetime.wins = (lifetime.wins||0) + 1;
+            lifetime.totalAmber = (lifetime.totalAmber||0) + state.reward;
+            lifetime.totalHours = (lifetime.totalHours||0) + DUNGEON_GATES[state.gateId].durationMs / 3600e3;
+            if (state.stats) {
+                lifetime.totalMonsters = (lifetime.totalMonsters||0) + state.stats.monsters;
+                lifetime.totalCloseCalls = (lifetime.totalCloseCalls||0) + state.stats.closeCalls;
+                if (state.stats.mvpName) {
+                    lifetime.mvpCounts = lifetime.mvpCounts || {};
+                    lifetime.mvpCounts[state.stats.mvpName] = (lifetime.mvpCounts[state.stats.mvpName]||0) + 1;
+                }
+            }
+            lifetime.totalBonusCards = (lifetime.totalBonusCards||0) + (state.bonusCards?.length || 0);
+
+            progress = { ...progress, totalRaids, streak, lastRaidDate: todayKey, lifetime };
+
+            dungeonAch = ['dungeon_first'];
+            if (totalRaids >= 30) dungeonAch.push('dungeon_total_30');
+            if (streak >= 7) dungeonAch.push('dungeon_streak_7');
+            if (streak >= 100) dungeonAch.push('dungeon_streak_100');
+            if (state.gateId === 's' && state.success) dungeonAch.push('dungeon_s_clear');
+            if (state.bonusCards?.length) dungeonAch.push('dungeon_recruit');
+            if (progress.results.length === 5 && progress.results.every(r => r.success)) dungeonAch.push('dungeon_perfect_day');
         }
-        progress = { ...progress, totalRaids, streak, lastRaidDate: todayKey };
 
         await _dungeonSaveProgress(uid, progress);
         window._dungeonProgress = progress;
-
-        const dungeonAch = ['dungeon_first'];
-        if (totalRaids >= 30) dungeonAch.push('dungeon_total_30');
-        if (streak >= 7) dungeonAch.push('dungeon_streak_7');
-        if (streak >= 100) dungeonAch.push('dungeon_streak_100');
-        if (state.gateId === 's' && state.success) dungeonAch.push('dungeon_s_clear');
-        if (state.bonusCards?.length) dungeonAch.push('dungeon_recruit');
-        if (progress.results.length === 5 && progress.results.every(r => r.success)) dungeonAch.push('dungeon_perfect_day');
-        window.awardAchievements(dungeonAch).catch(() => {});
+        if (dungeonAch.length) window.awardAchievements(dungeonAch).catch(() => {});
     } catch(e) { return alert('Claim failed: ' + e.message); }
     window._dungeonState = null;
     window.loadDungeonTab();
