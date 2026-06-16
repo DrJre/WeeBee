@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/fireba
 import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch, waitForPendingWrites } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
+import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-analytics.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyBcRQzzJthjzpvsMdlTg_surpbD01NOnm0",
@@ -47,6 +48,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const storage = getStorage(app);
+const analytics = getAnalytics(app);
 const googleProvider = new GoogleAuthProvider();
 
 // --- RANK SYSTEM ---
@@ -6713,9 +6715,16 @@ window._wheelAdminReset = async function() {
 window._wheelSpin = async function() {
     if (!auth.currentUser) return window.openAuthModal();
     const uid = auth.currentUser.uid;
-    const state = window._wheelState;
-    if (!state) return;
+    // Re-read from Firestore so client-side state can't be tampered with
+    let state;
+    try {
+        const snap = await getDoc(doc(db, 'wheel_state', uid));
+        if (!snap.exists()) return;
+        state = snap.data();
+        window._wheelState = state;
+    } catch(e) { return; }
     const today = _wheelTodayKey();
+    if (state.month !== _wheelMonthKey()) return;
     const canSpin = state.lastSpinDate !== today || (state.extraSpinsAvailable || 0) > 0;
     if (!canSpin) return;
 
@@ -7003,6 +7012,16 @@ function _plinkoGetBridges(width, gap) {
     return { bridges, starBridge, starSlot };
 }
 
+function _plinkoGetSpecialPegs(pegs, gap) {
+    const rng = _plinkoSeededRandom(_plinkoSeedFromString('plinko-special-' + _plinkoTodayKey()));
+    const binTop = (PLINKO_ROWS + 1) * gap;
+    const goldenPool = pegs.filter(p => p.y >= binTop * 0.5);
+    const goldenPeg = goldenPool[Math.floor(rng() * goldenPool.length)];
+    const bouncyPool = pegs.filter(p => p.y >= binTop * 0.25 && p !== goldenPeg);
+    const bouncyPeg = bouncyPool[Math.floor(rng() * bouncyPool.length)];
+    return { goldenPeg, bouncyPeg };
+}
+
 async function _plinkoLoadConfig() {
     if (window._plinkoConfig) return window._plinkoConfig;
     try {
@@ -7086,13 +7105,11 @@ function _plinkoDrawFrame(ctx, width, height, gap, pegs, pegR, ball, dropX, feat
         ctx.fillStyle = '#f59e0b';
         ctx.fillText(String(PLINKO_PRIZES[i]), x + gap / 2, binTop + (height - binTop) / 2 + 4);
     }
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 1;
+    // Solid bucket walls between bins
+    const wallW = Math.max(3, gap * 0.08);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
     for (let i = 0; i <= binCount; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * gap, binTop);
-        ctx.lineTo(i * gap, height);
-        ctx.stroke();
+        ctx.fillRect(i * gap - wallW / 2, binTop, wallW, height - binTop);
     }
 
     // Star slot marker — a pink bridge across the bin's opening plus a star
@@ -7116,12 +7133,44 @@ function _plinkoDrawFrame(ctx, width, height, gap, pegs, pegR, ball, dropX, feat
         ctx.font = `700 ${Math.max(9, gap * 0.28)}px sans-serif`;
     }
 
-    // Pegs
+    const goldenPeg = features?.goldenPeg;
+    const bouncyPeg = features?.bouncyPeg;
+
+    // Regular pegs
     ctx.fillStyle = '#facc15';
     for (const p of pegs) {
+        if (p === goldenPeg || p === bouncyPeg) continue;
         ctx.beginPath();
         ctx.arc(p.x, p.y, pegR, 0, Math.PI * 2);
         ctx.fill();
+    }
+
+    // Orange (duplicate) peg — glowing orange
+    if (goldenPeg) {
+        ctx.save();
+        ctx.shadowColor = '#f97316';
+        ctx.shadowBlur = 18 + Math.sin(Date.now() / 180) * 6;
+        ctx.fillStyle = '#f97316';
+        ctx.beginPath();
+        ctx.arc(goldenPeg.x, goldenPeg.y, pegR * 1.25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.max(8, pegR * 1.1)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('✦', goldenPeg.x, goldenPeg.y + pegR * 0.4);
+    }
+
+    // Bouncy peg — glowing green
+    if (bouncyPeg) {
+        ctx.save();
+        ctx.shadowColor = '#22c55e';
+        ctx.shadowBlur = 14 + Math.sin(Date.now() / 220) * 5;
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath();
+        ctx.arc(bouncyPeg.x, bouncyPeg.y, pegR * 1.15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
     }
 
     // Multiplier bridges
@@ -7204,25 +7253,29 @@ function _plinkoDrawFrame(ctx, width, height, gap, pegs, pegR, ball, dropX, feat
         ctx.fill();
     }
 
-    // Fading ball trail
-    if (trail) {
-        for (let i = 0; i < trail.length; i++) {
-            const t = trail[i];
-            ctx.globalAlpha = (1 - i / trail.length) * 0.35;
-            ctx.fillStyle = '#ef4444';
+    // Balls and trails — ball/trail may be a single object/array or arrays of them
+    const ballsArr = Array.isArray(ball) ? ball : (ball ? [ball] : []);
+    const trailsArr = Array.isArray(trail) && Array.isArray(trail[0]) ? trail : (trail ? [trail] : []);
+    const ballColors = ['#ef4444', '#f97316']; // red for main, orange for split
+    for (let bi = 0; bi < ballsArr.length; bi++) {
+        const bColor = ballColors[bi] || '#f97316';
+        const bTrail = trailsArr[bi] || [];
+        for (let i = 0; i < bTrail.length; i++) {
+            const t = bTrail[i];
+            ctx.globalAlpha = (1 - i / bTrail.length) * 0.35;
+            ctx.fillStyle = bColor;
             ctx.beginPath();
             ctx.arc(t.x, t.y, t.r * 0.75, 0, Math.PI * 2);
             ctx.fill();
         }
         ctx.globalAlpha = 1;
-    }
-
-    // Ball
-    if (ball) {
-        ctx.fillStyle = '#ef4444';
-        ctx.beginPath();
-        ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
-        ctx.fill();
+        const b = ballsArr[bi];
+        if (b) {
+            ctx.fillStyle = bColor;
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 }
 
@@ -7232,101 +7285,144 @@ function _plinkoDrawFrame(ctx, width, height, gap, pegs, pegR, ball, dropX, feat
 // bridge was crossed. `startX` lets the player choose where the ball drops from.
 function _plinkoRunSimulation(canvas, startX) {
     return new Promise(resolve => {
-        if (!canvas) return resolve({ bin: Math.floor(PLINKO_PRIZES.length / 2), multiplier: 1, hitBridges: [], hitStar: false });
+        if (!canvas) return resolve({ bins: [Math.floor(PLINKO_PRIZES.length / 2)], multipliers: [1], hitBridges: [], hitStar: false });
         const ctx = canvas.getContext('2d');
         const width = canvas.width, height = canvas.height;
         const gap = width / PLINKO_PRIZES.length;
         const pegs = _plinkoGetPegPositions(width, gap);
-        const features = _plinkoGetBridges(width, gap);
+        const bridgeFeatures = _plinkoGetBridges(width, gap);
+        const specialPegs = _plinkoGetSpecialPegs(pegs, gap);
+        const features = { ...bridgeFeatures, ...specialPegs };
         const { bridges, starBridge } = features;
-        const pegR = gap * 0.13;
+        const pegR = gap * 0.16;
         const ballR = gap * 0.16;
         const gravity = gap * 0.0009;
         const maxVy = gap * 0.26;
         const maxVx = gap * 0.22;
         const restitution = 0.5;
+        const binTop = (PLINKO_ROWS + 1) * gap;
+        const wallW = Math.max(3, gap * 0.08);
 
-        let x = startX != null ? startX : width / 2;
-        x = Math.max(ballR, Math.min(width - ballR, x));
-        let y = ballR + 2;
-        let vx = (Math.random() - 0.5) * 0.5;
-        let vy = 0;
-        let multiplier = 1;
-        let hitStar = false;
-        const hitBridges = [];
-        const trail = [];
+        let sx = startX != null ? startX : width / 2;
+        sx = Math.max(ballR, Math.min(width - ballR, sx));
 
-        function step() {
-            const prevY = y;
-            vy = Math.min(vy + gravity, maxVy);
-            x += vx; y += vy;
+        const makeBall = (x, y, vx, vy) => ({
+            x, y, vx, vy,
+            multiplier: 1,
+            hitBridges: [],
+            hitStar: false,
+            trail: [],
+            triggeredBridges: new Set(),
+            starTriggered: false,
+            active: true,
+            bin: null,
+        });
 
-            if (x - ballR < 0) { x = ballR; vx = Math.abs(vx) * restitution; }
-            if (x + ballR > width) { x = width - ballR; vx = -Math.abs(vx) * restitution; }
+        const balls = [makeBall(sx, ballR + 2, (Math.random() - 0.5) * 0.5, 0)];
+        let splitDone = false;
+
+        function stepBall(ball) {
+            const prevY = ball.y;
+            ball.vy = Math.min(ball.vy + gravity, maxVy);
+            ball.x += ball.vx; ball.y += ball.vy;
+
+            if (ball.x - ballR < 0) { ball.x = ballR; ball.vx = Math.abs(ball.vx) * restitution; }
+            if (ball.x + ballR > width) { ball.x = width - ballR; ball.vx = -Math.abs(ball.vx) * restitution; }
+
+            if (ball.y + ballR > binTop) {
+                for (let wi = 1; wi < PLINKO_PRIZES.length; wi++) {
+                    const wallX = wi * gap;
+                    if (ball.x + ballR > wallX - wallW / 2 && ball.x - ballR < wallX + wallW / 2) {
+                        if (ball.x < wallX) { ball.x = wallX - wallW / 2 - ballR; ball.vx = -Math.abs(ball.vx) * restitution; }
+                        else                { ball.x = wallX + wallW / 2 + ballR; ball.vx =  Math.abs(ball.vx) * restitution; }
+                    }
+                }
+            }
 
             for (const p of pegs) {
-                const dx = x - p.x, dy = y - p.y;
+                const dx = ball.x - p.x, dy = ball.y - p.y;
                 const dist = Math.hypot(dx, dy);
                 const minDist = pegR + ballR;
                 if (dist < minDist && dist > 0.001) {
                     const nx = dx / dist, ny = dy / dist;
                     const overlap = minDist - dist;
-                    x += nx * overlap; y += ny * overlap;
-                    const dot = vx * nx + vy * ny;
-                    vx -= (1 + restitution) * dot * nx;
-                    vy -= (1 + restitution) * dot * ny;
-                    // Small random kick on every bounce — same as a real peg
-                    // board, where the exact contact point is never perfectly
-                    // centered, keeps the outcome from being deterministic.
-                    vx += (Math.random() - 0.5) * gap * 0.06;
+                    ball.x += nx * overlap; ball.y += ny * overlap;
+
+                    const isBouncy = p === features.bouncyPeg;
+                    const rest = isBouncy ? 1.5 : restitution;
+                    const dot = ball.vx * nx + ball.vy * ny;
+                    ball.vx -= (1 + rest) * dot * nx;
+                    ball.vy -= (1 + rest) * dot * ny;
+                    if (isBouncy) {
+                        // Extra kick to make it feel super springy
+                        ball.vy = Math.min(ball.vy, -maxVy * 0.5);
+                    }
+                    const speed = Math.hypot(ball.vx, ball.vy);
+                    ball.vx += (Math.random() - 0.5) * speed * 0.18;
+
+                    // Golden peg: spawn a duplicate ball once per drop
+                    if (p === features.goldenPeg && !splitDone) {
+                        splitDone = true;
+                        balls.push(makeBall(ball.x, ball.y, -ball.vx * 0.85, ball.vy * 0.85));
+                    }
                 }
             }
-            vx *= 0.99;
-            // When the ball settles into the V between two pegs, gravity keeps
-            // pushing it back into both every frame, so the collision loop above
-            // resolves against each peg in turn — stacking velocity reflections
-            // and random kicks frame after frame. Without a cap that energy
-            // builds up silently (since vx alone never triggers the landing
-            // check) until the ball finally pops free and shoots sideways.
-            // Clamping vx keeps that buildup bounded like maxVy already does for vy.
-            vx = Math.max(-maxVx, Math.min(maxVx, vx));
+            ball.vx *= 0.99;
+            ball.vx = Math.max(-maxVx, Math.min(maxVx, ball.vx));
 
-            // Multiplier bridges — crossing the gap between a bridge's two
-            // pegs (moving downward) multiplies the final prize. Multiple
-            // bridges in one drop stack together.
-            for (const b of bridges) {
-                if (!b.triggered && prevY < b.y && y >= b.y) {
+            for (let bi = 0; bi < bridges.length; bi++) {
+                const b = bridges[bi];
+                if (!ball.triggeredBridges.has(bi) && prevY < b.y && ball.y >= b.y) {
                     const lo = Math.min(b.x1, b.x2), hi = Math.max(b.x1, b.x2);
-                    if (x + ballR > lo && x - ballR < hi) {
-                        b.triggered = true;
+                    if (ball.x + ballR > lo && ball.x - ballR < hi) {
+                        ball.triggeredBridges.add(bi);
                         b.flashFrames = 24;
-                        multiplier *= b.multiplier;
-                        hitBridges.push(b.multiplier);
+                        ball.multiplier *= b.multiplier;
+                        ball.hitBridges.push(b.multiplier);
                     }
                 }
             }
 
-            // Star bridge — doesn't affect the multiplier; just flags that the
-            // ball passed through it. The bonus only pays out if it also
-            // lands in today's star slot.
-            if (!starBridge.triggered && prevY < starBridge.y && y >= starBridge.y) {
+            if (!ball.starTriggered && prevY < starBridge.y && ball.y >= starBridge.y) {
                 const lo = Math.min(starBridge.x1, starBridge.x2), hi = Math.max(starBridge.x1, starBridge.x2);
-                if (x + ballR > lo && x - ballR < hi) {
-                    starBridge.triggered = true;
+                if (ball.x + ballR > lo && ball.x - ballR < hi) {
+                    ball.starTriggered = true;
                     starBridge.flashFrames = 24;
-                    hitStar = true;
+                    ball.hitStar = true;
                 }
             }
 
-            trail.unshift({ x, y, r: ballR });
-            if (trail.length > 7) trail.pop();
+            ball.trail.unshift({ x: ball.x, y: ball.y, r: ballR });
+            if (ball.trail.length > 7) ball.trail.pop();
 
-            _plinkoDrawFrame(ctx, width, height, gap, pegs, pegR, { x, y, r: ballR }, null, features, trail);
+            if (ball.y + ballR >= height - 2) {
+                ball.active = false;
+                ball.y = height - 2 - ballR; // settle at bucket floor
+                ball.trail = []; // clear trail so it doesn't hang above
+                ball.bin = Math.max(0, Math.min(PLINKO_PRIZES.length - 1, Math.floor(ball.x / gap)));
+            }
+        }
 
-            if (y + ballR >= height - 2) {
-                let bin = Math.floor(x / gap);
-                bin = Math.max(0, Math.min(PLINKO_PRIZES.length - 1, bin));
-                resolve({ bin, multiplier, hitBridges, hitStar: hitStar && bin === features.starSlot });
+        function step() {
+            for (const ball of balls) {
+                if (ball.active) stepBall(ball);
+            }
+
+            // Draw ALL balls (active + landed) so landed balls stay visible
+            _plinkoDrawFrame(
+                ctx, width, height, gap, pegs, pegR,
+                balls.map(b => ({ x: b.x, y: b.y, r: ballR })),
+                null, features,
+                balls.map(b => b.trail)
+            );
+
+            if (balls.every(b => !b.active)) {
+                const bins = balls.map(b => b.bin);
+                const multipliers = balls.map(b => b.multiplier);
+                const hitStar = balls.some(b => b.hitStar && b.bin === features.starSlot);
+                const allHitBridges = balls.flatMap(b => b.hitBridges);
+                // Brief pause so the player can see where the ball settled
+                setTimeout(() => resolve({ bins, multipliers, hitBridges: allHitBridges, hitStar }), 400);
                 return;
             }
             requestAnimationFrame(step);
@@ -7366,10 +7462,6 @@ function _plinkoRender(el, config, state) {
                     <div class="banner-hero-title" style="font-size:42px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🟡 Plinko 🟡</div>
                     <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-top:10px;">Drops cost ${PLINKO_DROP_COST} Amber</div>
                     <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:4px;">${freeAvailable ? 'You have a free drop available today!' : 'Your free daily drop resets at midnight'}</div>
-                    <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:10px;line-height:1.6;">
-                        🌉 Colored bridges multiply your prize 1.5x–3x — hit more than one and they stack!<br>
-                        Pass the ball through both <span style="color:${PLINKO_STAR_COLOR};font-weight:800;">★</span> gates to land the <span style="color:${PLINKO_STAR_COLOR};font-weight:800;">★</span> Bonus (+${PLINKO_STAR_BONUS} Amber)
-                    </div>
                 </div>
             </div>
 
@@ -7380,8 +7472,44 @@ function _plinkoRender(el, config, state) {
             </div>
 
             <div id="plinko-hint" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Press "Drop Ball", then tap where on the board you want it to fall</div>
-            <div id="plinko-board-wrap" style="position:relative;display:inline-block;max-width:100%;border-radius:16px;box-shadow:0 0 24px rgba(245,158,11,0.25),0 0 48px rgba(124,58,237,0.15);">
-                <canvas id="plinko-canvas" width="${width}" height="${height}" style="background:var(--bg-gray);border-radius:12px;max-width:100%;height:auto;border:1px solid var(--border-color);"></canvas>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+                <div id="plinko-board-wrap" style="position:relative;display:inline-block;max-width:100%;border-radius:16px;box-shadow:0 0 24px rgba(245,158,11,0.25),0 0 48px rgba(124,58,237,0.15);">
+                    <canvas id="plinko-canvas" width="${width}" height="${height}" style="background:var(--bg-gray);border-radius:12px;max-width:100%;height:auto;border:1px solid var(--border-color);display:block;"></canvas>
+                </div>
+                <div style="width:100%;max-width:${width}px;text-align:left;background:var(--bg-card);border:1px solid var(--border-color);border-radius:14px;padding:14px 18px;box-sizing:border-box;">
+                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:12px;">Board Key</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div style="width:16px;height:16px;border-radius:50%;background:#f97316;box-shadow:0 0 7px #f97316;flex-shrink:0;"></div>
+                            <div>
+                                <div style="font-size:12px;font-weight:800;color:var(--text-dark);">Split Peg</div>
+                                <div style="font-size:11px;color:var(--text-muted);">Spawns a 2nd ball — both scores added.</div>
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div style="width:16px;height:16px;border-radius:50%;background:#22c55e;box-shadow:0 0 7px #22c55e;flex-shrink:0;"></div>
+                            <div>
+                                <div style="font-size:12px;font-weight:800;color:var(--text-dark);">Bouncy Peg</div>
+                                <div style="font-size:11px;color:var(--text-muted);">Super springy — sends the ball flying.</div>
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div style="width:26px;height:4px;border-radius:2px;background:${PLINKO_STAR_COLOR};box-shadow:0 0 6px ${PLINKO_STAR_COLOR};flex-shrink:0;"></div>
+                            <div>
+                                <div style="font-size:12px;font-weight:800;color:${PLINKO_STAR_COLOR};">★ Star Gate</div>
+                                <div style="font-size:11px;color:var(--text-muted);">Go through the ★ gate AND land in the ★ bucket — both required for +${PLINKO_STAR_BONUS} Amber.</div>
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div style="width:26px;height:4px;border-radius:2px;background:#a78bfa;box-shadow:0 0 6px #a78bfa;flex-shrink:0;"></div>
+                            <div>
+                                <div style="font-size:12px;font-weight:800;color:#a78bfa;">Multiplier Gate</div>
+                                <div style="font-size:11px;color:var(--text-muted);">Multiplies your prize. Bridges stack!</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-color);font-size:10px;color:var(--text-muted);">Special pegs change position daily at midnight.</div>
+                </div>
             </div>
             <div>
             ${window.isAdmin && !config.enabled ? `<div style="margin-top:16px;padding:10px 16px;background:rgba(239,68,68,0.12);border:1px solid #ef4444;border-radius:10px;color:#ef4444;font-size:12px;font-weight:700;display:inline-block;">⚠️ Plinko is hidden from regular users — admin preview only</div>` : ''}
@@ -7395,7 +7523,8 @@ function _plinkoRender(el, config, state) {
         const pegGap = width / PLINKO_PRIZES.length;
         const pegs = _plinkoGetPegPositions(width, pegGap);
         const features = _plinkoGetBridges(width, pegGap);
-        _plinkoDrawFrame(ctx, width, height, pegGap, pegs, pegGap * 0.13, null, null, features, null);
+        const specialPegs = _plinkoGetSpecialPegs(pegs, pegGap);
+        _plinkoDrawFrame(ctx, width, height, pegGap, pegs, pegGap * 0.16, [], null, { ...features, ...specialPegs }, []);
 
         canvas.addEventListener('click', (e) => {
             if (!window._plinkoAiming || window._plinkoDropInProgress) return;
@@ -7490,10 +7619,13 @@ window._plinkoExecuteDrop = async function(dropX) {
 
     window._plinkoDropInProgress = true;
     const canvas = document.getElementById('plinko-canvas');
-    const { bin, multiplier, hitBridges, hitStar } = await _plinkoRunSimulation(canvas, dropX);
+    const { bins, multipliers, hitBridges, hitStar } = await _plinkoRunSimulation(canvas, dropX);
     window._plinkoDropInProgress = false;
 
-    const prize = Math.round(PLINKO_PRIZES[bin] * multiplier) + (hitStar ? PLINKO_STAR_BONUS : 0);
+    // Sum prizes from all balls (main + any duplicates from golden peg)
+    const totalMultiplier = multipliers[0]; // for display purposes use the first ball's multiplier
+    const prize = bins.reduce((sum, bin, i) => sum + Math.round(PLINKO_PRIZES[bin] * (multipliers[i] || 1)), 0)
+        + (hitStar ? PLINKO_STAR_BONUS : 0);
     try { await _awardAmber(prize, 'plinko:drop'); } catch(e) { console.error('Plinko prize grant failed:', e); }
 
     const totalDrops = (state.totalDrops || 0) + 1;
@@ -7518,9 +7650,10 @@ window._plinkoExecuteDrop = async function(dropX) {
     if (hitStar) plinkoAch.push('plinko_star');
     window.awardAchievements(plinkoAch).catch(() => {});
 
-    const burstCount = hitStar ? 80 : (multiplier > 1 ? 50 : 24);
-    _plinkoConfettiBurst(burstCount, multiplier, hitStar);
-    _plinkoShowResultModal(prize, multiplier, hitBridges, hitStar);
+    const didSplit = bins.length > 1;
+    const burstCount = hitStar ? 80 : (totalMultiplier > 1 || didSplit ? 50 : 24);
+    _plinkoConfettiBurst(burstCount, totalMultiplier, hitStar);
+    _plinkoShowResultModal(prize, totalMultiplier, hitBridges, hitStar, didSplit);
     window._plinkoRefreshBadge();
     setTimeout(() => _plinkoRender(document.getElementById('plinko-tab-content'), window._plinkoConfig || {}, state), 1200);
 };
@@ -7552,7 +7685,7 @@ function _plinkoConfettiBurst(count, multiplier, hitStar) {
     }
 }
 
-function _plinkoShowResultModal(prize, multiplier, hitBridges, hitStar) {
+function _plinkoShowResultModal(prize, multiplier, hitBridges, hitStar, didSplit) {
     document.getElementById('plinko-result-modal')?.remove();
     const modal = document.createElement('div');
     modal.id = 'plinko-result-modal';
@@ -7566,9 +7699,14 @@ function _plinkoShowResultModal(prize, multiplier, hitBridges, hitStar) {
     const starBadge = hitStar ? `
         <div style="font-size:16px;font-weight:900;color:${PLINKO_STAR_COLOR};margin-top:10px;">★ Bonus: +${PLINKO_STAR_BONUS} Amber! ★</div>
     ` : '';
+    const splitBadge = didSplit ? `
+        <div style="font-size:14px;font-weight:800;color:#ffd700;margin-top:8px;">✦ Split! Both balls counted!</div>
+    ` : '';
+    const emoji = hitStar ? '⭐' : (didSplit ? '✦' : (multiplier > 1 ? '🎉' : '🟡'));
     modal.innerHTML = `<div style="text-align:center;background:var(--bg-card);border-radius:16px;padding:36px 28px;max-width:360px;">
-        <div style="font-size:60px;">${hitStar ? '⭐' : (multiplier > 1 ? '🎉' : '🟡')}</div>
+        <div style="font-size:60px;">${emoji}</div>
         <div style="font-size:22px;font-weight:900;color:#fff;margin-top:8px;">+${prize} Amber!</div>
+        ${splitBadge}
         ${multiplierBadges}
         ${starBadge}
         <button onclick="document.getElementById('plinko-result-modal')?.remove()" class="action-btn" style="margin:20px auto 0;">Nice!</button>
@@ -7627,21 +7765,21 @@ async function _tcgEnsureCardPool() {
 // fallback to the hand-curated arrays until the one-time migration has been run).
 function _tcgFullCardPool() {
     const sr = (window._tcgSRPool && window._tcgSRPool.length)
-        ? window._tcgSRPool.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'sr' }))
-        : TCG_SR_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'sr' }));
+        ? window._tcgSRPool.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'sr', addedAt: c.addedAt || null }))
+        : TCG_SR_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'sr', addedAt: null }));
     const ssr = (window._tcgSSRPool && window._tcgSSRPool.length)
-        ? window._tcgSSRPool.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'ssr' }))
-        : TCG_SSR_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'ssr' }));
+        ? window._tcgSSRPool.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'ssr', addedAt: c.addedAt || null }))
+        : TCG_SSR_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'ssr', addedAt: null }));
     const ur = ((window._tcgURPool && window._tcgURPool.length)
-        ? window._tcgURPool.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'ur' }))
-        : TCG_UR_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'ur' })))
-        .concat(TCG_FOUNDER_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'ur', founder: true })));
+        ? window._tcgURPool.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'ur', addedAt: c.addedAt || null }))
+        : TCG_UR_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'ur', addedAt: null })))
+        .concat(TCG_FOUNDER_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'ur', founder: true, addedAt: null })));
     return [
         ...ur,
         ...ssr,
         ...sr,
-        ...(window._tcgRarePool || []).map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'rare' })),
-        ...(window._tcgCommonPool || []).map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'common' })),
+        ...(window._tcgRarePool || []).map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'rare', addedAt: c.addedAt || null })),
+        ...(window._tcgCommonPool || []).map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'common', addedAt: c.addedAt || null })),
     ].filter(c => c.image);
 }
 
@@ -7873,12 +8011,24 @@ window._tcgMigrateSRSSRToPool = async function() {
     ];
     if (statusEl) statusEl.textContent = `Migrating ${all.length} cards…`;
     try {
+        // Fetch existing doc IDs so we only stamp addedAt on cards that are new
+        const [srSnap, ssrSnap, urSnap] = await Promise.all([
+            getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'sr'),  limit(500))),
+            getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'ssr'), limit(500))),
+            getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'ur'),  limit(100))),
+        ]);
+        const existingIds = new Set();
+        [srSnap, ssrSnap, urSnap].forEach(snap => snap.forEach(d => existingIds.add(d.id)));
+
+        let newCount = 0;
         for (const c of all) {
             const id = `${c.rarityTier}_${slug(c.name)}_${slug(c.anime)}`;
-            await setDoc(doc(db, 'characters', id), { name: c.name, series: c.anime, image: c.image, rarityTier: c.rarityTier }, { merge: true });
+            const fields = { name: c.name, series: c.anime, image: c.image, rarityTier: c.rarityTier };
+            if (!existingIds.has(id)) { fields.addedAt = serverTimestamp(); newCount++; }
+            await setDoc(doc(db, 'characters', id), fields, { merge: true });
         }
         _tcgClearPoolCache();
-        if (statusEl) statusEl.textContent = `Done — migrated ${all.length} SR/SSR/UR cards into the pool.`;
+        if (statusEl) statusEl.textContent = `Done — ${all.length} cards synced (${newCount} new).`;
         window._tcgBrowsePool('all', '', 0);
     } catch(e) {
         if (statusEl) statusEl.textContent = `Failed: ${e.message}`;
@@ -7889,6 +8039,22 @@ window._tcgMigrateSRSSRToPool = async function() {
 // earlier versions of TCG_SR_CARDS/SSR_CARDS/UR_CARDS — when a card's name or
 // anime label changes, _tcgMigrateSRSSRToPool writes it under a *new* doc id
 // but never deletes the old one. Those leftover docs still match
+// One-time cleanup: remove incorrect podium badges awarded to anime that hit the
+// podium before the MIN_REVIEWS_PODIUM=5 rule was enforced (2026-06-16).
+window._fixWrongPodiumBadges = async function() {
+    if (!window.isAdmin) { console.warn('Admin only.'); return; }
+    const targets = [
+        { mal_id: 889,   fields: { hasBeenFirst: false, firstDate: null } },             // Black Lagoon
+        { mal_id: 199,   fields: { hasBeenFirst: false, firstDate: null, hasBeenThird: false, thirdDate: null } }, // Spirited Away
+        { mal_id: 60022, fields: { hasBeenSecond: false, secondDate: null } },            // One Piece Fan Letter
+    ];
+    for (const t of targets) {
+        await setDoc(doc(db, 'rankHistory', String(t.mal_id)), t.fields, { merge: true });
+        console.log(`Cleared badges for MAL ${t.mal_id}`);
+    }
+    console.log('Done — wrong podium badges removed.');
+};
+
 // rarityTier sr/ssr/ur and have a `series`, so they stay in the pull pool —
 // meaning whichever character has both an old and current entry gets pulled
 // roughly twice as often as everyone else. Run this after "Sync Cards to Pool".
@@ -8183,7 +8349,13 @@ window._tcgSearchCards = async function(queryStr) {
         (c.anime && c.anime.toLowerCase().includes(q))
     ) : pool;
 
-    if (sort === 'new') results = [...results].reverse();
+    if (sort === 'new') {
+        results = [...results].sort((a, b) => {
+            const ta = a.addedAt ? (a.addedAt.toMillis ? a.addedAt.toMillis() : new Date(a.addedAt).getTime()) : 0;
+            const tb = b.addedAt ? (b.addedAt.toMillis ? b.addedAt.toMillis() : new Date(b.addedAt).getTime()) : 0;
+            return tb - ta;
+        });
+    }
 
     if (!results.length) {
         el.innerHTML = '<p style="color:var(--text-muted);">No cards found.</p>';
@@ -12618,15 +12790,16 @@ window.fetchDiscoverPage = async function() {
             } catch(e) {}
         }
 
-        const MIN_REVIEWS = 5;
+        const MIN_REVIEWS_PODIUM = 5;
+        const MIN_REVIEWS_LIST  = 2;
         const allRanked = Object.values(animeStats)
-            .filter(a => a.title)
+            .filter(a => a.title && a.count >= MIN_REVIEWS_LIST)
             .map(a => ({ ...a, avgScore: (a.totalScore / a.count).toFixed(1) }))
             .sort((a, b) => parseFloat(b.avgScore) - parseFloat(a.avgScore));
-        // Podium: top 3 from ALL qualifying anime — don't cap at 10 first
-        const podium = allRanked.filter(a => a.count >= MIN_REVIEWS).slice(0, 3);
+        // Podium: top 3 among anime with 5+ reviews
+        const podium = allRanked.filter(a => a.count >= MIN_REVIEWS_PODIUM).slice(0, 3);
         const podiumIds = new Set(podium.map(a => a.mal_id));
-        // List: next 7 non-podium anime by avgScore (includes unqualified)
+        // List: next 7 non-podium anime with 2+ reviews
         const listItems = allRanked.filter(a => !podiumIds.has(a.mal_id)).slice(0, 7);
         // top10 used by rank snapshot below
         const top10 = [...podium, ...listItems];
@@ -12682,7 +12855,7 @@ window.fetchDiscoverPage = async function() {
             // Revoke badges from any anime that doesn't meet the minimum review threshold
             const revokes = [];
             top10.forEach(a => {
-                if (a.count < MIN_REVIEWS) {
+                if (a.count < MIN_REVIEWS_PODIUM) {
                     const h = historyMap[a.mal_id] || {};
                     if (h.hasBeenFirst || h.hasBeenSecond || h.hasBeenThird) {
                         const updates = {};
@@ -12699,7 +12872,7 @@ window.fetchDiscoverPage = async function() {
             // Update snapshot every 12 hours — stores ALL qualified anime so any anime page can show its rank
             const daysSinceSnapshot = (Date.now() - lastSnapshotTime) / 86400000;
             if (daysSinceSnapshot >= 0.5) {
-                const qualifiedRanked = allRanked.filter(a => a.count >= MIN_REVIEWS);
+                const qualifiedRanked = allRanked.filter(a => a.count >= MIN_REVIEWS_PODIUM);
                 setDoc(doc(db, "meta", "rankSnapshot"), {
                     rankings: qualifiedRanked.map((a, i) => ({ mal_id: a.mal_id, rank: i + 1, avgScore: parseFloat(a.avgScore) })),
                     lastUpdated: Date.now()
@@ -12770,7 +12943,7 @@ window.fetchDiscoverPage = async function() {
                         <div class="podium-step step-1">1</div>
                     </div>`;
             } else {
-                html += `<div style="color:var(--text-muted); font-size:13px; text-align:center; align-self:center; padding:20px;">Need ${MIN_REVIEWS}+ reviews to qualify for the podium</div>`;
+                html += `<div style="color:var(--text-muted); font-size:13px; text-align:center; align-self:center; padding:20px;">Need ${MIN_REVIEWS_PODIUM}+ reviews to qualify for the podium</div>`;
             }
 
             // #3 — Right (qualified only)
@@ -12799,8 +12972,8 @@ window.fetchDiscoverPage = async function() {
                 html += '<div class="top10-list-container">';
                 listItems.forEach((anime, i) => {
                     const globalRank = podium.length + i + 1;
-                    const unqualifiedNote = anime.count < MIN_REVIEWS
-                        ? `<span style="font-size:10px; color:var(--text-muted); margin-left:4px;">(${anime.count}/${MIN_REVIEWS} reviews for podium)</span>`
+                    const unqualifiedNote = anime.count < MIN_REVIEWS_PODIUM
+                        ? `<span style="font-size:10px; color:var(--text-muted); margin-left:4px;">(${anime.count}/${MIN_REVIEWS_PODIUM} reviews for podium)</span>`
                         : '';
                     html += `
                         <div class="top10-list-item" onclick="loadAnimeDetails(${anime.mal_id})">
@@ -14084,9 +14257,9 @@ const BW_NRT_CHARS = [
     {id:'yugito',     name:'Yugito Nii',          img:'https://s4.anilist.co/file/anilistcdn/character/large/15362.jpg',                 gender:'Female', affiliation:['Cloud'],                                 jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],                                 nature:['Fire','Lightning'],                              kekkeiGenkai:false, attribute:['Jinchuriki'],        debutArc:'Akatsuki Suppression'},
     {id:'utakata',    name:'Utakata',            img:'https://s4.anilist.co/file/anilistcdn/character/large/b23219-eEWDh3idJwit.jpg',   gender:'Male',   affiliation:['Mist','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Water'],                                         kekkeiGenkai:false, attribute:['Jinchuriki'],        debutArc:'Akatsuki Suppression'},
     {id:'han',        name:'Han',                img:'https://cdn.myanimelist.net/images/characters/10/615374.jpg',                     gender:'Male',   affiliation:['Stone'],                                 jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Earth','Water','Fire'],                          kekkeiGenkai:false, attribute:['Jinchuriki'],        debutArc:'Fourth Shinobi World War'},
-    {id:'roshi',      name:'Roshi',              img:'https://cdn.myanimelist.net/images/characters/7/585052.jpg',                      gender:'Male',   affiliation:['Stone'],                                 jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Earth','Fire'],                                  kekkeiGenkai:true,  attribute:['Jinchuriki'],        debutArc:'Akatsuki Suppression'},
+    {id:'roshi',      name:'Roshi',              img:'https://cdn.myanimelist.net/images/characters/3/66153.jpg',                       gender:'Male',   affiliation:['Stone'],                                 jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Earth','Fire'],                                  kekkeiGenkai:true,  attribute:['Jinchuriki'],        debutArc:'Akatsuki Suppression'},
     {id:'fuu',        name:'Fu',                 img:'https://cdn.myanimelist.net/images/characters/3/553177.jpg',                      gender:'Female', affiliation:['Waterfall'],                             jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Lightning','Earth','Wind'],                      kekkeiGenkai:false, attribute:['Jinchuriki'],        debutArc:'Fourth Shinobi World War'},
-    {id:'blackzetsu', name:'Black Zetsu',        img:'https://cdn.myanimelist.net/images/characters/14/618824.jpg',                     gender:'Male',   affiliation:['Akatsuki'],                              jutsuType:['Ninjutsu','Fuinjutsu','Kinjutsu'],                                            nature:['Earth','Water'],                                 kekkeiGenkai:false, attribute:[],                    debutArc:'Akatsuki Suppression'},
+
     {id:'chojuro',    name:'Chojuro',            img:'https://s4.anilist.co/file/anilistcdn/character/large/23418.jpg',                 gender:'Male',   affiliation:['Mist'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu'],                                             nature:['Water'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Five Kage Summit'},
     {id:'ao',         name:'Ao',                 img:'https://cdn.myanimelist.net/images/characters/13/631929.jpg',                     gender:'Male',   affiliation:['Mist'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Water','Fire','Earth'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Five Kage Summit'},
     {id:'genma',      name:'Genma Shiranui',      img:'https://s4.anilist.co/file/anilistcdn/character/large/n3735-IRx14wSYNVSE.png',    gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Fire','Earth'],                                  kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
@@ -17791,6 +17964,14 @@ function _dungeonCardPower(card) {
     return power;
 }
 
+// +1 power for every card in the party that shares an anime with at least
+// one other card — rewards building thematic parties.
+function _dungeonComboBonus(cards) {
+    const animeCounts = {};
+    cards.forEach(c => { const a = c.anime || ''; if (a) animeCounts[a] = (animeCounts[a] || 0) + 1; });
+    return cards.reduce((sum, c) => sum + ((animeCounts[c.anime || ''] || 0) > 1 ? 1 : 0), 0);
+}
+
 function _dungeonSuccessChance(partyPower, difficulty) {
     return Math.max(15, Math.min(95, 50 + (partyPower - difficulty) * 4));
 }
@@ -18044,8 +18225,8 @@ function _dungeonRenderGateSelect(el) {
 
     let mainHTML;
     if (poolIndex >= 5) {
-        const totalAmber = progress.results.reduce((s, r) => s + r.reward, 0);
-        const wins = progress.results.filter(r => r.success).length;
+        const totalAmber = progress.results.slice(0, 5).reduce((s, r) => s + r.reward, 0);
+        const wins = progress.results.slice(0, 5).filter(r => r.success).length;
         mainHTML = `
             <div style="background:var(--bg-gray);border-radius:14px;padding:28px 20px;text-align:center;">
                 <div style="font-size:20px;font-weight:800;margin-bottom:8px;">🏁 Today's Gates Cleared!</div>
@@ -18152,27 +18333,34 @@ function _dungeonSortCards(cards, sort) {
 function _dungeonRenderPartySelect(panel) {
     const { gateId, selected, cards, sort } = window._dungeonPickState;
     const gate = DUNGEON_GATES[gateId];
-    const partyPower = [...selected].reduce((sum,id) => {
-        const c = cards.find(c=>c.id===id);
-        return sum + (c ? _dungeonCardPower(c) : 0);
-    }, 0);
+    const selectedCards = [...selected].map(id => cards.find(c => c.id === id)).filter(Boolean);
+    const basePartyPower = selectedCards.reduce((sum, c) => sum + _dungeonCardPower(c), 0);
+    const combo = _dungeonComboBonus(selectedCards);
+    const partyPower = basePartyPower + combo;
     const chance = _dungeonSuccessChance(partyPower, gate.difficulty);
     const canStart = selected.size === gate.partySize;
     const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
+
+    // Build a set of anime names that appear more than once among selected cards
+    // (used to show the combo badge on individual cards).
+    const selectedAnimeCounts = {};
+    selectedCards.forEach(c => { const a = c.anime || ''; if (a) selectedAnimeCounts[a] = (selectedAnimeCounts[a] || 0) + 1; });
 
     const sortedCards = _dungeonSortCards(cards, sort);
     const cardsHTML = sortedCards.length ? sortedCards.map(c => {
         const isSel = selected.has(c.id);
         const fatigued = _dungeonIsFatigued(c.id);
+        const inCombo = isSel && (selectedAnimeCounts[c.anime || ''] || 0) > 1;
         return `
-        <div onclick="${fatigued?'':`window._dungeonTogglePick('${c.id}')`}" style="cursor:${fatigued?'not-allowed':'pointer'};border-radius:10px;overflow:hidden;border:3px solid ${isSel?'var(--accent-yellow)':'transparent'};position:relative;background:var(--bg-gray);${fatigued?'opacity:0.45;':''}">
+        <div onclick="${fatigued?'':`window._dungeonTogglePick('${c.id}')`}" style="cursor:${fatigued?'not-allowed':'pointer'};border-radius:10px;overflow:hidden;border:3px solid ${inCombo?'#a855f7':isSel?'var(--accent-yellow)':'transparent'};position:relative;background:var(--bg-gray);${fatigued?'opacity:0.45;':''}">
             <img src="${c.image||''}" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;${fatigued?'filter:grayscale(0.6);':''}" loading="lazy">
             <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);color:#fff;font-size:10px;padding:4px 6px;text-align:center;">
                 <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
-                <div style="color:#FFD700;">${rarityLabels[c.rarity]||c.rarity} · Power ${_dungeonCardPower(c)}</div>
+                <div style="color:${inCombo?'#d8a4ff':'#FFD700'};">${rarityLabels[c.rarity]||c.rarity} · Power ${_dungeonCardPower(c)}${inCombo?' +1':''}️</div>
             </div>
             ${fatigued ? `<div style="position:absolute;top:0;left:0;right:0;background:rgba(0,0,0,0.7);color:#FFD700;font-size:10px;font-weight:800;text-align:center;padding:4px 0;">😴 Resting</div>` : ''}
-            ${isSel ? `<div style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:var(--accent-yellow);color:#222;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:13px;">✓</div>` : ''}
+            ${inCombo ? `<div style="position:absolute;top:4px;left:4px;background:#a855f7;color:#fff;font-size:9px;font-weight:900;padding:2px 5px;border-radius:4px;">COMBO</div>` : ''}
+            ${isSel ? `<div style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:${inCombo?'#a855f7':'var(--accent-yellow)'};color:${inCombo?'#fff':'#222'};font-weight:900;display:flex;align-items:center;justify-content:center;font-size:13px;">✓</div>` : ''}
         </div>`;
     }).join('') : `<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:24px;">No cards in your collection yet — open some packs first!</div>`;
 
@@ -18180,9 +18368,10 @@ function _dungeonRenderPartySelect(panel) {
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
             <button onclick="window._dungeonCancelPartySelect()" class="cancel-btn" style="font-size:13px;">← Back to Gates</button>
             <div style="font-weight:800;font-size:16px;">${gate.icon} ${gate.name} — Pick ${gate.partySize} card${gate.partySize>1?'s':''}</div>
+            <button class="action-btn" style="font-weight:800;${canStart?'':'opacity:0.5;cursor:not-allowed;'}" ${canStart?`onclick="window._dungeonStartRaid()"`:''}>Begin Raid →</button>
         </div>
         <div style="background:var(--bg-gray);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-            <div style="font-size:13px;">Selected: <strong>${selected.size}/${gate.partySize}</strong> · Party Power: <strong>${partyPower}</strong></div>
+            <div style="font-size:13px;">Selected: <strong>${selected.size}/${gate.partySize}</strong> · Party Power: <strong>${partyPower}</strong>${combo > 0 ? ` <span style="color:#a855f7;font-weight:800;">(+${combo} Combo!)</span>` : ''}</div>
             <div style="font-size:13px;">Success Chance: <strong style="color:${chance>=70?'#4caf50':chance>=40?'#FFD700':'#f44336'};">${chance}%</strong></div>
         </div>
         <div style="font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:6px;">😴 Cards sent on a raid need to rest for the next gate before they can be used again.</div>
@@ -18234,7 +18423,7 @@ window._dungeonStartRaid = async function() {
     if (!ps) return;
     const gate = DUNGEON_GATES[ps.gateId];
     const cards = ps.cards.filter(c => ps.selected.has(c.id));
-    const partyPower = cards.reduce((sum,c) => sum + _dungeonCardPower(c), 0);
+    const partyPower = cards.reduce((sum,c) => sum + _dungeonCardPower(c), 0) + _dungeonComboBonus(cards);
     const chance = _dungeonSuccessChance(partyPower, gate.difficulty);
     const success = Math.random()*100 < chance;
     const reward = success ? Math.round(gate.rewardMin + Math.random()*(gate.rewardMax-gate.rewardMin)) : gate.failReward;
@@ -18332,7 +18521,7 @@ function _dungeonRenderActive(el, state) {
             <div style="font-size:18px;font-weight:800;margin-bottom:6px;">${state.success ? '🎉 Success!' : '💀 Failed'}</div>
             <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;">${state.success ? `Your party cleared the gate and found loot!` : `Your party survived, but came up empty-handed.`}</div>
             <div style="font-size:24px;font-weight:900;color:#FFD700;margin-bottom:16px;">🟡 ${state.reward} Amber</div>
-            <button class="action-btn" style="padding:12px 32px;font-weight:800;" onclick="window._dungeonClaim()">Claim Reward</button>
+            <button class="action-btn" id="dungeon-claim-btn" style="padding:12px 32px;font-weight:800;" onclick="this.disabled=true;this.textContent='Claiming…';window._dungeonClaim()">Claim Reward</button>
         </div>
         ${_dungeonBonusCardsHTML(state)}
         ${_dungeonStatsHTML(state)}
@@ -18434,10 +18623,24 @@ function _dungeonStatsHTML(state) {
 }
 
 window._dungeonClaim = async function() {
-    const state = window._dungeonState;
-    if (!state || Date.now() < state.endTime) return;
+    if (window._dungeonClaiming) return;
+    const clientState = window._dungeonState;
+    if (!clientState || Date.now() < clientState.endTime) return;
+    window._dungeonClaiming = true;
     const uid = auth.currentUser.uid;
+    let state;
     try {
+        // Atomically read + delete raid_state in one transaction.
+        // If the doc is already gone (double-click, console spam) the transaction
+        // throws and we bail immediately without paying out anything.
+        const raidRef = doc(db, 'raid_state', uid);
+        await runTransaction(db, async (tx) => {
+            const snap = await tx.get(raidRef);
+            if (!snap.exists()) throw new Error('already_claimed');
+            state = snap.data();
+            tx.delete(raidRef);
+        });
+
         // Test-mode raids (admin 30s gates) don't pay out — they're only for
         // testing the flow, not for racking up real amber/cards/stats.
         if (!state.testMode) {
@@ -18447,7 +18650,7 @@ window._dungeonClaim = async function() {
                 window._tcgCollectionCache.delete(uid);
             }
         }
-        await deleteDoc(doc(db, 'raid_state', uid));
+        // raid_state already deleted inside the transaction above
 
         // Advance the daily pool — unless the date rolled over while this
         // raid was in progress, in which case it belonged to a pool that's
@@ -18460,7 +18663,9 @@ window._dungeonClaim = async function() {
             progress = {
                 ...progress,
                 poolIndex: Math.min(5, progress.poolIndex + 1),
-                results: [...progress.results, { gateId: state.gateId, success: state.success, reward: state.reward, party: state.party, bonusCards: state.bonusCards || [] }],
+                results: progress.results.length < 5
+                    ? [...progress.results, { gateId: state.gateId, success: state.success, reward: state.reward, party: state.party, bonusCards: state.bonusCards || [] }]
+                    : progress.results,
             };
         }
 
@@ -18504,7 +18709,12 @@ window._dungeonClaim = async function() {
         await _dungeonSaveProgress(uid, progress);
         window._dungeonProgress = progress;
         if (dungeonAch.length) window.awardAchievements(dungeonAch).catch(() => {});
-    } catch(e) { return alert('Claim failed: ' + e.message); }
+    } catch(e) {
+        window._dungeonClaiming = false;
+        if (e.message !== 'already_claimed') alert('Claim failed: ' + e.message);
+        return;
+    }
+    window._dungeonClaiming = false;
     window._dungeonState = null;
     window.loadDungeonTab();
 };
@@ -18516,9 +18726,13 @@ window._dungeonShareSummary = async function() {
     const uid = auth.currentUser.uid;
     const profile = window._myProfile || {};
     const pool = _dungeonGeneratePool(progress.date);
-    const totalAmber = progress.results.reduce((s,r) => s + r.reward, 0);
-    const wins = progress.results.filter(r => r.success).length;
-    const foundCards = progress.results.flatMap(r => r.bonusCards || []).map(c => ({ name: c.name, image: c.image, rarity: c.rarity }));
+    const safeResults = progress.results.slice(0, 5);
+    const totalAmber = safeResults.reduce((s,r) => s + r.reward, 0);
+    const wins = safeResults.filter(r => r.success).length;
+    const seenNames = new Set();
+    const foundCards = safeResults.flatMap(r => r.bonusCards || [])
+        .map(c => ({ name: c.name, image: c.image, rarity: c.rarity }))
+        .filter(c => { if (seenNames.has(c.name)) return false; seenNames.add(c.name); return true; });
     const post = {
         uid,
         displayName: profile.displayName || auth.currentUser.displayName || 'WeeBee User',
@@ -18585,31 +18799,45 @@ function _dungeonGenerateSummaryPostHTML(post) {
     const safeId = post.id;
     const col = 'dungeon_posts';
 
+    const rarityBorderColor = r => ({ ur:'#ff3c00', ssr:'#00d4ff', sr:'#a78bfa', rare:'#f59e0b', common:'#9aa1a8' }[r] || '#9aa1a8');
+
     const gatesHTML = (post.gates||[]).map(g => {
         const gate = DUNGEON_GATES[g.gateId] || {};
-        const partyHTML = (g.party||[]).map(c => `<img src="${c.image||''}" title="${c.name||''}" style="width:18px;height:24px;object-fit:cover;border-radius:3px;border:1px solid rgba(255,255,255,0.3);">`).join('');
-        return `<div style="flex:1;min-width:55px;text-align:center;background:var(--bg-gray);border-radius:8px;padding:8px 4px;">
-            <div style="font-size:20px;">${gate.icon||''}</div>
-            <div style="font-size:9px;font-weight:700;color:var(--text-muted);">${(g.gateId||'').toUpperCase()}-Rank</div>
-            <div style="font-size:13px;margin-top:2px;">${g.success?'✅':'💀'}</div>
-            <div style="font-size:10px;color:#FFD700;font-weight:800;">+${g.reward}</div>
-            ${partyHTML ? `<div style="display:flex;justify-content:center;gap:2px;margin-top:6px;flex-wrap:wrap;">${partyHTML}</div>` : ''}
+        const partyHTML = (g.party||[]).map(c => {
+            const bc = rarityBorderColor(c.rarity);
+            return `
+            <div style="width:38px;text-align:center;">
+                <img src="${c.image||''}" title="${c.name||''}" style="width:38px;height:51px;object-fit:cover;border-radius:5px;display:block;border:2px solid ${bc};box-shadow:0 0 6px ${bc}55;">
+                <div style="font-size:9px;font-weight:700;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">${c.name||''}</div>
+            </div>`;
+        }).join('');
+        return `<div style="flex:1;min-width:52px;text-align:center;background:var(--bg-gray);border-radius:8px;padding:10px 4px;">
+            <div style="font-size:26px;line-height:1;">${gate.icon||''}</div>
+            <div style="font-size:11px;font-weight:800;color:var(--text-muted);margin-top:4px;">${(g.gateId||'').toUpperCase()}-Rank</div>
+            <div style="font-size:18px;margin-top:4px;">${g.success?'✅':'💀'}</div>
+            <div style="font-size:12px;color:#FFD700;font-weight:900;margin-top:2px;">+${g.reward}</div>
+            ${partyHTML ? `<div style="display:flex;justify-content:center;gap:4px;margin-top:8px;flex-wrap:wrap;">${partyHTML}</div>` : ''}
         </div>`;
     }).join('');
 
+    const cardsUsedHTML = '';
+
     const foundHTML = (post.foundCards||[]).length ? `
-        <div style="margin-top:12px;">
-            <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;text-align:center;">🎁 New Teammates Found Today</div>
-            <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;">
-                ${post.foundCards.map(c => `
-                    <div style="width:50px;">
-                        <img src="${c.image||''}" title="${c.name||''}" style="width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:6px;display:block;">
-                        <div style="font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;">${c.name||''}</div>
-                    </div>`).join('')}
+        <div style="margin-top:12px;text-align:center;">
+            <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">🎁 New Teammates Found</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+                ${post.foundCards.map(c => {
+                    const bc = rarityBorderColor(c.rarity);
+                    return `
+                    <div style="width:52px;text-align:center;">
+                        <img src="${c.image||''}" title="${c.name||''}" style="width:52px;height:70px;object-fit:cover;border-radius:6px;display:block;border:2px solid ${bc};box-shadow:0 0 8px ${bc}66;">
+                        <div style="font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">${c.name||''}</div>
+                    </div>`;
+                }).join('')}
             </div>
         </div>` : '';
 
-    return `<div class="review-card feed-post-card" style="position:relative;">
+    return `<div class="review-card feed-post-card" style="position:relative;background:rgba(142,68,173,0.06);border:1px solid rgba(142,68,173,0.25);border-radius:14px;">
         ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
             <div style="position:relative;">
                 <button onclick="window.togglePostMenu('${safeId}')" style="background:rgba(0,0,0,0.35);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:white;"><span class="material-symbols-outlined" style="font-size:16px;">more_vert</span></button>
@@ -18631,6 +18859,7 @@ function _dungeonGenerateSummaryPostHTML(post) {
         <div style="margin:14px 0 8px;">
             <div style="font-size:15px;font-weight:800;text-align:center;margin-bottom:10px;">🏁 ${post.wins}/5 Gates Cleared · 🟡 ${post.totalAmber} Amber</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">${gatesHTML}</div>
+            ${cardsUsedHTML}
             ${foundHTML}
         </div>
         <div class="review-actions">
@@ -18676,7 +18905,7 @@ window.generateDungeonPostCardHTML = function(post) {
             <img src="${c.image}" style="width:100%;height:100%;object-fit:cover;display:block;">
         </div>`).join('');
 
-    return `<div class="review-card feed-post-card" style="position:relative;">
+    return `<div class="review-card feed-post-card" style="position:relative;background:rgba(142,68,173,0.06);border:1px solid rgba(142,68,173,0.25);border-radius:14px;">
         ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
             <div style="position:relative;">
                 <button onclick="window.togglePostMenu('${safeId}')" style="background:rgba(0,0,0,0.35);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:white;"><span class="material-symbols-outlined" style="font-size:16px;">more_vert</span></button>
