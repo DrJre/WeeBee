@@ -347,6 +347,10 @@ service cloud.firestore {
     }
 
     // ── TCG card collections (per-user subcollection) ─────────────────────────
+    // Admin collection-group query for the dedup tool (collectionGroup('cards')).
+    match /{path=**}/cards/{card} {
+      allow read: if isAdmin();
+    }
     match /card_collections/{uid}/cards/{card} {
       allow read: if true;
       // Admin can also create cards directly in another user's collection —

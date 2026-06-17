@@ -988,6 +988,17 @@
                             </div>
                         </div>
 
+                        <!-- Deduplicate Collections -->
+                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                            <div style="flex:1; min-width:200px;">
+                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">🗑️ Remove Duplicate Cards</div>
+                                <div style="font-size:12px; color:var(--text-muted);">Scans every user's collection for cards with the same name, rarity, and serial. Keeps the earliest-pulled copy, deletes the rest.</div>
+                                <span id="tcg-dedup-status" style="font-size:12px; color:var(--text-muted);"></span>
+                            </div>
+                            <button onclick="window._tcgDeduplicateCollections(true)" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Dry Run</button>
+                            <button onclick="window._tcgDeduplicateCollections(false)" style="padding:10px 20px; border-radius:8px; border:1px solid #ef4444; background:transparent; color:#ef4444; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Delete Dupes</button>
+                        </div>
+
                         <!-- Flash Sale Toggle -->
                         <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                             <div>
@@ -2351,6 +2362,6 @@
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=335"></script>
+    <script type="module" src="app.js?v=344"></script>
 </body>
 </html>

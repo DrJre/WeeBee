@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch, waitForPendingWrites } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, collection, collectionGroup, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch, waitForPendingWrites } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-analytics.js";
@@ -6126,6 +6126,17 @@ const TCG_SSR_CARDS = [
 
 // UR art — top rarity, hand-curated. Animated art (e.g. animated WebP) encouraged.
 const TCG_UR_CARDS = [
+    { name: 'Attack Titan', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FUR%2FAttack%20Titan.gif?alt=media&token=81ffe62b-a017-4bdf-9b12-6cbb33ec0fd7' },
+    { name: 'Eren Yeager', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FUR%2FEren%20Yeager.gif?alt=media&token=cdf9c22f-58f6-4565-b20a-1b2adf97dda7' },
+    { name: 'Mikasa Ackerman', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FUR%2FMikasa%20Ackerman.gif?alt=media&token=5c30fbf6-fa88-4fd9-a395-f65917041041' },
+    { name: 'Nezuko', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FUR%2FNezuko.gif?alt=media&token=75ea4144-0d0f-4d1c-b6f0-bf55398519a9' },
+    { name: 'Tanjiro', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FUR%2FTanjiro.gif?alt=media&token=ab3d4402-7d1a-4756-b420-71fa7c46a501' },
+    { name: 'Frieren', anime: 'Frieren', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFrieren%2FUR%2FFrieren%20UR.gif?alt=media&token=211e8ef5-eebc-440a-be1f-5565e83ddc5e' },
+    { name: 'Monkey D. Luffy', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FMonkey%20D%20Luffy.gif?alt=media&token=6fd4a67c-08fd-46f4-a38e-877ae65f934b' },
+    { name: 'Tony Chopper', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FChopper.gif?alt=media&token=97e02889-3cd5-4007-a26c-6f3c4bdb38f7' },
+    { name: 'Byakuya', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FUR%2FByakuya.gif?alt=media&token=0a078e68-cc6d-4377-84d3-6e95b928113a' },
+    { name: 'Ichigo', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FUR%2FIchigo.gif?alt=media&token=04fef526-df17-4a25-941a-a5c35cc3add1' },
+    { name: 'Rock Lee', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FRock%20Lee.gif?alt=media&token=bb34d915-5b99-4f94-8d2c-9348ca1b2442' },
 ];
 
 // Founder gift cards — 1-of-1 designs, hand-gifted by an admin. Never enter
@@ -6620,8 +6631,10 @@ function _wheelRender(el, config, state) {
                 <input id="wheel-admin-enabled" type="checkbox" ${config.enabled ? 'checked' : ''}> Wheel enabled for all users
             </label>
             <button onclick="window._wheelSaveConfig()" class="action-btn" style="font-weight:800;">Save</button>
-            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color);">
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color);display:flex;flex-wrap:wrap;gap:8px;">
                 <button onclick="window._wheelAdminReset()" class="cancel-btn" style="font-size:12px;opacity:0.75;">🔄 Reset My Wheel (Admin Testing)</button>
+                <button onclick="window._wheelAdminGrantUR()" class="action-btn" style="font-size:12px;background:#7c3aed;">🌟 Grant Monthly UR to Me (Test)</button>
+                <button onclick="window._wheelAdminRemoveLastUR()" class="cancel-btn" style="font-size:12px;opacity:0.75;">🗑️ Remove Last Monthly UR from Me</button>
             </div>
         </div>` : '';
 
@@ -6710,6 +6723,119 @@ window._wheelAdminReset = async function() {
         await window.loadWheelTab();
         window._wheelRefreshBadges();
     } catch(e) { alert('Reset failed: ' + e.message); }
+};
+
+window._wheelAdminGrantUR = async function() {
+    if (!window.isAdmin || !auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const ur = _wheelGetMonthlyUrCard();
+    const now = new Date();
+    const stampText = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
+    try {
+        await addDoc(collection(db, 'card_collections', uid, 'cards'), {
+            name: ur.name, anime: ur.anime, rarity: 'ur', image: ur.image,
+            monthlyUr: true, stampText, serial: null, edition: null, pulledAt: serverTimestamp(),
+        });
+        window._tcgCollectionCache.delete(uid);
+        alert(`Granted ${ur.name} (${stampText}) to your collection.`);
+    } catch(e) { alert('Grant failed: ' + e.message); }
+};
+
+window._wheelAdminRemoveLastUR = async function() {
+    if (!window.isAdmin || !auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'card_collections', uid, 'cards'),
+            where('monthlyUr', '==', true),
+            orderBy('pulledAt', 'desc'),
+            limit(1)
+        ));
+        if (snap.empty) { alert('No monthly UR cards found in your collection.'); return; }
+        const card = snap.docs[0];
+        const { name, stampText } = card.data();
+        if (!confirm(`Remove "${name}" (${stampText}) from your collection?`)) return;
+        await deleteDoc(card.ref);
+        window._tcgCollectionCache.delete(uid);
+        alert('Removed.');
+    } catch(e) { alert('Remove failed: ' + e.message); }
+};
+
+window._tcgDeduplicateCollections = async function(dryRun = true) {
+    if (!window.isAdmin) return;
+    const status = document.getElementById('tcg-dedup-status');
+    if (!dryRun && !confirm('This will permanently delete duplicate cards across ALL user collections. Continue?')) return;
+
+    const setStatus = msg => { if (status) status.textContent = msg; };
+    setStatus('Loading all cards…');
+
+    try {
+        // Collection group query — gets all cards across all users in one shot.
+        const allSnap = await getDocs(collectionGroup(db, 'cards'));
+        setStatus(`Scanning ${allSnap.size} cards…`);
+
+        // Group by uid, sort each group by pulledAt asc so earliest copy is kept.
+        const byUid = new Map();
+        for (const d of allSnap.docs) {
+            const uid = d.ref.parent.parent.id;
+            if (!byUid.has(uid)) byUid.set(uid, []);
+            byUid.get(uid).push(d);
+        }
+
+        let totalDupes = 0;
+        let totalDeleted = 0;
+        const report = [];
+
+        for (const [uid, docs] of byUid) {
+            docs.sort((a, b) => {
+                const ta = a.data().pulledAt?.toMillis?.() ?? 0;
+                const tb = b.data().pulledAt?.toMillis?.() ?? 0;
+                return ta - tb;
+            });
+            const seen = new Map();
+            const toDelete = [];
+
+            docs.forEach(d => {
+                const c = d.data();
+                let key;
+                if (c.founder) {
+                    key = `founder|${c.name}|${c.rarity}`;
+                } else if (c.monthlyUr) {
+                    key = `monthlyUr|${c.name}|${c.stampText || ''}`;
+                } else {
+                    key = `${c.name}|${c.rarity}|${c.serial ?? 'null'}|${c.edition ?? 1}`;
+                }
+                if (seen.has(key)) {
+                    toDelete.push({ ref: d.ref, name: c.name, rarity: c.rarity, serial: c.serial });
+                } else {
+                    seen.set(key, d.id);
+                }
+            });
+
+            if (toDelete.length) {
+                totalDupes += toDelete.length;
+                report.push(`${uid}: ${toDelete.length} dupe(s) — ${toDelete.map(c => `${c.name} (${c.rarity} #${c.serial ?? '?'})`).join(', ')}`);
+                if (!dryRun) {
+                    await Promise.all(toDelete.map(c => deleteDoc(c.ref)));
+                    window._tcgCollectionCache.delete(uid);
+                    totalDeleted += toDelete.length;
+                }
+            }
+        }
+
+        if (totalDupes === 0) {
+            setStatus('✅ No duplicates found.');
+        } else if (dryRun) {
+            setStatus(`🔍 Found ${totalDupes} duplicate(s) across ${report.length} user(s). Check console for details.`);
+            console.log('[Dedup dry run]\n' + report.join('\n'));
+        } else {
+            setStatus(`✅ Deleted ${totalDeleted} duplicate(s) across ${report.length} user(s).`);
+            console.log('[Dedup deleted]\n' + report.join('\n'));
+        }
+    } catch(e) {
+        setStatus('❌ Error: ' + e.message);
+        console.error('_tcgDeduplicateCollections:', e);
+    }
 };
 
 window._wheelSpin = async function() {
@@ -6827,17 +6953,15 @@ async function _wheelGrantReward(uid, section) {
         case 'pack': {
             const pack = TCG_PACKS.find(p => p.id === section.packId);
             if (!pack) return true;
-            for (let attempt = 0; attempt < 2; attempt++) {
-                try {
-                    await _tcgEnsureCardPool();
-                    const cards = _tcgRollPackCards(pack);
-                    const enriched = await _withTimeout(_tcgSavePackToCollection(uid, cards), 10000, 'Pack save');
-                    window._tcgCollectionCache.delete(uid);
-                    window._wheelPendingPackReveal = { pack, cards: enriched };
-                    return true;
-                } catch(e) {
-                    console.error(`Wheel pack grant failed (attempt ${attempt + 1}):`, e);
-                }
+            try {
+                await _tcgEnsureCardPool();
+                const cards = _tcgRollPackCards(pack);
+                const enriched = await _withTimeout(_tcgSavePackToCollection(uid, cards), 15000, 'Pack save');
+                window._tcgCollectionCache.delete(uid);
+                window._wheelPendingPackReveal = { pack, cards: enriched };
+                return true;
+            } catch(e) {
+                console.error('Wheel pack grant failed:', e);
             }
             return false;
         }
@@ -8402,39 +8526,38 @@ window._tcgBuyPack = async function(packId) {
     window._tcgBuyInProgress = true;
     _tcgShowPackLoading(pack);
 
+    // Atomic check-and-deduct: read balance and subtract in a single transaction
+    // so two concurrent tabs can't both pass the balance check on the same funds.
     try {
-        const pd = await getDoc(doc(db, 'profiles', uid));
-        const amber = pd.exists() ? (pd.data().amber || 0) : 0;
-        if (amber < cost) {
-            document.getElementById('tcg-pack-modal')?.remove();
-            window._tcgBuyInProgress = false;
-            return alert('Not enough Amber!');
-        }
-        await updateDoc(doc(db, 'profiles', uid), { amber: increment(-cost) });
+        await runTransaction(db, async tx => {
+            const pd = await tx.get(doc(db, 'profiles', uid));
+            const amber = pd.exists() ? (pd.data().amber || 0) : 0;
+            if (amber < cost) throw new Error('NOT_ENOUGH_AMBER');
+            tx.update(doc(db, 'profiles', uid), { amber: increment(-cost) });
+        });
         addDoc(collection(db, 'amber_log'), { uid, amount: -cost, reason: `pack:${packId}`, timestamp: new Date() }).catch(() => {});
     } catch(e) {
         document.getElementById('tcg-pack-modal')?.remove();
         window._tcgBuyInProgress = false;
+        if (e.message === 'NOT_ENOUGH_AMBER') return alert('Not enough Amber!');
         alert('Purchase failed: ' + e.message);
         return;
     }
 
+    // Single attempt only — no retry. If the save times out the first write may
+    // already be in-flight; retrying would double-save cards to the collection.
     let enrichedCards = null;
-    for (let attempt = 0; attempt < 2 && !enrichedCards; attempt++) {
-        try {
-            await _tcgEnsureCardPool();
-            const cards = _tcgRollPackCards(pack);
-            enrichedCards = await _withTimeout(_tcgSavePackToCollection(uid, cards), 10000, 'Pack save');
-            window._tcgCollectionCache.delete(uid);
-        } catch(e) {
-            console.error(`Failed to save pack to collection (attempt ${attempt + 1}):`, e);
-        }
+    try {
+        await _tcgEnsureCardPool();
+        const cards = _tcgRollPackCards(pack);
+        enrichedCards = await _withTimeout(_tcgSavePackToCollection(uid, cards), 15000, 'Pack save');
+        window._tcgCollectionCache.delete(uid);
+    } catch(e) {
+        console.error('Failed to save pack to collection:', e);
     }
 
     if (!enrichedCards) {
-        // Couldn't persist the cards after retrying — refund the amber rather
-        // than showing a pack-opening animation for cards the player doesn't
-        // actually own.
+        // Save failed — refund the amber so the player isn't out of pocket.
         try { await updateDoc(doc(db, 'profiles', uid), { amber: increment(cost) }); } catch(e) { console.error('Pack refund failed:', e); }
         document.getElementById('tcg-pack-modal')?.remove();
         window._tcgBuyInProgress = false;
