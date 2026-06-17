@@ -1053,6 +1053,18 @@
                             <span id="tcg-srssr-migrate-status" style="font-size:12px; color:var(--text-muted); flex:1;"></span>
                         </div>
 
+                        <!-- Pool Capacity Meters -->
+                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px;">
+                            <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:14px;">
+                                <div>
+                                    <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Pool Capacity</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Serial slots remaining across all users for each rarity. Red = running low, add more cards.</div>
+                                </div>
+                                <button onclick="window._tcgRenderPoolMeters()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Refresh</button>
+                            </div>
+                            <div id="tcg-pool-meters"></div>
+                        </div>
+
                         <!-- Image Validator -->
                         <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                             <div>
@@ -1093,12 +1105,23 @@
                             <div id="amber-pay-results" style="margin-top:10px;"></div>
                         </div>
 
+                        <!-- Deduct Amber (admin) -->
+                        <div style="margin:24px 0 0;">
+                            <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#ef4444; margin-bottom:10px;">Deduct Amber from User</div>
+                            <p style="color:var(--text-muted); font-size:12px; margin:0 0 10px;">Use this to claw back amber from exploit payouts — e.g. multi-click dismantle bug. Balance will not go below 0.</p>
+                            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                                <input type="text" id="amber-deduct-search" placeholder="Search by display name..." onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsersForDeduct();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                <button onclick="window._tcgAdminSearchUsersForDeduct()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
+                            </div>
+                            <div id="amber-deduct-results" style="margin-top:10px;"></div>
+                        </div>
+
                         <!-- Gift Founder Card (admin) -->
                         <div style="margin:24px 0 0;">
                             <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:10px;">Gift Founder Card</div>
                             <p style="color:var(--text-muted); font-size:12px; margin:0 0 10px;">Gifts a 1-of-1 "Founder" edition card to a user's collection. Pick the design, then search for the recipient.</p>
                             <select id="founder-gift-select" onchange="window._tcgRenderFounderPreview()" style="padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; margin-bottom:14px;">
-                                <option value="levi">Levi Ackerman (Attack on Titan, UR)</option>
+                                <option value="oguri_cap">Oguri Cap (Uma Musume Pretty Derby, UR)</option>
                                 <option value="naruto">Naruto Uzumaki (Naruto, UR)</option>
                                 <option value="choji">Choji Akimichi (Naruto, UR)</option>
                                 <option value="brook">Brook (One Piece, UR)</option>
@@ -1112,6 +1135,7 @@
                                 <option value="luffy">Luffy (One Piece, UR)</option>
                                 <option value="no_face">No Face (Spirited Away, UR)</option>
                                 <option value="sung_jinwoo">Sung Jinwoo (Solo Leveling, UR)</option>
+                                <option value="astro_boy">Astro Boy (Astro Boy, UR)</option>
                             </select>
                             <div id="founder-card-preview" style="margin-bottom:14px;"></div>
                             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">

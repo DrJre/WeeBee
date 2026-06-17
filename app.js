@@ -51,6 +51,35 @@ const storage = getStorage(app);
 const analytics = getAnalytics(app);
 const googleProvider = new GoogleAuthProvider();
 
+// ── Maintenance Mode ─────────────────────────────────────────────────────────
+// Toggle by setting maintenanceMode: true/false on the Firestore doc meta/maintenance.
+// Fires in real-time — users already on the page are signed out and locked out immediately.
+onSnapshot(doc(db, 'meta', 'maintenance'), (snap) => {
+    const on = snap.exists() && snap.data().maintenanceMode === true;
+    let overlay = document.getElementById('maintenance-overlay');
+    if (on && !window.isAdmin) {
+        if (auth.currentUser) signOut(auth).catch(() => {});
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'maintenance-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#0d0f14;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-family:inherit;';
+            overlay.innerHTML = `
+                <div style="font-size:48px;">🐝</div>
+                <div style="font-size:24px;font-weight:800;color:#ffc107;letter-spacing:1px;">Down for Maintenance</div>
+                <div style="font-size:15px;color:#aaa;max-width:340px;text-align:center;line-height:1.6;">WeeBee is getting some updates. We'll be back shortly — hang tight!</div>
+            `;
+            document.body.appendChild(overlay);
+        }
+    } else if (overlay) {
+        overlay.remove();
+    }
+});
+
+window._maintenance = async function(on) {
+    await setDoc(doc(db, 'meta', 'maintenance'), { maintenanceMode: on });
+    console.log('Maintenance mode:', on ? 'ON' : 'OFF');
+};
+
 // --- RANK SYSTEM ---
 window.myReviewCount = 0;
 window.userRankCache = {};
@@ -2854,6 +2883,34 @@ window.toggleCommentReaction = async function(event, commentId, type, btnElement
     }
 };
 
+window.toggleBwCommentReaction = async function(event, commentId, type, btnElement) {
+    if (event) { event.preventDefault(); event.stopPropagation(); }
+    if (!auth.currentUser) return window.openAuthModal();
+    const container = btnElement.parentElement;
+    const likeBtn = container.children[0]; const likeSpan = likeBtn.querySelector('.c-like-count');
+    const dislikeBtn = container.children[1]; const dislikeSpan = dislikeBtn.querySelector('.c-dislike-count');
+    let lCount = parseInt(likeSpan.innerText) || 0; let dCount = parseInt(dislikeSpan.innerText) || 0;
+    if (type === 'like') {
+        if (likeBtn.style.color === 'var(--accent-yellow)') { likeBtn.style.color = 'var(--text-muted)'; likeSpan.innerText = Math.max(0, lCount - 1); }
+        else { likeBtn.style.color = 'var(--accent-yellow)'; likeSpan.innerText = lCount + 1;
+            if (dislikeBtn.style.color === 'red') { dislikeBtn.style.color = 'var(--text-muted)'; dislikeSpan.innerText = Math.max(0, dCount - 1); } }
+    } else {
+        if (dislikeBtn.style.color === 'red') { dislikeBtn.style.color = 'var(--text-muted)'; dislikeSpan.innerText = Math.max(0, dCount - 1); }
+        else { dislikeBtn.style.color = 'red'; dislikeSpan.innerText = dCount + 1;
+            if (likeBtn.style.color === 'var(--accent-yellow)') { likeBtn.style.color = 'var(--text-muted)'; likeSpan.innerText = Math.max(0, lCount - 1); } }
+    }
+    const commentRef = doc(db, 'bw_post_comments', commentId);
+    const snap = await getDoc(commentRef);
+    if (snap.exists()) {
+        let likes = snap.data().likes || []; let dislikes = snap.data().dislikes || [];
+        let addedReaction = false;
+        if (type === 'like') { if (likes.includes(auth.currentUser.uid)) likes = likes.filter(id => id !== auth.currentUser.uid); else { likes.push(auth.currentUser.uid); dislikes = dislikes.filter(id => id !== auth.currentUser.uid); addedReaction = true; } }
+        else { if (dislikes.includes(auth.currentUser.uid)) dislikes = dislikes.filter(id => id !== auth.currentUser.uid); else { dislikes.push(auth.currentUser.uid); likes = likes.filter(id => id !== auth.currentUser.uid); addedReaction = true; } }
+        await updateDoc(commentRef, { likes, dislikes });
+        if (addedReaction) _recordReactionGiven(`bw_comment_${commentId}`);
+    }
+};
+
 window.toggleReviewExpand = function(el) {
     const full = el.querySelector('.full-review-content');
     const comms = el.querySelector('.inline-comments');
@@ -2950,6 +3007,18 @@ window.submitInlineComment = async function(reviewId, btn) {
     if (countEl) countEl.innerText = (parseInt(countEl.innerText) + 1) + ' Comments';
     const container = card ? card.querySelector('.inline-comments') : null;
     input.value = ''; fetchInlineComments(reviewId, container);
+    // Notify the review owner
+    const av = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+    getDoc(doc(db, 'reviews', reviewId)).then(snap => {
+        if (!snap.exists()) return;
+        const ownerUid = snap.data().uid;
+        if (!ownerUid || ownerUid === auth.currentUser.uid) return;
+        addDoc(collection(db, 'notifications'), {
+            targetUid: ownerUid, type: 'review_comment',
+            senderUid: auth.currentUser.uid, senderName: auth.currentUser.displayName, senderAvatar: av,
+            message: 'commented on your review', timestamp: new Date(), read: false
+        }).catch(() => {});
+    }).catch(() => {});
 };
 
 window.generateReviewCardHTML = function(rev, isGlobal = false) {
@@ -5556,7 +5625,7 @@ window.submitTlViewerComment = async function(postId) {
     delete input.dataset.replyToUid;
     input.value = '';
     const av = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
-    const commentData = { postId, uid: auth.currentUser.uid, displayName: auth.currentUser.displayName, avatar: av, text, timestamp: new Date(), ...(replyTo && { replyTo }), ...(replyToUid && { replyToUid }) };
+    const commentData = { postId, uid: auth.currentUser.uid, displayName: auth.currentUser.displayName, avatar: av, text, timestamp: new Date(), likes: [], dislikes: [], ...(replyTo && { replyTo }), ...(replyToUid && { replyToUid }) };
     try {
         const ref = await addDoc(collection(db,'bw_post_comments'), commentData);
         const listEl = document.getElementById('tl-viewer-comments-list');
@@ -5569,6 +5638,17 @@ window.submitTlViewerComment = async function(postId) {
                 message: 'replied to your comment', timestamp: new Date(), read: false
             }).catch(() => {});
         }
+        // Notify the tier list owner
+        getDoc(doc(db, 'tier_lists', postId)).then(snap => {
+            if (!snap.exists()) return;
+            const ownerUid = snap.data().uid;
+            if (!ownerUid || ownerUid === auth.currentUser.uid) return;
+            addDoc(collection(db, 'notifications'), {
+                targetUid: ownerUid, type: 'post_comment',
+                senderUid: auth.currentUser.uid, senderName: auth.currentUser.displayName, senderAvatar: av,
+                message: 'commented on your post', timestamp: new Date(), read: false
+            }).catch(() => {});
+        }).catch(() => {});
     } catch(e) { alert('Failed to post comment.'); console.error(e); }
 };
 
@@ -5999,7 +6079,7 @@ const TCG_SR_CARDS = [
     { name: 'Yor Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSR%2FYor%20Forger.jpg?alt=media&token=e7efce79-67b7-46a4-8ca8-497336badb36' },
     { name: 'Future Trunks', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FFuture%20Trunks.jpg?alt=media&token=b35e17da-7291-41e1-85e3-010edc16565c' },
     { name: 'Gohan', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FGohan.jpg?alt=media&token=777ed92d-9dd7-4cee-b4f8-a7e880d0fbb7' },
-    { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FGoku.jpg?alt=media&token=ffca75fe-b937-493d-8f5f-796a8e9d5452' },
+    { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FGoku_SR.webp?alt=media&token=c364fcb6-419b-4df5-9d83-346665bfa0ae' },
     { name: 'Piccolo', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FPiccolo.jpg?alt=media&token=7cb85d13-e9cb-451e-9ae3-3744cc23a5d9' },
     { name: 'Vegeta', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FVegeta.jpg?alt=media&token=11b1e828-8e8e-4e22-a0b7-c15f2b868cc8' },
     { name: 'Zenitsu', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FZenitsu.jpg?alt=media&token=a20ecab2-d516-4dc6-b530-2e6e54cfc17f' },
@@ -6102,7 +6182,7 @@ const TCG_SSR_CARDS = [
     { name: 'Gojo', anime: 'Jujutsu Kaisen', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJJK%2FSSR%2FGojo.webp?alt=media&token=7de91a3a-bd9d-4248-85e0-c37ab78c3067' },
     { name: 'Izuku Midoriya', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FIzuku%20Midoriya.jpg?alt=media&token=3fe565ae-28a3-407e-8be1-be7cb7d4b22e' },
     { name: 'Yor Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSSR%2FYor%20Forger.webp?alt=media&token=84fead07-4f1a-4b87-afa0-c20ab3314bef' },
-    { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FGoku.webp?alt=media&token=2a908b50-04b5-49ed-84d3-c49a654a06b9' },
+    { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FGoku_SSR.jpg?alt=media&token=2275c03f-022b-4fa6-aecd-a973e47bf938' },
     { name: 'Kid Gohan', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FKid%20Gohan.webp?alt=media&token=1aec64a8-66b7-45d6-a063-1729d41951de' },
     { name: 'Vegeta', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FVegeta.jpg?alt=media&token=4e68f056-5150-4cb0-a0b2-cf2bc3103e3a' },
     { name: 'Sung Jin-woo', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSSR%2FSung%20Jin-woo.jpg?alt=media&token=848623b2-bea0-4deb-a78d-cd179913ee1a' },
@@ -6137,6 +6217,8 @@ const TCG_UR_CARDS = [
     { name: 'Byakuya', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FUR%2FByakuya.gif?alt=media&token=0a078e68-cc6d-4377-84d3-6e95b928113a' },
     { name: 'Ichigo', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FUR%2FIchigo.gif?alt=media&token=04fef526-df17-4a25-941a-a5c35cc3add1' },
     { name: 'Rock Lee', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FRock%20Lee.gif?alt=media&token=bb34d915-5b99-4f94-8d2c-9348ca1b2442' },
+    { name: 'Levi Ackerman', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FUR%2FLevi%20Ackerman.gif?alt=media&token=be445e89-10ac-420d-b314-58364db4588f' },
+    { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FUR%2FGoku_UR.gif?alt=media&token=ac0ef55d-d237-40a2-8212-c512bfdefadd' },
 ];
 
 // Founder gift cards — 1-of-1 designs, hand-gifted by an admin. Never enter
@@ -6144,8 +6226,8 @@ const TCG_UR_CARDS = [
 // Admin picks which design to send from the dropdown in the gift panel.
 const TCG_FOUNDER_CARDS = [
     {
-        id: 'levi', name: 'Levi Ackerman', anime: 'Attack on Titan', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FUR%2FLevi%20Ackerman.gif?alt=media&token=be445e89-10ac-420d-b314-58364db4588f',
+        id: 'oguri_cap', name: 'Oguri Cap', anime: 'Uma Musume Pretty Derby', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FUR%2FOguri%20Cap.gif?alt=media&token=647bece7-34a2-4a89-a021-ad2e54447c49',
         founder: true,
     },
     {
@@ -6211,6 +6293,11 @@ const TCG_FOUNDER_CARDS = [
     {
         id: 'sung_jinwoo', name: 'Sung Jinwoo', anime: 'Solo Leveling', rarity: 'ur',
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FUR%2FSung%20Jinwoo.gif?alt=media&token=b50514ce-3ebe-4d71-a692-eec8bdb89bd2',
+        founder: true,
+    },
+    {
+        id: 'astro_boy', name: 'Astro Boy', anime: 'Astro Boy', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAstro%20Boy%2FUR%2FAstro%20Boy.jpg?alt=media&token=3b5ca35a-ba28-434a-8deb-ea3131f87a6f',
         founder: true,
     },
 ];
@@ -6299,6 +6386,51 @@ window._tcgAdminSendAmber = async function(uid, name) {
         if (input) input.value = '';
         window._amberLoadWallet();
         alert(`Sent ${amount.toLocaleString()} Amber to ${name}.`);
+    } catch(e) { alert('Failed: ' + e.message); }
+};
+
+// Admin: search users by display name to deduct amber (exploit clawback, etc.)
+window._tcgAdminSearchUsersForDeduct = async function() {
+    if (!window.isAdmin) return;
+    const term = (document.getElementById('amber-deduct-search')?.value || '').trim().toLowerCase();
+    const el = document.getElementById('amber-deduct-results');
+    if (!el) return;
+    if (!term) { el.innerHTML = ''; return; }
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Searching…</p>';
+    try {
+        const snap = await getDocs(query(collection(db, 'profiles'), limit(300)));
+        const matches = [];
+        snap.forEach(d => {
+            const p = d.data();
+            if ((p.displayName || '').toLowerCase().includes(term)) matches.push({ uid: d.id, name: p.displayName || 'Unknown', amber: p.amber || 0 });
+        });
+        if (!matches.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No users found.</p>'; return; }
+        el.innerHTML = matches.slice(0, 10).map(u => `
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border-color); flex-wrap:wrap;">
+                <span style="font-size:13px; flex:1; min-width:120px;">${u.name} <span style="color:var(--text-muted);">(🟡 ${u.amber.toLocaleString()})</span></span>
+                <input type="number" id="amber-deduct-amt-${u.uid}" placeholder="Amount" min="1" style="width:100px; padding:7px 10px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                <button onclick="window._tcgAdminDeductAmber('${u.uid}','${u.name.replace(/'/g, "\\'")}')" style="padding:7px 16px; border-radius:6px; border:none; background:#ef4444; color:#fff; font-weight:700; font-size:12px; cursor:pointer;">Deduct</button>
+            </div>`).join('');
+    } catch(e) { el.innerHTML = `<p style="color:red;font-size:13px;">${e.message}</p>`; }
+};
+
+window._tcgAdminDeductAmber = async function(uid, name) {
+    if (!window.isAdmin) return;
+    const input = document.getElementById(`amber-deduct-amt-${uid}`);
+    const amount = parseInt(input?.value || '0', 10);
+    if (!amount || amount <= 0) return alert('Enter a valid amount.');
+    if (!confirm(`Deduct 🟡 ${amount.toLocaleString()} Amber from ${name}? Balance will not go below 0.`)) return;
+    try {
+        const profileRef = doc(db, 'profiles', uid);
+        const snap = await getDoc(profileRef);
+        const current = snap.exists() ? (snap.data().amber || 0) : 0;
+        const newBalance = Math.max(0, current - amount);
+        const actualDeducted = current - newBalance;
+        await updateDoc(profileRef, { amber: newBalance });
+        addDoc(collection(db, 'amber_log'), { uid, amount: -actualDeducted, reason: 'admin:deduct', timestamp: new Date() }).catch(() => {});
+        if (input) input.value = '';
+        window._amberLoadWallet();
+        alert(`Deducted 🟡 ${actualDeducted.toLocaleString()} from ${name}. New balance: 🟡 ${newBalance.toLocaleString()}.`);
     } catch(e) { alert('Failed: ' + e.message); }
 };
 
@@ -6636,6 +6768,14 @@ function _wheelRender(el, config, state) {
                 <button onclick="window._wheelAdminGrantUR()" class="action-btn" style="font-size:12px;background:#7c3aed;">🌟 Grant Monthly UR to Me (Test)</button>
                 <button onclick="window._wheelAdminRemoveLastUR()" class="cancel-btn" style="font-size:12px;opacity:0.75;">🗑️ Remove Last Monthly UR from Me</button>
             </div>
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color);">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">🌟 Gift Monthly UR to User</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <input type="text" id="wheel-ur-gift-search" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._wheelAdminSearchUsersForUR();}" style="flex:1;min-width:160px;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;">
+                    <button onclick="window._wheelAdminSearchUsersForUR()" style="padding:8px 14px;border-radius:8px;border:none;background:var(--bg-gray-darker);color:var(--text-dark);font-weight:700;font-size:12px;cursor:pointer;">Search</button>
+                </div>
+                <div id="wheel-ur-gift-results" style="margin-top:8px;"></div>
+            </div>
         </div>` : '';
 
     const now = new Date();
@@ -6741,6 +6881,45 @@ window._wheelAdminGrantUR = async function() {
     } catch(e) { alert('Grant failed: ' + e.message); }
 };
 
+window._wheelAdminSearchUsersForUR = async function() {
+    if (!window.isAdmin) return;
+    const term = (document.getElementById('wheel-ur-gift-search')?.value || '').trim().toLowerCase();
+    const el = document.getElementById('wheel-ur-gift-results');
+    if (!el) return;
+    if (!term) { el.innerHTML = ''; return; }
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Searching…</p>';
+    try {
+        const snap = await getDocs(query(collection(db, 'profiles'), limit(300)));
+        const matches = [];
+        snap.forEach(d => {
+            const p = d.data();
+            if ((p.displayName || '').toLowerCase().includes(term)) matches.push({ uid: d.id, name: p.displayName || 'Unknown' });
+        });
+        if (!matches.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No users found.</p>'; return; }
+        const ur = _wheelGetMonthlyUrCard();
+        el.innerHTML = matches.slice(0, 10).map(u => `
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-color);flex-wrap:wrap;">
+                <span style="font-size:13px;flex:1;min-width:120px;">${u.name}</span>
+                <button onclick="window._wheelAdminGiftURToUser('${u.uid}','${u.name.replace(/'/g, "\\'")}')" style="padding:7px 16px;border-radius:6px;border:none;background:#7c3aed;color:#fff;font-weight:700;font-size:12px;cursor:pointer;">Gift ${ur.name} (UR)</button>
+            </div>`).join('');
+    } catch(e) { el.innerHTML = `<p style="color:red;font-size:13px;">${e.message}</p>`; }
+};
+
+window._wheelAdminGiftURToUser = async function(uid, name) {
+    if (!window.isAdmin) return;
+    const ur = _wheelGetMonthlyUrCard();
+    const now = new Date();
+    const stampText = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
+    if (!confirm(`Gift "${ur.name}" (${stampText} UR) to ${name}?`)) return;
+    try {
+        await addDoc(collection(db, 'card_collections', uid, 'cards'), {
+            name: ur.name, anime: ur.anime, rarity: 'ur', image: ur.image,
+            monthlyUr: true, stampText, serial: null, edition: null, pulledAt: serverTimestamp(),
+        });
+        alert(`Gifted ${ur.name} (${stampText}) to ${name}.`);
+    } catch(e) { alert('Gift failed: ' + e.message); }
+};
+
 window._wheelAdminRemoveLastUR = async function() {
     if (!window.isAdmin || !auth.currentUser) return;
     const uid = auth.currentUser.uid;
@@ -6759,6 +6938,54 @@ window._wheelAdminRemoveLastUR = async function() {
         window._tcgCollectionCache.delete(uid);
         alert('Removed.');
     } catch(e) { alert('Remove failed: ' + e.message); }
+};
+
+// Admin: update/create a character's art in the Firestore pool for all specified rarities.
+// Usage: window._tcgUpdatePoolArt({ name, anime, rarities: { sr: url, ssr: url, ur: url, rare: url, common: url } })
+window._tcgUpdatePoolArt = async function({ name, anime, rarities: rarityMap }) {
+    if (!window.isAdmin) return console.warn('Admin only.');
+    const results = [];
+    for (const [rarity, image] of Object.entries(rarityMap)) {
+        // Find existing doc(s) for this name + rarity
+        const snap = await getDocs(query(collection(db, 'characters'),
+            where('rarityTier', '==', rarity), where('name', '==', name)));
+        if (!snap.empty) {
+            // Update all matching docs
+            for (const d of snap.docs) {
+                await updateDoc(d.ref, { image, imageBroken: false });
+                results.push({ action: 'updated', rarity, id: d.id });
+            }
+        } else {
+            // Create new entry
+            const ref = await addDoc(collection(db, 'characters'), {
+                name, series: anime, image, rarityTier: rarity, imageBroken: false, addedAt: new Date()
+            });
+            results.push({ action: 'created', rarity, id: ref.id });
+        }
+    }
+    // Bust the in-memory pool cache so next pack open picks up the new art
+    window._tcgRarePool = null; window._tcgCommonPool = null;
+    window._tcgSRPool = null; window._tcgSSRPool = null; window._tcgURPool = null;
+    console.table(results);
+    console.log('Done. Pool cache cleared.');
+};
+
+window._tcgFindCard = async function(nameQuery, rarities) {
+    if (!window.isAdmin) return console.warn('Admin only.');
+    const snap = await getDocs(collectionGroup(db, 'cards'));
+    const term = nameQuery.toLowerCase();
+    const raritySet = rarities ? new Set(rarities) : null;
+    const hits = [];
+    snap.forEach(d => {
+        const c = d.data();
+        if (!(c.name || '').toLowerCase().includes(term)) return;
+        if (raritySet && !raritySet.has(c.rarity)) return;
+        const uid = d.ref.path.split('/')[1];
+        hits.push({ uid, name: c.name, rarity: c.rarity, serial: c.serial ?? null, cardId: d.id });
+    });
+    console.table(hits);
+    console.log(`Found ${hits.length} match(es) for "${nameQuery}"`);
+    return hits;
 };
 
 window._tcgDeduplicateCollections = async function(dryRun = true) {
@@ -6838,6 +7065,63 @@ window._tcgDeduplicateCollections = async function(dryRun = true) {
     }
 };
 
+window._tcgRenderPoolMeters = async function() {
+    if (!window.isAdmin) return;
+    const el = document.getElementById('tcg-pool-meters');
+    if (!el) return;
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Loading…</p>';
+
+    const RARITIES = ['ur', 'ssr', 'sr', 'rare', 'common'];
+    const RARITY_LABEL = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
+    const RARITY_COLOR = { ur:'#ff3c00', ssr:'#00d4ff', sr:'#a78bfa', rare:'#f59e0b', common:'#9aa1a8' };
+
+    try {
+        // Count unique designs per rarity in the card pool
+        const poolSnap = await getDocs(collection(db, 'characters'));
+        const designs = { ur:0, ssr:0, sr:0, rare:0, common:0 };
+        poolSnap.forEach(d => {
+            const r = d.data().rarityTier;
+            if (designs[r] != null) designs[r]++;
+        });
+
+        // Count issued cards per rarity across all users (admin-only collectionGroup)
+        // Exclude founder and monthlyUr — those don't consume pool serial slots
+        const issuedSnap = await getDocs(collectionGroup(db, 'cards'));
+        const issued = { ur:0, ssr:0, sr:0, rare:0, common:0 };
+        issuedSnap.forEach(d => {
+            const c = d.data();
+            if (c.founder || c.monthlyUr) return;
+            const r = c.rarity;
+            if (issued[r] != null) issued[r]++;
+        });
+
+        el.innerHTML = RARITIES.map(r => {
+            const maxPerCard = RARITY_MAX_VERSIONS[r] || 5000;
+            const totalCapacity = designs[r] * maxPerCard;
+            const issuedCount = issued[r];
+            const remaining = Math.max(0, totalCapacity - issuedCount);
+            const pct = totalCapacity > 0 ? (remaining / totalCapacity) * 100 : 0;
+
+            const barColor = pct >= 50 ? '#22c55e' : pct >= 20 ? '#f59e0b' : '#ef4444';
+            const rarityDot = `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${RARITY_COLOR[r]};margin-right:6px;flex-shrink:0;"></span>`;
+
+            return `
+            <div style="margin-bottom:14px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+                    <span style="font-size:13px;font-weight:800;display:flex;align-items:center;">${rarityDot}${RARITY_LABEL[r]}</span>
+                    <span style="font-size:12px;color:var(--text-muted);">${remaining.toLocaleString()} / ${totalCapacity.toLocaleString()} slots remaining &nbsp;·&nbsp; ${designs[r]} designs × ${maxPerCard.toLocaleString()} serials &nbsp;·&nbsp; ${issuedCount.toLocaleString()} issued</span>
+                </div>
+                <div style="height:10px;border-radius:99px;background:var(--bg-gray-darker);overflow:hidden;">
+                    <div style="height:100%;width:${pct.toFixed(1)}%;background:${barColor};border-radius:99px;transition:width 0.4s;"></div>
+                </div>
+                <div style="font-size:11px;font-weight:700;color:${barColor};margin-top:3px;">${pct.toFixed(1)}% remaining</div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        el.innerHTML = `<p style="color:#ef4444;font-size:13px;">Failed to load: ${e.message}</p>`;
+    }
+};
+
 window._wheelSpin = async function() {
     if (!auth.currentUser) return window.openAuthModal();
     const uid = auth.currentUser.uid;
@@ -6908,7 +7192,7 @@ window._wheelSpin = async function() {
         streak,
     };
     if (isDailySpin) update.streakDate = today;
-    if (section.type === 'monthly_ur') update.pendingUrClaim = true;
+    if (section.type === 'monthly_ur') update.pendingUrClaim = false;
 
     setTimeout(async () => {
         const flashEl = document.getElementById('wheel-flash');
@@ -6970,12 +7254,15 @@ async function _wheelGrantReward(uid, section) {
             const now = new Date();
             const stampText = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
             try {
+                // Firestore rule requires pendingUrClaim == true before the card write —
+                // set it first, then write the card, then clear it.
+                await updateDoc(doc(db, 'wheel_state', uid), { pendingUrClaim: true });
                 await addDoc(collection(db, 'card_collections', uid, 'cards'), {
                     name: ur.name || 'Monthly UR', anime: ur.anime || '', rarity: 'ur', image: ur.image || '',
                     monthlyUr: true, stampText, serial: null, edition: null, pulledAt: serverTimestamp(),
                 });
                 window._tcgCollectionCache.delete(uid);
-                await setDoc(doc(db, 'wheel_state', uid), { pendingUrClaim: false }, { merge: true }).catch(() => {});
+                await updateDoc(doc(db, 'wheel_state', uid), { pendingUrClaim: false }).catch(() => {});
                 return true;
             } catch(e) { console.error('Monthly UR grant failed:', e); return false; }
         }
@@ -8884,11 +9171,13 @@ const RARITY_MAX_VERSIONS = { common: 5000, rare: 2500, sr: 500, ssr: 250, ur: 5
 const TCG_DISMANTLE_RATES = { common: 5, rare: 20, sr: 100, ssr: 400, ur: 1500 };
 
 // Dismantles an owned card for a flat amber payout based on rarity
+window._tcgDismantling = false;
 window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser || window._tcgDismantling) return;
     const amount = TCG_DISMANTLE_RATES[rarity] || 0;
     const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common' }[rarity] || rarity;
     if (!confirm(`Dismantle ${name} (${label}) for 🟡 ${amount.toLocaleString()} Amber? This cannot be undone.`)) return;
+    window._tcgDismantling = true;
     try {
         await deleteDoc(doc(db, 'card_collections', auth.currentUser.uid, 'cards', cardId));
         await _awardAmber(amount, 'tcg:dismantle');
@@ -8902,6 +9191,8 @@ window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
         }
     } catch(e) {
         alert('Failed to dismantle: ' + e.message);
+    } finally {
+        window._tcgDismantling = false;
     }
 };
 
@@ -9182,13 +9473,15 @@ window._tcgToggleCardSelect = function(cardId, uid, filter, profileUid) {
 
 window._tcgBulkDismantle = async function(uid, profileUid) {
     if (!auth.currentUser || auth.currentUser.uid !== uid) return;
+    if (window._tcgDismantling) return;
+    window._tcgDismantling = true;
     const sel = window._tcgMultiSelect.selected;
-    if (!sel.size) return;
+    if (!sel.size) { window._tcgDismantling = false; return; }
     let cards;
-    try { cards = await _tcgLoadCollection(uid); } catch(e) { return; }
+    try { cards = await _tcgLoadCollection(uid); } catch(e) { window._tcgDismantling = false; return; }
     const selectedCards = cards.filter(c => sel.has(c.id));
     const total = selectedCards.reduce((sum, c) => sum + (TCG_DISMANTLE_RATES[c.rarity] || 0), 0);
-    if (!confirm(`Dismantle ${selectedCards.length} card(s) for 🟡 ${total.toLocaleString()} Amber total? This cannot be undone.`)) return;
+    if (!confirm(`Dismantle ${selectedCards.length} card(s) for 🟡 ${total.toLocaleString()} Amber total? This cannot be undone.`)) { window._tcgDismantling = false; return; }
     try {
         for (const c of selectedCards) {
             await deleteDoc(doc(db, 'card_collections', uid, 'cards', c.id));
@@ -9206,6 +9499,8 @@ window._tcgBulkDismantle = async function(uid, profileUid) {
         }
     } catch(e) {
         alert('Failed to dismantle: ' + e.message);
+    } finally {
+        window._tcgDismantling = false;
     }
 };
 
@@ -12090,7 +12385,7 @@ window._renderBracketCard = function(b, uid, inModal = false) {
             : null;
         const nextBtn = mi < totalMatchups - 1
             ? `<button onclick="window._bracketMatchupIdx['${b.id}']=${mi+1};window._renderBracketsFeed();" style="${btnBase}background:${voted?'var(--accent-yellow)':'var(--bg-gray-darker)'};color:${voted?'#111':'var(--text-muted)'};">Next →</button>`
-            : (allVoted && isOwner
+            : (allVoted
                 ? `<button onclick="window.advanceBracket('${b.id}')" style="${btnBase}background:var(--accent-yellow);color:#111;">Next Round →</button>`
                 : `<div></div>`);
 
@@ -12424,6 +12719,14 @@ window.advanceBracket = async function(bracketId) {
     if (!b) return;
     const round = b.currentRound || 0;
     const matchups = b.rounds[String(round)];
+    // If another user already advanced the round, just navigate to it
+    const nextIdx = round + 1;
+    if (b.rounds?.[String(nextIdx)]) {
+        b.currentRound = nextIdx;
+        window._bracketMatchupIdx[bracketId] = 0;
+        window._renderBracketsFeed();
+        return;
+    }
     const winners = matchups.map((m, mi) => {
         const votesA = (b.votes?.[`${round}_${mi}_A`]||[]).length;
         const votesB = (b.votes?.[`${round}_${mi}_B`]||[]).length;
@@ -12442,7 +12745,6 @@ window.advanceBracket = async function(bracketId) {
     for (let i = 0; i < winners.length; i += 2) {
         if (winners[i] && winners[i+1]) nextRound.push({ animeA: winners[i], animeB: winners[i+1] });
     }
-    const nextIdx = round + 1;
     if (!b.rounds) b.rounds = {};
     b.rounds[String(nextIdx)] = nextRound;
     b.currentRound = nextIdx;
@@ -14872,6 +15174,8 @@ function renderBwComment(commentId, c, postId, postCollection) {
     const isReply = !!c.replyTo;
     const replyBadge = isReply ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;display:flex;align-items:center;gap:3px;"><span class="material-symbols-outlined" style="font-size:12px;">subdirectory_arrow_right</span> replying to <strong style="color:var(--accent-yellow);">@${c.replyTo}</strong></div>` : '';
     const replyStyle = isReply ? 'margin-left:20px;border-left:3px solid var(--accent-yellow);' : '';
+    const likeStyle = auth.currentUser && c.likes?.includes(auth.currentUser.uid) ? 'color:var(--accent-yellow);' : 'color:var(--text-muted);';
+    const dislikeStyle = auth.currentUser && c.dislikes?.includes(auth.currentUser.uid) ? 'color:red;' : 'color:var(--text-muted);';
     return `<div id="bw-comment-doc-${commentId}" style="display:flex; gap:10px; margin-bottom:10px; align-items:flex-start; background:var(--bg-white); padding:10px; border-radius:8px; border:1px solid var(--border-color);${replyStyle}">
         <img src="${c.avatar}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(c.displayName)}&backgroundColor=ffc107&fontColor=333333'">
         <div style="flex:1; min-width:0;">
@@ -14881,6 +15185,10 @@ function renderBwComment(commentId, c, postId, postCollection) {
             </div>
             ${replyBadge}
             <p id="bw-comment-text-${commentId}" style="font-size:13px; margin:2px 0 0; color:var(--text-dark); word-break:break-word;">${c.text}${c.edited ? ' <span style="font-size:10px;color:var(--text-muted);font-style:italic;">(edited)</span>' : ''}</p>
+            <div style="display:flex; gap:12px; margin-top:5px; font-size:11px; align-items:center;">
+                <div style="display:flex;align-items:center;gap:3px;cursor:pointer;${likeStyle}" onclick="window.toggleBwCommentReaction(event,'${commentId}','like',this)"><span class="material-symbols-outlined" style="font-size:13px;">thumb_up</span><span class="c-like-count">${c.likes?.length || 0}</span></div>
+                <div style="display:flex;align-items:center;gap:3px;cursor:pointer;${dislikeStyle}" onclick="window.toggleBwCommentReaction(event,'${commentId}','dislike',this)"><span class="material-symbols-outlined" style="font-size:13px;">thumb_down</span><span class="c-dislike-count">${c.dislikes?.length || 0}</span></div>
+            </div>
         </div>
     </div>`;
 }
@@ -14990,7 +15298,7 @@ window.submitBwPostComment = async function(event, btn, postId, postCollection) 
     delete input.dataset.replyToUid;
     input.value = '';
     const av = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
-    const commentData = { postId, uid: auth.currentUser.uid, displayName: auth.currentUser.displayName, avatar: av, text, timestamp: new Date(), ...(replyTo && { replyTo }), ...(replyToUid && { replyToUid }) };
+    const commentData = { postId, uid: auth.currentUser.uid, displayName: auth.currentUser.displayName, avatar: av, text, timestamp: new Date(), likes: [], dislikes: [], ...(replyTo && { replyTo }), ...(replyToUid && { replyToUid }) };
     try {
         const ref = await addDoc(collection(db, 'bw_post_comments'), commentData);
         _awardAmberInteraction();
@@ -15009,6 +15317,17 @@ window.submitBwPostComment = async function(event, btn, postId, postCollection) 
                 message: 'replied to your comment', timestamp: new Date(), read: false
             }).catch(() => {});
         }
+        // Notify the post owner (unless they're the one commenting)
+        getDoc(doc(db, postCollection, postId)).then(snap => {
+            if (!snap.exists()) return;
+            const ownerUid = snap.data().uid;
+            if (!ownerUid || ownerUid === auth.currentUser.uid) return;
+            addDoc(collection(db, 'notifications'), {
+                targetUid: ownerUid, type: 'post_comment',
+                senderUid: auth.currentUser.uid, senderName: auth.currentUser.displayName, senderAvatar: av,
+                message: 'commented on your post', timestamp: new Date(), read: false
+            }).catch(() => {});
+        }).catch(() => {});
     } catch(e) { console.error('Comment failed', e); alert('Failed to post comment: ' + (e?.message || e)); }
 };
 

@@ -173,7 +173,11 @@ service cloud.firestore {
     match /bw_post_comments/{doc} {
       allow read: if true;
       allow create: if isAuth();
-      allow update, delete: if isOwner(resource.data.uid);
+      allow delete: if isOwner(resource.data.uid);
+      allow update: if isOwner(resource.data.uid) || (
+        isAuth() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'dislikes'])
+      );
     }
 
     match /episode_comments/{doc} {

@@ -6,6 +6,13 @@
       "**/.*",
       "CLAUDE.md",
       "firebase-debug.log"
+    ],
+    "redirects": [
+      { "source": "/", "destination": "/maintenance.html", "type": 302 },
+      { "source": "/index.html", "destination": "/maintenance.html", "type": 302 }
+    ],
+    "rewrites": [
+      { "source": "**", "destination": "/maintenance.html" }
     ]
   },
   "firestore": {
