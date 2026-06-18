@@ -998,6 +998,25 @@
                             <button id="admin-maintenance-btn" onclick="window._adminToggleMaintenance()" style="padding:10px 20px; border-radius:8px; border:none; background:#ef4444; color:#fff; font-weight:800; font-size:13px; cursor:pointer; flex-shrink:0;">🔴 Turn On Maintenance</button>
                         </div>
 
+                        <!-- Pack Odds Simulator -->
+                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                            <div style="flex:1; min-width:200px;">
+                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">🎲 Pack Odds Simulator</div>
+                                <div style="font-size:12px; color:var(--text-muted);">Simulates pack openings using live odds. No cards are saved.</div>
+                            </div>
+                            <select id="sim-pack-select" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; font-weight:700;">
+                                <option value="standard">Standard Pack</option>
+                                <option value="premium">Premium Pack</option>
+                            </select>
+                            <select id="sim-count-select" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; font-weight:700;">
+                                <option value="100">100 packs</option>
+                                <option value="500">500 packs</option>
+                                <option value="1000" selected>1,000 packs</option>
+                                <option value="5000">5,000 packs</option>
+                            </select>
+                            <button onclick="window._tcgSimulatePacks()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:800; font-size:13px; cursor:pointer;">Run Simulation</button>
+                        </div>
+
                         <!-- Deduplicate Collections -->
                         <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                             <div style="flex:1; min-width:200px;">
@@ -1146,6 +1165,7 @@
                                 <option value="no_face">No Face (Spirited Away, UR)</option>
                                 <option value="sung_jinwoo">Sung Jinwoo (Solo Leveling, UR)</option>
                                 <option value="astro_boy">Astro Boy (Astro Boy, UR)</option>
+                                <option value="arthur_boyle">Arthur Boyle (Fire Force, UR)</option>
                             </select>
                             <div id="founder-card-preview" style="margin-bottom:14px;"></div>
                             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">

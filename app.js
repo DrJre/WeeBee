@@ -1221,6 +1221,16 @@ window.fetchNotifications = function() {
                 onClickAction = `onclick="openDMConversation('${n.senderUid}','${safeName}','${safeAvatar}')"`;
             } else if (n.type === 'trade_offer' && n.tradeId) {
                 onClickAction = `onclick="window._tcgOpenTradeReview('${n.tradeId}')"`;
+            } else if ((n.type === 'comment_reply' || n.type === 'post_comment') && n.postId) {
+                if (n.postCollection === 'tier_lists') {
+                    onClickAction = `onclick="window.openTierListViewer('${n.postId}')"`;
+                } else if (n.postCollection === 'hot_takes') {
+                    onClickAction = `onclick="window.switchView('community-view');document.getElementById('hot-takes-tab-btn')?.click()"`;
+                } else if (n.postCollection === 'melobee_posts') {
+                    onClickAction = `onclick="window.goToMeloBeeTab()"`;
+                } else {
+                    onClickAction = `onclick="window.switchView('home-view')"`;
+                }
             } else {
                 onClickAction = `onclick="viewUserProfile('${n.senderUid}')"`;
             }
@@ -3886,7 +3896,7 @@ window.loadProfileFeed = async function(uid) {
             ? query(collection(db, 'tier_lists'), where('uid', '==', uid), limit(30))
             : query(collection(db, 'tier_lists'), where('uid', '==', uid), where('public', '==', true), limit(30));
         const _empty = { forEach: () => {}, docs: [] };
-        const [revSnap, tlSnap, htSnap, pollSnap, bracketSnap, bwSnap, triviaSnap, mbSnap, gpSnap] = await Promise.all([
+        const [revSnap, tlSnap, htSnap, pollSnap, bracketSnap, bwSnap, triviaSnap, mbSnap, gpSnap, dungeonSnap] = await Promise.all([
             getDocs(query(collection(db, 'reviews'), where('uid', '==', uid), limit(60))).catch(() => _empty),
             getDocs(tlFilter).catch(() => _empty),
             getDocs(query(collection(db, 'hot_takes'), where('uid', '==', uid), limit(30))).catch(() => _empty),
@@ -3896,6 +3906,7 @@ window.loadProfileFeed = async function(uid) {
             getDocs(query(collection(db, 'trivia_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
             getDocs(query(collection(db, 'melobee_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
             getDocs(query(collection(db, 'general_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
+            getDocs(query(collection(db, 'dungeon_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
         ]);
         const items = [];
         revSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'review', _ts: d.data().timestamp?.toMillis?.() || 0 }));
@@ -3907,6 +3918,7 @@ window.loadProfileFeed = async function(uid) {
         triviaSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'trivia', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         mbSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'melobee', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         gpSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'general_post', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+        dungeonSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'dungeon', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         items.sort((a, b) => b._ts - a._ts);
         if (!items.length) {
             container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:32px;">No posts yet.</p>';
@@ -3927,6 +3939,7 @@ window.loadProfileFeed = async function(uid) {
                 else if (item._type === 'trivia') html = window.generateTriviaPostCardHTML(item);
                 else if (item._type === 'melobee') html = window.generateMeloBeePostCardHTML(item);
                 else if (item._type === 'general_post') html = window._renderGeneralPostCard(item, curUid);
+                else if (item._type === 'dungeon') html = window.generateDungeonPostCardHTML(item);
             } catch(e) { console.error('Profile feed render error:', item._type, e); }
             if (html) container.innerHTML += `<div>${html}</div>`;
         });
@@ -5696,7 +5709,8 @@ window.submitTlViewerComment = async function(postId) {
             addDoc(collection(db, 'notifications'), {
                 targetUid: replyToUid, type: 'comment_reply',
                 senderUid: auth.currentUser.uid, senderName: auth.currentUser.displayName, senderAvatar: av,
-                message: 'replied to your comment', timestamp: new Date(), read: false
+                message: 'replied to your comment', timestamp: new Date(), read: false,
+                postId, postCollection: 'tier_lists'
             }).catch(() => {});
         }
         // Notify the tier list owner
@@ -6359,6 +6373,11 @@ const TCG_FOUNDER_CARDS = [
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAstro%20Boy%2FUR%2FAstro%20Boy.jpg?alt=media&token=3b5ca35a-ba28-434a-8deb-ea3131f87a6f',
         founder: true,
     },
+    {
+        id: 'arthur_boyle', name: 'Arthur Boyle', anime: 'Fire Force', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFire%20Force%2FUR%2FArthur%20Boyle.gif?alt=media&token=470e5553-a04b-491e-a05b-c2e74a5e25c5',
+        founder: true,
+    },
 ];
 
 window._amberLoadWallet = async function() {
@@ -6407,6 +6426,83 @@ window._amberLoadWallet = async function() {
                 </div>
             </div>`;
     } catch(e) { el.innerHTML = `<p style="color:red;">Failed to load: ${e.message}</p>`; }
+};
+
+window._tcgSimulatePacks = function() {
+    if (!window.isAdmin) return;
+    _tcgEnsureCardPool();
+    const packId = document.getElementById('sim-pack-select')?.value || 'standard';
+    const count = parseInt(document.getElementById('sim-count-select')?.value || '1000');
+    const pack = TCG_PACKS.find(p => p.id === packId);
+    if (!pack) return;
+
+    const tally = { ur: [], ssr: [], sr: [], rare: 0, common: 0 };
+    for (let i = 0; i < count; i++) {
+        const cards = _tcgRollPackCards(pack);
+        for (const c of cards) {
+            if (c.rarity === 'ur' || c.rarity === 'ssr' || c.rarity === 'sr') tally[c.rarity].push(c);
+            else tally[c.rarity] = (tally[c.rarity] || 0) + 1;
+        }
+    }
+
+    const total = count * 5;
+    const pct = n => ((n / total) * 100).toFixed(2) + '%';
+    const rarityColor = { ur: '#ffd700', ssr: '#c084fc', sr: '#f97316', rare: '#60a5fa', common: '#9ca3af' };
+    const rarityLabel = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common' };
+
+    const statRow = (rarity, count2) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:var(--bg-white);margin-bottom:6px;">
+            <span style="font-size:11px;font-weight:800;color:${rarityColor[rarity]};width:36px;">${rarityLabel[rarity]}</span>
+            <div style="flex:1;background:var(--bg-gray);border-radius:4px;height:8px;overflow:hidden;">
+                <div style="height:100%;background:${rarityColor[rarity]};width:${Math.min(100,(count2/total)*100*10)}%;"></div>
+            </div>
+            <span style="font-size:13px;font-weight:700;min-width:40px;text-align:right;">${count2}</span>
+            <span style="font-size:12px;color:var(--text-muted);min-width:50px;text-align:right;">${pct(count2)}</span>
+        </div>`;
+
+    const cardRows = (arr, rarity) => arr.map(c =>
+        `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;border-bottom:1px solid var(--border-color);">
+            <img src="${c.image}" style="width:28px;height:38px;object-fit:cover;border-radius:3px;flex-shrink:0;">
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
+                <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.anime || ''}</div>
+            </div>
+            <span style="font-size:10px;font-weight:800;color:${rarityColor[rarity]};flex-shrink:0;">${rarityLabel[rarity]}</span>
+        </div>`).join('');
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;background:rgba(0,0,0,0.7);overflow-y:auto;';
+    modal.innerHTML = `
+        <div style="background:var(--bg-card);border-radius:16px;padding:24px;width:100%;max-width:560px;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+                <div>
+                    <div style="font-weight:800;font-size:17px;">🎲 ${pack.name} — ${count.toLocaleString()} Pack Simulation</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${total.toLocaleString()} total cards rolled</div>
+                </div>
+                <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div style="margin-bottom:18px;">
+                ${statRow('ur', tally.ur.length)}
+                ${statRow('ssr', tally.ssr.length)}
+                ${statRow('sr', tally.sr.length)}
+                ${statRow('rare', tally.rare)}
+                ${statRow('common', tally.common)}
+            </div>
+            <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">UR Pulls (${tally.ur.length})</div>
+            <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px;margin-bottom:14px;">
+                ${tally.ur.length ? cardRows(tally.ur, 'ur') : '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">None pulled</div>'}
+            </div>
+            <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">SSR Pulls (${tally.ssr.length})</div>
+            <div style="max-height:240px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px;margin-bottom:14px;">
+                ${tally.ssr.length ? cardRows(tally.ssr, 'ssr') : '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">None pulled</div>'}
+            </div>
+            <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">SR Pulls (${tally.sr.length})</div>
+            <div style="max-height:240px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px;">
+                ${tally.sr.length ? cardRows(tally.sr, 'sr') : '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">None pulled</div>'}
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 };
 
 // Admin: search users by display name to send a manual Amber payment (refunds, etc.)
@@ -8181,7 +8277,11 @@ window._plinkoExecuteDrop = async function(dropX) {
     const totalMultiplier = multipliers[0]; // for display purposes use the first ball's multiplier
     const rawPrize = bins.reduce((sum, bin, i) => sum + Math.round(PLINKO_PRIZES[bin] * (multipliers[i] || 1)), 0)
         + (hitStar ? PLINKO_STAR_BONUS : 0);
-    const remaining = PLINKO_DAILY_CAP - amberEarnedToday;
+    // Cap is net-based: the drop cost offsets the gross prize, so the max gross
+    // prize allowed is (net remaining) + cost. Free drops have no cost offset.
+    const dropCost = freeAvailable ? 0 : PLINKO_DROP_COST;
+    const netRemaining = PLINKO_DAILY_CAP - amberEarnedToday;
+    const remaining = netRemaining + dropCost;
     const prize = Math.min(rawPrize, remaining);
     const wasCapped = prize < rawPrize;
     try { await _awardAmber(prize, 'plinko:drop'); } catch(e) { console.error('Plinko prize grant failed:', e); }
@@ -8196,7 +8296,7 @@ window._plinkoExecuteDrop = async function(dropX) {
         const update = { totalDrops, streak };
         if (freeAvailable) update.lastDropDate = today;
         if (hitStar) update.starUsedDate = today;
-        update.amberEarnedToday = amberEarnedToday + prize;
+        update.amberEarnedToday = amberEarnedToday + Math.max(0, prize - dropCost);
         update.amberEarnedDate = today;
         await setDoc(doc(db, 'plinko_state', uid), update, { merge: true });
     } catch(e) { console.error('Plinko state save failed:', e); }
@@ -8204,7 +8304,7 @@ window._plinkoExecuteDrop = async function(dropX) {
     state.streak = streak;
     if (freeAvailable) state.lastDropDate = today;
     if (hitStar) state.starUsedDate = today;
-    state.amberEarnedToday = amberEarnedToday + prize;
+    state.amberEarnedToday = amberEarnedToday + Math.max(0, prize - dropCost);
     state.amberEarnedDate = today;
 
     const plinkoAch = ['plinko_first'];
@@ -9329,6 +9429,7 @@ const TCG_DISMANTLE_RATES = { common: 5, rare: 20, sr: 100, ssr: 400, ur: 1500 }
 window._tcgDismantling = false;
 window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
     if (!auth.currentUser || window._tcgDismantling) return;
+    if (window._tcgFavoriteIds?.has(cardId)) { alert(`"${name}" is favorited. Unfavorite it first to dismantle.`); return; }
     const amount = TCG_DISMANTLE_RATES[rarity] || 0;
     const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common' }[rarity] || rarity;
     if (!confirm(`Dismantle ${name} (${label}) for 🟡 ${amount.toLocaleString()} Amber? This cannot be undone.`)) return;
@@ -9578,6 +9679,20 @@ window._tcgTogglePin = async function(cardId, profileUid) {
     }
 };
 
+window._tcgToggleFavorite = async function(cardId, uid, filter) {
+    if (!auth.currentUser || auth.currentUser.uid !== uid) return;
+    const ref = doc(db, 'profiles', uid);
+    try {
+        const pd = await getDoc(ref);
+        let favs = pd.exists() ? (pd.data().favoriteTcgCardIds || []) : [];
+        if (favs.includes(cardId)) { favs = favs.filter(id => id !== cardId); }
+        else { favs = [...favs, cardId]; }
+        await updateDoc(ref, { favoriteTcgCardIds: favs });
+        window._tcgFavoriteIds = new Set(favs);
+        window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'), uid, filter || 'all');
+    } catch(e) { alert('Failed to update favorite: ' + e.message); }
+};
+
 // ── Multiselect: bulk dismantle / bulk pin ──────────────────────────────────
 window._tcgMultiSelect = { active: false, selected: new Set() };
 
@@ -9626,6 +9741,254 @@ window._tcgToggleCardSelect = function(cardId, uid, filter, profileUid) {
     }
 };
 
+window._tcgSmartDismantleModal = async function(uid) {
+    if (!auth.currentUser || auth.currentUser.uid !== uid) return;
+
+    // Remove any existing modal
+    document.getElementById('smart-dismantle-modal')?.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'smart-dismantle-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:var(--bg-white);display:flex;align-items:center;justify-content:center;padding:16px;';
+
+    const RARITY_LABELS = { common:'Common', rare:'Rare', sr:'SR', ssr:'SSR', ur:'UR' };
+    const RARITY_ORDER  = ['common','rare','sr','ssr','ur'];
+    let savedRarities  = new Set(['common','rare']);
+    let savedSerialMin = '';
+    let protectedAnime = [];
+    try {
+        const p = JSON.parse(localStorage.getItem('tcg_smart_prefs') || '{}');
+        if (Array.isArray(p.rarities) && p.rarities.length) savedRarities = new Set(p.rarities);
+        if (p.serialMin != null) savedSerialMin = p.serialMin;
+        if (Array.isArray(p.protectedAnime)) protectedAnime = p.protectedAnime;
+    } catch(e) {}
+    let previewCards   = [];   // cards currently shown in preview (may have been deselected)
+    let selectedIds    = new Set();
+    let allCards       = null; // loaded once
+
+    const render = () => {
+        const rarityChecks = RARITY_ORDER.map(r => `
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                <input type="checkbox" id="sd-rarity-${r}" ${savedRarities.has(r)?'checked':''} style="width:15px;height:15px;accent-color:var(--accent-yellow);">
+                ${RARITY_LABELS[r]}
+            </label>`).join('');
+
+        modal.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:16px;width:100%;max-width:680px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+            <!-- Header -->
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--border-color);flex-shrink:0;">
+                <div style="font-size:16px;font-weight:800;">⚙ Smart Select</div>
+                <button onclick="document.getElementById('smart-dismantle-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:22px;line-height:1;">✕</button>
+            </div>
+
+            <!-- Filters -->
+            <div style="padding:18px 20px;border-bottom:1px solid var(--border-color);flex-shrink:0;display:flex;flex-direction:column;gap:16px;">
+
+                <!-- Rarities -->
+                <div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">Include Rarities</div>
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;">${rarityChecks}</div>
+                </div>
+
+                <!-- Serial threshold -->
+                <div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">Serial Number Above</div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <input type="number" id="sd-serial-min" min="1" placeholder="e.g. 100" value="${savedSerialMin}" style="width:120px;padding:7px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;">
+                        <span style="font-size:12px;color:var(--text-muted);">Leave blank to include all serials</span>
+                    </div>
+                </div>
+
+                <!-- Protect anime -->
+                <div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">Protect These Anime (keep their cards)</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;" id="sd-protected-tags">
+                        ${protectedAnime.map(a => `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:#f59e0b;">${a}<button onclick="window._sdRemoveAnime('${a.replace(/'/g,"\\'")}');event.stopPropagation();" style="background:none;border:none;cursor:pointer;color:#f59e0b;font-size:14px;padding:0;line-height:1;">✕</button></span>`).join('')}
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <input type="text" id="sd-anime-input" list="sd-anime-list" placeholder="Type anime name…" style="flex:1;padding:7px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;" onkeydown="if(event.key==='Enter'){event.preventDefault();window._sdAddAnime();}">
+                        <datalist id="sd-anime-list">${(allCards||[]).map(c=>c.anime).filter((v,i,a)=>a.indexOf(v)===i).sort().map(a=>`<option value="${a}">`).join('')}</datalist>
+                        <button onclick="window._sdAddAnime()" style="padding:7px 14px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-weight:700;font-size:12px;cursor:pointer;">Add</button>
+                    </div>
+                </div>
+
+                <!-- Also skip pinned -->
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+                    <input type="checkbox" id="sd-skip-pinned" checked style="width:15px;height:15px;accent-color:var(--accent-yellow);">
+                    Skip pinned cards
+                </label>
+
+                <button onclick="window._sdPreview()" style="padding:9px 20px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;align-self:flex-start;">Preview Selection</button>
+            </div>
+
+            <!-- Preview list -->
+            <div id="sd-preview-area" style="flex:1;overflow-y:auto;padding:16px 20px;">
+                <p style="color:var(--text-muted);font-size:13px;">Set your filters above and click Preview Selection.</p>
+            </div>
+
+            <!-- Footer -->
+            <div id="sd-footer" style="padding:14px 20px;border-top:1px solid var(--border-color);flex-shrink:0;display:none;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                <span id="sd-footer-label" style="font-size:13px;font-weight:700;"></span>
+                <div style="display:flex;gap:10px;">
+                    <button onclick="document.getElementById('smart-dismantle-modal').remove()" style="padding:9px 18px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;font-size:13px;cursor:pointer;">Cancel</button>
+                    <button id="sd-dismantle-btn" onclick="window._sdConfirmDismantle()" style="padding:9px 18px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">Dismantle</button>
+                </div>
+            </div>
+        </div>`;
+    };
+
+    // Helper: re-render just the protected tags without rebuilding the whole modal
+    window._sdRemoveAnime = function(anime) {
+        protectedAnime = protectedAnime.filter(a => a !== anime);
+        document.getElementById('sd-protected-tags').innerHTML =
+            protectedAnime.map(a => `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:#f59e0b;">${a}<button onclick="window._sdRemoveAnime('${a.replace(/'/g,"\\'")}');event.stopPropagation();" style="background:none;border:none;cursor:pointer;color:#f59e0b;font-size:14px;padding:0;line-height:1;">✕</button></span>`).join('');
+    };
+
+    window._sdAddAnime = function() {
+        const input = document.getElementById('sd-anime-input');
+        const val = (input?.value || '').trim();
+        if (!val || protectedAnime.includes(val)) { if (input) input.value = ''; return; }
+        protectedAnime.push(val);
+        if (input) input.value = '';
+        window._sdRemoveAnime('__force_rerender__'); // reuse re-render
+        document.getElementById('sd-protected-tags').innerHTML =
+            protectedAnime.map(a => `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:#f59e0b;">${a}<button onclick="window._sdRemoveAnime('${a.replace(/'/g,"\\'")}');event.stopPropagation();" style="background:none;border:none;cursor:pointer;color:#f59e0b;font-size:14px;padding:0;line-height:1;">✕</button></span>`).join('');
+    };
+
+    window._sdPreview = async function() {
+        const previewEl = document.getElementById('sd-preview-area');
+        previewEl.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Loading your collection…</p>';
+
+        // Load collection once
+        if (!allCards) {
+            try { allCards = await _tcgLoadCollection(uid); }
+            catch(e) { previewEl.innerHTML = `<p style="color:red;font-size:13px;">Failed to load: ${e.message}</p>`; return; }
+            // Refresh datalist now that we have card data
+            const dl = document.getElementById('sd-anime-list');
+            if (dl) dl.innerHTML = [...new Set(allCards.map(c=>c.anime))].sort().map(a=>`<option value="${a}">`).join('');
+        }
+
+        // Read filter values
+        const selectedRarities = new Set(RARITY_ORDER.filter(r => document.getElementById(`sd-rarity-${r}`)?.checked));
+        const serialMinRaw = document.getElementById('sd-serial-min')?.value || '';
+        const serialMin = parseInt(serialMinRaw, 10) || 0;
+        // Persist prefs
+        savedRarities = selectedRarities; savedSerialMin = serialMinRaw;
+        try { localStorage.setItem('tcg_smart_prefs', JSON.stringify({ rarities:[...selectedRarities], serialMin:serialMinRaw, protectedAnime })); } catch(e) {}
+        const skipPinned = document.getElementById('sd-skip-pinned')?.checked ?? true;
+        const protectedTerms = protectedAnime.map(a => a.toLowerCase());
+
+        // Load pinned IDs if needed
+        let pinnedSet = new Set();
+        if (skipPinned) {
+            try {
+                const pd = await getDoc(doc(db, 'profiles', uid));
+                pinnedSet = new Set(pd.exists() ? (pd.data().pinnedTcgCardIds || []) : []);
+            } catch(e) {}
+        }
+
+        // Filter
+        previewCards = allCards.filter(c => {
+            if (c.founder || c.monthlyUr || (window._tcgFavoriteIds?.has(c.id))) return false; // never auto-dismantle special/favorited
+            if (!selectedRarities.has(c.rarity)) return false;
+            if (protectedTerms.some(term => (c.anime || '').toLowerCase().includes(term))) return false;
+            if (skipPinned && pinnedSet.has(c.id)) return false;
+            if (serialMin > 0 && (c.serial == null || c.serial <= serialMin)) return false;
+            return true;
+        });
+
+        selectedIds = new Set(previewCards.map(c => c.id));
+        renderPreview();
+    };
+
+    const renderPreview = () => {
+        const previewEl = document.getElementById('sd-preview-area');
+        const footer    = document.getElementById('sd-footer');
+        const footerLbl = document.getElementById('sd-footer-label');
+        if (!previewEl) return;
+
+        if (!previewCards.length) {
+            previewEl.innerHTML = '<p style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px 0;">No cards match those filters.</p>';
+            if (footer) footer.style.display = 'none';
+            return;
+        }
+
+        const activeCards = previewCards.filter(c => selectedIds.has(c.id));
+        const total = activeCards.reduce((s, c) => s + (TCG_DISMANTLE_RATES[c.rarity] || 0), 0);
+
+        previewEl.innerHTML = `
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">${previewCards.length} card${previewCards.length!==1?'s':''} matched — uncheck any you want to keep.</div>
+            ${previewCards.map(c => {
+                const checked = selectedIds.has(c.id);
+                const serialTxt = c.serial != null ? `#${c.serial} / ${RARITY_MAX_VERSIONS[c.rarity]||5000}` : '';
+                const rarityColors = { common:'#9aa1a8', rare:'#f59e0b', sr:'#8b5cf6', ssr:'#00d4ff', ur:'#ff4dff' };
+                const col = rarityColors[c.rarity] || '#aaa';
+                return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border-color);opacity:${checked?1:0.4};">
+                    <input type="checkbox" ${checked?'checked':''} onchange="window._sdToggleCard('${c.id}')" style="width:16px;height:16px;flex-shrink:0;accent-color:var(--accent-yellow);cursor:pointer;">
+                    <img src="${c.image||''}" style="width:36px;height:50px;object-fit:cover;border-radius:4px;flex-shrink:0;border:2px solid ${col};" onerror="this.style.display='none'">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
+                        <div style="font-size:11px;color:var(--text-muted);">${c.anime}${serialTxt ? ' · ' + serialTxt : ''}</div>
+                    </div>
+                    <span style="font-size:11px;font-weight:800;color:${col};flex-shrink:0;">${(c.rarity||'').toUpperCase()}</span>
+                    <span style="font-size:12px;font-weight:700;color:#f59e0b;flex-shrink:0;">🟡 ${TCG_DISMANTLE_RATES[c.rarity]||0}</span>
+                </div>`;
+            }).join('')}`;
+
+        if (footer) {
+            footer.style.display = 'flex';
+            if (footerLbl) footerLbl.textContent = `${activeCards.length} card${activeCards.length!==1?'s':''} selected · 🟡 ${total.toLocaleString()} Amber`;
+            const btn = document.getElementById('sd-dismantle-btn');
+            if (btn) btn.disabled = activeCards.length === 0;
+        }
+    };
+
+    window._sdToggleCard = function(cardId) {
+        if (selectedIds.has(cardId)) selectedIds.delete(cardId); else selectedIds.add(cardId);
+        // Update opacity + footer without full re-render
+        const activeCards = previewCards.filter(c => selectedIds.has(c.id));
+        const total = activeCards.reduce((s, c) => s + (TCG_DISMANTLE_RATES[c.rarity] || 0), 0);
+        const footerLbl = document.getElementById('sd-footer-label');
+        if (footerLbl) footerLbl.textContent = `${activeCards.length} card${activeCards.length!==1?'s':''} selected · 🟡 ${total.toLocaleString()} Amber`;
+        const btn = document.getElementById('sd-dismantle-btn');
+        if (btn) btn.disabled = activeCards.length === 0;
+        // Update the row opacity
+        const rows = document.getElementById('sd-preview-area')?.querySelectorAll('div[style*="border-bottom"]');
+        if (rows) {
+            previewCards.forEach((c, i) => { if (rows[i]) rows[i].style.opacity = selectedIds.has(c.id) ? '1' : '0.4'; });
+        }
+    };
+
+    window._sdConfirmDismantle = async function() {
+        if (window._tcgDismantling) return;
+        const toDismantle = previewCards.filter(c => selectedIds.has(c.id));
+        if (!toDismantle.length) return;
+        const total = toDismantle.reduce((s, c) => s + (TCG_DISMANTLE_RATES[c.rarity] || 0), 0);
+        if (!confirm(`Dismantle ${toDismantle.length} card(s) for 🟡 ${total.toLocaleString()} Amber? This cannot be undone.`)) return;
+        window._tcgDismantling = true;
+        const btn = document.getElementById('sd-dismantle-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Dismantling…'; }
+        try {
+            for (const c of toDismantle) {
+                await deleteDoc(doc(db, 'card_collections', uid, 'cards', c.id));
+            }
+            if (total > 0) await _awardAmber(total, 'tcg:dismantle');
+            window._tcgCollectionCache.delete(uid);
+            document.getElementById('smart-dismantle-modal')?.remove();
+            window._tcgRenderMyCollection('mycards', true);
+        } catch(e) {
+            alert('Dismantle failed: ' + e.message);
+            if (btn) { btn.disabled = false; btn.textContent = 'Dismantle'; }
+        } finally {
+            window._tcgDismantling = false;
+        }
+    };
+
+    render();
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+};
+
 window._tcgBulkDismantle = async function(uid, profileUid) {
     if (!auth.currentUser || auth.currentUser.uid !== uid) return;
     if (window._tcgDismantling) return;
@@ -9634,9 +9997,13 @@ window._tcgBulkDismantle = async function(uid, profileUid) {
     if (!sel.size) { window._tcgDismantling = false; return; }
     let cards;
     try { cards = await _tcgLoadCollection(uid); } catch(e) { window._tcgDismantling = false; return; }
-    const selectedCards = cards.filter(c => sel.has(c.id));
+    const favSet = window._tcgFavoriteIds || new Set();
+    const selectedCards = cards.filter(c => sel.has(c.id) && !favSet.has(c.id));
+    const skippedFavs = cards.filter(c => sel.has(c.id) && favSet.has(c.id)).length;
+    if (!selectedCards.length) { alert(skippedFavs ? 'All selected cards are favorited. Unfavorite them first.' : 'No cards selected.'); window._tcgDismantling = false; return; }
     const total = selectedCards.reduce((sum, c) => sum + (TCG_DISMANTLE_RATES[c.rarity] || 0), 0);
-    if (!confirm(`Dismantle ${selectedCards.length} card(s) for 🟡 ${total.toLocaleString()} Amber total? This cannot be undone.`)) { window._tcgDismantling = false; return; }
+    const favNote = skippedFavs ? ` (${skippedFavs} favorited card${skippedFavs>1?'s':''} skipped)` : '';
+    if (!confirm(`Dismantle ${selectedCards.length} card(s) for 🟡 ${total.toLocaleString()} Amber total?${favNote} This cannot be undone.`)) { window._tcgDismantling = false; return; }
     try {
         for (const c of selectedCards) {
             await deleteDoc(doc(db, 'card_collections', uid, 'cards', c.id));
@@ -9774,8 +10141,14 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
 
     if (!cards.length) { el.innerHTML = `<p style="color:var(--text-muted);">No cards yet — open a pack to get started!</p>`; return; }
 
-    let pinnedIds = [];
-    try { const pd = await getDoc(doc(db, 'profiles', uid)); pinnedIds = pd.exists() ? (pd.data().pinnedTcgCardIds || []) : []; } catch(e) {}
+    let pinnedIds = [], favoriteIds = [];
+    try {
+        const pd = await getDoc(doc(db, 'profiles', uid));
+        const pdata = pd.exists() ? pd.data() : {};
+        pinnedIds = pdata.pinnedTcgCardIds || [];
+        favoriteIds = pdata.favoriteTcgCardIds || [];
+    } catch(e) {}
+    window._tcgFavoriteIds = new Set(favoriteIds);
 
     const rarityOrder = { ur:-1, ssr:0, sr:1, rare:2, common:3 };
     const sort = window._tcgCardSort;
@@ -9818,6 +10191,7 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
                     <option value="serial-high" ${sort==='serial-high'?'selected':''}>Sort: Serial # (High-Low)</option>
                 </select>
                 <button onclick="window._tcgToggleMultiSelect('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${ms.active?'var(--accent-yellow)':'var(--border-color)'};background:${ms.active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${ms.active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${ms.active ? '✕ Cancel' : '☑ Multiselect'}</button>
+                <button onclick="window._tcgSmartDismantleModal('${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;">⚙ Smart Select</button>
             </div>
         </div>
         <div style="margin-bottom:14px;">
@@ -9838,16 +10212,18 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
                 const serial = card.founder ? 'Founder Edition' : (card.monthlyUr ? card.stampText : (card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : ''));
                 const dismantleAmount = TCG_DISMANTLE_RATES[card.rarity] || 0;
                 const isPinned = pinnedIds.includes(card.id);
+                const isFav = favoriteIds.includes(card.id);
                 const selected = ms.active && ms.selected.has(card.id);
                 return `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;${selected?'outline:3px solid var(--accent-yellow);border-radius:14px;':''}">
                     <div class="tcg-card-scale-wrap" onclick="${ms.active ? `window._tcgToggleCardSelect('${card.id}','${uid}','${filter}')` : `window._tcgOpenCardViewer('${uid}','${card.id}')`}" style="cursor:pointer;position:relative;">
                         ${ms.active ? `<div style="position:absolute;top:6px;left:6px;z-index:3;width:24px;height:24px;border-radius:50%;border:2px solid #fff;background:${selected?'var(--accent-yellow)':'rgba(0,0,0,0.45)'};display:flex;align-items:center;justify-content:center;font-size:14px;color:#222;font-weight:900;">${selected?'✓':''}</div>` : ''}
                         <div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div>
+                        ${!ms.active ? `<button onclick="event.stopPropagation();window._tcgToggleFavorite('${card.id}','${uid}','${filter}')" style="position:absolute;bottom:8px;right:8px;z-index:5;width:28px;height:28px;border-radius:50%;border:none;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;line-height:1;color:${isFav?'#ef4444':'#bbb'};" title="${isFav?'Unfavorite':'Favorite (protects from dismantling)'}">${isFav?'♥':'♡'}</button>` : ''}
                     </div>
                     ${serial ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${serial}</div>` : ''}
                     ${!ms.active ? `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">
                         <button onclick="window._tcgTogglePin('${card.id}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isPinned?'var(--accent-yellow)':'var(--border-color)'};background:${isPinned?'rgba(245,158,11,0.12)':'transparent'};color:${isPinned?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;" title="${isPinned ? 'Remove from showcase' : 'Pin to profile showcase'}">${isPinned ? '★ Pinned' : '☆ Pin'}</button>
-                        <button class="tcg-dismantle-btn" onclick="window._tcgDismantleCard('${card.id}','${card.rarity}','${card.name.replace(/'/g,"\\'")}')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;" title="Break down for amber">Dismantle · 🟡 ${dismantleAmount}</button>
+                        <button class="tcg-dismantle-btn" onclick="window._tcgDismantleCard('${card.id}','${card.rarity}','${card.name.replace(/'/g,"\\'")}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isFav?'rgba(239,68,68,0.3)':'var(--border-color)'};background:transparent;color:${isFav?'rgba(239,68,68,0.4)':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:${isFav?'not-allowed':'pointer'};" title="${isFav?'Unfavorite to dismantle':'Break down for amber'}">Dismantle · 🟡 ${dismantleAmount}</button>
                     </div>` : ''}
                 </div>`;
             }).join('')}
@@ -11298,7 +11674,7 @@ window._renderHotTakeCard = function(ht, uid) {
     const dislikes = ht.dislikes || [];
     const isLiked = uid && likes.includes(uid);
     const isDisliked = uid && dislikes.includes(uid);
-    return `<div class="feed-post-card" style="background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.22);border-radius:14px;padding:16px;margin-bottom:12px;position:relative;">
+    return `<div class="feed-post-card" data-ht-id="${ht.id}" style="background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.22);border-radius:14px;padding:16px;margin-bottom:12px;position:relative;">
         ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
             <div style="position:relative;">
                 <button onclick="window.togglePostMenu('${ht.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined" style="font-size:20px;">more_vert</span></button>
@@ -11384,10 +11760,17 @@ window.postHotTake = async function() {
 window.voteHotTake = async function(id, dir) {
     if (!auth.currentUser) return window.openAuthModal();
     const uid = auth.currentUser.uid;
-    const listHt = window._hotTakesList.find(x => x.id === id);
-    const actHt = (window._activityItems||[]).find(x => x.id === id && x._type === 'hot_take');
-    const ht = listHt || actHt;
-    if (!ht) return;
+    let listHt = window._hotTakesList.find(x => x.id === id);
+    let actHt = (window._activityItems||[]).find(x => x.id === id && x._type === 'hot_take');
+    let ht = listHt || actHt;
+    // Not in any cached list (e.g. profile page) — fetch fresh from Firestore
+    if (!ht) {
+        try {
+            const snap = await getDoc(doc(db, 'hot_takes', id));
+            if (!snap.exists()) return;
+            ht = { ...snap.data(), id: snap.id };
+        } catch(e) { return; }
+    }
     const agreed = (ht.agreeUids||[]).includes(uid);
     const disagreed = (ht.disagreeUids||[]).includes(uid);
     function applyAgree(h) {
@@ -11402,8 +11785,14 @@ window.voteHotTake = async function(id, dir) {
     applyVote(ht);
     if (listHt && listHt !== ht) applyVote(listHt);
     if (actHt && actHt !== ht) applyVote(actHt);
+    // Re-render every instance of this card visible on the page
     window._renderHotTakesFeed();
     window._refreshHomeFeedItem(id);
+    document.querySelectorAll(`[data-ht-id="${id}"]`).forEach(el => {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = window._renderHotTakeCard(ht, uid);
+        el.replaceWith(tmp.firstElementChild);
+    });
     const ref = doc(db, 'hot_takes', id);
     if (dir === 'agree') {
         if (agreed) await updateDoc(ref, { agreeUids: arrayRemove(uid) });
@@ -15646,7 +16035,8 @@ window.submitBwPostComment = async function(event, btn, postId, postCollection) 
             addDoc(collection(db, 'notifications'), {
                 targetUid: replyToUid, type: 'comment_reply',
                 senderUid: auth.currentUser.uid, senderName: auth.currentUser.displayName, senderAvatar: av,
-                message: 'replied to your comment', timestamp: new Date(), read: false
+                message: 'replied to your comment', timestamp: new Date(), read: false,
+                postId, postCollection
             }).catch(() => {});
         }
         // Notify the post owner (unless they're the one commenting)
@@ -18150,15 +18540,10 @@ function _obDaily() {
     const dayIndex = bwDayIndex(today);
     const cycleNum = Math.floor(dayIndex / total) + offset;
     const dayInCycle = dayIndex % total;
-
-    // Fisher-Yates shuffle seeded by cycle — every song plays once before repeating
-    const order = [...Array(total).keys()];
-    let s = (cycleNum ^ 0x9e3779b9) >>> 0;
-    for (let i = order.length - 1; i > 0; i--) {
-        s = (Math.imul(s ^ (s >>> 16), 0x45d9f3b) ^ (s >>> 11)) >>> 0;
-        const j = s % (i + 1);
-        [order[i], order[j]] = [order[j], order[i]];
-    }
+    // Use the same proven LCG shuffle used by BuzzWord games.
+    // Multiply cycleNum by a large prime before seeding so adjacent cycles
+    // produce very different orderings (avoids the near-identical seeds bug).
+    const order = bwSeededShuffle([...Array(total).keys()], cycleNum * 1664525 + 1013904223);
     return OB_POOL[order[dayInCycle]];
 }
 
@@ -18990,7 +19375,8 @@ function _dungeonRenderGateSelect(el) {
         let icon, bg, border = '';
         if (result) { icon = result.success ? '✅' : '💀'; bg = 'rgba(255,255,255,0.04)'; }
         else { icon = '▶️'; bg = 'rgba(255,215,0,0.12)'; border = 'border:2px solid var(--accent-yellow);'; }
-        return `<div style="flex:1;min-width:60px;text-align:center;background:${bg};border-radius:10px;padding:10px 6px;${border}">
+        const clickable = result ? `onclick="window._dungeonShowPastResult(${i})" style="flex:1;min-width:60px;text-align:center;background:${bg};border-radius:10px;padding:10px 6px;${border}cursor:pointer;opacity:0.85;" title="View gate ${i+1} result"` : `style="flex:1;min-width:60px;text-align:center;background:${bg};border-radius:10px;padding:10px 6px;${border}"`;
+        return `<div ${clickable}>
             <div style="font-size:22px;">${g.icon}</div>
             <div style="font-size:10px;font-weight:700;margin-top:2px;">${g.id.toUpperCase()}-Rank</div>
             <div style="font-size:14px;margin-top:2px;">${icon}</div>
@@ -19054,6 +19440,61 @@ function _dungeonRenderGateSelect(el) {
     `;
     window.loadDungeonFeed();
 }
+
+window._dungeonShowPastResult = function(index) {
+    const el = document.getElementById('dungeon-gate-list');
+    if (!el) return;
+    const progress = window._dungeonProgress || {};
+    const pool = _dungeonGeneratePool(progress.date || _dungeonTodayKey());
+    const result = (progress.results || [])[index];
+    const gate = DUNGEON_GATES[pool[index]];
+    if (!result || !gate) return;
+
+    const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
+    const partyHTML = (result.party || []).map(c => `
+        <div style="text-align:center;width:70px;">
+            <div style="width:70px;height:95px;border-radius:8px;overflow:hidden;border:2px solid var(--accent-yellow);margin-bottom:4px;">
+                <img src="${c.image}" style="width:100%;height:100%;object-fit:cover;display:block;">
+            </div>
+            <div style="font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
+            <div style="font-size:10px;color:var(--text-muted);">${rarityLabels[c.rarity]||c.rarity}</div>
+        </div>`).join('');
+
+    const bonusHTML = (result.bonusCards || []).length ? `
+        <div style="background:var(--bg-white);border-radius:10px;padding:14px 16px;margin-top:12px;border:1px solid var(--accent-yellow);">
+            <div style="font-size:12px;font-weight:800;margin-bottom:10px;">🎁 Bonus cards found</div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                ${(result.bonusCards).map(c => `
+                    <div style="text-align:center;width:60px;">
+                        <div style="width:60px;height:82px;border-radius:6px;overflow:hidden;border:2px solid #ffd700;margin-bottom:3px;">
+                            <img src="${c.image}" style="width:100%;height:100%;object-fit:cover;display:block;">
+                        </div>
+                        <div style="font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
+                        <div style="font-size:10px;color:var(--text-muted);">${rarityLabels[c.rarity]||c.rarity}</div>
+                    </div>`).join('')}
+            </div>
+        </div>` : '';
+
+    el.innerHTML = `
+        <div style="background:var(--bg-gray);border-radius:14px;padding:18px 20px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+                <button onclick="window.loadDungeonTab()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;display:flex;align-items:center;gap:4px;padding:0;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">arrow_back</span> Back
+                </button>
+                <div style="font-weight:800;font-size:15px;">${gate.icon} Gate ${index+1} — ${gate.name}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                <div style="font-size:32px;">${result.success ? '✅' : '💀'}</div>
+                <div>
+                    <div style="font-weight:800;font-size:16px;">${result.success ? 'Victory' : 'Defeat'}</div>
+                    <div style="font-size:13px;color:var(--text-muted);">🟡 ${result.reward} Amber ${result.success ? 'earned' : '(consolation)'}</div>
+                </div>
+            </div>
+            ${partyHTML ? `<div style="font-size:12px;font-weight:800;margin-bottom:8px;color:var(--text-muted);">PARTY SENT</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">${partyHTML}</div>` : ''}
+            ${bonusHTML}
+        </div>`;
+};
 
 window._dungeonOpenPartySelect = async function(gateId) {
     const listEl = document.getElementById('dungeon-gate-list');
@@ -19271,7 +19712,47 @@ function _dungeonRenderActive(el, state) {
         ? (state.success ? "The crew emerges victorious!" : "The crew limps back, battered but alive...")
         : _dungeonFlavorText(gate, state.startTime, progress);
 
+    // Build the pool strip so the user can see their progress and tap completed gates
+    const dgProgress = window._dungeonProgress || { date: _dungeonTodayKey(), poolIndex: 0, results: [] };
+    const dgPool = _dungeonGeneratePool(dgProgress.date);
+    const dgPoolIndex = dgProgress.poolIndex;
+    const dgPoolStripHTML = dgPool.map((gid, i) => {
+        const g = DUNGEON_GATES[gid];
+        const result = dgProgress.results[i];
+        if (i > dgPoolIndex) {
+            return `<div style="flex:1;min-width:60px;text-align:center;background:rgba(255,255,255,0.02);border-radius:10px;padding:10px 6px;">
+                <div style="font-size:22px;opacity:0.4;">🔒</div>
+                <div style="font-size:10px;font-weight:700;margin-top:2px;color:var(--text-muted);">Locked</div>
+                <div style="font-size:14px;margin-top:2px;">&nbsp;</div>
+            </div>`;
+        }
+        if (i === dgPoolIndex) {
+            // Active raid
+            return `<div style="flex:1;min-width:60px;text-align:center;background:rgba(255,215,0,0.12);border-radius:10px;padding:10px 6px;border:2px solid var(--accent-yellow);">
+                <div style="font-size:22px;">${g.icon}</div>
+                <div style="font-size:10px;font-weight:700;margin-top:2px;">${g.id.toUpperCase()}-Rank</div>
+                <div style="font-size:14px;margin-top:2px;">⚔️</div>
+            </div>`;
+        }
+        const icon = result?.success ? '✅' : '💀';
+        return `<div onclick="window._dungeonShowPastResult(${i})" style="flex:1;min-width:60px;text-align:center;background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 6px;cursor:pointer;opacity:0.85;" title="View gate ${i+1} result">
+            <div style="font-size:22px;">${g.icon}</div>
+            <div style="font-size:10px;font-weight:700;margin-top:2px;">${g.id.toUpperCase()}-Rank</div>
+            <div style="font-size:14px;margin-top:2px;">${icon}</div>
+        </div>`;
+    }).join('');
+
     el.innerHTML = `
+        <div class="bw-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:20px;text-align:center;border:1px solid rgba(255,255,255,0.08);position:relative;overflow:hidden;">
+            <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(139,69,19,0.3) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(75,0,130,0.25) 0%,transparent 60%);pointer-events:none;"></div>
+            <div style="position:relative;z-index:1;">
+                <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
+                <div class="banner-hero-title" style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">⚔️ TCG Dungeon ⚔️</div>
+                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:520px;margin-left:auto;margin-right:auto;">New gates have torn open across the realm! Treasure waits for whoever's bold enough to go in after them. Assemble a team and clear them out!</div>
+            </div>
+        </div>
+        ${_dungeonLifetimeSummaryHTML(dgProgress)}
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">${dgPoolStripHTML}</div>
         <div style="background:var(--bg-gray);border-radius:16px;padding:20px;margin-bottom:16px;">
             <div style="font-weight:800;font-size:16px;margin-bottom:10px;">${gate.icon} ${gate.name} — Raid in Progress</div>
             <div style="position:relative;width:100%;aspect-ratio:16/7;background:linear-gradient(135deg,#2a1f3d,#1a2a3d);border-radius:12px;overflow:hidden;margin-bottom:12px;">
