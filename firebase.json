@@ -7,11 +7,8 @@
       "CLAUDE.md",
       "firebase-debug.log"
     ],
-    "redirects": [
-      { "source": "/", "destination": "/maintenance.html", "type": 302 },
-      { "source": "/index.html", "destination": "/maintenance.html", "type": 302 }
-    ],
     "rewrites": [
+      { "source": "/wb-admin", "destination": "/index.html" },
       { "source": "**", "destination": "/maintenance.html" }
     ]
   },

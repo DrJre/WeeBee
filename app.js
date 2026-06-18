@@ -56,6 +56,13 @@ const googleProvider = new GoogleAuthProvider();
 // Fires in real-time — users already on the page are signed out and locked out immediately.
 onSnapshot(doc(db, 'meta', 'maintenance'), (snap) => {
     const on = snap.exists() && snap.data().maintenanceMode === true;
+    window._maintenanceModeOn = on;
+    // Keep admin toggle button in sync if it's rendered
+    const btn = document.getElementById('admin-maintenance-btn');
+    if (btn) {
+        btn.textContent = on ? '🟢 Turn Off Maintenance' : '🔴 Turn On Maintenance';
+        btn.style.background = on ? '#10b981' : '#ef4444';
+    }
     let overlay = document.getElementById('maintenance-overlay');
     if (on && !window.isAdmin) {
         if (auth.currentUser) signOut(auth).catch(() => {});
@@ -67,8 +74,12 @@ onSnapshot(doc(db, 'meta', 'maintenance'), (snap) => {
                 <div style="font-size:48px;">🐝</div>
                 <div style="font-size:24px;font-weight:800;color:#ffc107;letter-spacing:1px;">Down for Maintenance</div>
                 <div style="font-size:15px;color:#aaa;max-width:340px;text-align:center;line-height:1.6;">WeeBee is getting some updates. We'll be back shortly — hang tight!</div>
+                <button id="maintenance-signin-btn" style="margin-top:8px;padding:10px 24px;border-radius:8px;border:1px solid #333;background:transparent;color:#555;font-size:13px;cursor:pointer;">Admin Sign In</button>
             `;
             document.body.appendChild(overlay);
+            document.getElementById('maintenance-signin-btn').addEventListener('click', () => {
+                signInWithPopup(auth, googleProvider).catch(() => {});
+            });
         }
     } else if (overlay) {
         overlay.remove();
@@ -78,6 +89,23 @@ onSnapshot(doc(db, 'meta', 'maintenance'), (snap) => {
 window._maintenance = async function(on) {
     await setDoc(doc(db, 'meta', 'maintenance'), { maintenanceMode: on });
     console.log('Maintenance mode:', on ? 'ON' : 'OFF');
+};
+
+window._adminToggleMaintenance = async function() {
+    if (!window.isAdmin) return;
+    const turningOn = !window._maintenanceModeOn;
+    const msg = turningOn
+        ? '⚠️ Turn ON maintenance mode?\n\nAll non-admin users will be signed out and locked out immediately.'
+        : 'Turn OFF maintenance mode? The site will become publicly accessible again.';
+    if (!confirm(msg)) return;
+    const btn = document.getElementById('admin-maintenance-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+        await window._maintenance(turningOn);
+    } catch(e) {
+        alert('Failed to toggle maintenance mode: ' + e.message);
+        if (btn) btn.disabled = false;
+    }
 };
 
 // --- RANK SYSTEM ---
@@ -1974,9 +2002,12 @@ window.fetchFriendData = async function() {
     } catch(e) { console.error('fetchFriendData error:', e); }
 };
 
+window._friendSendInFlight = new Set();
 window.sendFriendRequest = async function(toUid, btn) {
     if (!auth.currentUser) return window.openAuthModal();
-    btn.disabled = true;
+    if (window._friendSendInFlight.has(toUid)) return;
+    window._friendSendInFlight.add(toUid);
+    document.querySelectorAll(`[onclick*="sendFriendRequest('${toUid}"]`).forEach(b => b.disabled = true);
     const myName = auth.currentUser.displayName;
     const myAvatar = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(myName)}&backgroundColor=ffc107&fontColor=333333`;
     try {
@@ -1991,18 +2022,29 @@ window.sendFriendRequest = async function(toUid, btn) {
             senderName: myName, senderAvatar: myAvatar,
             message: 'sent you a friend request', requestId: reqRef.id, timestamp: new Date(), read: false
         });
-    } catch(e) { btn.disabled = false; console.error(e); }
+    } catch(e) {
+        document.querySelectorAll(`[onclick*="sendFriendRequest('${toUid}"]`).forEach(b => b.disabled = false);
+        console.error(e);
+    } finally {
+        window._friendSendInFlight.delete(toUid);
+    }
 };
 
+window._friendAcceptInFlight = new Set();
 window.acceptFriendRequest = async function(fromUid, requestId, notifId, btn) {
     if (!auth.currentUser) return;
-    if (btn) btn.disabled = true;
+    if (window._friendAcceptInFlight.has(requestId)) return;
+    window._friendAcceptInFlight.add(requestId);
+    // Disable all accept buttons for this request (may appear in both dropdown and notif page)
+    document.querySelectorAll(`[onclick*="acceptFriendRequest('${fromUid}"]`).forEach(b => b.disabled = true);
     try {
         const uid = auth.currentUser.uid;
         const uids = [uid, fromUid].sort();
+        // Deterministic doc ID prevents duplicate friend records if this fires twice
+        const friendDocId = uids.join('_');
         await Promise.all([
             updateDoc(doc(db, "friend_requests", requestId), { status: 'accepted' }),
-            addDoc(collection(db, "friends"), { uids, timestamp: new Date() })
+            setDoc(doc(db, "friends", friendDocId), { uids, timestamp: new Date() }),
         ]);
         window.myFriendIds.add(fromUid);
         window.myPendingInIds.delete(fromUid);
@@ -2016,11 +2058,20 @@ window.acceptFriendRequest = async function(fromUid, requestId, notifId, btn) {
             senderName: auth.currentUser.displayName, senderAvatar: myAvatar,
             message: 'accepted your friend request', timestamp: new Date(), read: false
         }).catch(() => {});
-    } catch(e) { if (btn) btn.disabled = false; console.error(e); }
+    } catch(e) {
+        document.querySelectorAll(`[onclick*="acceptFriendRequest('${fromUid}"]`).forEach(b => b.disabled = false);
+        console.error(e);
+    } finally {
+        window._friendAcceptInFlight.delete(requestId);
+    }
 };
 
+window._friendDeclineInFlight = new Set();
 window.declineFriendRequest = async function(fromUid, requestId, notifId, btn) {
     if (!auth.currentUser) return;
+    if (window._friendDeclineInFlight.has(requestId)) return;
+    window._friendDeclineInFlight.add(requestId);
+    document.querySelectorAll(`[onclick*="declineFriendRequest('${fromUid}"]`).forEach(b => b.disabled = true);
     try {
         await updateDoc(doc(db, "friend_requests", requestId), { status: 'declined' });
         window.myPendingInIds.delete(fromUid);
@@ -2028,7 +2079,12 @@ window.declineFriendRequest = async function(fromUid, requestId, notifId, btn) {
         if (area) area.innerHTML = `<button onclick="sendFriendRequest('${fromUid}', this)" class="action-btn"><span class="material-symbols-outlined">person_add</span> Add Friend</button>`;
         if (btn && btn.parentElement) btn.parentElement.outerHTML = `<span style="font-size:12px; color:var(--text-muted);">Request declined</span>`;
         if (notifId) setDoc(doc(db, "notifications", notifId), { read: true }, { merge: true }).catch(() => {});
-    } catch(e) { console.error(e); }
+    } catch(e) {
+        document.querySelectorAll(`[onclick*="declineFriendRequest('${fromUid}"]`).forEach(b => b.disabled = false);
+        console.error(e);
+    } finally {
+        window._friendDeclineInFlight.delete(requestId);
+    }
 };
 
 window.removeFriend = async function(friendUid, btn) {
@@ -2037,8 +2093,9 @@ window.removeFriend = async function(friendUid, btn) {
     try {
         const uid = auth.currentUser.uid;
         const snap = await getDocs(query(collection(db, "friends"), where("uids", "array-contains", uid)));
-        const friendDoc = snap.docs.find(d => d.data().uids.includes(friendUid));
-        if (friendDoc) await deleteDoc(doc(db, "friends", friendDoc.id));
+        // Delete ALL docs for this pair (handles legacy duplicates)
+        const toDelete = snap.docs.filter(d => d.data().uids.includes(friendUid));
+        await Promise.all(toDelete.map(d => deleteDoc(d.ref)));
         window.myFriendIds.delete(friendUid);
         const area = document.getElementById('profile-friend-btns');
         if (area) area.innerHTML = `<button onclick="sendFriendRequest('${friendUid}', this)" class="action-btn"><span class="material-symbols-outlined">person_add</span> Add Friend</button>`;
@@ -2275,8 +2332,8 @@ window.saveListEntry = async function(docId, mal_id, title, img, totalEps) {
     if (status === 'completed' && totalEps > 0) watched = totalEps;
 
     const entryData = {
-        uid: auth.currentUser.uid, mal_id, title, image: img, 
-        status, score, fanService, watchedEpisodes: watched, totalEpisodes: totalEps, 
+        uid: auth.currentUser.uid, mal_id, title, image: img,
+        status, score, fanService, watchedEpisodes: watched, totalEpisodes: totalEps,
         timestamp: new Date()
     };
 
@@ -2284,6 +2341,10 @@ window.saveListEntry = async function(docId, mal_id, title, img, totalEps) {
         // Determine if this status change earns achievements
         const prevEntry = window.myAnimeList.find(a => a.mal_id === mal_id);
         const prevStatus = prevEntry?.status;
+        const alreadyCompleted = prevEntry?.everCompleted === true;
+
+        // Persist a one-way flag so re-marking completed never re-awards
+        if (status === 'completed') entryData.everCompleted = true;
 
         if(docId) {
             await updateDoc(doc(db, "anime_lists", docId), entryData);
@@ -2294,7 +2355,7 @@ window.saveListEntry = async function(docId, mal_id, title, img, totalEps) {
         // Track completed/dropped counts for achievements
         if (auth.currentUser && status !== prevStatus) {
             const profileUpdates = {};
-            if (status === 'completed') { profileUpdates.completedCount = increment(1); _awardAmber(2, 'anime:complete').catch(() => {}); }
+            if (status === 'completed' && !alreadyCompleted) { profileUpdates.completedCount = increment(1); _awardAmber(2, 'anime:complete').catch(() => {}); }
             if (status === 'dropped') profileUpdates.droppedCount = increment(1);
             if (Object.keys(profileUpdates).length) {
                 setDoc(doc(db, "profiles", auth.currentUser.uid), profileUpdates, { merge: true }).then(() =>
@@ -5700,11 +5761,7 @@ window.switchGamesTab = function(event, tabId) {
     if (tabId === 'games-tab-plinko') {
         window.loadPlinkoTab();
     }
-    if (tabId === 'games-tab-dungeon') {
-        window.loadDungeonTab();
-    } else {
-        window._dungeonStopRefresh?.();
-    }
+    window._dungeonStopRefresh?.();
 };
 
 window.switchTcgTab = function(event, tabId) {
@@ -5714,6 +5771,8 @@ window.switchTcgTab = function(event, tabId) {
     if (event?.currentTarget) event.currentTarget.classList.add('active');
     if (tabId === 'tcg-tab-collection') window._tcgRenderMyCollection();
     if (tabId === 'tcg-tab-trading') window._tcgRenderMyTrades();
+    if (tabId === 'tcg-tab-dungeon') window.loadDungeonTab();
+    else window._dungeonStopRefresh?.();
     if (tabId === 'tcg-tab-admin') { window._tcgRenderFounderPreview(); window._tcgLoadSaleConfigUI(); }
 };
 
@@ -6765,7 +6824,7 @@ function _wheelRender(el, config, state) {
             <button onclick="window._wheelSaveConfig()" class="action-btn" style="font-weight:800;">Save</button>
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color);display:flex;flex-wrap:wrap;gap:8px;">
                 <button onclick="window._wheelAdminReset()" class="cancel-btn" style="font-size:12px;opacity:0.75;">🔄 Reset My Wheel (Admin Testing)</button>
-                <button onclick="window._wheelAdminGrantUR()" class="action-btn" style="font-size:12px;background:#7c3aed;">🌟 Grant Monthly UR to Me (Test)</button>
+                <button onclick="window._wheelSpin(true)" class="action-btn" style="font-size:12px;background:#7c3aed;">🌟 Force Land on UR (Test Full Flow)</button>
                 <button onclick="window._wheelAdminRemoveLastUR()" class="cancel-btn" style="font-size:12px;opacity:0.75;">🗑️ Remove Last Monthly UR from Me</button>
             </div>
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color);">
@@ -6923,21 +6982,38 @@ window._wheelAdminGiftURToUser = async function(uid, name) {
 window._wheelAdminRemoveLastUR = async function() {
     if (!window.isAdmin || !auth.currentUser) return;
     const uid = auth.currentUser.uid;
+    if (!confirm('Remove last monthly UR card (if any) and restore the UR wheel slot?')) return;
     try {
+        // Step 1: delete the card if one exists (non-fatal if already gone)
         const snap = await getDocs(query(
             collection(db, 'card_collections', uid, 'cards'),
-            where('monthlyUr', '==', true),
-            orderBy('pulledAt', 'desc'),
-            limit(1)
+            where('monthlyUr', '==', true)
         ));
-        if (snap.empty) { alert('No monthly UR cards found in your collection.'); return; }
-        const card = snap.docs[0];
-        const { name, stampText } = card.data();
-        if (!confirm(`Remove "${name}" (${stampText}) from your collection?`)) return;
-        await deleteDoc(card.ref);
-        window._tcgCollectionCache.delete(uid);
-        alert('Removed.');
-    } catch(e) { alert('Remove failed: ' + e.message); }
+        if (!snap.empty) {
+            const sorted = snap.docs.slice().sort((a, b) => (b.data().pulledAt?.toMillis?.() ?? 0) - (a.data().pulledAt?.toMillis?.() ?? 0));
+            await deleteDoc(sorted[0].ref);
+            window._tcgCollectionCache.delete(uid);
+        }
+
+        // Step 2: always restore the UR slot in wheel_state
+        const wheelSnap = await getDoc(doc(db, 'wheel_state', uid));
+        if (wheelSnap.exists()) {
+            const wdata = wheelSnap.data();
+            const urIdx = (wdata.sections || []).findIndex(s => s.type === 'monthly_ur');
+            if (urIdx !== -1) {
+                const newUsed = { ...(wdata.usedIndices || {}) };
+                delete newUsed[urIdx];
+                await updateDoc(doc(db, 'wheel_state', uid), {
+                    usedIndices: newUsed,
+                    pendingUrClaim: false,
+                });
+            }
+        }
+
+        window._wheelState = null;
+        await window.loadWheelTab();
+        alert('Done — UR slot restored.');
+    } catch(e) { alert('Failed: ' + e.message); }
 };
 
 // Admin: update/create a character's art in the Firestore pool for all specified rarities.
@@ -6986,6 +7062,50 @@ window._tcgFindCard = async function(nameQuery, rarities) {
     console.table(hits);
     console.log(`Found ${hits.length} match(es) for "${nameQuery}"`);
     return hits;
+};
+
+// Admin: dedup all friend entries across all users. Run from console:
+//   window._adminDeduplicateFriends()          — dry run (logs only)
+//   window._adminDeduplicateFriends(false)     — delete dupes
+window._adminDeduplicateFriends = async function(dryRun = true) {
+    if (!window.isAdmin) return console.warn('Admin only.');
+    console.log(`[Friends dedup] ${dryRun ? 'DRY RUN' : 'LIVE'} — loading all friend docs…`);
+    const snap = await getDocs(collection(db, 'friends'));
+    console.log(`[Friends dedup] ${snap.size} total docs`);
+
+    // Group docs by canonical pair key (sorted uids joined with _)
+    const byPair = new Map();
+    snap.forEach(d => {
+        const uids = (d.data().uids || []).slice().sort();
+        if (uids.length !== 2) return;
+        const key = uids.join('_');
+        if (!byPair.has(key)) byPair.set(key, []);
+        byPair.get(key).push(d);
+    });
+
+    let dupeCount = 0;
+    let deletedCount = 0;
+    for (const [key, docs] of byPair) {
+        if (docs.length <= 1) continue;
+        dupeCount += docs.length - 1;
+        // Keep the doc whose ID matches the canonical key, else keep oldest
+        const canonical = docs.find(d => d.id === key);
+        const keep = canonical || docs[0];
+        const remove = docs.filter(d => d.id !== keep.id);
+        console.log(`[Friends dedup] ${key}: ${docs.length} docs → keep ${keep.id}, delete ${remove.map(d => d.id).join(', ')}`);
+        if (!dryRun) {
+            await Promise.all(remove.map(d => deleteDoc(d.ref)));
+            deletedCount += remove.length;
+        }
+    }
+
+    if (dupeCount === 0) {
+        console.log('[Friends dedup] ✅ No duplicates found.');
+    } else if (dryRun) {
+        console.log(`[Friends dedup] 🔍 Found ${dupeCount} duplicate(s). Run with false to delete.`);
+    } else {
+        console.log(`[Friends dedup] ✅ Deleted ${deletedCount} duplicate(s).`);
+    }
 };
 
 window._tcgDeduplicateCollections = async function(dryRun = true) {
@@ -7122,8 +7242,9 @@ window._tcgRenderPoolMeters = async function() {
     }
 };
 
-window._wheelSpin = async function() {
+window._wheelSpin = async function(testUrSpin = false) {
     if (!auth.currentUser) return window.openAuthModal();
+    if (testUrSpin && !window.isAdmin) return;
     const uid = auth.currentUser.uid;
     // Re-read from Firestore so client-side state can't be tampered with
     let state;
@@ -7136,13 +7257,20 @@ window._wheelSpin = async function() {
     const today = _wheelTodayKey();
     if (state.month !== _wheelMonthKey()) return;
     const canSpin = state.lastSpinDate !== today || (state.extraSpinsAvailable || 0) > 0;
-    if (!canSpin) return;
+    if (!canSpin && !testUrSpin) return;
 
     const usedIndices = state.usedIndices || {};
     const available = state.sections.map((s, i) => i).filter(i => !usedIndices[i]);
     if (!available.length) return;
 
-    const pickIdx = available[Math.floor(Math.random() * available.length)];
+    let pickIdx;
+    if (testUrSpin) {
+        const urIdx = available.find(i => state.sections[i].type === 'monthly_ur');
+        if (urIdx === undefined) return alert('UR section is no longer available this month (already claimed or used).');
+        pickIdx = urIdx;
+    } else {
+        pickIdx = available[Math.floor(Math.random() * available.length)];
+    }
     const section = state.sections[pickIdx];
     const n = state.sections.length;
     const sliceAngle = 360 / n;
@@ -7345,6 +7473,7 @@ const PLINKO_MULTIPLIER_COLORS = { 1.5: '#22d3ee', 2: '#a855f7', 3: '#facc15' };
 // flat bonus. Both the bridge position and the slot reshuffle daily.
 const PLINKO_STAR_BONUS = 1500;
 const PLINKO_STAR_COLOR = '#ff5e9c';
+const PLINKO_DAILY_CAP = 3000;
 
 function _plinkoTodayKey(d = new Date()) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -7370,7 +7499,7 @@ function _plinkoSeededRandom(seed) {
 // spans the gap between two adjacent pegs on a given row; rows in the top
 // 40% of the board are excluded so a bridge can't be dropped straight into
 // from the top. Returns { bridges, starBridge, starSlot }.
-function _plinkoGetBridges(width, gap) {
+function _plinkoGetBridges(width, gap, starHiddenToday = false) {
     const rand = _plinkoSeededRandom(_plinkoSeedFromString('plinko-bridges-' + _plinkoTodayKey()));
     const binCount = PLINKO_PRIZES.length;
     const minRow = Math.ceil(PLINKO_ROWS * 0.4);
@@ -7420,6 +7549,7 @@ function _plinkoGetBridges(width, gap) {
         ? reachableSlots[Math.floor(rand() * reachableSlots.length)]
         : Math.max(0, Math.min(binCount - 1, Math.round(bridgeCenter - 0.5)));
 
+    if (starHiddenToday) return { bridges, starBridge: null, starSlot: null };
     return { bridges, starBridge, starSlot };
 }
 
@@ -7430,7 +7560,9 @@ function _plinkoGetSpecialPegs(pegs, gap) {
     const goldenPeg = goldenPool[Math.floor(rng() * goldenPool.length)];
     const bouncyPool = pegs.filter(p => p.y >= binTop * 0.25 && p !== goldenPeg);
     const bouncyPeg = bouncyPool[Math.floor(rng() * bouncyPool.length)];
-    return { goldenPeg, bouncyPeg };
+    const bouncyPool2 = bouncyPool.filter(p => p !== bouncyPeg);
+    const bouncyPeg2 = bouncyPool2[Math.floor(rng() * bouncyPool2.length)];
+    return { goldenPeg, bouncyPeg, bouncyPeg2 };
 }
 
 async function _plinkoLoadConfig() {
@@ -7546,11 +7678,12 @@ function _plinkoDrawFrame(ctx, width, height, gap, pegs, pegR, ball, dropX, feat
 
     const goldenPeg = features?.goldenPeg;
     const bouncyPeg = features?.bouncyPeg;
+    const bouncyPeg2 = features?.bouncyPeg2;
 
     // Regular pegs
     ctx.fillStyle = '#facc15';
     for (const p of pegs) {
-        if (p === goldenPeg || p === bouncyPeg) continue;
+        if (p === goldenPeg || p === bouncyPeg || p === bouncyPeg2) continue;
         ctx.beginPath();
         ctx.arc(p.x, p.y, pegR, 0, Math.PI * 2);
         ctx.fill();
@@ -7572,14 +7705,15 @@ function _plinkoDrawFrame(ctx, width, height, gap, pegs, pegR, ball, dropX, feat
         ctx.fillText('✦', goldenPeg.x, goldenPeg.y + pegR * 0.4);
     }
 
-    // Bouncy peg — glowing green
-    if (bouncyPeg) {
+    // Bouncy pegs — glowing green
+    for (const bp of [bouncyPeg, bouncyPeg2]) {
+        if (!bp) continue;
         ctx.save();
         ctx.shadowColor = '#22c55e';
         ctx.shadowBlur = 14 + Math.sin(Date.now() / 220) * 5;
         ctx.fillStyle = '#22c55e';
         ctx.beginPath();
-        ctx.arc(bouncyPeg.x, bouncyPeg.y, pegR * 1.15, 0, Math.PI * 2);
+        ctx.arc(bp.x, bp.y, pegR * 1.15, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     }
@@ -7694,19 +7828,19 @@ function _plinkoDrawFrame(ctx, width, height, gap, pegs, pegR, ball, dropX, feat
 // with the bin index the ball lands in, the combined multiplier from any
 // bridges it crossed, which multipliers were hit, and whether the star
 // bridge was crossed. `startX` lets the player choose where the ball drops from.
-function _plinkoRunSimulation(canvas, startX) {
+function _plinkoRunSimulation(canvas, startX, starHiddenToday = false) {
     return new Promise(resolve => {
         if (!canvas) return resolve({ bins: [Math.floor(PLINKO_PRIZES.length / 2)], multipliers: [1], hitBridges: [], hitStar: false });
         const ctx = canvas.getContext('2d');
         const width = canvas.width, height = canvas.height;
         const gap = width / PLINKO_PRIZES.length;
         const pegs = _plinkoGetPegPositions(width, gap);
-        const bridgeFeatures = _plinkoGetBridges(width, gap);
+        const bridgeFeatures = _plinkoGetBridges(width, gap, starHiddenToday);
         const specialPegs = _plinkoGetSpecialPegs(pegs, gap);
         const features = { ...bridgeFeatures, ...specialPegs };
         const { bridges, starBridge } = features;
         const pegR = gap * 0.16;
-        const ballR = gap * 0.16;
+        const ballR = gap * 0.18;
         const gravity = gap * 0.0009;
         const maxVy = gap * 0.26;
         const maxVx = gap * 0.22;
@@ -7759,7 +7893,7 @@ function _plinkoRunSimulation(canvas, startX) {
                     const overlap = minDist - dist;
                     ball.x += nx * overlap; ball.y += ny * overlap;
 
-                    const isBouncy = p === features.bouncyPeg;
+                    const isBouncy = p === features.bouncyPeg || p === features.bouncyPeg2;
                     const rest = isBouncy ? 1.5 : restitution;
                     const dot = ball.vx * nx + ball.vy * ny;
                     ball.vx -= (1 + rest) * dot * nx;
@@ -7794,7 +7928,7 @@ function _plinkoRunSimulation(canvas, startX) {
                 }
             }
 
-            if (!ball.starTriggered && prevY < starBridge.y && ball.y >= starBridge.y) {
+            if (starBridge && !ball.starTriggered && prevY < starBridge.y && ball.y >= starBridge.y) {
                 const lo = Math.min(starBridge.x1, starBridge.x2), hi = Math.max(starBridge.x1, starBridge.x2);
                 if (ball.x + ballR > lo && ball.x - ballR < hi) {
                     ball.starTriggered = true;
@@ -7846,6 +7980,9 @@ function _plinkoRender(el, config, state) {
     if (!el) return;
     const today = _plinkoTodayKey();
     const freeAvailable = state.lastDropDate !== today;
+    const starHiddenToday = state.starUsedDate === today;
+    const amberEarnedToday = state.amberEarnedDate === today ? (state.amberEarnedToday || 0) : 0;
+    const dailyCapReached = amberEarnedToday >= PLINKO_DAILY_CAP;
 
     const isDesktop = window.matchMedia('(min-width: 900px)').matches;
     const gap = isDesktop ? 46 : 30;
@@ -7873,12 +8010,13 @@ function _plinkoRender(el, config, state) {
                     <div class="banner-hero-title" style="font-size:42px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🟡 Plinko 🟡</div>
                     <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-top:10px;">Drops cost ${PLINKO_DROP_COST} Amber</div>
                     <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:4px;">${freeAvailable ? 'You have a free drop available today!' : 'Your free daily drop resets at midnight'}</div>
+                    <div style="font-size:12px;color:${dailyCapReached ? '#ef4444' : 'rgba(255,255,255,0.4)'};margin-top:4px;">${dailyCapReached ? `⛔ Daily cap reached (${PLINKO_DAILY_CAP.toLocaleString()} Amber) — resets at midnight` : `Daily Amber earned: ${amberEarnedToday.toLocaleString()} / ${PLINKO_DAILY_CAP.toLocaleString()}`}</div>
                 </div>
             </div>
 
             <div style="display:flex;justify-content:center;margin-bottom:16px;">
-                <button id="plinko-drop-btn" onclick="window._plinkoArmDrop()" class="action-btn" style="font-weight:800;font-size:15px;padding:12px 28px;">
-                    ${freeAvailable ? '🟡 Drop Ball (Free)' : `🟡 Drop Ball (${PLINKO_DROP_COST} Amber)`}
+                <button id="plinko-drop-btn" onclick="window._plinkoArmDrop()" class="action-btn" style="font-weight:800;font-size:15px;padding:12px 28px;${dailyCapReached ? 'opacity:0.5;cursor:not-allowed;' : ''}" ${dailyCapReached ? 'disabled' : ''}>
+                    ${dailyCapReached ? '⛔ Daily Cap Reached' : (freeAvailable ? '🟡 Drop Ball (Free)' : `🟡 Drop Ball (${PLINKO_DROP_COST} Amber)`)}
                 </button>
             </div>
 
@@ -7900,7 +8038,7 @@ function _plinkoRender(el, config, state) {
                         <div style="display:flex;align-items:center;gap:8px;">
                             <div style="width:16px;height:16px;border-radius:50%;background:#22c55e;box-shadow:0 0 7px #22c55e;flex-shrink:0;"></div>
                             <div>
-                                <div style="font-size:12px;font-weight:800;color:var(--text-dark);">Bouncy Peg</div>
+                                <div style="font-size:12px;font-weight:800;color:var(--text-dark);">Bouncy Pegs (×2)</div>
                                 <div style="font-size:11px;color:var(--text-muted);">Super springy — sends the ball flying.</div>
                             </div>
                         </div>
@@ -7908,7 +8046,7 @@ function _plinkoRender(el, config, state) {
                             <div style="width:26px;height:4px;border-radius:2px;background:${PLINKO_STAR_COLOR};box-shadow:0 0 6px ${PLINKO_STAR_COLOR};flex-shrink:0;"></div>
                             <div>
                                 <div style="font-size:12px;font-weight:800;color:${PLINKO_STAR_COLOR};">★ Star Gate</div>
-                                <div style="font-size:11px;color:var(--text-muted);">Go through the ★ gate AND land in the ★ bucket — both required for +${PLINKO_STAR_BONUS} Amber.</div>
+                                <div style="font-size:11px;color:var(--text-muted);">Go through the ★ gate AND land in the ★ bucket — both required for +${PLINKO_STAR_BONUS} Amber. Once per day.</div>
                             </div>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;">
@@ -7919,7 +8057,7 @@ function _plinkoRender(el, config, state) {
                             </div>
                         </div>
                     </div>
-                    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-color);font-size:10px;color:var(--text-muted);">Special pegs change position daily at midnight.</div>
+                    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-color);font-size:10px;color:var(--text-muted);">Special pegs change position daily at midnight.${starHiddenToday ? ' <span style="color:#ff5e9c;font-weight:700;">★ Star bonus already claimed today.</span>' : ''}</div>
                 </div>
             </div>
             <div>
@@ -7933,14 +8071,14 @@ function _plinkoRender(el, config, state) {
         const ctx = canvas.getContext('2d');
         const pegGap = width / PLINKO_PRIZES.length;
         const pegs = _plinkoGetPegPositions(width, pegGap);
-        const features = _plinkoGetBridges(width, pegGap);
+        const features = _plinkoGetBridges(width, pegGap, starHiddenToday);
         const specialPegs = _plinkoGetSpecialPegs(pegs, pegGap);
         _plinkoDrawFrame(ctx, width, height, pegGap, pegs, pegGap * 0.16, [], null, { ...features, ...specialPegs }, []);
 
         canvas.addEventListener('click', (e) => {
             if (!window._plinkoAiming || window._plinkoDropInProgress) return;
             window._plinkoAiming = false;
-            const ballR = pegGap * 0.16;
+            const ballR = pegGap * 0.18;
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
             let px = (e.clientX - rect.left) * scaleX;
@@ -8005,6 +8143,12 @@ window._plinkoExecuteDrop = async function(dropX) {
     const state = window._plinkoState || { lastDropDate: '' };
     const today = _plinkoTodayKey();
     const freeAvailable = state.lastDropDate !== today;
+    const starHiddenToday = state.starUsedDate === today;
+    const amberEarnedToday = state.amberEarnedDate === today ? (state.amberEarnedToday || 0) : 0;
+
+    if (amberEarnedToday >= PLINKO_DAILY_CAP) {
+        return alert(`You've reached the daily Plinko limit of ${PLINKO_DAILY_CAP} Amber. Come back tomorrow!`);
+    }
 
     const btn = document.getElementById('plinko-drop-btn');
     if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
@@ -8030,13 +8174,16 @@ window._plinkoExecuteDrop = async function(dropX) {
 
     window._plinkoDropInProgress = true;
     const canvas = document.getElementById('plinko-canvas');
-    const { bins, multipliers, hitBridges, hitStar } = await _plinkoRunSimulation(canvas, dropX);
+    const { bins, multipliers, hitBridges, hitStar } = await _plinkoRunSimulation(canvas, dropX, starHiddenToday);
     window._plinkoDropInProgress = false;
 
     // Sum prizes from all balls (main + any duplicates from golden peg)
     const totalMultiplier = multipliers[0]; // for display purposes use the first ball's multiplier
-    const prize = bins.reduce((sum, bin, i) => sum + Math.round(PLINKO_PRIZES[bin] * (multipliers[i] || 1)), 0)
+    const rawPrize = bins.reduce((sum, bin, i) => sum + Math.round(PLINKO_PRIZES[bin] * (multipliers[i] || 1)), 0)
         + (hitStar ? PLINKO_STAR_BONUS : 0);
+    const remaining = PLINKO_DAILY_CAP - amberEarnedToday;
+    const prize = Math.min(rawPrize, remaining);
+    const wasCapped = prize < rawPrize;
     try { await _awardAmber(prize, 'plinko:drop'); } catch(e) { console.error('Plinko prize grant failed:', e); }
 
     const totalDrops = (state.totalDrops || 0) + 1;
@@ -8048,11 +8195,17 @@ window._plinkoExecuteDrop = async function(dropX) {
     try {
         const update = { totalDrops, streak };
         if (freeAvailable) update.lastDropDate = today;
+        if (hitStar) update.starUsedDate = today;
+        update.amberEarnedToday = amberEarnedToday + prize;
+        update.amberEarnedDate = today;
         await setDoc(doc(db, 'plinko_state', uid), update, { merge: true });
     } catch(e) { console.error('Plinko state save failed:', e); }
     state.totalDrops = totalDrops;
     state.streak = streak;
     if (freeAvailable) state.lastDropDate = today;
+    if (hitStar) state.starUsedDate = today;
+    state.amberEarnedToday = amberEarnedToday + prize;
+    state.amberEarnedDate = today;
 
     const plinkoAch = ['plinko_first'];
     if (totalDrops >= 30) plinkoAch.push('plinko_total_30');
@@ -8064,7 +8217,7 @@ window._plinkoExecuteDrop = async function(dropX) {
     const didSplit = bins.length > 1;
     const burstCount = hitStar ? 80 : (totalMultiplier > 1 || didSplit ? 50 : 24);
     _plinkoConfettiBurst(burstCount, totalMultiplier, hitStar);
-    _plinkoShowResultModal(prize, totalMultiplier, hitBridges, hitStar, didSplit);
+    _plinkoShowResultModal(prize, totalMultiplier, hitBridges, hitStar, didSplit, wasCapped);
     window._plinkoRefreshBadge();
     setTimeout(() => _plinkoRender(document.getElementById('plinko-tab-content'), window._plinkoConfig || {}, state), 1200);
 };
@@ -8096,7 +8249,7 @@ function _plinkoConfettiBurst(count, multiplier, hitStar) {
     }
 }
 
-function _plinkoShowResultModal(prize, multiplier, hitBridges, hitStar, didSplit) {
+function _plinkoShowResultModal(prize, multiplier, hitBridges, hitStar, didSplit, wasCapped = false) {
     document.getElementById('plinko-result-modal')?.remove();
     const modal = document.createElement('div');
     modal.id = 'plinko-result-modal';
@@ -8114,12 +8267,14 @@ function _plinkoShowResultModal(prize, multiplier, hitBridges, hitStar, didSplit
         <div style="font-size:14px;font-weight:800;color:#ffd700;margin-top:8px;">✦ Split! Both balls counted!</div>
     ` : '';
     const emoji = hitStar ? '⭐' : (didSplit ? '✦' : (multiplier > 1 ? '🎉' : '🟡'));
+    const capBadge = wasCapped ? `<div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-top:8px;">Daily cap reached — capped at ${PLINKO_DAILY_CAP} Amber total today.</div>` : '';
     modal.innerHTML = `<div style="text-align:center;background:var(--bg-card);border-radius:16px;padding:36px 28px;max-width:360px;">
         <div style="font-size:60px;">${emoji}</div>
         <div style="font-size:22px;font-weight:900;color:#fff;margin-top:8px;">+${prize} Amber!</div>
         ${splitBadge}
         ${multiplierBadges}
         ${starBadge}
+        ${capBadge}
         <button onclick="document.getElementById('plinko-result-modal')?.remove()" class="action-btn" style="margin:20px auto 0;">Nice!</button>
     </div>`;
     document.body.appendChild(modal);
@@ -9632,6 +9787,8 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
             if (sort === 'oldest') return _tcgPulledAtMillis(a) - _tcgPulledAtMillis(b);
             if (sort === 'serial-low') return (a.serial ?? Infinity) - (b.serial ?? Infinity);
             if (sort === 'serial-high') return (b.serial ?? -Infinity) - (a.serial ?? -Infinity);
+            if (sort === 'name-az') return (a.name||'').localeCompare(b.name||'');
+            if (sort === 'name-za') return (b.name||'').localeCompare(a.name||'');
             return (rarityOrder[a.rarity]??9) - (rarityOrder[b.rarity]??9);
         });
     const counts = { ur:0, ssr:0, sr:0, rare:0, common:0 };
@@ -9653,6 +9810,8 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
             <div style="display:flex;gap:8px;align-items:center;">
                 <select onchange="window._tcgSetCardSort(this.value,'${uid}','${filter}')" style="padding:6px 10px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;">
                     <option value="rarity" ${sort==='rarity'?'selected':''}>Sort: Rarity</option>
+                    <option value="name-az" ${sort==='name-az'?'selected':''}>Sort: Name (A–Z)</option>
+                    <option value="name-za" ${sort==='name-za'?'selected':''}>Sort: Name (Z–A)</option>
                     <option value="newest" ${sort==='newest'?'selected':''}>Sort: Newest</option>
                     <option value="oldest" ${sort==='oldest'?'selected':''}>Sort: Oldest</option>
                     <option value="serial-low" ${sort==='serial-low'?'selected':''}>Sort: Serial # (Low-High)</option>
@@ -9878,22 +10037,53 @@ window._tcgAddCardsToBinderModal = async function(binderId, uid) {
 
     const modal = document.createElement('div');
     modal.id = 'tcg-binder-add-modal';
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;';
     modal.innerHTML = `
-        <div style="background:var(--bg-white);border-radius:16px;padding:24px;width:100%;max-width:760px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-                <h3 style="margin:0;">Add Cards to ${binder.name}</h3>
+        <div style="background:var(--bg-white);border-radius:16px;padding:24px;width:100%;max-width:760px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-shrink:0;">
+                <h3 style="margin:0;">Add Cards to ${binder.name.replace(/</g,'&lt;')}</h3>
                 <button onclick="document.getElementById('tcg-binder-add-modal').remove()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;">Close</button>
             </div>
-            ${available.length ? `<div style="display:flex;flex-wrap:wrap;gap:14px;">
-                ${available.map(c => `
-                    <div onclick="window._tcgAddCardToBinder('${binderId}','${uid}','${c.id}')" style="cursor:pointer;width:154px;height:216px;overflow:hidden;transition:transform .1s;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'">
-                        <div style="transform:scale(0.7);transform-origin:top left;">${_tcgBuildCardFace(c)}</div>
-                    </div>`).join('')}
+            ${available.length ? `
+            <div style="flex-shrink:0;margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <div style="position:relative;flex:1;min-width:180px;">
+                    <span class="material-symbols-outlined" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:17px;color:var(--text-muted);pointer-events:none;">search</span>
+                    <input id="tcg-binder-add-search" type="text" placeholder="Search by name or anime…" oninput="window._tcgFilterBinderModal()" style="width:100%;box-sizing:border-box;padding:7px 12px 7px 34px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;outline:none;">
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    ${['all','ur','ssr','sr','rare','common'].map(r => `<button data-rarity="${r}" onclick="window._tcgBinderModalRarity='${r}';window._tcgFilterBinderModal()" style="padding:5px 12px;border-radius:20px;border:1px solid ${r==='all'?'var(--accent-yellow)':'var(--border-color)'};background:${r==='all'?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${r==='all'?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${r==='all'?'All':r.toUpperCase()}</button>`).join('')}
+                </div>
+            </div>
+            <div id="tcg-binder-add-grid" style="overflow-y:auto;flex:1;">
+                <div style="display:flex;flex-wrap:wrap;gap:14px;">
+                    ${available.map(c => `
+                        <div data-name="${(c.name||'').toLowerCase().replace(/"/g,'')}" data-anime="${(c.anime||'').toLowerCase().replace(/"/g,'')}" data-rarity="${c.rarity||''}" data-id="${c.id}" onclick="window._tcgAddCardToBinder('${binderId}','${uid}','${c.id}')" style="cursor:pointer;width:154px;height:216px;overflow:hidden;transition:transform .1s;flex-shrink:0;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'">
+                            <div style="transform:scale(0.7);transform-origin:top left;">${_tcgBuildCardFace(c)}</div>
+                        </div>`).join('')}
+                </div>
             </div>` : `<p style="color:var(--text-muted);">All your cards are already in this binder.</p>`}
         </div>`;
     document.body.appendChild(modal);
+    window._tcgBinderModalRarity = 'all';
     _tcgObserveSSRCards(modal);
+};
+
+window._tcgFilterBinderModal = function() {
+    const q = (document.getElementById('tcg-binder-add-search')?.value || '').toLowerCase().trim();
+    const rarity = window._tcgBinderModalRarity || 'all';
+    // Update rarity button styles
+    document.querySelectorAll('#tcg-binder-add-modal [data-rarity]').forEach(btn => {
+        const active = btn.dataset.rarity === rarity;
+        btn.style.borderColor = active ? 'var(--accent-yellow)' : 'var(--border-color)';
+        btn.style.background = active ? 'rgba(245,158,11,0.12)' : 'var(--bg-gray)';
+        btn.style.color = active ? '#f59e0b' : 'var(--text-muted)';
+    });
+    // Filter card tiles
+    document.querySelectorAll('#tcg-binder-add-grid [data-id]').forEach(el => {
+        const nameMatch = !q || el.dataset.name.includes(q) || el.dataset.anime.includes(q);
+        const rarityMatch = rarity === 'all' || el.dataset.rarity === rarity;
+        el.style.display = nameMatch && rarityMatch ? '' : 'none';
+    });
 };
 
 window._tcgAddCardToBinder = async function(binderId, uid, cardId) {
@@ -10111,7 +10301,7 @@ window._tcgTogglePickerCard = function(el, cardId) {
 
 // Modal — propose (or counter) a trade with another user
 window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
-    if (!auth.currentUser || auth.currentUser.uid === otherUid) return;
+    if (!auth.currentUser || (auth.currentUser.uid === otherUid && !window.isAdmin)) return;
     document.getElementById('tcg-trade-modal')?.remove();
     const myUid = auth.currentUser.uid;
 
@@ -10486,6 +10676,28 @@ window._tcgStartCounter = function(tradeId) {
     });
 };
 
+// After a trade adds cards to the current user's collection, delete any that
+// are now exact duplicates (same name + rarity + serial). Only runs on the
+// authenticated user's own collection — no cross-user writes needed.
+async function _tcgDeduplicateReceivedCards(uid, receivedCards) {
+    if (!receivedCards || !receivedCards.length) return;
+    for (const card of receivedCards) {
+        if (!card.name || !card.rarity || card.serial == null) continue;
+        try {
+            const snap = await getDocs(query(
+                collection(db, 'card_collections', uid, 'cards'),
+                where('name', '==', card.name),
+                where('rarity', '==', card.rarity),
+                where('serial', '==', card.serial)
+            ));
+            if (snap.size <= 1) continue;
+            // Keep the first doc, delete the rest
+            await Promise.all(snap.docs.slice(1).map(d => deleteDoc(d.ref)));
+            console.log(`[TradeDedup] Removed ${snap.size - 1} duplicate(s) of ${card.name} (${card.rarity} #${card.serial})`);
+        } catch(e) { console.warn('[TradeDedup] Failed to dedup', card.name, e); }
+    }
+}
+
 // Applies one side of a trade for `uid`: removes `removeIds` from their
 // collection and adds `addCards` (full snapshots taken at proposal time).
 async function _tcgApplyTradeSide(uid, removeIds, addCards) {
@@ -10543,10 +10755,24 @@ window._tcgAcceptTrade = async function(tradeId) {
     const myUid = auth.currentUser.uid;
     try {
         const ref = doc(db,'trades',tradeId);
-        const snap = await getDoc(ref);
-        if (!snap.exists()) return;
-        const t = snap.data();
-        if (t.toUid !== myUid || t.status !== 'pending') return;
+
+        // Atomically claim the trade — only the first accept wins.
+        // If the status is anything other than 'pending' this throws and we bail.
+        let t;
+        try {
+            await runTransaction(db, async (tx) => {
+                const snap = await tx.get(ref);
+                if (!snap.exists()) throw new Error('NOT_FOUND');
+                const data = snap.data();
+                if (data.toUid !== myUid) throw new Error('NOT_RECIPIENT');
+                if (data.status !== 'pending') throw new Error('ALREADY_PROCESSED');
+                tx.update(ref, { status: 'processing', updatedAt: new Date() });
+                t = data;
+            });
+        } catch(e) {
+            if (['NOT_FOUND','NOT_RECIPIENT','ALREADY_PROCESSED'].includes(e.message)) return;
+            throw e;
+        }
 
         // Make sure none of the cards involved have already been consumed by
         // another trade (e.g. the sender offered the same card twice).
@@ -10566,6 +10792,7 @@ window._tcgAcceptTrade = async function(tradeId) {
             const myAmber = myProfile.exists() ? (myProfile.data().amber || 0) : 0;
             if (myAmber < requestAmber) {
                 await _tcgReleaseCardLocks(t.fromUid, t.offerCardIds);
+                await updateDoc(ref, { status: 'pending', updatedAt: new Date() });
                 alert(`You don't have enough Amber for this trade — you need 🟡 ${requestAmber.toLocaleString()}.`);
                 return;
             }
@@ -10584,6 +10811,7 @@ window._tcgAcceptTrade = async function(tradeId) {
         }
 
         await _tcgApplyTradeSide(myUid, t.requestCardIds, t.offerCards);
+        await _tcgDeduplicateReceivedCards(myUid, t.offerCards);
         if (offerAmber - requestAmber !== 0) {
             await updateDoc(doc(db,'profiles',myUid), { amber: increment(offerAmber - requestAmber) });
         }
@@ -10644,6 +10872,7 @@ window._tcgProcessAcceptedTrades = async function() {
             if (myDone) continue;
             if (t.fromUid === myUid) {
                 await _tcgApplyTradeSide(myUid, t.offerCardIds, t.requestCards);
+                await _tcgDeduplicateReceivedCards(myUid, t.requestCards);
                 await _tcgReleaseCardLocks(myUid, t.offerCardIds);
                 const offerAmber = t.offerAmber || 0, requestAmber = t.requestAmber || 0;
                 if (offerAmber - requestAmber !== 0) {
@@ -10661,6 +10890,7 @@ window._tcgProcessAcceptedTrades = async function() {
                 const locked = myCardsOk && await _tcgAcquireCardLocks(t.fromUid, t.offerCardIds, d.id);
                 if (!myCardsOk || !locked) { await updateDoc(d.ref, { status: 'invalid', updatedAt: new Date() }); continue; }
                 await _tcgApplyTradeSide(myUid, t.requestCardIds, t.offerCards);
+                await _tcgDeduplicateReceivedCards(myUid, t.offerCards);
                 const offerAmber = t.offerAmber || 0, requestAmber = t.requestAmber || 0;
                 if (offerAmber - requestAmber !== 0) {
                     await updateDoc(doc(db,'profiles',myUid), { amber: increment(offerAmber - requestAmber) });
@@ -10741,6 +10971,108 @@ window._tcgRenderMyTrades = async function() {
     _tcgObserveSSRCards(el);
 };
 
+// Admin — load all trades across all users, most recent first
+window._tcgAdminLoadTradeLog = async function() {
+    if (!window.isAdmin) return;
+    const el = document.getElementById('tcg-admin-trade-log');
+    if (!el) return;
+    el.innerHTML = '<p style="color:var(--text-muted);margin:0;">Loading…</p>';
+    try {
+        const snap = await getDocs(query(collection(db, 'trades'), orderBy('updatedAt', 'desc'), limit(100)));
+        if (snap.empty) { el.innerHTML = '<p style="color:var(--text-muted);margin:0;">No trades found.</p>'; return; }
+
+        const STATUS_COLOR = { pending:'#f59e0b', processing:'#3b82f6', accepted:'#10b981', completed:'#6366f1', declined:'#6b7280', invalid:'#ef4444', cancelled:'#6b7280' };
+        const rows = snap.docs.map(d => {
+            const t = d.data();
+            const status = t.status || 'unknown';
+            const color = STATUS_COLOR[status] || '#6b7280';
+            const ts = t.updatedAt?.toDate?.()?.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }) || '—';
+            const offerCount = (t.offerCards || t.offerCardIds || []).length;
+            const requestCount = (t.requestCards || t.requestCardIds || []).length;
+            const amberLine = (t.offerAmber || t.requestAmber)
+                ? `<span style="font-size:11px;color:#f59e0b;">${t.offerAmber||0}🟡 → ${t.requestAmber||0}🟡</span>`
+                : '';
+            return `<div onclick="window._tcgAdminTradeDetail('${d.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;cursor:pointer;border-bottom:1px solid var(--border-color);transition:background .1s;" onmouseover="this.style.background='var(--bg-white)'" onmouseout="this.style.background='transparent'">
+                <span style="font-size:11px;font-weight:700;color:${color};background:${color}22;padding:2px 8px;border-radius:20px;min-width:72px;text-align:center;text-transform:uppercase;">${status}</span>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:700;color:var(--text-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t.fromName||'?'} → ${t.toName||'?'}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">${offerCount} card${offerCount!==1?'s':''} offered · ${requestCount} requested ${amberLine}</div>
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${ts}</div>
+                <span class="material-symbols-outlined" style="font-size:16px;color:var(--text-muted);">chevron_right</span>
+            </div>`;
+        }).join('');
+        el.innerHTML = `<div style="border-radius:8px;overflow:hidden;">${rows}</div>`;
+    } catch(e) { el.innerHTML = `<p style="color:#ef4444;margin:0;">Failed: ${e.message}</p>`; }
+};
+
+// Admin — show full detail modal for a single trade
+window._tcgAdminTradeDetail = async function(tradeId) {
+    if (!window.isAdmin) return;
+    document.getElementById('tcg-admin-trade-detail-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'tcg-admin-trade-detail-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+    modal.innerHTML = `<div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:700px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div style="font-size:16px;font-weight:800;">Trade Detail</div>
+            <button onclick="document.getElementById('tcg-admin-trade-detail-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div id="tcg-admin-trade-detail-body"><p style="color:var(--text-muted);">Loading…</p></div>
+    </div>`;
+    document.body.appendChild(modal);
+
+    try {
+        const snap = await getDoc(doc(db, 'trades', tradeId));
+        const body = document.getElementById('tcg-admin-trade-detail-body');
+        if (!snap.exists()) { body.innerHTML = '<p style="color:#ef4444;">Trade not found.</p>'; return; }
+        const t = snap.data();
+
+        const STATUS_COLOR = { pending:'#f59e0b', processing:'#3b82f6', accepted:'#10b981', completed:'#6366f1', declined:'#6b7280', invalid:'#ef4444', cancelled:'#6b7280' };
+        const color = STATUS_COLOR[t.status] || '#6b7280';
+        const fmt = ts => ts?.toDate?.()?.toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }) || '—';
+
+        const cardList = (cards, label) => {
+            if (!cards || !cards.length) return `<div style="color:var(--text-muted);font-size:12px;font-style:italic;">None</div>`;
+            return cards.map(c => `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-color);">
+                <span style="font-size:10px;font-weight:800;text-transform:uppercase;padding:2px 6px;border-radius:10px;background:var(--bg-gray);color:var(--text-muted);">${c.rarity||'?'}</span>
+                <span style="font-size:13px;font-weight:600;">${c.name||'Unknown'}</span>
+                <span style="font-size:11px;color:var(--text-muted);margin-left:auto;">#${c.serial??'?'} · ${c.anime||''}</span>
+            </div>`).join('');
+        };
+
+        body.innerHTML = `
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+                <span style="font-size:12px;font-weight:700;color:${color};background:${color}22;padding:3px 10px;border-radius:20px;text-transform:uppercase;">${t.status||'?'}</span>
+                <span style="font-size:12px;color:var(--text-muted);">ID: <code style="font-size:11px;">${tradeId}</code></span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;font-size:12px;">
+                <div><span style="color:var(--text-muted);">From:</span> <strong>${t.fromName||'?'}</strong> <span style="color:var(--text-muted);font-size:11px;">(${t.fromUid||''})</span></div>
+                <div><span style="color:var(--text-muted);">To:</span> <strong>${t.toName||'?'}</strong> <span style="color:var(--text-muted);font-size:11px;">(${t.toUid||''})</span></div>
+                <div><span style="color:var(--text-muted);">Created:</span> ${fmt(t.createdAt)}</div>
+                <div><span style="color:var(--text-muted);">Updated:</span> ${fmt(t.updatedAt)}</div>
+                <div><span style="color:var(--text-muted);">From completed:</span> ${t.fromCompleted ? '✅' : '⬜'}</div>
+                <div><span style="color:var(--text-muted);">To completed:</span> ${t.toCompleted ? '✅' : '⬜'}</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                <div>
+                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">${t.fromName||'Sender'} offers${t.offerAmber ? ` + 🟡 ${t.offerAmber.toLocaleString()}` : ''}</div>
+                    ${cardList(t.offerCards)}
+                </div>
+                <div>
+                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">${t.toName||'Recipient'} offers${t.requestAmber ? ` + 🟡 ${t.requestAmber.toLocaleString()}` : ''}</div>
+                    ${cardList(t.requestCards)}
+                </div>
+            </div>
+            ${(t.history||[]).length ? `<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">Counter History (${t.history.length} round${t.history.length!==1?'s':''})</div><div style="font-size:12px;color:var(--text-muted);">${t.history.map((h,i) => `Round ${i+1}: ${(h.offerCards||[]).length} cards from ${h.fromUid?.slice(0,8)||'?'}… ↔ ${(h.requestCards||[]).length} cards from ${h.toUid?.slice(0,8)||'?'}…`).join('<br>')}</div></div>` : ''}
+        `;
+    } catch(e) {
+        const body = document.getElementById('tcg-admin-trade-detail-body');
+        if (body) body.innerHTML = `<p style="color:#ef4444;">Failed: ${e.message}</p>`;
+    }
+};
+
 // Modal — search for a user by display name to start a new trade with
 window._tcgOpenTradeUserSearch = function() {
     document.getElementById('tcg-trade-search-modal')?.remove();
@@ -10777,7 +11109,7 @@ window._tcgSearchTradeUsers = function(value) {
             docs = snap.docs;
         } catch(e) {}
         const myUid = auth.currentUser?.uid;
-        docs = docs.filter(d => d.id !== myUid);
+        if (!window.isAdmin) docs = docs.filter(d => d.id !== myUid);
         if (!docs.length) { resultsEl.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No users found.</p>'; return; }
         resultsEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">${docs.map(d => {
             const p = d.data();
@@ -13607,8 +13939,8 @@ window.searchAnime = async function(queryStr) {
     try {
         // Run anime search and user search in parallel
         const normalized = queryStr.toLowerCase();
-        const [animeRes, userSnap] = await Promise.all([
-            fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(queryStr)}&limit=10`),
+        const [json, userSnap] = await Promise.all([
+            window.jikanFetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(queryStr)}&limit=10`, `search_${normalized.replace(/\s+/g, '_').slice(0, 80)}`).catch(() => null),
             getDocs(query(collection(db, "profiles"), where("displayNameLower", ">=", normalized), where("displayNameLower", "<=", normalized + ''), limit(8)))
                 .catch(() => ({ empty: true, docs: [] }))
         ]);
@@ -13638,10 +13970,7 @@ window.searchAnime = async function(queryStr) {
         }
 
         // Anime results
-        if (!animeRes.ok) throw new Error(`Jikan returned ${animeRes.status}`);
-        const json = await animeRes.json();
-        const data = json.data;
-        if (!Array.isArray(data)) throw new Error('Unexpected response format');
+        const data = Array.isArray(json?.data) ? json.data : [];
 
         // Fetch WeeBee scores for all returned anime in one query
         const bwScoreMap = {};
@@ -13659,7 +13988,10 @@ window.searchAnime = async function(queryStr) {
             } catch(e) { /* silently fail */ }
         }
 
-        if (data.length === 0 && userSnap.empty) {
+        if (json === null) {
+            html += `<p style="color:var(--text-muted); text-align:center; font-size:13px;">Anime search is temporarily unavailable — try again in a moment.</p>`;
+        }
+        if (data.length === 0 && userSnap.empty && json !== null) {
             html = '<p style="color:var(--text-muted); text-align:center;">No results found.</p>';
         } else if (data.length > 0) {
             html += `<h4 style="font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:12px;">Anime</h4>

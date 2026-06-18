@@ -287,7 +287,7 @@ service cloud.firestore {
 
     match /meta/{doc} {
       allow read: if true;
-      allow write: if isAuth();
+      allow write: if isAdmin();
     }
 
     // ── Seasonal voting ───────────────────────────────────────────────────────
@@ -370,7 +370,7 @@ service cloud.firestore {
         )
       );
       allow update: if isOwner(uid);
-      allow delete: if isOwner(uid);
+      allow delete: if isOwner(uid) || isAdmin();
     }
 
     // ── Prize Wheel ────────────────────────────────────────────────────────
@@ -387,11 +387,19 @@ service cloud.firestore {
     match /wheel_state/{uid} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid);
-      allow update: if isOwner(uid) &&
-        request.resource.data.sections == resource.data.sections &&
-        request.resource.data.month == resource.data.month &&
-        request.resource.data.usedIndices.size() <= resource.data.usedIndices.size() + 1 &&
-        request.resource.data.lastSpinDate >= resource.data.lastSpinDate;
+      // Admin can freely update any wheel_state (for testing tools).
+      // Owner updates: either just toggling pendingUrClaim (UR gate flag),
+      // or a regular spin update where sections/month are unchanged,
+      // usedIndices grows by at most 1, and lastSpinDate never goes back.
+      allow update: if isAdmin() || (isOwner(uid) && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingUrClaim']) ||
+        (
+          request.resource.data.sections == resource.data.sections &&
+          request.resource.data.month == resource.data.month &&
+          request.resource.data.usedIndices.size() <= resource.data.usedIndices.size() + 1 &&
+          request.resource.data.lastSpinDate >= resource.data.lastSpinDate
+        )
+      ));
       // Admin-only "reset my wheel" testing tool deletes this doc so it
       // regenerates fresh on next load.
       allow delete: if isAdmin();
@@ -404,16 +412,21 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Per-user plinko state — just tracks the date of the last free drop.
+    // Per-user plinko state — tracks the last free drop date, daily amber
+    // earned, and star-bonus-claimed date. amberEarnedToday may only
+    // increase when the amberEarnedDate stays the same (same day), or
+    // reset freely when the date advances — prevents clients from writing
+    // amberEarnedToday=0 to reset their own daily cap.
     match /plinko_state/{uid} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid);
-      // totalDrops must advance by exactly one drop, and the free-daily-drop
-      // date can never move backwards — stops a stale/replayed client from
-      // re-claiming a previous day's free drop.
       allow update: if isOwner(uid) &&
         request.resource.data.totalDrops == resource.data.get('totalDrops', 0) + 1 &&
-        request.resource.data.lastDropDate >= resource.data.get('lastDropDate', '');
+        request.resource.data.lastDropDate >= resource.data.get('lastDropDate', '') &&
+        (
+          request.resource.data.get('amberEarnedDate', '') > resource.data.get('amberEarnedDate', '') ||
+          request.resource.data.get('amberEarnedToday', 0) >= resource.data.get('amberEarnedToday', 0)
+        );
       // Admin-only "reset my free ball" testing tool deletes this doc.
       allow delete: if isAdmin();
     }
@@ -483,11 +496,11 @@ service cloud.firestore {
     // card_collections subcollection — no cross-user writes needed.
     match /trades/{tradeId} {
       allow read: if isAuth() && request.auth.uid in resource.data.participants;
-      allow create: if isAuth() &&
+      allow create: if isAdmin() || (isAuth() &&
         request.auth.uid in request.resource.data.participants &&
         request.resource.data.fromUid == request.auth.uid &&
         request.resource.data.toUid != request.auth.uid &&
-        request.resource.data.status == 'pending';
+        request.resource.data.status == 'pending');
       allow update: if isAuth() && request.auth.uid in resource.data.participants;
     }
 
