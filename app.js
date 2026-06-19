@@ -9700,6 +9700,8 @@ window._tcgMultiSelect = { active: false, selected: new Set() };
 // within the session. 'rarity' (default), 'newest', or 'oldest' (by pulledAt).
 window._tcgCardSort = 'rarity';
 window._tcgCardSearch = '';
+window._tcgProfileCardSort = 'rarity';
+window._tcgProfileCardSearch = '';
 
 window._tcgSetCardSort = function(sort, uid, filter) {
     window._tcgCardSort = sort;
@@ -9712,6 +9714,22 @@ window._tcgSetCardSearch = async function(uid, filter) {
     if (input) window._tcgCardSearch = input.value;
     await window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'), uid, filter);
     const fresh = document.getElementById('tcg-collection-search');
+    if (fresh) { fresh.focus(); fresh.setSelectionRange(cursor, cursor); }
+};
+
+window._tcgSetProfileCardSort = function(sort, uid) {
+    window._tcgProfileCardSort = sort;
+    const el = document.getElementById('user-tcg-binders-container');
+    if (el) window._tcgRenderProfileBindersList(el, uid);
+};
+
+window._tcgSetProfileCardSearch = async function(uid) {
+    const input = document.getElementById('profile-tcg-search');
+    const cursor = input ? input.selectionStart : 0;
+    if (input) window._tcgProfileCardSearch = input.value;
+    const el = document.getElementById('user-tcg-binders-container');
+    if (el) await window._tcgRenderProfileBindersList(el, uid);
+    const fresh = document.getElementById('profile-tcg-search');
     if (fresh) { fresh.focus(); fresh.setSelectionRange(cursor, cursor); }
 };
 
@@ -10552,7 +10570,19 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
         try { const pd = await getDoc(doc(db, 'profiles', uid)); pinnedIds = pd.exists() ? (pd.data().pinnedTcgCardIds || []) : []; } catch(e) {}
     }
     const rarityOrder = { ur:-1, ssr:0, sr:1, rare:2, common:3 };
-    const sortedCards = [...cards].sort((a,b) => (rarityOrder[a.rarity]??9) - (rarityOrder[b.rarity]??9));
+    const profileSort = window._tcgProfileCardSort || 'rarity';
+    const profileSearchQ = (window._tcgProfileCardSearch || '').toLowerCase().trim();
+    const sortedCards = [...cards]
+        .filter(c => !profileSearchQ || (c.name||'').toLowerCase().includes(profileSearchQ) || (c.anime||'').toLowerCase().includes(profileSearchQ))
+        .sort((a,b) => {
+            if (profileSort === 'newest') return _tcgPulledAtMillis(b) - _tcgPulledAtMillis(a);
+            if (profileSort === 'oldest') return _tcgPulledAtMillis(a) - _tcgPulledAtMillis(b);
+            if (profileSort === 'serial-low') return (a.serial ?? Infinity) - (b.serial ?? Infinity);
+            if (profileSort === 'serial-high') return (b.serial ?? -Infinity) - (a.serial ?? -Infinity);
+            if (profileSort === 'name-az') return (a.name||'').localeCompare(b.name||'');
+            if (profileSort === 'name-za') return (b.name||'').localeCompare(a.name||'');
+            return (rarityOrder[a.rarity]??9) - (rarityOrder[b.rarity]??9);
+        });
 
     const ms = window._tcgMultiSelect;
     const selCount = ms.selected.size;
@@ -10570,8 +10600,27 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
         `<p style="color:var(--text-muted);margin:0 0 28px;">${isOwner ? 'You haven\'t created any binders yet — head to the TCG tab to make one.' : 'This user hasn\'t created any binders yet.'}</p>`}
 
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-            <div style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">🃏 All Cards (${cards.length})</div>
-            ${isOwner && cards.length ? `<button onclick="window._tcgToggleMultiSelect('${uid}',null,'${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${ms.active?'var(--accent-yellow)':'var(--border-color)'};background:${ms.active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${ms.active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${ms.active ? '✕ Cancel' : '☑ Multiselect'}</button>` : ''}
+            <div style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">🃏 All Cards (${profileSearchQ ? `${sortedCards.length} / ${cards.length}` : cards.length})</div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <select onchange="window._tcgSetProfileCardSort(this.value,'${uid}')" style="padding:6px 10px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;">
+                    <option value="rarity" ${profileSort==='rarity'?'selected':''}>Sort: Rarity</option>
+                    <option value="name-az" ${profileSort==='name-az'?'selected':''}>Sort: Name (A–Z)</option>
+                    <option value="name-za" ${profileSort==='name-za'?'selected':''}>Sort: Name (Z–A)</option>
+                    <option value="newest" ${profileSort==='newest'?'selected':''}>Sort: Newest</option>
+                    <option value="oldest" ${profileSort==='oldest'?'selected':''}>Sort: Oldest</option>
+                    <option value="serial-low" ${profileSort==='serial-low'?'selected':''}>Sort: Serial # (Low–High)</option>
+                    <option value="serial-high" ${profileSort==='serial-high'?'selected':''}>Sort: Serial # (High–Low)</option>
+                </select>
+                ${isOwner && cards.length ? `<button onclick="window._tcgToggleMultiSelect('${uid}',null,'${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${ms.active?'var(--accent-yellow)':'var(--border-color)'};background:${ms.active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${ms.active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${ms.active ? '✕ Cancel' : '☑ Multiselect'}</button>` : ''}
+            </div>
+        </div>
+        <div style="margin-bottom:14px;">
+            <div style="position:relative;max-width:320px;">
+                <span class="material-symbols-outlined" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:17px;color:var(--text-muted);pointer-events:none;">search</span>
+                <input id="profile-tcg-search" type="text" value="${(window._tcgProfileCardSearch||'').replace(/"/g,'&quot;')}" oninput="window._tcgSetProfileCardSearch('${uid}')" placeholder="Search by name or anime…" style="width:100%;box-sizing:border-box;padding:7px 12px 7px 34px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;outline:none;">
+                ${profileSearchQ ? `<button onclick="window._tcgProfileCardSearch='';window._tcgRenderProfileBindersList(document.getElementById('user-tcg-binders-container'),'${uid}')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:15px;line-height:1;">✕</button>` : ''}
+            </div>
+            ${profileSearchQ ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px;margin-left:4px;">${sortedCards.length} result${sortedCards.length!==1?'s':''} for "<strong>${profileSearchQ}</strong>"</div>` : ''}
         </div>
         ${isOwner && ms.active ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;padding:10px 14px;background:var(--bg-gray);border-radius:10px;border:1px solid var(--border-color);">
             <span style="font-size:13px;font-weight:700;">${selCount} selected</span>
@@ -15781,9 +15830,6 @@ window.generateBwPostCardHTML = function(post) {
             </div>` : ''}
             <div class="bw-thumb-wrapper">
                 <img src="${game.cover}" class="bw-thumb-img" alt="${game.badge}">
-                <div class="bw-play-overlay">
-                    <span class="bw-play-btn" onclick="event.stopPropagation(); ${game.playFn}">▶ Play</span>
-                </div>
             </div>
             <div class="review-header" style="position:relative; z-index:3; padding-right:195px;">
                 <img src="${post.avatar}" class="avatar" style="cursor:pointer;" onclick="event.stopPropagation(); viewUserProfile('${post.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(post.displayName)}&backgroundColor=ffc107&fontColor=333333'">
@@ -15792,7 +15838,7 @@ window.generateBwPostCardHTML = function(post) {
                     ${window.getRankBadgeHTML(window.userRankCache[post.uid]||0,14)}
                     ${window.getPinnedBadgesHTML(post.uid)}
                     <span style="display:inline-block;background:${game.badgeBg};color:${game.badgeColor};font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">${game.badge}</span><br>
-                    <span style="font-size:12px;color:var(--text-muted);">Solved in <strong style="color:var(--text-dark);">${post.guessCount} ${post.guessCount===1?'guess':'guesses'}</strong> · ${formatTimeAgo(post.timestamp)}</span>
+                    <span style="font-size:12px;color:var(--text-muted);">Solved in <strong style="color:var(--text-dark);">${post.guessCount} ${post.guessCount===1?'guess':'guesses'}</strong> · ${formatTimeAgo(post.timestamp)} · <span onclick="event.stopPropagation();${game.playFn}" style="color:${game.badgeColor};cursor:pointer;font-weight:700;">Play today's →</span></span>
                 </div>
             </div>
             ${post.caption ? `<p style="font-size:14px;color:var(--text-dark);margin:10px 0 2px;position:relative;z-index:2;padding-right:195px;">${post.caption}</p>` : ''}

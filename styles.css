@@ -434,7 +434,7 @@ h3 { font-size: 18px; margin-bottom: 15px; }
     z-index: 10;
     background: var(--bg-white);
     color: var(--text-dark);
-    border: 1px solid #E0E0E0;
+    border: 1px solid var(--border-color);
     border-radius: 50%;
     width: 40px; height: 40px;
     display: flex; align-items: center; justify-content: center;
@@ -604,7 +604,7 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 .review-card.expanded .expand-hint-row { display: none; }
 .review-cover-mobile { display: none; width: 26px; height: 37px; border-radius: 4px; object-fit: cover; cursor: pointer; flex-shrink: 0; }
 .action-stat { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 13px; font-weight: 600; }
-.action-stat button { background: var(--bg-white); border: 1px solid #E0E0E0; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; color: var(--text-dark); box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+.action-stat button { background: var(--bg-white); border: 1px solid var(--border-color); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; color: var(--text-dark); box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
 .action-stat button:hover { background: var(--bg-gray-darker); transform: scale(1.05); }
 
 .top10-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
@@ -1608,9 +1608,10 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
    plus a pulsing multi-color glow halo. ──────────────────────────────── */
 .wb-card.rarity-ur {
     background: linear-gradient(135deg,
-        #ff3c00 0%, #ff0a54 28%, #ff6b35 56%, #c9184a 80%, #ff3c00 100%);
+        #ff3c00 0%, #ff0a54 15%, #fff0a0 28%, #ff6b35 42%,
+        #c9184a 56%, #ffb347 68%, #ff0a54 80%, #ff3c00 100%);
     background-size: 400% 400%;
-    animation: ur-prismatic 6s ease infinite, ur-glow 4.4s ease-in-out infinite;
+    animation: ur-prismatic 5s ease infinite, ur-glow 3s ease-in-out infinite;
     animation-play-state: paused, paused;
     padding: 7px;
     contain: paint;
