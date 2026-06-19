@@ -905,6 +905,9 @@
                         <button class="detail-tab tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-trading')">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">swap_horiz</span> Trading
                         </button>
+                        <button class="detail-tab tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-auction')">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">gavel</span> Auction
+                        </button>
                         <button class="detail-tab tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-dungeon')">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">fort</span> Dungeon
                         </button>
@@ -972,7 +975,21 @@
 
                     <!-- TRADING TAB -->
                     <div id="tcg-tab-trading" class="tcg-tab-content" style="display:none;">
-                        <div id="tcg-trades-container"></div>
+                        <div style="display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--border-color);">
+                            <button id="trading-subtab-trades-btn" onclick="window._tcgSwitchTradingSubtab('trades')" style="padding:9px 18px;border:none;background:none;font-size:13px;font-weight:700;cursor:pointer;color:var(--accent-yellow);border-bottom:2px solid var(--accent-yellow);margin-bottom:-2px;">My Trades</button>
+                            <button id="trading-subtab-bulletin-btn" onclick="window._tcgSwitchTradingSubtab('bulletin')" style="padding:9px 18px;border:none;background:none;font-size:13px;font-weight:700;cursor:pointer;color:var(--text-muted);border-bottom:2px solid transparent;margin-bottom:-2px;">📌 Bulletin Board</button>
+                        </div>
+                        <div id="trading-subtab-trades">
+                            <div id="tcg-trades-container"></div>
+                        </div>
+                        <div id="trading-subtab-bulletin" style="display:none;">
+                            <div id="tcg-bulletin-container"></div>
+                        </div>
+                    </div>
+
+                    <!-- AUCTION TAB -->
+                    <div id="tcg-tab-auction" class="tcg-tab-content" style="display:none;">
+                        <div id="tcg-auction-container"></div>
                     </div>
 
                     <!-- DUNGEON TAB -->
@@ -996,6 +1013,19 @@
                                 <div style="font-size:12px; color:var(--text-muted);">Locks out all non-admin users immediately and shows the maintenance page. Admins can still sign in.</div>
                             </div>
                             <button id="admin-maintenance-btn" onclick="window._adminToggleMaintenance()" style="padding:10px 20px; border-radius:8px; border:none; background:#ef4444; color:#fff; font-weight:800; font-size:13px; cursor:pointer; flex-shrink:0;">🔴 Turn On Maintenance</button>
+                        </div>
+
+                        <!-- Gift Wheel UR (shortcut to Prize Wheel admin tool) -->
+                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                            <div style="flex:1; min-width:200px;">
+                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">🌟 Gift Monthly Wheel UR</div>
+                                <div style="font-size:12px; color:var(--text-muted);">Manually gift the current month's UR card to a user (for trade issues, compensation, etc.)</div>
+                                <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                                    <input type="text" id="tcg-admin-wheel-ur-search" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._wheelAdminSearchUsersForUR('tcg-admin-wheel-ur');}" style="flex:1; min-width:160px; padding:8px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                    <button onclick="window._wheelAdminSearchUsersForUR('tcg-admin-wheel-ur')" style="padding:8px 14px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:12px; cursor:pointer;">Search</button>
+                                </div>
+                                <div id="tcg-admin-wheel-ur-results" style="margin-top:8px;"></div>
+                            </div>
                         </div>
 
                         <!-- Pack Odds Simulator -->
@@ -1166,6 +1196,7 @@
                                 <option value="sung_jinwoo">Sung Jinwoo (Solo Leveling, UR)</option>
                                 <option value="astro_boy">Astro Boy (Astro Boy, UR)</option>
                                 <option value="arthur_boyle">Arthur Boyle (Fire Force, UR)</option>
+                                <option value="alucard">Alucard (Hellsing Ultimate, UR)</option>
                             </select>
                             <div id="founder-card-preview" style="margin-bottom:14px;"></div>
                             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
@@ -2430,6 +2461,6 @@
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=366"></script>
+    <script type="module" src="app.js?v=368"></script>
 </body>
 </html>

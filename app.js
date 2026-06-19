@@ -5785,6 +5785,7 @@ window.switchTcgTab = function(event, tabId) {
     if (event?.currentTarget) event.currentTarget.classList.add('active');
     if (tabId === 'tcg-tab-collection') window._tcgRenderMyCollection();
     if (tabId === 'tcg-tab-trading') window._tcgRenderMyTrades();
+    if (tabId === 'tcg-tab-auction') window._auctionRender();
     if (tabId === 'tcg-tab-dungeon') window.loadDungeonTab();
     else window._dungeonStopRefresh?.();
     if (tabId === 'tcg-tab-admin') { window._tcgRenderFounderPreview(); window._tcgLoadSaleConfigUI(); }
@@ -6376,6 +6377,11 @@ const TCG_FOUNDER_CARDS = [
     {
         id: 'arthur_boyle', name: 'Arthur Boyle', anime: 'Fire Force', rarity: 'ur',
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFire%20Force%2FUR%2FArthur%20Boyle.gif?alt=media&token=470e5553-a04b-491e-a05b-c2e74a5e25c5',
+        founder: true,
+    },
+    {
+        id: 'alucard', name: 'Alucard', anime: 'Hellsing Ultimate', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FUR%2FAlucard%202.gif?alt=media&token=d0419e6c-00ad-40ed-ad41-42501ff35ca4',
         founder: true,
     },
 ];
@@ -7036,10 +7042,11 @@ window._wheelAdminGrantUR = async function() {
     } catch(e) { alert('Grant failed: ' + e.message); }
 };
 
-window._wheelAdminSearchUsersForUR = async function() {
+window._wheelAdminSearchUsersForUR = async function(prefix) {
     if (!window.isAdmin) return;
-    const term = (document.getElementById('wheel-ur-gift-search')?.value || '').trim().toLowerCase();
-    const el = document.getElementById('wheel-ur-gift-results');
+    const p = prefix || 'wheel-ur-gift';
+    const term = (document.getElementById(`${p}-search`)?.value || '').trim().toLowerCase();
+    const el = document.getElementById(`${p}-results`);
     if (!el) return;
     if (!term) { el.innerHTML = ''; return; }
     el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Searching…</p>';
@@ -9418,6 +9425,48 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
     _tcgObserveSSRCards(body);
 };
 
+// ── Card snapshot viewer (no Firestore fetch — works for trade/bulletin cards) ─
+// Stores card data objects by integer ID so onclick handlers stay short and safe.
+let _tcgSnapSeq = 0;
+window._tcgSnapStore = {};
+
+function _tcgStoreSnap(card) {
+    const id = ++_tcgSnapSeq;
+    window._tcgSnapStore[id] = card;
+    return id;
+}
+
+window._tcgViewCardSnapshot = function(snapId) {
+    const card = window._tcgSnapStore[snapId];
+    if (!card) return;
+    document.getElementById('tcg-card-viewer-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'tcg-card-viewer-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+    const maxV = RARITY_MAX_VERSIONS[card.rarity] || 5000;
+    const versionText = card.founder ? 'Founder Edition · 1 of 1'
+        : card.monthlyUr ? (card.stampText || 'Prize Wheel UR')
+        : card.serial != null ? `${card.serial} / ${maxV}${(card.edition||1)>1?` · Edition ${card.edition}`:''}` : '—';
+    const rarityLabel = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[card.rarity] || card.rarity;
+    modal.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:18px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.5);max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;align-items:center;gap:14px;width:300px;max-width:100%;box-sizing:border-box;">
+            <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+                <div style="font-size:16px;font-weight:800;">Card Details</div>
+                <button onclick="document.getElementById('tcg-card-viewer-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div style="margin:6px 0;">${_tcgBuildCardFace(card)}</div>
+            <div style="width:100%;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text-dark);">
+                <div><strong>Character:</strong> ${card.name || '—'}</div>
+                <div><strong>Series:</strong> ${card.anime || '—'}</div>
+                <div><strong>Rarity:</strong> ${rarityLabel}</div>
+                <div><strong>Version:</strong> ${versionText}</div>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    _tcgObserveSSRCards(modal);
+};
+
 // ── TCG Collection System ─────────────────────────────────────────────────────
 
 const RARITY_MAX_VERSIONS = { common: 5000, rare: 2500, sr: 500, ssr: 250, ur: 50 };
@@ -10944,17 +10993,46 @@ window._tcgOpenTradeConfirm = function(otherUid, existingTradeId, otherName) {
             </div>
             <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border-color);">
                 <button onclick="document.getElementById('tcg-trade-confirm-modal').remove()" style="padding:10px 22px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-weight:800;font-size:13px;cursor:pointer;">Back</button>
-                <button onclick="window._tcgSubmitTradeProposal('${otherUid}','${existingTradeId||''}','${otherName.replace(/'/g, "\\'")}')" style="padding:10px 22px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">Confirm Trade and Send</button>
+                <button onclick="this.disabled=true;this.textContent='Sending…';window._tcgSubmitTradeProposal('${otherUid}','${existingTradeId||''}','${otherName.replace(/'/g, "\\'")}',this)" style="padding:10px 22px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">Confirm Trade and Send</button>
             </div>
         </div>`;
     document.body.appendChild(modal);
     _tcgObserveSSRCards(modal);
 };
 
-window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, otherName) {
+// Accounts created on or after this date must be Bronze rank (10 reviews) and
+// at least 21 days old before they can send or accept trades.
+const TRADE_GATE_CUTOFF = new Date('2026-06-19T00:00:00Z');
+
+async function _tcgCheckTradeEligibility() {
+    if (!auth.currentUser) return false;
+    const created = new Date(auth.currentUser.metadata.creationTime);
+    if (created < TRADE_GATE_CUTOFF) return true; // grandfathered — no restrictions
+
+    const daysSince = (Date.now() - created.getTime()) / 86400000;
+    if (daysSince < 21) {
+        const daysLeft = Math.ceil(21 - daysSince);
+        alert(`Your account needs to be at least 3 weeks old to trade. Come back in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}!`);
+        return false;
+    }
+    try {
+        const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid));
+        const reviews = pd.exists() ? (pd.data().reviewCount || 0) : 0;
+        if (reviews < 10) {
+            alert(`You need Bronze rank (10 reviews) to trade. You have ${reviews} review${reviews !== 1 ? 's' : ''} — ${10 - reviews} more to go!`);
+            return false;
+        }
+    } catch(e) {}
+    return true;
+}
+
+window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, otherName, btn) {
+    if (window._tcgProposalInProgress) { if (btn) { btn.disabled = false; btn.textContent = 'Confirm Trade and Send'; } return; }
+    window._tcgProposalInProgress = true;
     const ctx = window._tcgTradeContext;
     const state = window._tcgTradePickerState;
-    if (!ctx || !state || !auth.currentUser) return;
+    if (!ctx || !state || !auth.currentUser) { window._tcgProposalInProgress = false; if (btn) { btn.disabled = false; btn.textContent = 'Confirm Trade and Send'; } return; }
+    if (!await _tcgCheckTradeEligibility()) return;
 
     const offerAmber = Math.max(0, Math.min(1000, parseInt(document.getElementById('tcg-trade-amber-give')?.value, 10) || 0));
     const requestAmber = Math.max(0, Math.min(1000, parseInt(document.getElementById('tcg-trade-amber-get')?.value, 10) || 0));
@@ -10975,6 +11053,21 @@ window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, other
     } catch(e) {}
 
     try {
+        // Block if any offered cards are on an active bulletin listing
+        if (offerCardIds.length) {
+            const myListingsSnap = await getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid)));
+            const listedCardIds = new Set(
+                myListingsSnap.docs.filter(d => d.data().status === 'active').flatMap(d => d.data().cardIds || [])
+            );
+            const bulletinConflict = offerCardIds.filter(id => listedCardIds.has(id));
+            if (bulletinConflict.length) {
+                alert('One or more of your offered cards is currently posted on the Trade Bulletin. Withdraw those listings before trading them.');
+                if (btn) { btn.disabled = false; btn.textContent = 'Confirm Trade and Send'; }
+                window._tcgProposalInProgress = false;
+                return;
+            }
+        }
+
         if (existingTradeId) {
             const tradeRef = doc(db, 'trades', existingTradeId);
             const snap = await getDoc(tradeRef);
@@ -11011,7 +11104,12 @@ window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, other
         document.getElementById('tcg-trade-confirm-modal')?.remove();
         document.getElementById('tcg-trade-modal')?.remove();
         alert('Trade offer sent!');
-    } catch(e) { alert('Failed to send trade offer: ' + e.message); }
+    } catch(e) {
+        alert('Failed to send trade offer: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Confirm Trade and Send'; }
+    } finally {
+        window._tcgProposalInProgress = false;
+    }
 };
 
 // Modal — review/accept/decline/counter a trade offer
@@ -11037,10 +11135,20 @@ window._tcgOpenTradeReview = async function(tradeId) {
     const isRecipient = t.toUid === myUid;
     const otherName = isRecipient ? (t.fromName || 'A user') : (t.toName || 'A user');
 
-    const renderCardRow = (cards) => (cards||[]).length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;">${cards.map(c => `
-        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
-            <div style="width:88px;height:123px;overflow:hidden;"><div style="transform:scale(0.4);transform-origin:top left;">${_tcgBuildCardFace(c)}</div></div>
-        </div>`).join('')}</div>` : `<p style="color:var(--text-muted);font-size:13px;">Nothing</p>`;
+    const renderCardRow = (cards) => (cards||[]).length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;">${cards.map(c => {
+        const snapId = _tcgStoreSnap(c);
+        const rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[c.rarity] || c.rarity;
+        const rc = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' }[c.rarity] || 'var(--text-muted)';
+        const serial = c.serial != null ? `#${c.serial}` : (c.monthlyUr ? 'Wheel UR' : (c.founder ? '1 of 1' : ''));
+        return `<div onclick="window._tcgViewCardSnapshot(${snapId})" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px;border-radius:8px;border:1px solid var(--border-color);">
+            <div style="width:88px;height:123px;overflow:hidden;pointer-events:none;"><div style="transform:scale(0.4);transform-origin:top left;">${_tcgBuildCardFace(c)}</div></div>
+            <div style="text-align:center;width:88px;">
+                <div style="font-size:10px;font-weight:800;color:${rc};">${rl}</div>
+                <div style="font-size:10px;color:var(--text-dark);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${c.name||''}</div>
+                ${serial ? `<div style="font-size:9px;color:var(--text-muted);">${serial}</div>` : ''}
+            </div>
+        </div>`;
+    }).join('')}</div>` : `<p style="color:var(--text-muted);font-size:13px;">Nothing</p>`;
 
     let statusLabel = '';
     if (t.status === 'pending') statusLabel = isRecipient ? 'Awaiting your response' : 'Waiting for a response';
@@ -11055,11 +11163,11 @@ window._tcgOpenTradeReview = async function(tradeId) {
             window._tcgTradeCache = window._tcgTradeCache || {};
             window._tcgTradeCache[tradeId] = t;
             actions = `
-                <button onclick="window._tcgAcceptTrade('${tradeId}')" style="padding:10px 22px;border-radius:10px;border:none;background:#4CAF50;color:white;font-weight:800;font-size:13px;cursor:pointer;">Accept</button>
-                <button onclick="window._tcgDeclineTrade('${tradeId}')" style="padding:10px 22px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-weight:800;font-size:13px;cursor:pointer;">Decline</button>
+                <button onclick="this.disabled=true;this.textContent='Accepting…';window._tcgAcceptTrade('${tradeId}')" style="padding:10px 22px;border-radius:10px;border:none;background:#4CAF50;color:white;font-weight:800;font-size:13px;cursor:pointer;">Accept</button>
+                <button onclick="this.disabled=true;this.textContent='Declining…';window._tcgDeclineTrade('${tradeId}')" style="padding:10px 22px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-weight:800;font-size:13px;cursor:pointer;">Decline</button>
                 <button onclick="window._tcgStartCounter('${tradeId}')" style="padding:10px 22px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-weight:800;font-size:13px;cursor:pointer;">Counter Offer</button>`;
         } else {
-            actions = `<button onclick="window._tcgCancelTrade('${tradeId}')" style="padding:10px 22px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-weight:800;font-size:13px;cursor:pointer;">Cancel Offer</button>`;
+            actions = `<button onclick="this.disabled=true;this.textContent='Cancelling…';window._tcgCancelTrade('${tradeId}')" style="padding:10px 22px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-weight:800;font-size:13px;cursor:pointer;">Cancel Offer</button>`;
         }
     }
 
@@ -11129,8 +11237,18 @@ async function _tcgApplyTradeSide(uid, removeIds, addCards) {
     for (const id of (removeIds||[])) {
         try { await deleteDoc(doc(db,'card_collections',uid,'cards',id)); } catch(e) {}
     }
+    // Wheel UR cards (monthlyUr:true) require pendingUrClaim==true in wheel_state
+    // to pass the Firestore create rule. For traded URs the recipient never spun
+    // the wheel, so we temporarily set the flag before writing and clear it after.
+    const hasMonthlyUr = (addCards||[]).some(c => c.monthlyUr);
+    if (hasMonthlyUr) {
+        try { await setDoc(doc(db,'wheel_state',uid), { pendingUrClaim: true }, { merge: true }); } catch(e) {}
+    }
     for (const card of (addCards||[])) {
         try { await addDoc(collection(db,'card_collections',uid,'cards'), card); } catch(e) {}
+    }
+    if (hasMonthlyUr) {
+        try { await setDoc(doc(db,'wheel_state',uid), { pendingUrClaim: false }, { merge: true }); } catch(e) {}
     }
     window._tcgCollectionCache.delete(uid);
 }
@@ -11176,7 +11294,10 @@ async function _tcgReleaseCardLocks(ownerUid, cardIds) {
 }
 
 window._tcgAcceptTrade = async function(tradeId) {
-    if (!auth.currentUser) return;
+    if (window._tcgAcceptInProgress) return;
+    window._tcgAcceptInProgress = true;
+    if (!auth.currentUser) { window._tcgAcceptInProgress = false; return; }
+    if (!await _tcgCheckTradeEligibility()) { window._tcgAcceptInProgress = false; return; }
     const myUid = auth.currentUser.uid;
     try {
         const ref = doc(db,'trades',tradeId);
@@ -11251,6 +11372,7 @@ window._tcgAcceptTrade = async function(tradeId) {
         document.getElementById('tcg-trade-review-modal')?.remove();
         alert('Trade accepted! Your cards have been updated.');
     } catch(e) { alert('Failed to accept trade: ' + e.message); }
+    finally { window._tcgAcceptInProgress = false; }
 };
 
 window._tcgDeclineTrade = async function(tradeId) {
@@ -11345,9 +11467,10 @@ window._tcgRenderMyTrades = async function() {
     const outgoing = trades.filter(t => t.status === 'pending' && t.fromUid === myUid);
     const history = trades.filter(t => t.status !== 'pending');
 
-    const miniCards = (cards) => (cards||[]).slice(0,4).map(c => `
-        <div style="width:44px;height:62px;overflow:hidden;border-radius:4px;"><div style="transform:scale(0.2);transform-origin:top left;">${_tcgBuildCardFace(c)}</div></div>
-    `).join('') + ((cards||[]).length > 4 ? `<div style="font-size:11px;color:var(--text-muted);align-self:center;">+${cards.length-4}</div>` : '');
+    const miniCards = (cards) => (cards||[]).slice(0,4).map(c => {
+        const snapId = _tcgStoreSnap(c);
+        return `<div onclick="window._tcgViewCardSnapshot(${snapId})" title="${c.name||''}" style="cursor:pointer;width:44px;height:62px;overflow:hidden;border-radius:4px;pointer-events:auto;"><div style="transform:scale(0.2);transform-origin:top left;pointer-events:none;">${_tcgBuildCardFace(c)}</div></div>`;
+    }).join('') + ((cards||[]).length > 4 ? `<div style="font-size:11px;color:var(--text-muted);align-self:center;">+${cards.length-4}</div>` : '');
 
     const statusBadge = (status) => {
         const map = { pending: ['Pending','#f59e0b'], accepted: ['Accepted','#3b82f6'], completed: ['Completed','#4CAF50'], declined: ['Declined','#ef4444'], cancelled: ['Cancelled','var(--text-muted)'], invalid: ['No Longer Valid','#ef4444'] };
@@ -11394,6 +11517,1580 @@ window._tcgRenderMyTrades = async function() {
         ${section('📜 History', history, 'No past trades yet.')}
     `;
     _tcgObserveSSRCards(el);
+};
+
+// ── TCG Bulletin Picker (shared filter/sort/grid for post + offer modals) ────
+const _bpRarityOrder = { ur:0, ssr:1, sr:2, rare:3, common:4 };
+const _bpRarityColor = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' };
+
+function _tcgBulletinFilteredCards(cards, state) {
+    const { filter, sort, search } = state;
+    const s = (search||'').trim().toLowerCase();
+    return (filter === 'all' ? [...cards] : cards.filter(c => c.rarity === filter))
+        .filter(c => !s || (c.name||'').toLowerCase().includes(s) || (c.anime||'').toLowerCase().includes(s))
+        .sort((a, b) => {
+            if (sort === 'newest') return (_tcgPulledAtMillis(b)||0) - (_tcgPulledAtMillis(a)||0);
+            if (sort === 'oldest') return (_tcgPulledAtMillis(a)||0) - (_tcgPulledAtMillis(b)||0);
+            if (sort === 'serial-low') return (a.serial??Infinity) - (b.serial??Infinity);
+            if (sort === 'serial-high') return (b.serial??-Infinity) - (a.serial??-Infinity);
+            if (sort === 'name-az') return (a.name||'').localeCompare(b.name||'');
+            return (_bpRarityOrder[a.rarity]??9) - (_bpRarityOrder[b.rarity]??9);
+        });
+}
+
+function _tcgBulletinPickerGridHTML(mode, cards) {
+    const isPost = mode === 'post';
+    const selectedIds = isPost ? window._tcgBulletinPostSelectedIds : window._tcgBulletinOfferSelectedIds;
+    const toggleFn = isPost ? '_tcgToggleBulletinPostCard' : '_tcgToggleBulletinOfferCard';
+    const selColor = isPost ? 'var(--accent-yellow)' : '#7c3aed';
+    const selBg = isPost ? 'rgba(245,158,11,0.12)' : 'rgba(124,58,237,0.1)';
+
+    if (!cards.length) return '<p style="color:var(--text-muted);font-size:13px;">No cards match this filter.</p>';
+
+    return cards.map(c => {
+        const snapId = _tcgStoreSnap(c);
+        const selected = selectedIds?.has(c.id);
+        const rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[c.rarity] || c.rarity;
+        const serial = c.serial != null ? `#${c.serial}` : (c.monthlyUr ? 'Wheel UR' : (c.founder ? '1 of 1' : ''));
+        return `<div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <div onclick="window.${toggleFn}(this,'${c.id}')" data-card-id="${c.id}" style="cursor:pointer;padding:4px;border-radius:10px;border:2px solid ${selected?selColor:'transparent'};background:${selected?selBg:'transparent'};">
+                <div style="width:110px;height:154px;overflow:hidden;border-radius:4px;pointer-events:none;">
+                    <div style="transform:scale(0.5);transform-origin:top left;width:220px;height:308px;">${_tcgBuildCardFace(c)}</div>
+                </div>
+            </div>
+            <button onclick="event.stopPropagation();window._tcgViewCardSnapshot(${snapId})" title="View card" style="position:absolute;top:6px;right:0px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;">⤢</button>
+            <div style="text-align:center;width:110px;">
+                <div style="font-size:10px;font-weight:800;color:${_bpRarityColor[c.rarity]||'var(--text-muted)'};">${rl}</div>
+                <div style="font-size:10px;color:var(--text-dark);font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${c.name||''}</div>
+                ${serial ? `<div style="font-size:9px;color:var(--text-muted);">${serial}</div>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function _tcgBulletinPickerHTML(mode, allCards) {
+    const state = mode === 'post' ? window._tcgBulletinPostPickerState : window._tcgBulletinOfferPickerState;
+    const { filter, sort } = state;
+    const counts = { ur:0, ssr:0, sr:0, rare:0, common:0 };
+    allCards.forEach(c => { if (c.rarity in counts) counts[c.rarity]++; });
+    const filtered = _tcgBulletinFilteredCards(allCards, state);
+
+    return `
+        <input type="text" value="${(state.search||'').replace(/"/g,'&quot;')}" placeholder="Search by character or anime…"
+            oninput="window._tcgBulletinPickerSearch('${mode}',this.value)"
+            style="width:100%;padding:6px 10px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:12px;box-sizing:border-box;margin-bottom:8px;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                ${['all','ur','ssr','sr','rare','common'].map(f => {
+                    const labels = { all:`All (${allCards.length})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
+                    const active = f === filter;
+                    return `<button onclick="window._tcgBulletinPickerFilter('${mode}','${f}')" style="padding:4px 10px;border-radius:14px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
+                }).join('')}
+            </div>
+            <select onchange="window._tcgBulletinPickerSort('${mode}',this.value)" style="padding:4px 8px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;">
+                <option value="rarity" ${sort==='rarity'?'selected':''}>Sort: Rarity</option>
+                <option value="newest" ${sort==='newest'?'selected':''}>Sort: Newest</option>
+                <option value="oldest" ${sort==='oldest'?'selected':''}>Sort: Oldest</option>
+                <option value="serial-low" ${sort==='serial-low'?'selected':''}>Sort: Serial # ↑</option>
+                <option value="serial-high" ${sort==='serial-high'?'selected':''}>Sort: Serial # ↓</option>
+                <option value="name-az" ${sort==='name-az'?'selected':''}>Sort: Name A–Z</option>
+            </select>
+        </div>
+        <div id="bulletin-${mode}-grid" style="display:flex;flex-wrap:wrap;gap:10px;max-height:320px;overflow-y:auto;">
+            ${_tcgBulletinPickerGridHTML(mode, filtered)}
+        </div>`;
+}
+
+window._tcgBulletinPickerFilter = function(mode, filter) {
+    const state = mode === 'post' ? window._tcgBulletinPostPickerState : window._tcgBulletinOfferPickerState;
+    state.filter = filter;
+    const allCards = mode === 'post' ? window._tcgBulletinPostAllCards : window._tcgBulletinOfferAllCards;
+    const containerId = mode === 'post' ? 'bulletin-post-collection' : 'bulletin-offer-collection';
+    const el = document.getElementById(containerId);
+    if (el) { el.innerHTML = _tcgBulletinPickerHTML(mode, allCards); _tcgObserveSSRCards(el); }
+};
+
+window._tcgBulletinPickerSort = function(mode, sort) {
+    const state = mode === 'post' ? window._tcgBulletinPostPickerState : window._tcgBulletinOfferPickerState;
+    state.sort = sort;
+    _tcgRefreshBulletinPickerGrid(mode);
+};
+
+window._tcgBulletinPickerSearch = function(mode, val) {
+    const state = mode === 'post' ? window._tcgBulletinPostPickerState : window._tcgBulletinOfferPickerState;
+    state.search = val;
+    _tcgRefreshBulletinPickerGrid(mode);
+};
+
+function _tcgRefreshBulletinPickerGrid(mode) {
+    const grid = document.getElementById(`bulletin-${mode}-grid`);
+    if (!grid) return;
+    const allCards = mode === 'post' ? window._tcgBulletinPostAllCards : window._tcgBulletinOfferAllCards;
+    const state = mode === 'post' ? window._tcgBulletinPostPickerState : window._tcgBulletinOfferPickerState;
+    grid.innerHTML = _tcgBulletinPickerGridHTML(mode, _tcgBulletinFilteredCards(allCards, state));
+    _tcgObserveSSRCards(grid);
+}
+
+// ── TCG Auction House ────────────────────────────────────────────────────────
+
+let _auctionListener = null; // onSnapshot unsubscribe handle
+let _auctionTimerInterval = null;
+
+// Returns { poolDate, openTime, closeTime, isLive, isUpcoming, msToOpen, msToClose }
+function _auctionInfo() {
+    const now = new Date();
+    // Current NY date/time via Intl (works with DST automatically)
+    const fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false
+    });
+    const parts = fmt.formatToParts(now);
+    const p = t => parts.find(x => x.type === t)?.value;
+    const nyHour = parseInt(p('hour'));
+    const todayNY = `${p('year')}-${p('month')}-${p('day')}`;
+
+    // Which pool is currently live? The one with poolDate = today (if before 7pm) or yesterday
+    // Live pool = cards whose poolDate's 7pm has passed but close (next day 7pm) hasn't
+    // Submission pool = where a new card would go if submitted now
+    function nyDatePlusDays(base, days) {
+        const d = new Date(base + 'T12:00:00Z'); // noon UTC to avoid DST edge
+        d.setUTCDate(d.getUTCDate() + days);
+        const p2 = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/New_York', year:'numeric', month:'2-digit', day:'2-digit'
+        }).formatToParts(d);
+        const g = t => p2.find(x => x.type === t)?.value;
+        return `${g('year')}-${g('month')}-${g('day')}`;
+    }
+
+    // 7pm NY as UTC ms for a given NY date string
+    function sevenPmUTC(nyDate) {
+        // Find UTC offset at noon on that NY date
+        const noon = new Date(nyDate + 'T12:00:00Z');
+        const nyHourAtNoon = parseInt(new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/New_York', hour: '2-digit', hour12: false
+        }).format(noon));
+        const offsetHours = 12 - nyHourAtNoon; // e.g., 4 for EDT
+        const sevenPmMs = new Date(nyDate + 'T00:00:00Z').getTime()
+            + (19 + offsetHours) * 3600000;
+        return sevenPmMs;
+    }
+
+    const livePoolDate = nyHour >= 19 ? todayNY : nyDatePlusDays(todayNY, -1);
+    const liveOpenMs   = sevenPmUTC(livePoolDate);
+    const liveCloseMs  = liveOpenMs + 24 * 3600000;
+    const submitPoolDate = nyHour >= 19 ? nyDatePlusDays(todayNY, 1) : todayNY;
+    const nextOpenMs   = sevenPmUTC(submitPoolDate);
+
+    const isLive     = now.getTime() >= liveOpenMs && now.getTime() < liveCloseMs;
+    const isUpcoming = !isLive;
+
+    return {
+        livePoolDate,
+        submitPoolDate,
+        liveOpenTime:  new Date(liveOpenMs),
+        liveCloseTime: new Date(liveCloseMs),
+        nextOpenTime:  new Date(nextOpenMs),
+        isLive,
+        msToClose: Math.max(0, liveCloseMs - now.getTime()),
+        msToOpen:  Math.max(0, nextOpenMs  - now.getTime()),
+    };
+}
+
+function _auctionFmtCountdown(ms) {
+    if (ms <= 0) return '00:00:00';
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// Process any expired live auction items (client-side close)
+async function _auctionProcessExpired() {
+    try {
+        const info = _auctionInfo();
+        const now = new Date();
+        // Find live items whose closeTime has passed
+        const snap = await getDocs(query(
+            collection(db, 'auction_listings'),
+            where('status', '==', 'live')
+        ));
+        const expired = snap.docs.filter(d => {
+            const ct = d.data().closeTime;
+            return ct && (ct.toDate ? ct.toDate() : new Date(ct)) <= now;
+        });
+        if (!expired.length) return;
+
+        for (const d of expired) {
+            const item = d.data();
+            try {
+                if (item.currentBidderUid) {
+                    // Someone won — transfer card to winner, amber already deducted
+                    await _tcgApplyTradeSide(item.currentBidderUid, [], [item.card]);
+                    await updateDoc(d.ref, { status: 'won' });
+                    // Pay seller
+                    await updateDoc(doc(db, 'profiles', item.uid), { amber: increment(item.currentBid) });
+                    // Notify winner
+                    await addDoc(collection(db, 'notifications'), {
+                        targetUid: item.currentBidderUid, type: 'auction_won',
+                        senderUid: item.uid, senderName: item.displayName || 'Someone',
+                        message: `You won the auction for ${item.card?.name || 'a card'}!`,
+                        timestamp: now, read: false
+                    });
+                    // Notify seller
+                    await addDoc(collection(db, 'notifications'), {
+                        targetUid: item.uid, type: 'auction_sold',
+                        senderUid: item.currentBidderUid, senderName: item.currentBidderName || 'Someone',
+                        message: `Your ${item.card?.name || 'card'} sold for 🟡 ${item.currentBid.toLocaleString()} Amber!`,
+                        timestamp: now, read: false
+                    });
+                } else {
+                    // No bids — return card to seller
+                    await _tcgApplyTradeSide(item.uid, [], [item.card]);
+                    await updateDoc(d.ref, { status: 'unsold' });
+                }
+            } catch(e) { console.warn('auction close error for', d.id, e); }
+        }
+    } catch(e) { console.warn('_auctionProcessExpired', e); }
+}
+
+window._auctionRender = async function() {
+    const el = document.getElementById('tcg-auction-container');
+    if (!el) return;
+    if (!auth.currentUser) {
+        el.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px 0;">Sign in to view the Auction House.</p>';
+        return;
+    }
+
+    // Stop any previous listener + timer
+    if (_auctionListener) { _auctionListener(); _auctionListener = null; }
+    if (_auctionTimerInterval) { clearInterval(_auctionTimerInterval); _auctionTimerInterval = null; }
+
+    await _auctionProcessExpired();
+
+    const info = _auctionInfo();
+    const myUid = auth.currentUser.uid;
+
+    el.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px;">
+            <div style="font-size:15px;font-weight:800;color:var(--text-dark);">🔨 Auction House</div>
+            <button onclick="window._auctionOpenSubmitModal()" style="padding:10px 20px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">+ Submit a Card</button>
+        </div>
+        <div id="auction-status-bar" style="margin-bottom:20px;"></div>
+        <div id="auction-grid-container"><div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div></div>`;
+
+    // Countdown timer
+    function updateStatusBar() {
+        const i = _auctionInfo();
+        const bar = document.getElementById('auction-status-bar');
+        if (!bar) return;
+        if (i.isLive) {
+            bar.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span style="background:#4CAF50;color:#fff;border-radius:8px;padding:4px 12px;font-size:12px;font-weight:800;">🔴 LIVE</span>
+                <span style="font-size:13px;color:var(--text-muted);">Closes in <strong id="auction-countdown" style="color:var(--text-dark);font-variant-numeric:tabular-nums;">${_auctionFmtCountdown(i.msToClose)}</strong></span>
+            </div>`;
+        } else {
+            bar.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span style="background:var(--bg-gray);color:var(--text-muted);border:1px solid var(--border-color);border-radius:8px;padding:4px 12px;font-size:12px;font-weight:800;">UPCOMING</span>
+                <span style="font-size:13px;color:var(--text-muted);">Opens in <strong id="auction-countdown" style="color:var(--text-dark);font-variant-numeric:tabular-nums;">${_auctionFmtCountdown(i.msToOpen)}</strong></span>
+                <span style="font-size:12px;color:var(--text-muted);">Cards submitted now go into the next pool (opens ${i.nextOpenTime.toLocaleString('en-US',{timeZone:'America/New_York',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true})} ET)</span>
+            </div>`;
+        }
+    }
+    updateStatusBar();
+    _auctionTimerInterval = setInterval(() => {
+        const cd = document.getElementById('auction-countdown');
+        if (!cd) { clearInterval(_auctionTimerInterval); return; }
+        const i = _auctionInfo();
+        cd.textContent = _auctionFmtCountdown(i.isLive ? i.msToClose : i.msToOpen);
+        // If status changed, re-render fully
+        if ((i.isLive && !_auctionLastWasLive) || (!i.isLive && _auctionLastWasLive)) {
+            window._auctionRender();
+        }
+        _auctionLastWasLive = i.isLive;
+    }, 1000);
+    window._auctionLastWasLive = info.isLive;
+
+    // Real-time listener on current items
+    const queryPool = info.isLive ? info.livePoolDate : info.submitPoolDate;
+    const statusFilter = info.isLive ? 'live' : 'queued';
+
+    function renderGrid(docs) {
+        const grid = document.getElementById('auction-grid-container');
+        if (!grid) return;
+        if (!docs.length) {
+            grid.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0;">${info.isLive ? 'No items in this auction.' : 'No cards submitted for the next auction yet. Be the first!'}</p>`;
+            return;
+        }
+        const rc  = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' };
+        const rll = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
+        grid.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;">
+            ${docs.map(item => {
+                const isSeller = item.uid === myUid;
+                const isTopBidder = item.currentBidderUid === myUid;
+                const card = item.card || {};
+                const snapId = _tcgStoreSnap(card);
+                const rl = rll[card.rarity] || card.rarity || '';
+                const rc2 = rc[card.rarity] || 'var(--text-muted)';
+                const maxV = RARITY_MAX_VERSIONS[card.rarity] || 5000;
+                const version = card.founder ? '1 of 1' : card.monthlyUr ? 'Wheel UR' : card.serial != null ? `#${card.serial} / ${maxV}` : '';
+
+                let actionHtml = '';
+                if (item.status === 'queued') {
+                    actionHtml = isSeller
+                        ? `<button onclick="window._auctionWithdrawItem(this,'${item.id}')" style="padding:7px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;font-size:11px;cursor:pointer;width:100%;">Withdraw</button>`
+                        : `<div style="font-size:11px;color:var(--text-muted);text-align:center;">Starts ${info.nextOpenTime.toLocaleString('en-US',{timeZone:'America/New_York',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true})} ET</div>`;
+                } else if (item.status === 'live') {
+                    if (isSeller) {
+                        actionHtml = `<div style="font-size:11px;color:var(--text-muted);text-align:center;font-weight:700;">Your listing</div>`;
+                    } else if (isTopBidder) {
+                        actionHtml = `<div style="font-size:11px;color:#4CAF50;text-align:center;font-weight:800;">✓ You're winning!</div>`;
+                    } else {
+                        actionHtml = `<button onclick="window._auctionOpenBidModal('${item.id}')" style="padding:8px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-weight:800;font-size:11px;cursor:pointer;width:100%;">Place Bid</button>`;
+                    }
+                }
+
+                const bidSection = item.status === 'live'
+                    ? `<div style="background:var(--bg-gray);border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+                        <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${item.bidCount > 0 ? 'Current Bid' : 'Starting Bid'}</div>
+                        <div style="font-size:16px;font-weight:800;color:#f59e0b;">🟡 ${(item.currentBid||item.startingBid).toLocaleString()}</div>
+                        ${item.currentBidderName ? `<div style="font-size:10px;color:var(--text-muted);">by ${item.currentBidderName}</div>` : `<div style="font-size:10px;color:var(--text-muted);">No bids yet</div>`}
+                       </div>`
+                    : `<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Starting bid: <span style="font-weight:800;color:#f59e0b;">🟡 ${item.startingBid?.toLocaleString()}</span></div>`;
+
+                return `<div style="background:var(--bg-white);border-radius:14px;border:1px solid ${isTopBidder?'#4CAF50':'var(--border-color)'};overflow:hidden;display:flex;flex-direction:column;${isTopBidder?'box-shadow:0 0 0 2px #4CAF5044;':''}">
+                    <div onclick="window._tcgViewCardSnapshot(${snapId})" style="cursor:pointer;position:relative;background:var(--bg-gray);display:flex;justify-content:center;padding:12px 14px 8px;">
+                        <div style="height:220px;overflow:hidden;border-radius:6px;pointer-events:none;display:flex;justify-content:center;width:100%;">
+                            <div style="flex-shrink:0;transform:scale(0.718);transform-origin:top center;width:220px;height:308px;">${_tcgBuildCardFace(card)}</div>
+                        </div>
+                        ${isSeller ? '<div style="position:absolute;top:10px;left:10px;background:#f59e0b;color:#222;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;pointer-events:none;">Yours</div>' : ''}
+                    </div>
+                    <div style="padding:10px 12px 12px;flex:1;display:flex;flex-direction:column;gap:4px;">
+                        <div>
+                            <div style="font-size:11px;font-weight:800;color:${rc2};">${rl}${version ? ` · ${version}` : ''}</div>
+                            <div style="font-size:13px;font-weight:800;color:var(--text-dark);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${card.name||''}</div>
+                            <div style="font-size:11px;color:var(--text-muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${card.anime||''}</div>
+                        </div>
+                        ${bidSection}
+                        <div style="font-size:10px;color:var(--text-muted);">${item.displayName||''}</div>
+                        <div style="margin-top:auto;padding-top:4px;">${actionHtml}</div>
+                    </div>
+                </div>`;
+            }).join('')}
+        </div>`;
+        _tcgObserveSSRCards(grid);
+    }
+
+    _auctionListener = onSnapshot(
+        query(collection(db, 'auction_listings'), where('poolDate', '==', queryPool)),
+        snap => {
+            const items = [];
+            snap.forEach(d => {
+                const data = d.data();
+                if (data.status === statusFilter || (info.isLive && data.status === 'live')) {
+                    items.push({ id: d.id, ...data });
+                }
+            });
+            items.sort((a,b) => (b.createdAt?.toMillis?.()??0)-(a.createdAt?.toMillis?.()??0));
+            renderGrid(items);
+        },
+        err => console.warn('auction listener error', err)
+    );
+};
+
+window._auctionSubmitPickerState = { filter: 'all', sort: 'rarity', search: '' };
+window._auctionSubmitAllCards = [];
+
+window._auctionOpenSubmitModal = async function() {
+    if (!auth.currentUser) return;
+    const myUid = auth.currentUser.uid;
+    document.getElementById('tcg-auction-submit-modal')?.remove();
+    window._auctionSubmitPickerState = { filter: 'all', sort: 'rarity', search: '' };
+    window._auctionSubmitSelectedId = null;
+
+    const modal = document.createElement('div');
+    modal.id = 'tcg-auction-submit-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    const info = _auctionInfo();
+    const rarityPills = [
+        { val:'all', label:'All' },
+        { val:'ur',  label:'UR' },
+        { val:'ssr', label:'SSR' },
+        { val:'sr',  label:'SR' },
+        { val:'rare',label:'Rare' },
+        { val:'common',label:'Common' },
+    ];
+    const pillStyle = (active) => `padding:5px 12px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.15)':'transparent'};color:${active?'var(--accent-yellow)':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;`;
+
+    modal.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:860px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:92vh;display:flex;flex-direction:column;box-sizing:border-box;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-shrink:0;">
+                <div style="font-size:17px;font-weight:800;">Submit to Auction</div>
+                <button onclick="document.getElementById('tcg-auction-submit-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <p style="font-size:12px;color:var(--text-muted);margin:0 0 12px;flex-shrink:0;">Your card will be added to the pool that opens <strong>${info.nextOpenTime.toLocaleString('en-US',{timeZone:'America/New_York',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true})} ET</strong>.</p>
+            <div style="flex-shrink:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                <input id="auc-picker-search" type="text" placeholder="Search name or anime…" oninput="window._auctionPickerSearch(this.value)" style="flex:1;min-width:160px;padding:8px 12px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;">
+                <select id="auc-picker-sort" onchange="window._auctionPickerSort(this.value)" style="padding:8px 12px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;cursor:pointer;">
+                    <option value="rarity">Sort: Rarity</option>
+                    <option value="name-az">Sort: Name A–Z</option>
+                    <option value="newest">Sort: Newest</option>
+                    <option value="serial-low">Sort: Serial ↑</option>
+                    <option value="serial-high">Sort: Serial ↓</option>
+                </select>
+            </div>
+            <div id="auc-picker-pills" style="flex-shrink:0;display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+                ${rarityPills.map(p=>`<button onclick="window._auctionPickerFilter('${p.val}')" id="auc-pill-${p.val}" style="${pillStyle(p.val==='all')}">${p.label}</button>`).join('')}
+            </div>
+            <div id="auction-submit-collection" style="flex:1;overflow-y:auto;min-height:0;"><div style="padding:20px;text-align:center;color:var(--text-muted);">Loading…</div></div>
+            <div style="flex-shrink:0;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color);">
+                <label style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Starting Bid (min 100 🟡)</label>
+                <input id="auction-starting-bid" type="number" min="100" step="10" value="100" style="width:100%;margin-top:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;font-weight:700;box-sizing:border-box;">
+            </div>
+            <div style="display:flex;gap:10px;margin-top:14px;flex-shrink:0;">
+                <button onclick="document.getElementById('tcg-auction-submit-modal').remove()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;">Cancel</button>
+                <button id="auction-submit-btn" onclick="window._auctionSubmitCard(this)" style="flex:2;padding:12px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:14px;cursor:pointer;">Submit to Auction</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+
+    const collEl = document.getElementById('auction-submit-collection');
+    try {
+        const cards = await _tcgLoadCollection(myUid);
+        if (!cards.length) { collEl.innerHTML = '<p style="color:var(--text-muted);text-align:center;">No cards in your collection.</p>'; return; }
+        window._auctionSubmitAllCards = cards;
+        window._auctionRefreshPickerGrid();
+    } catch(e) { collEl.innerHTML = '<p style="color:var(--text-muted);text-align:center;">Failed to load collection.</p>'; }
+};
+
+window._auctionPickerFilter = function(filter) {
+    window._auctionSubmitPickerState.filter = filter;
+    document.querySelectorAll('[id^="auc-pill-"]').forEach(el => {
+        const active = el.id === `auc-pill-${filter}`;
+        el.style.borderColor   = active ? 'var(--accent-yellow)' : 'var(--border-color)';
+        el.style.background    = active ? 'rgba(245,158,11,0.15)' : 'transparent';
+        el.style.color         = active ? 'var(--accent-yellow)'  : 'var(--text-muted)';
+    });
+    window._auctionRefreshPickerGrid();
+};
+
+window._auctionPickerSort = function(sort) {
+    window._auctionSubmitPickerState.sort = sort;
+    window._auctionRefreshPickerGrid();
+};
+
+window._auctionPickerSearch = function(val) {
+    window._auctionSubmitPickerState.search = val;
+    window._auctionRefreshPickerGrid();
+};
+
+window._auctionRefreshPickerGrid = function() {
+    const collEl = document.getElementById('auction-submit-collection');
+    if (!collEl) return;
+    const { filter, sort, search } = window._auctionSubmitPickerState;
+    const s = search.trim().toLowerCase();
+    const ro = { ur:0, ssr:1, sr:2, rare:3, common:4 };
+    let cards = (window._auctionSubmitAllCards || [])
+        .filter(c => filter === 'all' || c.rarity === filter)
+        .filter(c => !s || (c.name||'').toLowerCase().includes(s) || (c.anime||'').toLowerCase().includes(s))
+        .sort((a,b) => {
+            if (sort === 'name-az')    return (a.name||'').localeCompare(b.name||'');
+            if (sort === 'newest')     return (_tcgPulledAtMillis(b)||0) - (_tcgPulledAtMillis(a)||0);
+            if (sort === 'serial-low') return (a.serial??Infinity)  - (b.serial??Infinity);
+            if (sort === 'serial-high')return (b.serial??-Infinity) - (a.serial??-Infinity);
+            return (ro[a.rarity]??9) - (ro[b.rarity]??9);
+        });
+
+    if (!cards.length) {
+        collEl.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:24px 0;">No cards match.</p>';
+        return;
+    }
+
+    const rc  = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' };
+    const rll = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
+    const sel = window._auctionSubmitSelectedId;
+
+    collEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;">
+        ${cards.map(c => {
+            const snapId = _tcgStoreSnap(c);
+            const color  = rc[c.rarity]  || 'var(--text-muted)';
+            const label  = rll[c.rarity] || c.rarity;
+            const isSelected = c.id === sel;
+            return `<div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;">
+                <div id="auc-sub-${c.id}" onclick="window._auctionSelectSubmitCard('${c.id}')" style="cursor:pointer;padding:5px;border-radius:12px;border:2px solid ${isSelected?'var(--accent-yellow)':'transparent'};background:${isSelected?'rgba(245,158,11,0.12)':'transparent'};width:100%;box-sizing:border-box;display:flex;justify-content:center;">
+                    <div style="width:110px;height:154px;overflow:hidden;border-radius:5px;pointer-events:none;display:flex;justify-content:center;">
+                        <div style="flex-shrink:0;transform:scale(0.5);transform-origin:top center;width:220px;height:308px;">${_tcgBuildCardFace(c)}</div>
+                    </div>
+                </div>
+                <button onclick="event.stopPropagation();window._tcgViewCardSnapshot(${snapId})" title="Preview" style="position:absolute;top:8px;right:4px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">⤢</button>
+                <div style="font-size:10px;font-weight:800;color:${color};text-align:center;">${label}</div>
+                <div style="font-size:10px;color:var(--text-dark);text-align:center;width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 4px;box-sizing:border-box;">${c.name||''}</div>
+            </div>`;
+        }).join('')}
+    </div>`;
+    _tcgObserveSSRCards(collEl);
+};
+
+window._auctionSelectSubmitCard = function(cardId) {
+    window._auctionSubmitSelectedId = cardId;
+    document.querySelectorAll('[id^="auc-sub-"]').forEach(el => {
+        const active = el.id === `auc-sub-${cardId}`;
+        el.style.borderColor = active ? 'var(--accent-yellow)' : 'transparent';
+        el.style.background  = active ? 'rgba(245,158,11,0.12)' : 'transparent';
+    });
+};
+
+let _auctionSubmitInProgress = false;
+window._auctionSubmitCard = async function(btn) {
+    if (_auctionSubmitInProgress) return;
+    if (!auth.currentUser) return;
+    const cardId = window._auctionSubmitSelectedId;
+    if (!cardId) { alert('Select a card first.'); return; }
+    const startingBid = Math.max(100, parseInt(document.getElementById('auction-starting-bid')?.value || '100') || 100);
+
+    btn.disabled = true; btn.textContent = 'Submitting…';
+    _auctionSubmitInProgress = true;
+    try {
+        const myUid = auth.currentUser.uid;
+
+        // Check user doesn't already have a card in the upcoming pool
+        const existingSnap = await getDocs(query(collection(db, 'auction_listings'), where('uid', '==', myUid)));
+        const info = _auctionInfo();
+        const upcoming = existingSnap.docs.filter(d => {
+            const data = d.data();
+            return data.poolDate === info.submitPoolDate && (data.status === 'queued' || data.status === 'live');
+        });
+        if (upcoming.length >= 3) {
+            alert("You already have 3 cards in the upcoming auction pool (max per user per auction)."); return;
+        }
+
+        const cards = await _tcgLoadCollection(myUid);
+        const card = cards.find(c => c.id === cardId);
+        if (!card) { alert('Card not found. Refresh and try again.'); return; }
+
+        // Check not on bulletin
+        const myListingsSnap = await getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid)));
+        const listed = myListingsSnap.docs.filter(d => d.data().status === 'active' && (d.data().cardIds||[]).includes(cardId));
+        if (listed.length) { alert('This card is on the Trade Bulletin. Withdraw it before submitting to auction.'); return; }
+
+        const { id: _id, ...cardData } = card;
+        // Remove card from collection (it's in auction now)
+        await _tcgApplyTradeSide(myUid, [cardId], []);
+
+        let myProfile = {};
+        try { const pd = await getDoc(doc(db,'profiles',myUid)); if (pd.exists()) myProfile = pd.data(); } catch(e) {}
+
+        await addDoc(collection(db, 'auction_listings'), {
+            uid: myUid,
+            displayName: auth.currentUser.displayName || myProfile.displayName || 'Unknown',
+            avatar: myProfile.avatar || '',
+            card: cardData,
+            cardId,
+            startingBid,
+            currentBid: startingBid,
+            currentBidderUid: null,
+            currentBidderName: null,
+            currentBidderAvatar: null,
+            bidCount: 0,
+            poolDate: info.submitPoolDate,
+            openTime: info.nextOpenTime,
+            closeTime: new Date(info.nextOpenTime.getTime() + 24 * 3600000),
+            status: info.isLive ? 'queued' : 'queued',
+            createdAt: new Date()
+        });
+
+        document.getElementById('tcg-auction-submit-modal')?.remove();
+        alert('Card submitted to the auction pool!');
+        window._auctionRender();
+    } catch(e) {
+        alert('Failed to submit: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Submit to Auction';
+    } finally { _auctionSubmitInProgress = false; }
+};
+
+window._auctionWithdrawItem = async function(btn, itemId) {
+    if (!confirm('Withdraw this card from the auction? It will be returned to your collection.')) return;
+    btn.disabled = true; btn.textContent = 'Withdrawing…';
+    try {
+        const snap = await getDoc(doc(db, 'auction_listings', itemId));
+        if (!snap.exists()) { alert('Item not found.'); return; }
+        const item = snap.data();
+        if (item.uid !== auth.currentUser?.uid) { alert('Not your listing.'); return; }
+        if (item.status !== 'queued') { alert('Can only withdraw items that haven\'t gone live yet.'); return; }
+        // Return card
+        await _tcgApplyTradeSide(item.uid, [], [item.card]);
+        await updateDoc(doc(db, 'auction_listings', itemId), { status: 'withdrawn' });
+    } catch(e) {
+        alert('Failed to withdraw: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Withdraw';
+    }
+};
+
+window._auctionOpenBidModal = async function(itemId) {
+    if (!auth.currentUser) return;
+    document.getElementById('tcg-auction-bid-modal')?.remove();
+
+    const snap = await getDoc(doc(db, 'auction_listings', itemId));
+    if (!snap.exists() || snap.data().status !== 'live') { alert('This auction item is no longer available.'); return; }
+    const item = { id: snap.id, ...snap.data() };
+    const minBid = (item.currentBid || item.startingBid) + 10;
+    const myUid = auth.currentUser.uid;
+
+    const modal = document.createElement('div');
+    modal.id = 'tcg-auction-bid-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
+    const rc = {ur:'#f59e0b',ssr:'#8b5cf6',sr:'#3b82f6',rare:'#10b981',common:'var(--text-muted)'}[item.card?.rarity]||'var(--text-muted)';
+    const rl = {ur:'UR',ssr:'SSR',sr:'SR',rare:'Rare',common:'Common'}[item.card?.rarity]||item.card?.rarity||'';
+
+    let myAmber = 0;
+    try { const pd = await getDoc(doc(db,'profiles',myUid)); if (pd.exists()) myAmber = pd.data().amber||0; } catch(e) {}
+
+    modal.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:400px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                <div style="font-size:17px;font-weight:800;">Place a Bid</div>
+                <button onclick="document.getElementById('tcg-auction-bid-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;background:var(--bg-gray);border-radius:12px;padding:12px;">
+                <div style="width:66px;height:92px;overflow:hidden;border-radius:4px;flex-shrink:0;display:flex;justify-content:center;">
+                    <div style="flex-shrink:0;transform:scale(0.3);transform-origin:top center;width:220px;height:308px;">${_tcgBuildCardFace(item.card||{})}</div>
+                </div>
+                <div>
+                    <div style="font-size:11px;font-weight:800;color:${rc};">${rl}</div>
+                    <div style="font-size:14px;font-weight:800;color:var(--text-dark);">${item.card?.name||''}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">by ${item.displayName||''}</div>
+                </div>
+            </div>
+            <div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;margin-bottom:16px;">
+                <div style="font-size:11px;color:var(--text-muted);font-weight:700;">Current bid</div>
+                <div style="font-size:20px;font-weight:800;color:#f59e0b;">🟡 ${(item.currentBid||item.startingBid).toLocaleString()}</div>
+                ${item.currentBidderName ? `<div style="font-size:11px;color:var(--text-muted);">by ${item.currentBidderName}</div>` : '<div style="font-size:11px;color:var(--text-muted);">No bids yet</div>'}
+            </div>
+            <label style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Your Bid (min 🟡 ${minBid.toLocaleString()})</label>
+            <input id="auction-bid-amount" type="number" min="${minBid}" step="10" value="${minBid}" style="width:100%;margin-top:6px;padding:10px 12px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:16px;font-weight:700;box-sizing:border-box;">
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Your balance: 🟡 ${myAmber.toLocaleString()} Amber</div>
+            <div style="display:flex;gap:10px;margin-top:18px;">
+                <button onclick="document.getElementById('tcg-auction-bid-modal').remove()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;">Cancel</button>
+                <button id="auction-bid-btn" onclick="window._auctionPlaceBid(this,'${itemId}',${minBid})" style="flex:2;padding:12px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-weight:800;font-size:14px;cursor:pointer;">Confirm Bid</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    _tcgObserveSSRCards(modal);
+};
+
+let _auctionBidInProgress = false;
+window._auctionPlaceBid = async function(btn, itemId, minBid) {
+    if (_auctionBidInProgress) return;
+    if (!auth.currentUser) return;
+    const bidAmount = parseInt(document.getElementById('auction-bid-amount')?.value || '0');
+    if (bidAmount < minBid) { alert(`Minimum bid is 🟡 ${minBid.toLocaleString()} Amber.`); return; }
+
+    btn.disabled = true; btn.textContent = 'Placing bid…';
+    _auctionBidInProgress = true;
+    const myUid = auth.currentUser.uid;
+    try {
+        let prevBidderUid = null, prevBidAmount = 0;
+        await runTransaction(db, async tx => {
+            const itemRef = doc(db, 'auction_listings', itemId);
+            const itemSnap = await tx.get(itemRef);
+            if (!itemSnap.exists()) throw new Error('Item not found.');
+            const item = itemSnap.data();
+            if (item.status !== 'live') throw new Error('This auction has ended.');
+            if (item.uid === myUid) throw new Error('You cannot bid on your own item.');
+            if (item.currentBidderUid === myUid) throw new Error('You are already the top bidder.');
+            const currentMin = (item.currentBid || item.startingBid) + (item.bidCount > 0 ? 10 : 0);
+            if (bidAmount < currentMin) throw new Error(`Minimum bid is now 🟡 ${currentMin.toLocaleString()}.`);
+
+            // Check bidder's amber balance
+            const bidderProfile = await tx.get(doc(db, 'profiles', myUid));
+            const myAmber = bidderProfile.exists() ? (bidderProfile.data().amber || 0) : 0;
+            if (bidAmount > myAmber) throw new Error(`You only have 🟡 ${myAmber.toLocaleString()} Amber.`);
+
+            prevBidderUid  = item.currentBidderUid;
+            prevBidAmount  = item.currentBid || item.startingBid;
+
+            let myProfile = {};
+            try { const mp = await tx.get(doc(db,'profiles',myUid)); if (mp.exists()) myProfile = mp.data(); } catch(e) {}
+
+            // Deduct from new bidder
+            tx.update(doc(db, 'profiles', myUid), { amber: increment(-bidAmount) });
+            // Refund previous bidder (if any)
+            if (prevBidderUid && prevBidderUid !== myUid) {
+                tx.update(doc(db, 'profiles', prevBidderUid), { amber: increment(prevBidAmount) });
+            }
+            // Update listing
+            tx.update(itemRef, {
+                currentBid: bidAmount,
+                currentBidderUid: myUid,
+                currentBidderName: auth.currentUser.displayName || myProfile.displayName || 'Unknown',
+                currentBidderAvatar: myProfile.avatar || '',
+                bidCount: increment(1)
+            });
+        });
+
+        // Notify previous top bidder they've been outbid (non-fatal)
+        if (prevBidderUid && prevBidderUid !== myUid) {
+            try {
+                await addDoc(collection(db, 'notifications'), {
+                    targetUid: prevBidderUid, type: 'auction_outbid',
+                    senderUid: myUid, senderName: auth.currentUser.displayName || 'Someone',
+                    message: `You were outbid on ${(await getDoc(doc(db,'auction_listings',itemId))).data()?.card?.name || 'an auction item'}! New bid: 🟡 ${bidAmount.toLocaleString()}`,
+                    timestamp: new Date(), read: false
+                });
+            } catch(e) {}
+        }
+
+        document.getElementById('tcg-auction-bid-modal')?.remove();
+    } catch(e) {
+        alert(e.message || 'Failed to place bid.');
+        btn.disabled = false; btn.textContent = 'Confirm Bid';
+    } finally { _auctionBidInProgress = false; }
+};
+
+// ── TCG Trade Bulletin ───────────────────────────────────────────────────────
+
+window._tcgSwitchTradingSubtab = function(tab) {
+    ['trades', 'bulletin'].forEach(t => {
+        const content = document.getElementById(`trading-subtab-${t}`);
+        const btn = document.getElementById(`trading-subtab-${t}-btn`);
+        if (content) content.style.display = t === tab ? '' : 'none';
+        if (btn) {
+            btn.style.color = t === tab ? 'var(--accent-yellow)' : 'var(--text-muted)';
+            btn.style.borderBottom = t === tab ? '2px solid var(--accent-yellow)' : '2px solid transparent';
+        }
+    });
+    if (tab === 'bulletin') window._tcgRenderBulletinBoard();
+    else window._tcgRenderMyTrades();
+};
+
+window._tcgRenderBulletinBoard = async function() {
+    const el = document.getElementById('tcg-bulletin-container');
+    if (!el) return;
+    if (!auth.currentUser) {
+        el.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px 0;">Sign in to view the Trade Bulletin.</p>';
+        return;
+    }
+    const myUid = auth.currentUser.uid;
+    el.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+            <div style="font-size:15px;font-weight:800;color:var(--text-dark);">📌 Trade Bulletin</div>
+            <button onclick="window._tcgOpenPostBulletinModal()" style="padding:10px 20px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">+ Post a Listing</button>
+        </div>
+        <div id="bulletin-my-offers-section"></div>
+        <div id="bulletin-listings-list"><div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div></div>`;
+
+    // Load my offers and all listings in parallel
+    try {
+        const [snap, myOffersSnap] = await Promise.all([
+            getDocs(query(collection(db, 'bulletin_listings'), orderBy('createdAt', 'desc'), limit(60))),
+            getDocs(query(collection(db, 'bulletin_offers'), where('fromUid', '==', myUid)))
+        ]);
+
+        // Render my offers section
+        const myOffers = [];
+        myOffersSnap.forEach(d => myOffers.push({ id: d.id, ...d.data() }));
+        const myOffersEl = document.getElementById('bulletin-my-offers-section');
+        if (myOffersEl && myOffers.length) {
+            // Fetch listing docs in parallel so we can show what each offer is for
+            const uniqueListingIds = [...new Set(myOffers.map(o => o.listingId).filter(Boolean))];
+            const listingDocResults = await Promise.all(uniqueListingIds.map(id => getDoc(doc(db, 'bulletin_listings', id)).catch(() => null)));
+            const listingMap = {};
+            listingDocResults.forEach((d, i) => { if (d?.exists()) listingMap[uniqueListingIds[i]] = d.data(); });
+
+            const _moRC = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' };
+            const statusColor = { pending:'#f59e0b', accepted:'#4CAF50', declined:'#ef4444', withdrawn:'var(--text-muted)' };
+            myOffersEl.innerHTML = `
+                <div style="margin-bottom:24px;">
+                    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">My Offers (${myOffers.length})</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        ${myOffers.sort((a,b)=>(b.createdAt?.toMillis?.()??0)-(a.createdAt?.toMillis?.()??0)).map(o => {
+                            const sc = statusColor[o.status] || 'var(--text-muted)';
+                            const listing = listingMap[o.listingId];
+                            const listingCard = listing?.cards?.[0];
+
+                            const miniCard = (c, label) => {
+                                const snapId = _tcgStoreSnap(c);
+                                const rc = _moRC[c.rarity] || 'var(--text-muted)';
+                                const rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[c.rarity] || c.rarity;
+                                return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                                    ${label ? `<div style="font-size:9px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${label}</div>` : ''}
+                                    <div onclick="window._tcgViewCardSnapshot(${snapId})" title="${c.name||''}" style="cursor:pointer;width:44px;height:62px;overflow:hidden;border-radius:4px;flex-shrink:0;"><div style="transform:scale(0.2);transform-origin:top left;pointer-events:none;">${_tcgBuildCardFace(c)}</div></div>
+                                    <div style="font-size:9px;font-weight:700;color:${rc};text-align:center;">${rl}</div>
+                                    <div style="font-size:9px;color:var(--text-dark);text-align:center;max-width:44px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${c.name||''}</div>
+                                </div>`;
+                            };
+
+                            const offerCardEls = (o.offerCards||[]).map(c => miniCard(c, '')).join('');
+                            const extraOffer = (o.offerCards||[]).length > 4 ? `<span style="font-size:11px;color:var(--text-muted);align-self:center;">+${o.offerCards.length-4}</span>` : '';
+                            const forCardEl = listingCard ? miniCard(listingCard, 'For') : (listing ? `<span style="font-size:11px;color:var(--text-muted);">Listing closed</span>` : `<span style="font-size:11px;color:var(--text-muted);">Listing removed</span>`);
+
+                            return `<div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;border:1px solid var(--border-color);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                                <div style="display:flex;gap:5px;align-items:flex-end;flex-shrink:0;">
+                                    ${offerCardEls || '<span style="font-size:12px;color:var(--text-muted);">Amber only</span>'}
+                                    ${extraOffer}
+                                </div>
+                                ${o.offerAmber>0?`<div style="font-size:12px;font-weight:800;color:#f59e0b;flex-shrink:0;align-self:center;">+🟡 ${o.offerAmber.toLocaleString()}</div>`:''}
+                                <div style="font-size:16px;color:var(--text-muted);align-self:center;flex-shrink:0;">→</div>
+                                <div style="flex-shrink:0;">${forCardEl}</div>
+                                <div style="flex:1;min-width:0;align-self:center;">
+                                    <div style="font-size:11px;color:var(--text-muted);">${formatTimeAgo(o.createdAt)}</div>
+                                </div>
+                                <span style="font-size:11px;font-weight:700;color:${sc};border:1px solid ${sc};border-radius:6px;padding:2px 8px;flex-shrink:0;align-self:center;">${o.status.charAt(0).toUpperCase()+o.status.slice(1)}</span>
+                                ${o.status==='pending'?`<button onclick="window._tcgWithdrawBulletinOffer(this,'${o.id}')" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;font-size:11px;cursor:pointer;flex-shrink:0;">Withdraw</button>`:''}
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            _tcgObserveSSRCards(myOffersEl);
+        }
+
+        const listings = [];
+        snap.forEach(d => {
+            const data = d.data();
+            if (data.status === 'active') listings.push({ id: d.id, ...data });
+        });
+
+        window._tcgBulletinAllListings = listings;
+        window._tcgBulletinMyUid = myUid;
+        if (!window._tcgBulletinBoardState) window._tcgBulletinBoardState = { filter: 'all', sort: 'newest', search: '' };
+
+        const listEl = document.getElementById('bulletin-listings-list');
+        if (!listEl) return;
+
+        // Rarity counts for filter pills
+        const counts = { ur:0, ssr:0, sr:0, rare:0, common:0 };
+        listings.forEach(l => { const r = l.cards?.[0]?.rarity; if (r && r in counts) counts[r]++; });
+
+        const state = window._tcgBulletinBoardState;
+        listEl.innerHTML = `
+            <input type="text" value="${(state.search||'').replace(/"/g,'&quot;')}" placeholder="Search by character or anime…"
+                oninput="window._tcgBulletinBoardSearch(this.value)"
+                style="width:100%;padding:7px 12px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;margin-bottom:10px;">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                    ${['all','ur','ssr','sr','rare','common'].map(f => {
+                        const labels = { all:`All (${listings.length})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
+                        const active = f === state.filter;
+                        return `<button onclick="window._tcgBulletinBoardFilter('${f}')" style="padding:4px 10px;border-radius:14px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
+                    }).join('')}
+                </div>
+                <select onchange="window._tcgBulletinBoardSort(this.value)" style="padding:4px 8px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;">
+                    <option value="newest" ${state.sort==='newest'?'selected':''}>Newest first</option>
+                    <option value="oldest" ${state.sort==='oldest'?'selected':''}>Oldest first</option>
+                    <option value="rarity" ${state.sort==='rarity'?'selected':''}>Rarity</option>
+                    <option value="name-az" ${state.sort==='name-az'?'selected':''}>Name A–Z</option>
+                </select>
+            </div>
+            <div id="bulletin-listings-grid"></div>`;
+
+        window._tcgRefreshBulletinGrid();
+    } catch(e) {
+        const listEl = document.getElementById('bulletin-listings-list');
+        if (listEl) listEl.innerHTML = '<p style="color:var(--text-muted);text-align:center;">Failed to load listings.</p>';
+    }
+};
+
+window._tcgBulletinBoardSearch = function(val) {
+    if (!window._tcgBulletinBoardState) window._tcgBulletinBoardState = { filter:'all', sort:'newest', search:'' };
+    window._tcgBulletinBoardState.search = val;
+    window._tcgRefreshBulletinGrid();
+};
+window._tcgBulletinBoardFilter = function(f) {
+    if (!window._tcgBulletinBoardState) window._tcgBulletinBoardState = { filter:'all', sort:'newest', search:'' };
+    window._tcgBulletinBoardState.filter = f;
+    // Re-render controls so active pill updates
+    document.querySelectorAll('#bulletin-listings-list button[onclick^="window._tcgBulletinBoardFilter"]').forEach(btn => {
+        const bf = btn.getAttribute('onclick').match(/'(\w+)'/)?.[1];
+        const active = bf === f;
+        btn.style.borderColor = active ? 'var(--accent-yellow)' : 'var(--border-color)';
+        btn.style.background = active ? 'rgba(245,158,11,0.12)' : 'var(--bg-gray)';
+        btn.style.color = active ? '#f59e0b' : 'var(--text-muted)';
+    });
+    window._tcgRefreshBulletinGrid();
+};
+window._tcgBulletinBoardSort = function(s) {
+    if (!window._tcgBulletinBoardState) window._tcgBulletinBoardState = { filter:'all', sort:'newest', search:'' };
+    window._tcgBulletinBoardState.sort = s;
+    window._tcgRefreshBulletinGrid();
+};
+
+window._tcgRefreshBulletinGrid = function() {
+    const grid = document.getElementById('bulletin-listings-grid');
+    if (!grid) return;
+    const all = window._tcgBulletinAllListings || [];
+    const myUid = window._tcgBulletinMyUid;
+    const { filter, sort, search } = window._tcgBulletinBoardState || { filter:'all', sort:'newest', search:'' };
+    const s = (search||'').trim().toLowerCase();
+    const rarityOrder = { ur:0, ssr:1, sr:2, rare:3, common:4 };
+
+    let filtered = all
+        .filter(l => filter === 'all' || l.cards?.[0]?.rarity === filter)
+        .filter(l => !s || (l.cards?.[0]?.name||'').toLowerCase().includes(s) || (l.cards?.[0]?.anime||'').toLowerCase().includes(s) || (l.displayName||'').toLowerCase().includes(s));
+
+    filtered.sort((a, b) => {
+        if (sort === 'oldest') return (a.createdAt?.toMillis?.()??0) - (b.createdAt?.toMillis?.()??0);
+        if (sort === 'rarity') return (rarityOrder[a.cards?.[0]?.rarity]??9) - (rarityOrder[b.cards?.[0]?.rarity]??9);
+        if (sort === 'name-az') return (a.cards?.[0]?.name||'').localeCompare(b.cards?.[0]?.name||'');
+        return (b.createdAt?.toMillis?.()??0) - (a.createdAt?.toMillis?.()??0); // newest
+    });
+
+    if (!filtered.length) {
+        grid.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:30px 0;">No listings match your search.</p>';
+        return;
+    }
+
+    const rc = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' };
+    const rlabel = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
+
+    grid.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:14px;">
+        ${filtered.map(listing => {
+            const isOwner = listing.uid === myUid;
+            const offerCount = listing.pendingOfferCount || 0;
+            const cards = listing.cards || [];
+            const first = cards[0];
+            if (!first) return '';
+
+            const snapId = _tcgStoreSnap(first);
+            const rarity = rlabel[first.rarity] || first.rarity;
+            const rarityC = rc[first.rarity] || 'var(--text-muted)';
+            const maxV = RARITY_MAX_VERSIONS[first.rarity] || 5000;
+            const version = first.founder ? '1 of 1'
+                : first.monthlyUr ? 'Wheel UR'
+                : first.serial != null ? `#${first.serial} / ${maxV}` : '';
+            const timeAgo = formatTimeAgo(listing.createdAt);
+            const offerBadge = offerCount > 0
+                ? `<span style="background:#ef4444;color:#fff;border-radius:10px;padding:1px 5px;font-size:10px;margin-left:4px;">${offerCount}</span>`
+                : '';
+            const actions = isOwner
+                ? `<button onclick="window._tcgOpenBulletinOffersView('${listing.id}')" style="padding:8px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:11px;cursor:pointer;width:100%;margin-bottom:5px;">View Offers${offerBadge}</button>
+                   <button onclick="window._tcgWithdrawBulletinListing(this,'${listing.id}')" style="padding:6px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;font-size:11px;cursor:pointer;width:100%;">Withdraw</button>`
+                : `<button onclick="window._tcgOpenBulletinOfferModal('${listing.id}')" style="padding:8px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-weight:800;font-size:11px;cursor:pointer;width:100%;">Make an Offer</button>`;
+
+            return `<div style="background:var(--bg-white);border-radius:14px;border:1px solid var(--border-color);overflow:hidden;display:flex;flex-direction:column;">
+                <div onclick="window._tcgViewCardSnapshot(${snapId})" style="cursor:pointer;position:relative;background:var(--bg-gray);display:flex;justify-content:center;padding:14px 14px 8px;">
+                    <div style="height:232px;overflow:hidden;border-radius:6px;pointer-events:none;display:flex;justify-content:center;width:100%;">
+                        <div style="flex-shrink:0;transform:scale(0.755);transform-origin:top center;width:220px;height:308px;">${_tcgBuildCardFace(first)}</div>
+                    </div>
+                    ${isOwner ? '<div style="position:absolute;top:10px;left:10px;background:#f59e0b;color:#222;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;pointer-events:none;">Yours</div>' : ''}
+                </div>
+                <div style="padding:10px 12px 12px;flex:1;display:flex;flex-direction:column;gap:5px;">
+                    <div>
+                        <div style="font-size:11px;font-weight:800;color:${rarityC};">${rarity}${version ? ` · ${version}` : ''}</div>
+                        <div style="font-size:13px;font-weight:800;color:var(--text-dark);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${first.name || ''}</div>
+                        <div style="font-size:11px;color:var(--text-muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${first.anime || ''}</div>
+                    </div>
+                    ${listing.note ? `<div style="font-size:11px;color:var(--text-dark);border-top:1px solid var(--border-color);padding-top:5px;"><span style="font-weight:800;color:var(--text-muted);">Looking For: </span>${listing.note}</div>` : ''}
+                    <div style="font-size:10px;color:var(--text-muted);">${listing.displayName || ''}${timeAgo ? ` · ${timeAgo}` : ''}</div>
+                    <div style="margin-top:auto;padding-top:6px;">${actions}</div>
+                </div>
+            </div>`;
+        }).filter(Boolean).join('')}
+    </div>`;
+    _tcgObserveSSRCards(grid);
+};
+
+window._tcgOpenPostBulletinModal = async function() {
+    if (!auth.currentUser) return window.openAuthModal();
+    if (!await _tcgCheckTradeEligibility()) return;
+
+    document.getElementById('tcg-bulletin-post-modal')?.remove();
+    const myUid = auth.currentUser.uid;
+
+    const modal = document.createElement('div');
+    modal.id = 'tcg-bulletin-post-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
+    modal.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:700px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <div style="font-size:17px;font-weight:800;color:var(--text-dark);">📌 Post a Trade Listing</div>
+                <button onclick="document.getElementById('tcg-bulletin-post-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <p style="font-size:13px;color:var(--text-muted);margin:0 0 16px;">Select cards from your collection to post for trade. Others can make offers on your listing.</p>
+            <div id="bulletin-post-collection"><div style="text-align:center;padding:24px;color:var(--text-muted);">Loading your cards…</div></div>
+            <div style="margin-top:16px;">
+                <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">What are you looking for? (optional)</label>
+                <input type="text" id="bulletin-post-note" maxlength="120" placeholder="e.g. Looking for SR Naruto cards or Amber" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding-top:14px;border-top:1px solid var(--border-color);">
+                <span id="bulletin-post-summary" style="font-size:13px;color:var(--text-muted);font-weight:700;">0 card(s) selected</span>
+                <button onclick="window._tcgSubmitBulletinListing(this)" style="padding:10px 22px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">Post Listing</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+
+    window._tcgBulletinPostSelectedIds = new Set();
+    window._tcgBulletinPostAllCards = [];
+    window._tcgBulletinPostPickerState = { filter: 'all', sort: 'rarity', search: '' };
+
+    try {
+        const cards = await _tcgLoadCollection(myUid);
+        window._tcgBulletinPostAllCards = cards;
+        const collEl = document.getElementById('bulletin-post-collection');
+        if (!collEl) return;
+        if (!cards.length) {
+            collEl.innerHTML = '<p style="color:var(--text-muted);text-align:center;">No cards in your collection.</p>';
+            return;
+        }
+        collEl.innerHTML = _tcgBulletinPickerHTML('post', cards);
+        _tcgObserveSSRCards(collEl);
+    } catch(e) {
+        const collEl = document.getElementById('bulletin-post-collection');
+        if (collEl) collEl.innerHTML = '<p style="color:var(--text-muted);">Failed to load cards.</p>';
+    }
+};
+
+window._tcgToggleBulletinPostCard = function(el, cardId) {
+    const ids = window._tcgBulletinPostSelectedIds;
+    if (!ids) return;
+    if (ids.has(cardId)) {
+        ids.delete(cardId);
+        el.style.borderColor = 'transparent'; el.style.background = 'transparent';
+    } else {
+        ids.add(cardId);
+        el.style.borderColor = 'var(--accent-yellow)'; el.style.background = 'rgba(245,158,11,0.12)';
+    }
+    const summary = document.getElementById('bulletin-post-summary');
+    if (summary) summary.textContent = `${ids.size} card(s) selected`;
+};
+
+window._tcgSubmitBulletinListing = async function(btn) {
+    if (window._tcgBulletinPostInProgress) return;
+    if (!auth.currentUser) return;
+    const selectedIds = [...(window._tcgBulletinPostSelectedIds || [])];
+    if (!selectedIds.length) { alert('Select at least one card to post.'); return; }
+
+    btn.disabled = true; btn.textContent = 'Posting…';
+    window._tcgBulletinPostInProgress = true;
+
+    try {
+        if (!await _tcgCheckTradeEligibility()) return;
+
+        const myUid = auth.currentUser.uid;
+        const note = document.getElementById('bulletin-post-note')?.value?.trim() || '';
+
+        const existingSnap = await getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid)));
+        const existingCount = existingSnap.docs.filter(d => d.data().status === 'active').length;
+        const LISTING_LIMIT = 10;
+        if (existingCount >= LISTING_LIMIT) {
+            alert(`You already have ${existingCount} active listing${existingCount !== 1 ? 's' : ''}. Withdraw one before posting more (limit is ${LISTING_LIMIT}).`);
+            return;
+        }
+        const spotsLeft = LISTING_LIMIT - existingCount;
+        if (selectedIds.length > spotsLeft) {
+            alert(`You can only post ${spotsLeft} more card${spotsLeft !== 1 ? 's' : ''} (limit is ${LISTING_LIMIT} active listings).`);
+            return;
+        }
+
+        const myCards = await _tcgLoadCollection(myUid);
+        const selectedCards = myCards.filter(c => selectedIds.includes(c.id));
+        if (selectedCards.length !== selectedIds.length) {
+            alert('Some selected cards could not be found. Please refresh and try again.');
+            return;
+        }
+
+        let myProfile = {};
+        try { const pd = await getDoc(doc(db, 'profiles', myUid)); if (pd.exists()) myProfile = pd.data(); } catch(e) {}
+
+        const poster = {
+            uid: myUid,
+            displayName: auth.currentUser.displayName || myProfile.displayName || 'Unknown',
+            avatar: myProfile.avatar || '',
+            note: note || null,
+            status: 'active',
+            pendingOfferCount: 0,
+        };
+        const now = new Date();
+        await Promise.all(selectedCards.map(c => {
+            const { id, ...cardData } = c;
+            return addDoc(collection(db, 'bulletin_listings'), {
+                ...poster,
+                cards: [cardData],
+                cardIds: [id],
+                createdAt: now,
+            });
+        }));
+
+        document.getElementById('tcg-bulletin-post-modal')?.remove();
+        window._tcgRenderBulletinBoard();
+    } catch(e) {
+        alert('Failed to post listing: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Post Listing';
+    } finally {
+        window._tcgBulletinPostInProgress = false;
+    }
+};
+
+window._tcgWithdrawBulletinOffer = async function(btn, offerId) {
+    if (!confirm('Withdraw your offer?')) return;
+    btn.disabled = true; btn.textContent = 'Withdrawing…';
+    try {
+        const oSnap = await getDoc(doc(db, 'bulletin_offers', offerId));
+        if (!oSnap.exists() || oSnap.data().status !== 'pending') { alert('This offer is no longer pending.'); return; }
+        const listingId = oSnap.data().listingId;
+        await updateDoc(doc(db, 'bulletin_offers', offerId), { status: 'withdrawn' });
+        try { await updateDoc(doc(db, 'bulletin_listings', listingId), { pendingOfferCount: increment(-1) }); } catch(e) {}
+        window._tcgRenderBulletinBoard();
+    } catch(e) {
+        alert('Failed to withdraw offer.');
+        btn.disabled = false; btn.textContent = 'Withdraw';
+    }
+};
+
+window._tcgWithdrawBulletinListing = async function(btn, listingId) {
+    if (!confirm('Withdraw this listing? All pending offers will be declined.')) return;
+    btn.disabled = true; btn.textContent = 'Withdrawing…';
+    const myUid = auth.currentUser?.uid;
+    try {
+        await updateDoc(doc(db, 'bulletin_listings', listingId), { status: 'withdrawn' });
+        const oSnap = await getDocs(query(collection(db, 'bulletin_offers'), where('listingOwnerUid', '==', myUid)));
+        const pendingDocs = oSnap.docs.filter(d => d.data().listingId === listingId && d.data().status === 'pending');
+        if (pendingDocs.length) {
+            const batch = writeBatch(db);
+            pendingDocs.forEach(d => batch.update(d.ref, { status: 'declined' }));
+            await batch.commit();
+        }
+        window._tcgRenderBulletinBoard();
+    } catch(e) {
+        alert('Failed to withdraw listing.');
+        btn.disabled = false; btn.textContent = 'Withdraw';
+    }
+};
+
+window._tcgOpenBulletinOfferModal = async function(listingId) {
+    if (!auth.currentUser) return window.openAuthModal();
+    if (!await _tcgCheckTradeEligibility()) return;
+    const myUid = auth.currentUser.uid;
+
+    document.getElementById('tcg-bulletin-offer-modal')?.remove();
+
+    let listing;
+    try {
+        const snap = await getDoc(doc(db, 'bulletin_listings', listingId));
+        if (!snap.exists() || snap.data().status !== 'active') { alert('This listing is no longer available.'); return; }
+        listing = { id: snap.id, ...snap.data() };
+    } catch(e) { alert('Failed to load listing.'); return; }
+
+    if (listing.uid === myUid) { alert("You can't make an offer on your own listing."); return; }
+
+    try {
+        const existSnap = await getDocs(query(collection(db, 'bulletin_offers'), where('fromUid', '==', myUid)));
+        const hasPending = existSnap.docs.some(d => d.data().listingId === listingId && d.data().status === 'pending');
+        if (hasPending) { alert("You already have a pending offer on this listing. The seller must decline it before you can submit a new one."); return; }
+    } catch(e) {}
+
+    let myAmber = 0;
+    try { const pd = await getDoc(doc(db, 'profiles', myUid)); if (pd.exists()) myAmber = pd.data().amber || 0; } catch(e) {}
+
+    const _rcBoardRarityColor = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' };
+    const listingMiniCards = (listing.cards || []).map(c => {
+        const snapId = _tcgStoreSnap(c);
+        const rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[c.rarity] || c.rarity;
+        const serial = c.serial != null ? `#${c.serial}` : (c.monthlyUr ? 'Wheel UR' : (c.founder ? '1 of 1' : ''));
+        return `<div onclick="window._tcgViewCardSnapshot(${snapId})" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-card);">
+            <div style="width:88px;height:123px;overflow:hidden;border-radius:6px;flex-shrink:0;pointer-events:none;">
+                <div style="transform:scale(0.4);transform-origin:top left;width:220px;height:308px;">${_tcgBuildCardFace(c)}</div>
+            </div>
+            <div style="text-align:center;width:88px;">
+                <div style="font-size:10px;font-weight:800;color:${_rcBoardRarityColor[c.rarity]||'var(--text-muted)'};">${rl}</div>
+                <div style="font-size:10px;color:var(--text-dark);font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${c.name||''}</div>
+                ${serial ? `<div style="font-size:10px;color:var(--text-muted);">${serial}</div>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+
+    const modal = document.createElement('div');
+    modal.id = 'tcg-bulletin-offer-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
+    modal.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:760px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                <div style="font-size:17px;font-weight:800;color:var(--text-dark);">Make an Offer</div>
+                <button onclick="document.getElementById('tcg-bulletin-offer-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div style="background:var(--bg-gray);border-radius:10px;padding:14px;margin-bottom:18px;">
+                <div style="font-size:11px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">They're Offering (posted by ${listing.displayName || 'Unknown'})</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">${listingMiniCards}</div>
+                ${listing.note ? `<p style="margin:8px 0 0;font-size:12px;color:var(--text-dark);"><span style="font-weight:800;color:var(--text-muted);">Looking For: </span>${listing.note}</p>` : ''}
+            </div>
+            <div style="margin-bottom:14px;">
+                <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">Your Offer — Select Cards</div>
+                <div id="bulletin-offer-collection"><div style="text-align:center;padding:16px;color:var(--text-muted);">Loading your cards…</div></div>
+                <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:16px;">
+                    <div>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">🟡 Amber to include (you have ${myAmber.toLocaleString()})</label>
+                        <input type="number" id="bulletin-offer-amber" min="0" max="${myAmber}" step="10" value="0" style="width:180px;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;">
+                    </div>
+                    <div style="flex:1;min-width:200px;">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">Message (optional)</label>
+                        <input type="text" id="bulletin-offer-note" maxlength="120" placeholder="Optional message to the seller…" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
+                    </div>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding-top:14px;border-top:1px solid var(--border-color);">
+                <span id="bulletin-offer-summary" style="font-size:13px;color:var(--text-muted);font-weight:700;">0 card(s) selected</span>
+                <button onclick="window._tcgSubmitBulletinOffer(this,'${listingId}')" style="padding:10px 22px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">Send Offer</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+
+    window._tcgBulletinOfferSelectedIds = new Set();
+
+    window._tcgBulletinOfferAllCards = [];
+    window._tcgBulletinOfferPickerState = { filter: 'all', sort: 'rarity', search: '' };
+
+    try {
+        const cards = await _tcgLoadCollection(myUid);
+        window._tcgBulletinOfferAllCards = cards;
+        const collEl = document.getElementById('bulletin-offer-collection');
+        if (!collEl) return;
+        if (!cards.length) {
+            collEl.innerHTML = '<p style="color:var(--text-muted);text-align:center;font-size:13px;">No cards in your collection.</p>';
+            return;
+        }
+        collEl.innerHTML = _tcgBulletinPickerHTML('offer', cards);
+        _tcgObserveSSRCards(collEl);
+    } catch(e) {
+        const collEl = document.getElementById('bulletin-offer-collection');
+        if (collEl) collEl.innerHTML = '<p style="color:var(--text-muted);">Failed to load cards.</p>';
+    }
+};
+
+window._tcgToggleBulletinOfferCard = function(el, cardId) {
+    const ids = window._tcgBulletinOfferSelectedIds;
+    if (!ids) return;
+    if (ids.has(cardId)) {
+        ids.delete(cardId);
+        el.style.borderColor = 'transparent'; el.style.background = 'transparent';
+    } else {
+        ids.add(cardId);
+        el.style.borderColor = '#7c3aed'; el.style.background = 'rgba(124,58,237,0.1)';
+    }
+    const summary = document.getElementById('bulletin-offer-summary');
+    if (summary) summary.textContent = `${ids.size} card(s) selected`;
+};
+
+window._tcgSubmitBulletinOffer = async function(btn, listingId) {
+    if (window._tcgBulletinOfferInProgress) return;
+    if (!auth.currentUser) return;
+
+    const selectedIds = [...(window._tcgBulletinOfferSelectedIds || [])];
+    const amber = parseInt(document.getElementById('bulletin-offer-amber')?.value || '0') || 0;
+    if (!selectedIds.length && !amber) { alert('Include at least one card or some Amber in your offer.'); return; }
+
+    btn.disabled = true; btn.textContent = 'Sending…';
+    window._tcgBulletinOfferInProgress = true;
+
+    try {
+        if (!await _tcgCheckTradeEligibility()) return;
+
+        const myUid = auth.currentUser.uid;
+
+        const lSnap = await getDoc(doc(db, 'bulletin_listings', listingId));
+        if (!lSnap.exists() || lSnap.data().status !== 'active') {
+            alert('This listing is no longer available.'); return;
+        }
+        const listing = { id: lSnap.id, ...lSnap.data() };
+
+        // Check for conflicts: duplicate offer on this listing, same card in another pending offer, or card already on the bulletin
+        const [existSnap, myListingsSnap] = await Promise.all([
+            getDocs(query(collection(db, 'bulletin_offers'), where('fromUid', '==', myUid))),
+            getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid)))
+        ]);
+
+        if (existSnap.docs.some(d => d.data().listingId === listingId && d.data().status === 'pending')) {
+            alert('You already have a pending offer on this listing.'); return;
+        }
+
+        if (selectedIds.length) {
+            // Cards already offered elsewhere
+            const alreadyOfferedIds = new Set(
+                existSnap.docs.filter(d => d.data().status === 'pending').flatMap(d => d.data().offerCardIds || [])
+            );
+            const doubleOffered = selectedIds.filter(id => alreadyOfferedIds.has(id));
+            if (doubleOffered.length) {
+                alert('One or more of your selected cards is already in a pending offer on another listing. Withdraw that offer first.'); return;
+            }
+
+            // Cards posted as active bulletin listings
+            const listedCardIds = new Set(
+                myListingsSnap.docs.filter(d => d.data().status === 'active').flatMap(d => d.data().cardIds || [])
+            );
+            const bulletinConflict = selectedIds.filter(id => listedCardIds.has(id));
+            if (bulletinConflict.length) {
+                alert('One or more of your selected cards is posted on the Trade Bulletin. Withdraw those listings before offering them.'); return;
+            }
+        }
+
+        // Validate amber
+        if (amber > 0) {
+            let balance = 0;
+            try { const pd = await getDoc(doc(db, 'profiles', myUid)); if (pd.exists()) balance = pd.data().amber || 0; } catch(e) {}
+            if (amber > balance) {
+                alert(`You only have 🟡 ${balance.toLocaleString()} Amber — you can't offer more than you have.`); return;
+            }
+        }
+
+        let offerCards = [], offerCardIds = [];
+        if (selectedIds.length) {
+            const myCards = await _tcgLoadCollection(myUid);
+            offerCards = myCards.filter(c => selectedIds.includes(c.id));
+            offerCardIds = offerCards.map(c => c.id);
+            if (offerCards.length !== selectedIds.length) {
+                alert('Some selected cards could not be found. Please refresh and try again.'); return;
+            }
+        }
+
+        let myProfile = {};
+        try { const pd = await getDoc(doc(db, 'profiles', myUid)); if (pd.exists()) myProfile = pd.data(); } catch(e) {}
+        const note = document.getElementById('bulletin-offer-note')?.value?.trim() || '';
+
+        await runTransaction(db, async tx => {
+            const freshListing = await tx.get(doc(db, 'bulletin_listings', listingId));
+            if (!freshListing.exists() || freshListing.data().status !== 'active') throw new Error('Listing no longer available.');
+            const offerRef = doc(collection(db, 'bulletin_offers'));
+            tx.set(offerRef, {
+                listingId,
+                listingOwnerUid: listing.uid,
+                fromUid: myUid,
+                fromName: auth.currentUser.displayName || myProfile.displayName || 'Unknown',
+                fromAvatar: myProfile.avatar || '',
+                offerCards: offerCards.map(({ id, ...rest }) => rest),
+                offerCardIds,
+                offerAmber: amber,
+                note: note || null,
+                status: 'pending',
+                createdAt: new Date()
+            });
+            tx.update(doc(db, 'bulletin_listings', listingId), { pendingOfferCount: increment(1) });
+        });
+
+        await addDoc(collection(db, 'notifications'), {
+            targetUid: listing.uid, type: 'bulletin_offer',
+            senderUid: myUid, senderName: auth.currentUser.displayName || 'A user',
+            message: 'made an offer on your Trade Bulletin listing',
+            listingId, timestamp: new Date(), read: false
+        });
+
+        document.getElementById('tcg-bulletin-offer-modal')?.remove();
+        alert('Offer sent!');
+    } catch(e) {
+        alert('Failed to send offer: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Send Offer';
+    } finally {
+        window._tcgBulletinOfferInProgress = false;
+    }
+};
+
+window._tcgOpenBulletinOffersView = async function(listingId) {
+    if (!auth.currentUser) return;
+    document.getElementById('tcg-bulletin-offers-modal')?.remove();
+
+    let listing, offers;
+    try {
+        const myUid = auth.currentUser.uid;
+        const [lSnap, oSnap] = await Promise.all([
+            getDoc(doc(db, 'bulletin_listings', listingId)),
+            getDocs(query(collection(db, 'bulletin_offers'), where('listingOwnerUid', '==', myUid)))
+        ]);
+        if (!lSnap.exists()) { alert('Listing not found.'); return; }
+        listing = { id: lSnap.id, ...lSnap.data() };
+        offers = [];
+        oSnap.forEach(d => { if (d.data().listingId === listingId) offers.push({ id: d.id, ...d.data() }); });
+        offers.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    } catch(e) { alert('Failed to load offers.'); return; }
+
+    const pending = offers.filter(o => o.status === 'pending');
+    const past = offers.filter(o => o.status !== 'pending');
+
+    const _rORC = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' };
+    const renderOffer = (o, isPending) => {
+        const miniCards = (o.offerCards || []).map(c => {
+            const snapId = _tcgStoreSnap(c);
+            const rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[c.rarity] || c.rarity;
+            const serial = c.serial != null ? `#${c.serial}` : (c.monthlyUr ? 'Wheel UR' : '');
+            return `<div onclick="window._tcgViewCardSnapshot(${snapId})" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px;border-radius:7px;border:1px solid var(--border-color);background:var(--bg-card);">
+                <div style="width:66px;height:92px;overflow:hidden;border-radius:4px;flex-shrink:0;pointer-events:none;">
+                    <div style="transform:scale(0.3);transform-origin:top left;width:220px;height:308px;">${_tcgBuildCardFace(c)}</div>
+                </div>
+                <div style="text-align:center;width:66px;">
+                    <div style="font-size:9px;font-weight:800;color:${_rORC[c.rarity]||'var(--text-muted)'};">${rl}</div>
+                    <div style="font-size:9px;color:var(--text-dark);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${c.name||''}</div>
+                    ${serial ? `<div style="font-size:9px;color:var(--text-muted);">${serial}</div>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+        const statusColor = { pending: '#f59e0b', accepted: '#4CAF50', declined: '#ef4444' }[o.status] || 'var(--text-muted)';
+        const hasCards = (o.offerCards || []).length > 0;
+        return `<div style="background:var(--bg-gray);border-radius:12px;padding:14px 16px;border:1px solid var(--border-color);">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+                <img src="${o.fromAvatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(o.fromName || '?')}&backgroundColor=ffc107&fontColor=333333`}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=?&backgroundColor=ffc107&fontColor=333333'">
+                <span style="font-weight:800;font-size:13px;">${o.fromName || 'Unknown'}</span>
+                <span style="font-size:11px;color:var(--text-muted);">${formatTimeAgo(o.createdAt)}</span>
+                ${!isPending ? `<span style="font-size:11px;font-weight:700;color:${statusColor};border:1px solid ${statusColor};border-radius:6px;padding:1px 7px;">${o.status.charAt(0).toUpperCase() + o.status.slice(1)}</span>` : ''}
+            </div>
+            ${hasCards ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:${o.offerAmber || o.note ? '8px' : '0'};">${miniCards}</div>` : ''}
+            ${o.offerAmber ? `<div style="font-size:13px;font-weight:800;color:#f59e0b;margin-bottom:${o.note ? '6px' : '0'};">🟡 ${o.offerAmber.toLocaleString()} Amber</div>` : ''}
+            ${!hasCards && !o.offerAmber ? '<div style="font-size:13px;color:var(--text-muted);margin-bottom:6px;">Amber-only offer</div>' : ''}
+            ${o.note ? `<p style="font-size:12px;color:var(--text-muted);margin:0 0 8px;font-style:italic;">"${o.note}"</p>` : ''}
+            ${isPending ? `<div style="display:flex;gap:8px;margin-top:10px;">
+                <button onclick="window._tcgAcceptBulletinOffer(this,'${listingId}','${o.id}')" style="padding:8px 18px;border-radius:8px;border:none;background:#4CAF50;color:#fff;font-weight:800;font-size:12px;cursor:pointer;">Accept</button>
+                <button onclick="window._tcgDeclineBulletinOffer(this,'${o.id}','${listingId}')" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;font-size:12px;cursor:pointer;">Decline</button>
+            </div>` : ''}
+        </div>`;
+    };
+
+    const modal = document.createElement('div');
+    modal.id = 'tcg-bulletin-offers-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
+    modal.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:680px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                <div style="font-size:17px;font-weight:800;color:var(--text-dark);">Offers on Your Listing</div>
+                <button onclick="document.getElementById('tcg-bulletin-offers-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            ${!pending.length && !past.length ? '<p style="color:var(--text-muted);text-align:center;padding:24px 0;">No offers yet.</p>' : ''}
+            ${pending.length ? `
+                <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">Pending (${pending.length})</div>
+                <div style="display:flex;flex-direction:column;gap:10px;${past.length ? 'margin-bottom:20px;' : ''}">${pending.map(o => renderOffer(o, true)).join('')}</div>` : ''}
+            ${past.length ? `
+                <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">Past Offers</div>
+                <div style="display:flex;flex-direction:column;gap:10px;">${past.map(o => renderOffer(o, false)).join('')}</div>` : ''}
+        </div>`;
+    document.body.appendChild(modal);
+    _tcgObserveSSRCards(modal);
+};
+
+window._tcgAcceptBulletinOffer = async function(btn, listingId, offerId) {
+    if (window._tcgBulletinActionInProgress) return;
+    if (!auth.currentUser) return;
+    if (!confirm('Accept this offer? Cards will be transferred immediately and all other offers will be declined.')) return;
+
+    btn.disabled = true; btn.textContent = 'Accepting…';
+    window._tcgBulletinActionInProgress = true;
+
+    try {
+        const myUid = auth.currentUser.uid;
+        let listing, offer;
+
+        await runTransaction(db, async tx => {
+            const lSnap = await tx.get(doc(db, 'bulletin_listings', listingId));
+            const oSnap = await tx.get(doc(db, 'bulletin_offers', offerId));
+            if (!lSnap.exists() || lSnap.data().status !== 'active') throw new Error('Listing is no longer available.');
+            if (!oSnap.exists() || oSnap.data().status !== 'pending') throw new Error('This offer is no longer available.');
+            if (lSnap.data().uid !== myUid) throw new Error('Not your listing.');
+            listing = { id: lSnap.id, ...lSnap.data() };
+            offer = { id: oSnap.id, ...oSnap.data() };
+            tx.update(lSnap.ref, { status: 'closed' });
+            tx.update(oSnap.ref, { status: 'accepted' });
+        });
+
+        // Validate offeror's amber balance before proceeding
+        const offerAmber = offer.offerAmber || 0;
+        if (offerAmber > 0) {
+            let balance = 0;
+            try { const pd = await getDoc(doc(db, 'profiles', offer.fromUid)); if (pd.exists()) balance = pd.data().amber || 0; } catch(e) {}
+            if (offerAmber > balance) {
+                await updateDoc(doc(db, 'bulletin_listings', listingId), { status: 'active' });
+                await updateDoc(doc(db, 'bulletin_offers', offerId), { status: 'pending' });
+                alert(`This offer included 🟡 ${offerAmber.toLocaleString()} Amber, but ${offer.fromName} only has ${balance.toLocaleString()}. You cannot accept it.`);
+                btn.disabled = false; btn.textContent = 'Accept';
+                return;
+            }
+        }
+
+        // Transfer cards: A (listing owner) loses listed cards, gains offer cards
+        //                 B (offeror) loses offer cards, gains listing cards
+        await _tcgApplyTradeSide(myUid, listing.cardIds || [], offer.offerCards || []);
+        await _tcgApplyTradeSide(offer.fromUid, offer.offerCardIds || [], listing.cards || []);
+
+        // Transfer amber: B pays A
+        if (offerAmber > 0) {
+            await updateDoc(doc(db, 'profiles', myUid), { amber: increment(offerAmber) });
+            await updateDoc(doc(db, 'profiles', offer.fromUid), { amber: increment(-offerAmber) });
+        }
+
+        // If the offeror had any of their transferred cards posted on the bulletin, close those listings
+        if ((offer.offerCardIds || []).length > 0) {
+            try {
+                const offererListings = await getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', offer.fromUid)));
+                const staleListings = offererListings.docs.filter(d => {
+                    const data = d.data();
+                    return data.status === 'active' && (data.cardIds || []).some(id => offer.offerCardIds.includes(id));
+                });
+                if (staleListings.length) {
+                    const cleanupBatch = writeBatch(db);
+                    staleListings.forEach(d => cleanupBatch.update(d.ref, { status: 'withdrawn' }));
+                    await cleanupBatch.commit();
+                }
+            } catch(e) {}
+        }
+
+        // Decline all other pending offers
+        const otherSnap = await getDocs(query(collection(db, 'bulletin_offers'), where('listingOwnerUid', '==', myUid)));
+        const stillPending = otherSnap.docs.filter(d => d.data().listingId === listingId && d.data().status === 'pending');
+        if (stillPending.length) {
+            const batch = writeBatch(db);
+            stillPending.forEach(d => batch.update(d.ref, { status: 'declined' }));
+            await batch.commit();
+        }
+
+        // Log in trade history (non-fatal — cards are already transferred at this point)
+        let myAvatar = '';
+        try { const pd = await getDoc(doc(db, 'profiles', myUid)); if (pd.exists()) myAvatar = pd.data().avatar || ''; } catch(e) {}
+        try {
+            await addDoc(collection(db, 'trades'), {
+                participants: [myUid, offer.fromUid],
+                fromUid: offer.fromUid, fromName: offer.fromName || 'Unknown', fromAvatar: offer.fromAvatar || '',
+                toUid: myUid, toName: auth.currentUser.displayName || 'Unknown', toAvatar: myAvatar,
+                offerCards: offer.offerCards || [], requestCards: listing.cards || [],
+                offerCardIds: offer.offerCardIds || [], requestCardIds: listing.cardIds || [],
+                offerAmber, requestAmber: 0,
+                status: 'completed', fromCompleted: true, toCompleted: true,
+                source: 'bulletin', bulletinListingId: listingId,
+                history: [], createdAt: new Date(), updatedAt: new Date()
+            });
+        } catch(e) { console.warn('bulletin trade log failed:', e.message); }
+
+        // Notify offeror (non-fatal)
+        try {
+            await addDoc(collection(db, 'notifications'), {
+                targetUid: offer.fromUid, type: 'bulletin_offer_accepted',
+                senderUid: myUid, senderName: auth.currentUser.displayName || 'Someone',
+                message: 'accepted your Trade Bulletin offer! Cards have been transferred.',
+                listingId, timestamp: new Date(), read: false
+            });
+        } catch(e) {}
+
+        document.getElementById('tcg-bulletin-offers-modal')?.remove();
+        alert('Offer accepted! Cards have been transferred.');
+        window._tcgRenderBulletinBoard();
+    } catch(e) {
+        alert('Failed to accept offer: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Accept';
+    } finally {
+        window._tcgBulletinActionInProgress = false;
+    }
+};
+
+window._tcgDeclineBulletinOffer = async function(btn, offerId, listingId) {
+    btn.disabled = true; btn.textContent = 'Declining…';
+    try {
+        await updateDoc(doc(db, 'bulletin_offers', offerId), { status: 'declined' });
+        await updateDoc(doc(db, 'bulletin_listings', listingId), { pendingOfferCount: increment(-1) });
+        document.getElementById('tcg-bulletin-offers-modal')?.remove();
+        window._tcgOpenBulletinOffersView(listingId);
+    } catch(e) {
+        alert('Failed to decline offer.');
+        btn.disabled = false; btn.textContent = 'Decline';
+    }
 };
 
 // Admin — load all trades across all users, most recent first
@@ -17367,10 +19064,15 @@ window.initBwDbGame = async function() {
     window.bwDbState = { answer: bwDbGetToday(), guesses: [], solved: false, selectedChar: null, date: today };
     try {
         if (auth.currentUser) {
-            const snap = await getDoc(doc(db, 'bw_db_games', `${auth.currentUser.uid}_${today}`));
-            if (snap.exists()) {
-                const d = snap.data();
-                _bwApplyDailySave(window.bwDbState, d, BW_DB_CHARS, 'wb_bwdb', 'bw_db_games', today);
+            try {
+                const snap = await getDoc(doc(db, 'bw_db_games', `${auth.currentUser.uid}_${today}`));
+                if (snap.exists()) {
+                    const d = snap.data();
+                    _bwApplyDailySave(window.bwDbState, d, BW_DB_CHARS, 'wb_bwdb', 'bw_db_games', today);
+                }
+            } catch(e) {
+                const saved = localStorage.getItem(`wb_bwdb_${today}`);
+                if (saved) { const d = JSON.parse(saved); _bwApplyDailySave(window.bwDbState, d, BW_DB_CHARS, 'wb_bwdb', 'bw_db_games', today); }
             }
         } else {
             const saved = localStorage.getItem(`wb_bwdb_${today}`);
@@ -17432,11 +19134,10 @@ window.submitBwDbGuess = async function() {
     if (!isCorrect && bwAllGreen(colors)) bwShowAllGreenNotice('bwdb-grid', 8 * 500 + 800);
     const today = bwGetDate();
     const saveData = { guesses: window.bwDbState.guesses, solved: window.bwDbState.solved, date: today, guessCount: window.bwDbState.guesses.length, displayName: auth.currentUser?.displayName||'Player', uid: auth.currentUser?.uid || null };
+    window._saveGameState(`wb_bwdb_${today}`, JSON.stringify(saveData));
     if (auth.currentUser) {
         setDoc(doc(db, 'bw_db_games', `${auth.currentUser.uid}_${today}`), saveData).catch(()=>{});
         if (window.bwDbState.solved) window.bwDbUpdateLeaderboard(window.bwDbState.guesses.length);
-    } else {
-        window._saveGameState(`wb_bwdb_${today}`, JSON.stringify(saveData));
     }
 };
 
