@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PR Card Shape Preview</title>
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: #0e1016;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 48px;
+    font-family: system-ui, sans-serif;
+    padding: 40px 20px;
+    box-sizing: border-box;
+  }
+
+  h1 { color: #fff; font-size: 15px; letter-spacing: 2px; text-transform: uppercase; margin: 0; opacity: 0.5; }
+
+  .row {
+    display: flex;
+    gap: 48px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .card-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .label {
+    color: rgba(255,255,255,0.6);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    text-align: center;
+  }
+  .sublabel {
+    color: rgba(255,255,255,0.35);
+    font-size: 11px;
+    text-align: center;
+    margin-top: -10px;
+    max-width: 200px;
+    line-height: 1.4;
+  }
+
+  /* ── Shared rainbow animation ── */
+  @keyframes pr-rainbow {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* Holographic shimmer overlay */
+  .card-outer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: conic-gradient(
+      from calc(var(--mx, 0.5) * 360deg) at calc(var(--mx, 0.5) * 100%) calc(var(--my, 0.5) * 100%),
+      rgba(255,0,128,0.18) 0deg,
+      rgba(255,165,0,0.14) 60deg,
+      rgba(255,255,0,0.10) 120deg,
+      rgba(0,255,128,0.14) 180deg,
+      rgba(0,200,255,0.18) 240deg,
+      rgba(160,32,255,0.14) 300deg,
+      rgba(255,0,128,0.18) 360deg
+    );
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .card-outer:hover::after { opacity: 1; }
+
+  /* ──────────────────────────────────────────────────────
+     OPTION A — Cut / Beveled corners (octagon)
+  ────────────────────────────────────────────────────── */
+  .card-a {
+    width: 220px;
+    height: 308px;
+    position: relative;
+    /* Rainbow border background */
+    background: linear-gradient(135deg,
+      #ff0080 0%, #ff8c00 14%, #ffe100 28%, #00ff88 42%,
+      #00d4ff 57%, #8000ff 71%, #ff0080 85%, #ff8c00 100%);
+    background-size: 300% 300%;
+    animation: pr-rainbow 4s ease infinite;
+    padding: 6px;
+    box-sizing: border-box;
+    /* Cut corners */
+    clip-path: polygon(
+      18px 0%, calc(100% - 18px) 0%,
+      100% 18px, 100% calc(100% - 18px),
+      calc(100% - 18px) 100%, 18px 100%,
+      0% calc(100% - 18px), 0% 18px
+    );
+    box-shadow:
+      0 12px 48px rgba(0,0,0,0.7),
+      0 0 40px rgba(255,0,128,0.4),
+      0 0 80px rgba(0,200,255,0.3);
+    flex-shrink: 0;
+  }
+  .card-a .card-inner {
+    width: 100%;
+    height: 100%;
+    background: #14161e;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    /* Match the outer clip so inner fills cleanly */
+    clip-path: polygon(
+      12px 0%, calc(100% - 12px) 0%,
+      100% 12px, 100% calc(100% - 12px),
+      calc(100% - 12px) 100%, 12px 100%,
+      0% calc(100% - 12px), 0% 12px
+    );
+  }
+
+  /* ──────────────────────────────────────────────────────
+     OPTION B — Shield / pointed bottom
+  ────────────────────────────────────────────────────── */
+  .card-b {
+    width: 220px;
+    height: 308px;
+    position: relative;
+    background: linear-gradient(135deg,
+      #ff0080 0%, #ff8c00 14%, #ffe100 28%, #00ff88 42%,
+      #00d4ff 57%, #8000ff 71%, #ff0080 85%, #ff8c00 100%);
+    background-size: 300% 300%;
+    animation: pr-rainbow 4s ease infinite;
+    padding: 6px;
+    box-sizing: border-box;
+    /* Shield: straight top, round top-corners, pointed bottom-center */
+    clip-path: polygon(
+      14px 0%, calc(100% - 14px) 0%,
+      100% 14px,
+      100% 72%,
+      50% 100%,
+      0% 72%,
+      0% 14px
+    );
+    box-shadow:
+      0 12px 48px rgba(0,0,0,0.7),
+      0 0 40px rgba(255,0,128,0.4),
+      0 0 80px rgba(0,200,255,0.3);
+    flex-shrink: 0;
+  }
+  .card-b .card-inner {
+    width: 100%;
+    height: 100%;
+    background: #14161e;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    clip-path: polygon(
+      8px 0%, calc(100% - 8px) 0%,
+      100% 8px,
+      100% 72%,
+      50% 100%,
+      0% 72%,
+      0% 8px
+    );
+  }
+
+  /* ──────────────────────────────────────────────────────
+     OPTION C — Same rounded rect, double-ring rainbow border
+  ────────────────────────────────────────────────────── */
+  .card-c-outer {
+    width: 220px;
+    height: 308px;
+    border-radius: 14px;
+    position: relative;
+    /* Outer ring: thick rainbow */
+    background: linear-gradient(135deg,
+      #ff0080 0%, #ff8c00 14%, #ffe100 28%, #00ff88 42%,
+      #00d4ff 57%, #8000ff 71%, #ff0080 85%, #ff8c00 100%);
+    background-size: 300% 300%;
+    animation: pr-rainbow 4s ease infinite;
+    padding: 5px;
+    box-sizing: border-box;
+    box-shadow:
+      0 12px 48px rgba(0,0,0,0.7),
+      0 0 40px rgba(255,0,128,0.4),
+      0 0 80px rgba(0,200,255,0.3);
+    flex-shrink: 0;
+  }
+  /* Inner ring: dark gap */
+  .card-c-outer .card-c-mid {
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+    background: #14161e;
+    padding: 3px;
+    box-sizing: border-box;
+    position: relative;
+  }
+  /* Second rainbow ring */
+  .card-c-outer .card-c-mid::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 10px;
+    background: linear-gradient(135deg,
+      #ff0080 0%, #ff8c00 14%, #ffe100 28%, #00ff88 42%,
+      #00d4ff 57%, #8000ff 71%, #ff0080 85%, #ff8c00 100%);
+    background-size: 300% 300%;
+    animation: pr-rainbow 4s ease infinite reverse;
+    opacity: 0.55;
+    z-index: 0;
+  }
+  .card-c-outer .card-inner {
+    width: 100%;
+    height: 100%;
+    background: #14161e;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+  }
+
+  /* ── Card internals (shared) ── */
+  .card-outer { position: relative; }
+
+  .card-inner .card-art {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+  .card-inner .card-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  /* Rainbow shimmer over art */
+  .card-inner .card-art::before {
+    content: '';
+    position: absolute;
+    inset: -20%;
+    background: linear-gradient(115deg,
+      transparent 25%,
+      rgba(255,0,128,0.18) 38%,
+      rgba(0,200,255,0.15) 50%,
+      rgba(255,255,0,0.12) 62%,
+      rgba(160,32,255,0.18) 72%,
+      transparent 80%);
+    mix-blend-mode: screen;
+    z-index: 2;
+    pointer-events: none;
+    animation: shimmer-drift 8s ease-in-out infinite alternate;
+  }
+  @keyframes shimmer-drift {
+    0%   { transform: translateX(-15%) rotate(-5deg); }
+    100% { transform: translateX(15%)  rotate(5deg); }
+  }
+  /* Dark gradient top/bottom overlays */
+  .card-inner .card-art::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(to bottom, rgba(10,10,18,0.6) 0%, transparent 28%),
+      linear-gradient(to top,    rgba(10,10,18,0.88) 0%, transparent 44%);
+    z-index: 3;
+  }
+
+  .card-inner .card-header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    z-index: 5;
+  }
+  .wb-mark {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    color: rgba(255,255,255,0.9);
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+  }
+  .pr-gem {
+    width: 20px; height: 20px;
+    background: linear-gradient(135deg, #fff 0%, #ff80c8 40%, #80c8ff 70%, #c8ff80 100%);
+    border-radius: 3px;
+    transform: rotate(45deg);
+    box-shadow: 0 0 12px rgba(255,255,255,0.8), 0 0 24px rgba(255,0,128,0.5);
+    animation: gem-pulse 2s ease-in-out infinite;
+  }
+  @keyframes gem-pulse {
+    0%, 100% { box-shadow: 0 0 10px rgba(255,255,255,0.8), 0 0 20px rgba(255,0,128,0.5); }
+    50%       { box-shadow: 0 0 18px rgba(255,255,255,1),   0 0 36px rgba(0,200,255,0.7); }
+  }
+
+  .card-inner .card-footer {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 10px 12px 12px;
+    z-index: 5;
+  }
+  .card-name {
+    font-size: 14px;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-series {
+    font-size: 10px;
+    color: rgba(255,255,255,0.6);
+    font-weight: 600;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-rarity {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    background: linear-gradient(90deg, rgba(255,0,128,0.3), rgba(0,200,255,0.3));
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    text-shadow: 0 0 8px rgba(255,255,255,0.5);
+  }
+  .card-serial {
+    font-size: 9px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.45);
+    letter-spacing: 0.5px;
+    margin-top: 3px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Prismatic Rare — Shape Options</h1>
+
+<div class="row">
+
+  <!-- OPTION A: Cut corners -->
+  <div class="card-wrap">
+    <div class="label">Option A</div>
+    <div class="sublabel">Beveled / cut corners</div>
+    <div class="card-a card-outer">
+      <div class="card-inner">
+        <div class="card-art">
+          <img src="https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FNaruto.gif?alt=media&token=193d6d16-8d2e-46e1-92b9-7adfd776105e" alt="Naruto">
+        </div>
+        <div class="card-header">
+          <span class="wb-mark">WEEBEE</span>
+          <div class="pr-gem"></div>
+        </div>
+        <div class="card-footer">
+          <div class="card-name">Naruto Uzumaki</div>
+          <div class="card-series">Naruto</div>
+          <div class="card-rarity">Prismatic Rare</div>
+          <div class="card-serial">1 / 100</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OPTION B: Shield / pointed bottom -->
+  <div class="card-wrap">
+    <div class="label">Option B</div>
+    <div class="sublabel">Shield / pointed bottom</div>
+    <div class="card-b card-outer">
+      <div class="card-inner">
+        <div class="card-art">
+          <img src="https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FNaruto.gif?alt=media&token=193d6d16-8d2e-46e1-92b9-7adfd776105e" alt="Naruto">
+        </div>
+        <div class="card-header">
+          <span class="wb-mark">WEEBEE</span>
+          <div class="pr-gem"></div>
+        </div>
+        <div class="card-footer">
+          <div class="card-name">Naruto Uzumaki</div>
+          <div class="card-series">Naruto</div>
+          <div class="card-rarity">Prismatic Rare</div>
+          <div class="card-serial">1 / 100</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OPTION C: Double ring -->
+  <div class="card-wrap">
+    <div class="label">Option C</div>
+    <div class="sublabel">Same shape, double rainbow ring</div>
+    <div class="card-c-outer card-outer">
+      <div class="card-c-mid">
+        <div class="card-inner">
+          <div class="card-art">
+            <img src="https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FNaruto.gif?alt=media&token=193d6d16-8d2e-46e1-92b9-7adfd776105e" alt="Naruto">
+          </div>
+          <div class="card-header">
+            <span class="wb-mark">WEEBEE</span>
+            <div class="pr-gem"></div>
+          </div>
+          <div class="card-footer">
+            <div class="card-name">Naruto Uzumaki</div>
+            <div class="card-series">Naruto</div>
+            <div class="card-rarity">Prismatic Rare</div>
+            <div class="card-serial">1 / 100</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Holographic shimmer follows mouse
+  document.querySelectorAll('.card-outer').forEach(card => {
+    card.addEventListener('mousemove', e => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty('--mx', ((e.clientX - r.left) / r.width).toFixed(3));
+      card.style.setProperty('--my', ((e.clientY - r.top) / r.height).toFixed(3));
+    });
+  });
+</script>
+</body>
+</html>
