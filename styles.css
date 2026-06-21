@@ -405,6 +405,10 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     .stat-box h4 { font-size: 10px; }
     .stat-box .value { font-size: 16px !important; }
 
+    /* Profile tabs — compact on small screens */
+    .profile-tabs { gap: 4px; }
+    .p-tab { font-size: 12px; padding: 8px 6px; }
+
     /* Hide rank, status, edit columns on small screens — leaves Image, Title, Score */
     .anime-list-table th:first-child,
     .anime-list-table td:first-child { display: none; }
@@ -752,8 +756,9 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 .profile-card h4 { font-size: 12px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 15px; letter-spacing: 1px; }
 .profile-stat-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
 .profile-stat-row strong { color: var(--text-dark); }
-.profile-tabs { display: flex; gap: 20px; border-bottom: 2px solid #F0F0F0; margin-bottom: 20px; }
-.p-tab { background: none; border: none; padding: 10px 5px; font-weight: 600; font-size: 15px; color: var(--text-muted); cursor: pointer; position: relative; }
+.profile-tabs { display: flex; gap: 20px; border-bottom: 2px solid #F0F0F0; margin-bottom: 20px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.profile-tabs::-webkit-scrollbar { display: none; }
+.p-tab { background: none; border: none; padding: 10px 5px; font-weight: 600; font-size: 15px; color: var(--text-muted); cursor: pointer; position: relative; white-space: nowrap; flex-shrink: 0; }
 .p-tab.active { color: var(--text-dark); }
 .p-tab.active::after { content: ''; position: absolute; bottom: -2px; left: 0; width: 100%; height: 2px; background: var(--accent-yellow); }
 

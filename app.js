@@ -156,6 +156,7 @@ window.updateTopbarRank = async function() {
         const count = pd.exists() ? (pd.data().reviewCount || 0) : 0;
         window.myReviewCount = count;
         window.userRankCache[auth.currentUser.uid] = count;
+        window.userPinnedBadgesCache[auth.currentUser.uid] = pd.exists() ? (pd.data().pinnedBadges || []) : [];
         const el = document.getElementById('topbar-rank-badge');
         if (el) el.innerHTML = window.getRankBadgeHTML(count, 16);
     } catch(e) {}
@@ -404,13 +405,16 @@ async function _awardAmberToUser(uid, amount, reason) {
     addDoc(collection(db, 'amber_log'), { uid, amount, reason, timestamp: new Date() }).catch(() => {});
 }
 
-// Award amber for a daily-capped action (e.g. games) — fires once per key per day
+// Award amber for a daily-capped action (e.g. games) — fires once per key per day.
+// Writes the claim flag to Firestore so _syncGameProgressFromCloud can block
+// a second claim on another device.
 function _awardAmberDaily(key, amount) {
     if (!auth.currentUser) return;
     const today = new Date().toISOString().split('T')[0];
     const storageKey = `weebee_amber_${key}_${today}`;
     if (localStorage.getItem(storageKey)) return;
     localStorage.setItem(storageKey, '1');
+    setDoc(doc(db, 'game_progress', auth.currentUser.uid), { [storageKey]: '1' }, { merge: true }).catch(() => {});
     _awardAmber(amount, key).catch(() => {});
 }
 
@@ -749,6 +753,13 @@ window._syncGameProgressFromCloud = async function() {
         `weebee_trivia_${today}`,
         `weebee_ob_${today}`, `weebee_ob_offset_${today}`, `weebee_melobee_posted_${today}`,
         'weebee_mb_stats',
+        // Amber claim flags — synced so a second device can't claim the same daily reward
+        `weebee_amber_game_trivia_${today}`,
+        `weebee_amber_game_melobee_${today}`,
+        `weebee_amber_game_bwop_${today}`, `weebee_amber_game_bwop_mastery_${today}`,
+        `weebee_amber_game_bwnrt_${today}`, `weebee_amber_game_bwnrt_mastery_${today}`,
+        `weebee_amber_game_bwblc_${today}`, `weebee_amber_game_bwblc_mastery_${today}`,
+        `weebee_amber_game_bwdb_${today}`,  `weebee_amber_game_bwdb_mastery_${today}`,
     ];
     try {
         const snap = await getDoc(doc(db, 'game_progress', auth.currentUser.uid));
@@ -763,9 +774,46 @@ window._syncGameProgressFromCloud = async function() {
     } catch(e) { console.error('_syncGameProgressFromCloud', e); }
 };
 
-onAuthStateChanged(auth, (user) => {
+function _showBanScreen(reason, expiresAt) {
+    document.getElementById('weebee-ban-screen')?.remove();
+    const el = document.createElement('div');
+    el.id = 'weebee-ban-screen';
+    el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:40px;text-align:center;box-sizing:border-box;';
+    const expiryLine = expiresAt
+        ? `Your ban expires on <strong>${expiresAt.toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' })}</strong>.`
+        : 'This is a <strong>permanent</strong> ban.';
+    el.innerHTML = `
+        <div style="max-width:440px;">
+            <div style="font-size:56px;margin-bottom:16px;">🚫</div>
+            <h1 style="font-size:26px;font-weight:800;margin:0 0 10px;color:#111;">You've been banned from WeeBee</h1>
+            <p style="font-size:14px;color:#555;margin:0 0 16px;">${expiryLine}</p>
+            ${reason ? `<div style="background:#f3f4f6;border-radius:10px;padding:12px 18px;font-size:13px;color:#111;margin-bottom:20px;"><span style="color:#6b7280;">Reason:</span> ${reason}</div>` : ''}
+            <p style="font-size:12px;color:#9ca3af;">If you believe this is a mistake, please contact the WeeBee team.</p>
+        </div>`;
+    document.body.appendChild(el);
+}
+
+onAuthStateChanged(auth, async (user) => {
     const authSection = document.getElementById('user-auth-section');
     if (user) {
+        // Ban check — fail open so a Firestore outage never locks out real users
+        try {
+            const pd = await getDoc(doc(db, 'profiles', user.uid));
+            if (pd.exists()) {
+                const d = pd.data();
+                if (d.banned) {
+                    const expires = d.banExpiresAt?.toDate?.() || null;
+                    if (!expires || expires > new Date()) {
+                        _showBanScreen(d.banReason || '', expires);
+                        signOut(auth).catch(() => {});
+                        return;
+                    }
+                    // Expired — lift silently
+                    updateDoc(doc(db, 'profiles', user.uid), { banned: false, banExpiresAt: null }).catch(() => {});
+                }
+            }
+        } catch(e) {}
+
         const avatarUrl = user.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(user.displayName)}&backgroundColor=ffc107&fontColor=333333`;
         authSection.innerHTML = `
             <div class="topbar-dm-wrap" style="position:relative; display:flex; align-items:center;" onclick="event.stopPropagation()">
@@ -833,6 +881,27 @@ onAuthStateChanged(auth, (user) => {
         // Backfill displayNameLower for case-insensitive search
         if (user.displayName) {
             setDoc(doc(db, "profiles", user.uid), { displayNameLower: user.displayName.toLowerCase() }, { merge: true }).catch(() => {});
+        }
+        // Backfill account creation timestamp (used by alt-account scanner)
+        if (user.metadata?.creationTime) {
+            setDoc(doc(db, 'profiles', user.uid), {
+                accountCreatedAt: new Date(user.metadata.creationTime)
+            }, { merge: true }).catch(() => {});
+        }
+        // Device fingerprint for alt account detection.
+        // Only saved on first login — never overwritten — so we capture the
+        // device used to CREATE the account, not whatever device was used last
+        // (which could be a shared/library computer causing false positives).
+        if (window.FingerprintJS) {
+            getDoc(doc(db, 'profiles', user.uid)).then(snap => {
+                if (snap.exists() && snap.data().deviceFingerprint) return; // already set, don't overwrite
+                return window.FingerprintJS.load().then(fp => fp.get()).then(result => {
+                    setDoc(doc(db, 'profiles', user.uid), {
+                        deviceFingerprint: result.visitorId,
+                        fingerprintUpdatedAt: serverTimestamp()
+                    }, { merge: true }).catch(() => {});
+                });
+            }).catch(() => {});
         }
         const ADMIN_UIDS = ['XUD3ym2NcdWtrUiPLlFFaO5ufMh1'];
         Promise.all([
@@ -1215,19 +1284,37 @@ window.fetchNotifications = function() {
                 onClickAction = `onclick="loadAnimeDetails(${n.linkRef}, false, 'tab-reviews')"`;
             } else if (n.type === 'suggestion' && n.linkRef) {
                 onClickAction = `onclick="loadAnimeDetails(${n.linkRef})"`;
+            } else if (n.type === 'review_comment') {
+                if (n.mal_id) {
+                    onClickAction = `onclick="loadAnimeDetails(${n.mal_id}, false, 'tab-reviews')"`;
+                } else {
+                    onClickAction = `onclick="window.switchView('home-view')"`;
+                }
             } else if (n.type === 'dm') {
                 const safeAvatar = (n.senderAvatar || '').replace(/'/g, "\\'");
                 const safeName = (n.senderName || '').replace(/'/g, "\\'");
                 onClickAction = `onclick="openDMConversation('${n.senderUid}','${safeName}','${safeAvatar}')"`;
             } else if (n.type === 'trade_offer' && n.tradeId) {
                 onClickAction = `onclick="window._tcgOpenTradeReview('${n.tradeId}')"`;
+            } else if (n.type === 'auction_won' || n.type === 'auction_sold' || n.type === 'auction_outbid') {
+                onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-auction')"`;
+            } else if (n.type === 'bulletin_offer' && n.listingId) {
+                onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-bulletin');window._tcgOpenBulletinOffersView('${n.listingId}')"`;
+            } else if (n.type === 'bulletin_offer_accepted') {
+                onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-collection')"`;
+            } else if (n.type === 'follow' || n.type === 'friend_accept' || n.type === 'friend_request') {
+                onClickAction = `onclick="viewUserProfile('${n.senderUid}')"`;
+            } else if (n.type === 'system') {
+                onClickAction = '';
             } else if ((n.type === 'comment_reply' || n.type === 'post_comment') && n.postId) {
                 if (n.postCollection === 'tier_lists') {
                     onClickAction = `onclick="window.openTierListViewer('${n.postId}')"`;
                 } else if (n.postCollection === 'hot_takes') {
-                    onClickAction = `onclick="window.switchView('community-view');document.getElementById('hot-takes-tab-btn')?.click()"`;
+                    onClickAction = `onclick="window.switchView('community-view');window.switchCommunityTab(null,'community-tab-hottakes');window.loadHotTakes()"`;
                 } else if (n.postCollection === 'melobee_posts') {
                     onClickAction = `onclick="window.goToMeloBeeTab()"`;
+                } else if (n.postCollection === 'general_posts') {
+                    onClickAction = `onclick="window.switchView('home-view')"`;
                 } else {
                     onClickAction = `onclick="window.switchView('home-view')"`;
                 }
@@ -1719,6 +1806,8 @@ window.submitInDepthReview = async function() {
                 animeImage: window.currentAnime?.images?.jpg?.image_url,
                 type: reviewType, score: parseFloat(overallScore), categories,
                 fanService: fanService !== null ? fanService : null, text: _indepthSummary,
+                spoiler: !!(document.getElementById('indepth-review-spoiler')?.checked),
+                spoilerHint: document.getElementById('indepth-review-spoiler')?.checked ? (document.getElementById('indepth-spoiler-hint')?.value.trim() || '') : '',
                 username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
                 uid: auth.currentUser.uid, timestamp: new Date(),
                 likes: [], dislikes: [], commentCount: 0
@@ -1774,6 +1863,8 @@ window.submitQuickReview = async function() {
                 animeTitle: window.currentAnime?.title_english || window.currentAnime?.title,
                 animeImage: window.currentAnime?.images?.jpg?.image_url,
                 type: 'quick', score, fanService, text,
+                spoiler: !!(document.getElementById('quick-review-spoiler')?.checked),
+                spoilerHint: document.getElementById('quick-review-spoiler')?.checked ? (document.getElementById('quick-spoiler-hint')?.value.trim() || '') : '',
                 username: auth.currentUser.displayName, avatar: auth.currentUser.photoURL,
                 uid: auth.currentUser.uid, timestamp: new Date(),
                 likes: [], dislikes: [], commentCount: 0
@@ -3087,7 +3178,8 @@ window.submitInlineComment = async function(reviewId, btn) {
         addDoc(collection(db, 'notifications'), {
             targetUid: ownerUid, type: 'review_comment',
             senderUid: auth.currentUser.uid, senderName: auth.currentUser.displayName, senderAvatar: av,
-            message: 'commented on your review', timestamp: new Date(), read: false
+            message: 'commented on your review', timestamp: new Date(), read: false,
+            postId: reviewId, mal_id: snap.data().mal_id || null
         }).catch(() => {});
     }).catch(() => {});
 };
@@ -3179,7 +3271,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
     }
 
     const isOwner = auth.currentUser && rev.uid === auth.currentUser.uid;
-    return `
+    const cardHtml = `
         <div class="review-card weebee-review interactive review-item" onclick="${rev.type === 'in-depth' ? 'toggleReviewExpand(this)' : ''}">
             ${isOwner ? `
             <div style="position:absolute; top:10px; right:10px; z-index:5;" onclick="event.stopPropagation();">
@@ -3211,6 +3303,10 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                 </div>
             </div>
         </div>`;
+    if (rev.spoiler && rev.id) {
+        return _wrapSpoilerOverlay(cardHtml, rev.id, rev.spoilerHint || '');
+    }
+    return cardHtml;
 };
 
 // --- DYNAMIC PROFILE HUB VIEW ---
@@ -4469,6 +4565,29 @@ window._activityItems = [];
 window._activityIndex = 0;
 const ACTIVITY_PAGE_SIZE = 20;
 
+// ─── Spoiler overlay ────────────────────────────────────────────────────────
+window._revealedSpoilers = new Set();
+
+window._revealSpoiler = function(postId, event) {
+    if (event) event.stopPropagation();
+    window._revealedSpoilers.add(postId);
+    const overlay = document.getElementById(`spoiler-overlay-${postId}`);
+    if (overlay) overlay.remove();
+};
+
+// Wraps any post card HTML in a frosted-glass spoiler overlay.
+// hint: short string shown under the lock icon (e.g. "Attack on Titan")
+function _wrapSpoilerOverlay(html, postId, hint) {
+    if (window._revealedSpoilers?.has(postId)) return html;
+    return `<div style="position:relative;">${html}<div id="spoiler-overlay-${postId}" onclick="event.stopPropagation()" style="position:absolute;inset:0;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:rgba(8,8,16,0.38);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;border-radius:14px;gap:6px;text-align:center;padding:24px;box-sizing:border-box;">
+        <div style="font-size:30px;line-height:1;">🔒</div>
+        <div style="font-size:15px;font-weight:900;color:#fff;margin-top:2px;">Spoiler Warning</div>
+        ${hint ? `<div style="font-size:12px;color:rgba(255,255,255,0.75);max-width:220px;line-height:1.4;">Contains spoilers for <strong>${hint}</strong></div>` : ''}
+        <button onclick="window._revealSpoiler('${postId}',event)" style="margin-top:8px;padding:9px 22px;border-radius:20px;border:2px solid rgba(255,255,255,0.55);background:rgba(255,255,255,0.12);color:#fff;font-weight:800;font-size:13px;cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.22)'" onmouseout="this.style.background='rgba(255,255,255,0.12)'">Reveal Post</button>
+    </div></div>`;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function formatTimeAgo(ts) {
     const ms = ts?.toMillis?.() || (ts?.seconds ? ts.seconds * 1000 : (typeof ts === 'number' ? ts : 0));
     if (!ms) return '';
@@ -5721,7 +5840,8 @@ window.submitTlViewerComment = async function(postId) {
             addDoc(collection(db, 'notifications'), {
                 targetUid: ownerUid, type: 'post_comment',
                 senderUid: auth.currentUser.uid, senderName: auth.currentUser.displayName, senderAvatar: av,
-                message: 'commented on your post', timestamp: new Date(), read: false
+                message: 'commented on your post', timestamp: new Date(), read: false,
+                postId, postCollection: 'tier_lists'
             }).catch(() => {});
         }).catch(() => {});
     } catch(e) { alert('Failed to post comment.'); console.error(e); }
@@ -5759,7 +5879,13 @@ window.switchCommunityTab = function(event, tabId) {
     document.querySelectorAll('#community-view .community-tab-content').forEach(el => el.style.display = 'none');
     document.querySelectorAll('#community-view .community-tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(tabId).style.display = 'block';
-    if (event?.currentTarget) event.currentTarget.classList.add('active');
+    if (event?.currentTarget) {
+        event.currentTarget.classList.add('active');
+    } else {
+        document.querySelectorAll(`#community-view .community-tab-btn`).forEach(btn => {
+            if (btn.getAttribute('onclick')?.includes(tabId)) btn.classList.add('active');
+        });
+    }
 };
 
 window.switchGamesTab = function(event, tabId) {
@@ -5782,7 +5908,13 @@ window.switchTcgTab = function(event, tabId) {
     document.querySelectorAll('#tcg-view .tcg-tab-content').forEach(el => el.style.display = 'none');
     document.querySelectorAll('#tcg-view .tcg-tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(tabId).style.display = 'block';
-    if (event?.currentTarget) event.currentTarget.classList.add('active');
+    if (event?.currentTarget) {
+        event.currentTarget.classList.add('active');
+    } else {
+        document.querySelectorAll('#tcg-view .tcg-tab-btn').forEach(btn => {
+            if (btn.getAttribute('onclick')?.includes(tabId)) btn.classList.add('active');
+        });
+    }
     if (tabId === 'tcg-tab-collection') window._tcgRenderMyCollection();
     if (tabId === 'tcg-tab-trading') window._tcgRenderMyTrades();
     if (tabId === 'tcg-tab-auction') window._auctionRender();
@@ -5812,6 +5944,10 @@ window.openCreatePost = function() {
 window.closeCreatePostModal = function() {
     const modal = document.getElementById('create-post-modal');
     if (modal) modal.style.display = 'none';
+    const spoilerCb = document.getElementById('general-post-spoiler');
+    if (spoilerCb) spoilerCb.checked = false;
+    const gpHintWrap = document.getElementById('gp-spoiler-hint-wrap');
+    if (gpHintWrap) { gpHintWrap.style.display = 'none'; const hi = document.getElementById('gp-spoiler-hint'); if (hi) hi.value = ''; }
 };
 
 window.goToTriviaTab = function() {
@@ -6384,6 +6520,11 @@ const TCG_FOUNDER_CARDS = [
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FUR%2FAlucard%202.gif?alt=media&token=d0419e6c-00ad-40ed-ad41-42501ff35ca4',
         founder: true,
     },
+    {
+        id: 'gohan', name: 'Gohan', anime: 'Dragon Ball', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FUR%2FURGOHAN2-ezgif.com-crop.gif?alt=media&token=4c57b457-a91e-4dc8-af24-1eef3f09dca6',
+        founder: true,
+    },
 ];
 
 window._amberLoadWallet = async function() {
@@ -6434,36 +6575,58 @@ window._amberLoadWallet = async function() {
     } catch(e) { el.innerHTML = `<p style="color:red;">Failed to load: ${e.message}</p>`; }
 };
 
+window._tcgSimSyncCost = function() {
+    const packId = document.getElementById('sim-pack-select')?.value;
+    const costWrap = document.getElementById('sim-cost-wrap');
+    const cmpWrap = document.getElementById('sim-cost-compare-wrap');
+    const costInput = document.getElementById('sim-cost-input');
+    if (packId === 'compare') {
+        if (costWrap) costWrap.style.display = 'none';
+        if (cmpWrap) cmpWrap.style.display = 'flex';
+    } else {
+        if (costWrap) costWrap.style.display = 'flex';
+        if (cmpWrap) cmpWrap.style.display = 'none';
+        if (costInput) {
+            const pack = TCG_PACKS.find(p => p.id === packId);
+            if (pack) costInput.value = pack.cost;
+        }
+    }
+};
+
+function _tcgSimRunPack(pack, count) {
+    const tally = { ur: [], ssr: [], sr: [], rare: 0, common: 0 };
+    let totalDismantle = 0;
+    for (let i = 0; i < count; i++) {
+        const cards = _tcgRollPackCards(pack);
+        for (const c of cards) {
+            const dv = TCG_DISMANTLE_RATES[c.rarity] || 0;
+            totalDismantle += dv;
+            if (c.rarity === 'ur' || c.rarity === 'ssr' || c.rarity === 'sr') tally[c.rarity].push(c);
+            else tally[c.rarity] = (tally[c.rarity] || 0) + 1;
+        }
+    }
+    return { tally, totalDismantle };
+}
+
 window._tcgSimulatePacks = function() {
     if (!window.isAdmin) return;
     _tcgEnsureCardPool();
     const packId = document.getElementById('sim-pack-select')?.value || 'standard';
     const count = parseInt(document.getElementById('sim-count-select')?.value || '1000');
-    const pack = TCG_PACKS.find(p => p.id === packId);
-    if (!pack) return;
 
-    const tally = { ur: [], ssr: [], sr: [], rare: 0, common: 0 };
-    for (let i = 0; i < count; i++) {
-        const cards = _tcgRollPackCards(pack);
-        for (const c of cards) {
-            if (c.rarity === 'ur' || c.rarity === 'ssr' || c.rarity === 'sr') tally[c.rarity].push(c);
-            else tally[c.rarity] = (tally[c.rarity] || 0) + 1;
-        }
-    }
-
-    const total = count * 5;
-    const pct = n => ((n / total) * 100).toFixed(2) + '%';
     const rarityColor = { ur: '#ffd700', ssr: '#c084fc', sr: '#f97316', rare: '#60a5fa', common: '#9ca3af' };
     const rarityLabel = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common' };
+    const DISMANTLE = TCG_DISMANTLE_RATES;
 
-    const statRow = (rarity, count2) => `
+    const statRow = (rarity, count2, total) => `
         <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:var(--bg-white);margin-bottom:6px;">
             <span style="font-size:11px;font-weight:800;color:${rarityColor[rarity]};width:36px;">${rarityLabel[rarity]}</span>
             <div style="flex:1;background:var(--bg-gray);border-radius:4px;height:8px;overflow:hidden;">
                 <div style="height:100%;background:${rarityColor[rarity]};width:${Math.min(100,(count2/total)*100*10)}%;"></div>
             </div>
-            <span style="font-size:13px;font-weight:700;min-width:40px;text-align:right;">${count2}</span>
-            <span style="font-size:12px;color:var(--text-muted);min-width:50px;text-align:right;">${pct(count2)}</span>
+            <span style="font-size:13px;font-weight:700;min-width:40px;text-align:right;">${count2.toLocaleString()}</span>
+            <span style="font-size:12px;color:var(--text-muted);min-width:50px;text-align:right;">${((count2/total)*100).toFixed(2)}%</span>
+            <span style="font-size:11px;color:var(--text-muted);min-width:64px;text-align:right;">🟡 ${(count2 * DISMANTLE[rarity]).toLocaleString()}</span>
         </div>`;
 
     const cardRows = (arr, rarity) => arr.map(c =>
@@ -6476,37 +6639,449 @@ window._tcgSimulatePacks = function() {
             <span style="font-size:10px;font-weight:800;color:${rarityColor[rarity]};flex-shrink:0;">${rarityLabel[rarity]}</span>
         </div>`).join('');
 
-    const modal = document.createElement('div');
-    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;background:rgba(0,0,0,0.7);overflow-y:auto;';
-    modal.innerHTML = `
-        <div style="background:var(--bg-card);border-radius:16px;padding:24px;width:100%;max-width:560px;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-                <div>
-                    <div style="font-weight:800;font-size:17px;">🎲 ${pack.name} — ${count.toLocaleString()} Pack Simulation</div>
-                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${total.toLocaleString()} total cards rolled</div>
-                </div>
-                <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
-            </div>
-            <div style="margin-bottom:18px;">
-                ${statRow('ur', tally.ur.length)}
-                ${statRow('ssr', tally.ssr.length)}
-                ${statRow('sr', tally.sr.length)}
-                ${statRow('rare', tally.rare)}
-                ${statRow('common', tally.common)}
-            </div>
-            <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">UR Pulls (${tally.ur.length})</div>
-            <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px;margin-bottom:14px;">
-                ${tally.ur.length ? cardRows(tally.ur, 'ur') : '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">None pulled</div>'}
-            </div>
-            <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">SSR Pulls (${tally.ssr.length})</div>
-            <div style="max-height:240px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px;margin-bottom:14px;">
-                ${tally.ssr.length ? cardRows(tally.ssr, 'ssr') : '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">None pulled</div>'}
-            </div>
-            <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">SR Pulls (${tally.sr.length})</div>
-            <div style="max-height:240px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px;">
-                ${tally.sr.length ? cardRows(tally.sr, 'sr') : '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">None pulled</div>'}
-            </div>
+    // Amber you'd spend on average before pulling one card of a given rarity
+    const costPer = (pulls, packs, cost) => pulls ? Math.round((packs * cost) / pulls).toLocaleString() : '∞';
+
+    const rarityRow = (label, color, pulls, packs, cost) => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-radius:8px;background:var(--bg-gray);margin-bottom:5px;">
+            <span style="font-size:12px;font-weight:800;color:${color};">${label}</span>
+            <span style="font-size:13px;font-weight:800;">🟡 ${costPer(pulls, packs, cost)}</span>
         </div>`;
+
+    const valueBlock = (packName, costPerPack, totalDismantle, packCount, tally) => {
+        const avgDismantle = totalDismantle / packCount;
+        const net = avgDismantle - costPerPack;
+        const roi = (avgDismantle / costPerPack * 100).toFixed(1);
+        const netColor = net >= 0 ? '#22c55e' : '#ef4444';
+        const netSign = net >= 0 ? '+' : '';
+        return `
+        <div style="background:var(--bg-white);border-radius:12px;padding:14px 16px;margin-top:14px;">
+            <div style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;">💡 Value Analysis — ${packName}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                <div style="background:var(--bg-gray);border-radius:8px;padding:10px 12px;">
+                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Avg dismantle / pack</div>
+                    <div style="font-size:16px;font-weight:800;">🟡 ${avgDismantle.toFixed(1)}</div>
+                </div>
+                <div style="background:var(--bg-gray);border-radius:8px;padding:10px 12px;">
+                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Cost / pack</div>
+                    <div style="font-size:16px;font-weight:800;">🟡 ${costPerPack.toLocaleString()}</div>
+                </div>
+                <div style="background:var(--bg-gray);border-radius:8px;padding:10px 12px;">
+                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Net per pack</div>
+                    <div style="font-size:16px;font-weight:800;color:${netColor};">${netSign}${net.toFixed(1)} 🟡</div>
+                </div>
+                <div style="background:var(--bg-gray);border-radius:8px;padding:10px 12px;">
+                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Return on cost</div>
+                    <div style="font-size:16px;font-weight:800;color:${parseFloat(roi)>=100?'#22c55e':'#ef4444'};">${roi}%</div>
+                </div>
+            </div>
+            <div style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Expected Amber per Rarity Pull</div>
+            ${rarityRow('UR', rarityColor.ur, tally.ur.length, packCount, costPerPack)}
+            ${rarityRow('SSR', rarityColor.ssr, tally.ssr.length, packCount, costPerPack)}
+            ${rarityRow('SR', rarityColor.sr, tally.sr.length, packCount, costPerPack)}
+            ${rarityRow('Rare', rarityColor.rare, tally.rare, packCount, costPerPack)}
+            ${rarityRow('Common', rarityColor.common, tally.common, packCount, costPerPack)}
+            <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">Total dismantle value across ${packCount.toLocaleString()} packs: 🟡 ${totalDismantle.toLocaleString()}</div>
+        </div>`;
+    };
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;background:var(--bg-gray);overflow-y:auto;';
+
+    // Simulate buying packs, dismantling every card, reinvesting amber until broke.
+    // Actually rolls cards each round so lifetime rarity tallies are accurate.
+    function simulateReinvest(startAmber, pack, costPerPack) {
+        let amber = startAmber;
+        let totalPacks = 0;
+        let totalSpent = 0;
+        let totalDismantle = 0;
+        const tally = { ur: 0, ssr: 0, sr: 0, rare: 0, common: 0 };
+        const rounds = [];
+        while (amber >= costPerPack && rounds.length < 500) {
+            const packs = Math.floor(amber / costPerPack);
+            const spent = packs * costPerPack;
+            let gained = 0;
+            for (let i = 0; i < packs; i++) {
+                for (const c of _tcgRollPackCards(pack)) {
+                    tally[c.rarity] = (tally[c.rarity] || 0) + 1;
+                    gained += TCG_DISMANTLE_RATES[c.rarity] || 0;
+                }
+            }
+            totalSpent += spent;
+            totalDismantle += gained;
+            amber = (amber - spent) + gained;
+            totalPacks += packs;
+            rounds.push({ packs, spent, gained, amber });
+        }
+        return { totalPacks, totalSpent, totalDismantle, tally, rounds, finalAmber: amber };
+    }
+
+    if (packId === 'compare') {
+        const stdPack = TCG_PACKS.find(p => p.id === 'standard');
+        const prmPack = TCG_PACKS.find(p => p.id === 'premium');
+        const stdCost = parseInt(document.getElementById('sim-cost-std')?.value || stdPack.cost);
+        const prmCost = parseInt(document.getElementById('sim-cost-prm')?.value || prmPack.cost);
+        const sBudget = parseInt(document.getElementById('sim-budget-std')?.value || '1500');
+        const pBudget = parseInt(document.getElementById('sim-budget-prm')?.value || '10000');
+        const { tally: sTally, totalDismantle: sTD } = _tcgSimRunPack(stdPack, count);
+        const { tally: pTally, totalDismantle: pTD } = _tcgSimRunPack(prmPack, count);
+        const sAvg = sTD / count, pAvg = pTD / count;
+        const sNet = sAvg - stdCost, pNet = pAvg - prmCost;
+        const sRoi = (sAvg / stdCost * 100).toFixed(1), pRoi = (pAvg / prmCost * 100).toFixed(1);
+        const winner = sNet >= pNet ? 'Standard' : 'Premium';
+        const winColor = sNet >= pNet ? '#4f46e5' : '#b45309';
+
+        // Reinvestment loop — actually rolls cards each round for accurate lifetime tallies
+        const sStartAmber = Math.floor(sBudget / stdCost) * stdCost;
+        const pStartAmber = Math.floor(pBudget / prmCost) * prmCost;
+        const sLoop = simulateReinvest(sStartAmber, stdPack, stdCost);
+        const pLoop = simulateReinvest(pStartAmber, prmPack, prmCost);
+
+        const loopWinnerPacks = sLoop.totalPacks >= pLoop.totalPacks ? 'Standard' : 'Premium';
+        const loopWinnerColor = sLoop.totalPacks >= pLoop.totalPacks ? '#4f46e5' : '#b45309';
+
+        const sRecovPct = sLoop.totalSpent ? (sLoop.totalDismantle / sLoop.totalSpent * 100).toFixed(1) : '0';
+        const pRecovPct = pLoop.totalSpent ? (pLoop.totalDismantle / pLoop.totalSpent * 100).toFixed(1) : '0';
+        const sCostPer = r => sLoop.tally[r] ? Math.round(sLoop.totalSpent / sLoop.tally[r]).toLocaleString() : '∞';
+        const pCostPer = r => pLoop.tally[r] ? Math.round(pLoop.totalSpent / pLoop.tally[r]).toLocaleString() : '∞';
+
+        // Round-by-round table (cap at 12 rows)
+        const maxRows = Math.max(sLoop.rounds.length, pLoop.rounds.length);
+        const tableRows = Array.from({ length: Math.min(maxRows, 12) }, (_, i) => {
+            const s = sLoop.rounds[i];
+            const p = pLoop.rounds[i];
+            return `<tr>
+                <td style="padding:5px 8px;font-size:12px;font-weight:700;color:var(--text-muted);text-align:center;">${i+1}</td>
+                <td style="padding:5px 8px;font-size:12px;font-weight:800;color:#4f46e5;text-align:center;">${s ? s.packs.toLocaleString() : '—'}</td>
+                <td style="padding:5px 8px;font-size:12px;color:var(--text-muted);text-align:center;">${s ? `🟡 ${s.gained.toLocaleString()}` : '—'}</td>
+                <td style="padding:5px 8px;font-size:12px;color:var(--text-muted);text-align:center;">${s ? `🟡 ${s.amber.toLocaleString()}` : '—'}</td>
+                <td style="padding:5px 8px;font-size:12px;font-weight:800;color:#b45309;text-align:center;">${p ? p.packs.toLocaleString() : '—'}</td>
+                <td style="padding:5px 8px;font-size:12px;color:var(--text-muted);text-align:center;">${p ? `🟡 ${p.gained.toLocaleString()}` : '—'}</td>
+                <td style="padding:5px 8px;font-size:12px;color:var(--text-muted);text-align:center;">${p ? `🟡 ${p.amber.toLocaleString()}` : '—'}</td>
+            </tr>`;
+        }).join('');
+
+        // Lifetime compare rows (lower cost per rarity = better)
+        const loopCompareRow = (label, sVal, pVal, fmt, higherIsBetter = true) => {
+            const sNum = typeof sVal === 'number' ? sVal : Infinity;
+            const pNum = typeof pVal === 'number' ? pVal : Infinity;
+            const sBetter = higherIsBetter ? sNum >= pNum : sNum <= pNum;
+            const pBetter = !sBetter;
+            return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;align-items:center;">
+                <div style="font-size:12px;color:var(--text-muted);text-align:center;">${label}</div>
+                <div style="background:${sBetter?'rgba(79,70,229,0.12)':'var(--bg-gray)'};border-radius:8px;padding:8px 10px;text-align:center;border:2px solid ${sBetter?'#4f46e5':'transparent'};">
+                    <div style="font-size:13px;font-weight:800;">${fmt(sVal)}</div>
+                </div>
+                <div style="background:${pBetter?'rgba(180,83,9,0.12)':'var(--bg-gray)'};border-radius:8px;padding:8px 10px;text-align:center;border:2px solid ${pBetter?'#b45309':'transparent'};">
+                    <div style="font-size:13px;font-weight:800;">${fmt(pVal)}</div>
+                </div>
+            </div>`;
+        };
+
+        // Plain-language verdict
+        const overallLine = sLoop.totalPacks > pLoop.totalPacks
+            ? `<b>Standard Pack</b> opened <b>${sLoop.totalPacks.toLocaleString()} packs</b> vs Premium's <b>${pLoop.totalPacks.toLocaleString()}</b>. Standard recovers ${sRecovPct}% of cost per cycle vs Premium's ${pRecovPct}%, and the lower price keeps amber cycling longer.`
+            : pLoop.totalPacks > sLoop.totalPacks
+            ? `<b>Premium Pack</b> opened <b>${pLoop.totalPacks.toLocaleString()} packs</b> vs Standard's <b>${sLoop.totalPacks.toLocaleString()}</b>. Premium recovers ${pRecovPct}% of cost per cycle vs Standard's ${sRecovPct}%, more than offsetting the higher price.`
+            : `Both packs opened <b>${sLoop.totalPacks.toLocaleString()} total packs</b> — essentially identical long-run value for these budgets.`;
+
+        const rarityGoals = [
+            { key: 'ur',     label: 'UR',     emoji: '🌟' },
+            { key: 'ssr',    label: 'SSR',    emoji: '💜' },
+            { key: 'sr',     label: 'SR',     emoji: '🟠' },
+            { key: 'rare',   label: 'Rare',   emoji: '🔵' },
+            { key: 'common', label: 'Common', emoji: '⚪' },
+        ];
+
+        const rarityLines = rarityGoals.map(({ key, label, emoji }) => {
+            const sCost = sLoop.tally[key] ? sLoop.totalSpent / sLoop.tally[key] : Infinity;
+            const pCost = pLoop.tally[key] ? pLoop.totalSpent / pLoop.tally[key] : Infinity;
+            const sPulls = sLoop.tally[key] || 0;
+            const pPulls = pLoop.tally[key] || 0;
+
+            if (!isFinite(sCost) && !isFinite(pCost)) {
+                return `<div style="padding:6px 0;border-bottom:1px solid var(--border-color);display:flex;gap:8px;align-items:flex-start;"><span style="flex-shrink:0;">${emoji}</span><span>Neither pack pulled a <b>${label}</b> in this simulation — increase your budget and re-run.</span></div>`;
+            }
+            if (!isFinite(sCost)) {
+                return `<div style="padding:6px 0;border-bottom:1px solid var(--border-color);display:flex;gap:8px;align-items:flex-start;"><span style="flex-shrink:0;">${emoji}</span><span>Hunting <b>${label}</b>? Use <b style="color:#b45309;">Premium</b> — Standard never pulled one at this budget (🟡 ${Math.round(pCost).toLocaleString()} per pull, ${pPulls.toLocaleString()} total).</span></div>`;
+            }
+            if (!isFinite(pCost)) {
+                return `<div style="padding:6px 0;border-bottom:1px solid var(--border-color);display:flex;gap:8px;align-items:flex-start;"><span style="flex-shrink:0;">${emoji}</span><span>Hunting <b>${label}</b>? Use <b style="color:#4f46e5;">Standard</b> — Premium never pulled one at this budget (🟡 ${Math.round(sCost).toLocaleString()} per pull, ${sPulls.toLocaleString()} total).</span></div>`;
+            }
+
+            const sWins = sCost <= pCost;
+            const winName = sWins ? 'Standard' : 'Premium';
+            const winColor2 = sWins ? '#4f46e5' : '#b45309';
+            const winCost = Math.round(sWins ? sCost : pCost).toLocaleString();
+            const loseCost = Math.round(sWins ? pCost : sCost).toLocaleString();
+            const winPulls = (sWins ? sPulls : pPulls).toLocaleString();
+            const savePct = Math.round(Math.abs(sCost - pCost) / Math.max(sCost, pCost) * 100);
+
+            return `<div style="padding:6px 0;border-bottom:1px solid var(--border-color);display:flex;gap:8px;align-items:flex-start;"><span style="flex-shrink:0;">${emoji}</span><span>Hunting <b>${label}</b>? Use <b style="color:${winColor2};">${winName}</b> — 🟡 ${winCost} per pull (${winPulls} total) vs 🟡 ${loseCost} — <b>${savePct}% cheaper</b> per ${label}.</span></div>`;
+        }).join('');
+
+        // Balance suggestions — uses the large main simulation (count packs each)
+        // for clean per-pack rates, not the loop (which has different budgets).
+        // "Fair" = Premium should give costRatio× more of a rarity than Standard
+        // so that 1 amber spent buys the same expected pulls on either pack.
+        const costRatio = prmCost / stdCost;
+        const simCount = r => Array.isArray(sTally[r]) ? sTally[r].length : (sTally[r] || 0);
+        const simCountP = r => Array.isArray(pTally[r]) ? pTally[r].length : (pTally[r] || 0);
+
+        const balanceSuggestions = rarityGoals.map(({ key, label, emoji }) => {
+            const sRate = simCount(key) / count;   // Standard pulls per pack
+            const pRate = simCountP(key) / count;  // Premium pulls per pack
+            const fairPRate = sRate * costRatio;   // what Premium should give for equal amber-per-pull
+            const fairSRate = pRate / costRatio;   // what Standard should give for equal amber-per-pull
+
+            const sP100 = (sRate * 100).toFixed(2);
+            const pP100 = (pRate * 100).toFixed(2);
+            const fairP100 = (fairPRate * 100).toFixed(2);
+            const fairS100 = (fairSRate * 100).toFixed(2);
+
+            let statusIcon, statusColor, statusLabel;
+            let premiumTweak, standardTweak;
+
+            if (sRate < 0.0001 && pRate < 0.0001) {
+                statusIcon = '❓'; statusColor = 'var(--text-muted)'; statusLabel = 'Insufficient data';
+                premiumTweak = `Neither pack pulled a ${label} in ${count.toLocaleString()} packs — run more packs to assess.`;
+                standardTweak = null;
+
+            } else if (pRate >= fairPRate * 0.85 && pRate <= fairPRate * 1.2) {
+                statusIcon = '✅'; statusColor = '#22c55e'; statusLabel = 'Balanced';
+                if (key === 'rare' || key === 'common') {
+                    premiumTweak = `Standard correctly dominates for ${label}s (${sP100} vs ${pP100} per 100 packs) — this is expected at this cost ratio. No change needed.`;
+                    standardTweak = `If Standard feels too rewarding for ${label}s, lower its random-slot ${label} rate from ~${sP100}/100 toward ~${(sRate*0.8*100).toFixed(2)}/100, redistributing weight to Rare or SR.`;
+                } else {
+                    premiumTweak = `Premium gives ${pP100} ${label}s per 100 packs; fair value is ${fairP100}. No Premium change needed.`;
+                    standardTweak = `Standard is at ${sP100}/100 — if you want to widen Premium's advantage, lower Standard's ${label} rate slightly, which would shift the fair threshold down.`;
+                }
+
+            } else if (pRate > fairPRate * 1.2) {
+                const overPct = Math.round((pRate / fairPRate - 1) * 100);
+                statusIcon = '⬆️'; statusColor = '#f59e0b'; statusLabel = 'Premium over-delivers';
+
+                if (key === 'sr') {
+                    premiumTweak = `Premium gives ${pP100} SRs/100 packs vs fair value of ${fairP100} — ${overPct}% over. This is intentional (guaranteed SR slot). If SRs feel too easy on Premium, lower the guaranteed slot from 95% SR to ~75–80%, shifting the rest to SSR.`;
+                    standardTweak = `Alternatively, raise Standard's guaranteed slot SR rate from 4.6% toward ~${Math.min(15, parseFloat(sP100)*1.4).toFixed(1)}% to bring Standard closer to Premium's SR pull rate, narrowing the gap. This makes Standard more exciting without changing Premium.`;
+                } else if (key === 'rare' || key === 'common') {
+                    premiumTweak = `Premium gives ${pP100} ${label}s/100 packs vs fair value of ${fairP100} — ${overPct}% over. Reduce Premium's random-slot ${label} rate and shift weight to SR/SSR to better match what players expect from a premium pack.`;
+                    standardTweak = `Alternatively, increase Standard's ${label} rate from ${sP100} toward ~${(sRate * 1.2 * 100).toFixed(2)}/100 — this makes Standard feel more rewarding for ${label}s and widens the apparent gap with Premium on higher rarities.`;
+                } else {
+                    premiumTweak = `Premium gives ${pP100} ${label}s/100 packs vs fair value of ${fairP100} — ${overPct}% over. Reduce Premium's ${label} odds slightly and redistribute weight to UR or SSR.`;
+                    standardTweak = `Alternatively, reduce Standard's ${label} rate from ${sP100}/100 toward ~${fairS100}/100 — this raises the fair threshold for Premium, relieving pressure on its odds.`;
+                }
+
+            } else {
+                // Under-delivers
+                const underPct = Math.round((1 - pRate / fairPRate) * 100);
+                statusIcon = '⬇️'; statusColor = '#ef4444'; statusLabel = 'Premium under-delivers';
+
+                if (key === 'ur') {
+                    premiumTweak = `Premium is at ${pP100} URs/100 packs; fair value is ${fairP100} — ${underPct}% under. Raise Premium's UR bonus rate toward ~${(fairPRate * 100).toFixed(2)}%/pack. Currently Standard=0.1%, Premium=0.2% — doubling again to ~0.4% would move meaningfully toward balance.`;
+                    standardTweak = `Alternatively, reduce Standard's UR bonus from 0.1% to ~0.03%/pack (or remove it entirely) — this lowers the fair target for Premium and makes Premium's 0.2% feel like a real differentiator without touching Premium's odds at all.`;
+                } else if (key === 'ssr') {
+                    premiumTweak = `Premium gives ${pP100} SSRs/100 packs; fair value is ${fairP100} — ${underPct}% under. Increase Premium's random-slot SSR rate (currently 1% per slot) toward ~${(fairPRate / 4 * 100).toFixed(2)}% per slot, and/or raise the guaranteed slot SSR from 5% toward ~10%.`;
+                    standardTweak = `Alternatively, reduce Standard's random-slot SSR rate from 0.1% per slot toward ~${(fairSRate / 4 * 100).toFixed(3)}% per slot — this makes SSRs feel more exclusive to Premium without touching Premium's odds.`;
+                } else {
+                    premiumTweak = `Premium gives ${pP100} ${label}s/100 packs; fair value is ${fairP100} — ${underPct}% under. Increase Premium's ${label} rate in the random slots or guaranteed slot.`;
+                    standardTweak = `Alternatively, reduce Standard's ${label} rate from ${sP100}/100 toward ~${fairS100}/100, lowering the fair benchmark so Premium's current rate looks more competitive.`;
+                }
+            }
+
+            return `<div style="padding:10px 0;border-bottom:1px solid var(--border-color);">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
+                    <span>${emoji}</span>
+                    <span style="font-weight:800;font-size:13px;">${label}</span>
+                    <span style="font-size:13px;">${statusIcon}</span>
+                    <span style="font-size:11px;font-weight:700;color:${statusColor};">${statusLabel}</span>
+                    <span style="font-size:11px;color:var(--text-muted);margin-left:auto;">Std: ${sP100}/100 · Prm: ${pP100}/100 · Fair Prm: ${fairP100}/100</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:5px;">
+                    <div style="font-size:12px;line-height:1.5;padding:7px 10px;border-radius:7px;background:rgba(180,83,9,0.08);border-left:3px solid #b45309;">
+                        <span style="font-size:10px;font-weight:800;color:#b45309;text-transform:uppercase;letter-spacing:0.5px;">Premium tweak</span><br>${premiumTweak}
+                    </div>
+                    ${standardTweak ? `<div style="font-size:12px;line-height:1.5;padding:7px 10px;border-radius:7px;background:rgba(79,70,229,0.08);border-left:3px solid #4f46e5;">
+                        <span style="font-size:10px;font-weight:800;color:#4f46e5;text-transform:uppercase;letter-spacing:0.5px;">Standard tweak</span><br>${standardTweak}
+                    </div>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+
+        const verdict = `
+            <div style="margin-bottom:10px;">${overallLine}</div>
+            <div style="font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;">Best pack by rarity goal</div>
+            <div style="font-size:12px;line-height:1.6;margin-bottom:14px;">${rarityLines}</div>
+            <div style="font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">🔧 Odds balance suggestions</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Based on the ${costRatio.toFixed(1)}× cost ratio (Premium ÷ Standard). "Fair" = 1 amber buys equal expected pulls on either pack for that rarity.</div>
+            ${balanceSuggestions}
+        `;
+
+        const compareRow = (label, sVal, pVal, fmt, higherIsBetter = true) => {
+            const sBetter = higherIsBetter ? sVal >= pVal : sVal <= pVal;
+            const pBetter = !sBetter;
+            return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;align-items:center;">
+                <div style="font-size:12px;color:var(--text-muted);text-align:center;">${label}</div>
+                <div style="background:${sBetter?'rgba(79,70,229,0.12)':'var(--bg-gray)'};border-radius:8px;padding:8px 10px;text-align:center;border:2px solid ${sBetter?'#4f46e5':'transparent'};">
+                    <div style="font-size:13px;font-weight:800;">${fmt(sVal)}</div>
+                </div>
+                <div style="background:${pBetter?'rgba(180,83,9,0.12)':'var(--bg-gray)'};border-radius:8px;padding:8px 10px;text-align:center;border:2px solid ${pBetter?'#b45309':'transparent'};">
+                    <div style="font-size:13px;font-weight:800;">${fmt(pVal)}</div>
+                </div>
+            </div>`;
+        };
+
+        modal.innerHTML = `
+            <div style="background:var(--bg-card);border-radius:16px;padding:24px;width:100%;max-width:620px;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+                    <div>
+                        <div style="font-weight:800;font-size:17px;">⚖️ Pack Comparison — ${count.toLocaleString()} Packs Each</div>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${(count*10).toLocaleString()} total cards rolled across both packs</div>
+                    </div>
+                    <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
+                </div>
+                <div style="background:${winColor}22;border-radius:10px;padding:10px 16px;margin-bottom:16px;text-align:center;">
+                    <div style="font-size:12px;color:var(--text-muted);">Best value per amber spent</div>
+                    <div style="font-size:18px;font-weight:900;color:${winColor};margin-top:2px;">🏆 ${winner} Pack</div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+                    <div></div>
+                    <div style="text-align:center;font-size:12px;font-weight:800;color:#4f46e5;">Standard</div>
+                    <div style="text-align:center;font-size:12px;font-weight:800;color:#b45309;">Premium</div>
+                </div>
+                ${compareRow('Cost / pack', stdCost, prmCost, v => `🟡 ${v.toLocaleString()}`, false)}
+                ${compareRow('Avg dismantle / pack', sAvg, pAvg, v => `🟡 ${v.toFixed(1)}`)}
+                ${compareRow('Net per pack', sNet, pNet, v => { const s = v>=0?'+':''; return `${s}${v.toFixed(1)} 🟡`; })}
+                ${compareRow('Return on cost', parseFloat(sRoi), parseFloat(pRoi), v => `${v.toFixed(1)}%`)}
+                <div style="grid-column:1/-1;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin:8px 0 4px;padding-top:8px;border-top:1px solid var(--border-color);">Cards pulled (${count.toLocaleString()} packs each)</div>
+                ${compareRow('UR', sTally.ur.length, pTally.ur.length, v => v.toLocaleString())}
+                ${compareRow('SSR', sTally.ssr.length, pTally.ssr.length, v => v.toLocaleString())}
+                ${compareRow('SR', sTally.sr.length, pTally.sr.length, v => v.toLocaleString())}
+                ${compareRow('Rare', sTally.rare, pTally.rare, v => v.toLocaleString())}
+                ${compareRow('Common', sTally.common, pTally.common, v => v.toLocaleString())}
+                <div style="grid-column:1/-1;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin:8px 0 4px;padding-top:8px;border-top:1px solid var(--border-color);">Amber to pull one of each rarity (lower = cheaper)</div>
+                ${compareRow('Cost per UR', Math.round(count*stdCost/(sTally.ur.length||Infinity)), Math.round(count*prmCost/(pTally.ur.length||Infinity)), v => v===Infinity||!isFinite(v)?'∞':`🟡 ${Math.round(v).toLocaleString()}`, false)}
+                ${compareRow('Cost per SSR', Math.round(count*stdCost/(sTally.ssr.length||Infinity)), Math.round(count*prmCost/(pTally.ssr.length||Infinity)), v => v===Infinity||!isFinite(v)?'∞':`🟡 ${Math.round(v).toLocaleString()}`, false)}
+                ${compareRow('Cost per SR', Math.round(count*stdCost/(sTally.sr.length||Infinity)), Math.round(count*prmCost/(pTally.sr.length||Infinity)), v => v===Infinity||!isFinite(v)?'∞':`🟡 ${Math.round(v).toLocaleString()}`, false)}
+                ${compareRow('Cost per Rare', Math.round(count*stdCost/(sTally.rare||Infinity)), Math.round(count*prmCost/(pTally.rare||Infinity)), v => v===Infinity||!isFinite(v)?'∞':`🟡 ${Math.round(v).toLocaleString()}`, false)}
+                ${compareRow('Cost per Common', Math.round(count*stdCost/(sTally.common||Infinity)), Math.round(count*prmCost/(pTally.common||Infinity)), v => v===Infinity||!isFinite(v)?'∞':`🟡 ${Math.round(v).toLocaleString()}`, false)}
+                <div style="font-size:11px;color:var(--text-muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border-color);">
+                    Dismantle rates used: UR 🟡1500 · SSR 🟡400 · SR 🟡100 · Rare 🟡20 · Common 🟡5
+                </div>
+                <div style="margin-top:18px;border-top:2px solid var(--border-color);padding-top:16px;">
+                    <div style="font-size:14px;font-weight:800;margin-bottom:4px;">🔄 Reinvestment Loop</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Each user buys as many packs as they can, dismantles every card, then reinvests the amber — repeat until broke. Standard starts with 🟡 ${sStartAmber.toLocaleString()} · Premium starts with 🟡 ${pStartAmber.toLocaleString()}.</div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+                        <div style="background:rgba(79,70,229,0.1);border:2px solid ${sLoop.totalPacks>=pLoop.totalPacks?'#4f46e5':'transparent'};border-radius:10px;padding:12px;text-align:center;">
+                            <div style="font-size:11px;font-weight:800;color:#4f46e5;margin-bottom:4px;">STANDARD</div>
+                            <div style="font-size:22px;font-weight:900;color:#4f46e5;margin:4px 0;">${sLoop.totalPacks.toLocaleString()}</div>
+                            <div style="font-size:11px;color:var(--text-muted);">${sLoop.rounds.length} round${sLoop.rounds.length!==1?'s':''} · 🟡 ${sLoop.finalAmber.toLocaleString()} left</div>
+                        </div>
+                        <div style="background:rgba(180,83,9,0.1);border:2px solid ${pLoop.totalPacks>=sLoop.totalPacks?'#b45309':'transparent'};border-radius:10px;padding:12px;text-align:center;">
+                            <div style="font-size:11px;font-weight:800;color:#b45309;margin-bottom:4px;">PREMIUM</div>
+                            <div style="font-size:22px;font-weight:900;color:#b45309;margin:4px 0;">${pLoop.totalPacks.toLocaleString()}</div>
+                            <div style="font-size:11px;color:var(--text-muted);">${pLoop.rounds.length} round${pLoop.rounds.length!==1?'s':''} · 🟡 ${pLoop.finalAmber.toLocaleString()} left</div>
+                        </div>
+                    </div>
+
+                    <div style="overflow-x:auto;margin-bottom:16px;">
+                        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                            <thead>
+                                <tr style="background:var(--bg-gray);">
+                                    <th style="padding:6px 8px;text-align:center;font-size:11px;color:var(--text-muted);">Round</th>
+                                    <th colspan="3" style="padding:6px 8px;text-align:center;font-size:11px;font-weight:800;color:#4f46e5;border-left:1px solid var(--border-color);">Standard</th>
+                                    <th colspan="3" style="padding:6px 8px;text-align:center;font-size:11px;font-weight:800;color:#b45309;border-left:1px solid var(--border-color);">Premium</th>
+                                </tr>
+                                <tr style="background:var(--bg-gray);">
+                                    <th style="padding:4px 8px;"></th>
+                                    <th style="padding:4px 8px;text-align:center;font-size:10px;color:var(--text-muted);font-weight:600;border-left:1px solid var(--border-color);">Packs</th>
+                                    <th style="padding:4px 8px;text-align:center;font-size:10px;color:var(--text-muted);font-weight:600;">Dismantle</th>
+                                    <th style="padding:4px 8px;text-align:center;font-size:10px;color:var(--text-muted);font-weight:600;">Amber left</th>
+                                    <th style="padding:4px 8px;text-align:center;font-size:10px;color:var(--text-muted);font-weight:600;border-left:1px solid var(--border-color);">Packs</th>
+                                    <th style="padding:4px 8px;text-align:center;font-size:10px;color:var(--text-muted);font-weight:600;">Dismantle</th>
+                                    <th style="padding:4px 8px;text-align:center;font-size:10px;color:var(--text-muted);font-weight:600;">Amber left</th>
+                                </tr>
+                            </thead>
+                            <tbody>${tableRows}</tbody>
+                        </table>
+                        ${maxRows > 12 ? `<div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:6px;">(showing first 12 of ${maxRows} rounds)</div>` : ''}
+                    </div>
+
+                    <div style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Lifetime pulls (all rounds combined)</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">
+                        <div></div>
+                        <div style="text-align:center;font-size:11px;font-weight:800;color:#4f46e5;">Standard</div>
+                        <div style="text-align:center;font-size:11px;font-weight:800;color:#b45309;">Premium</div>
+                    </div>
+                    ${loopCompareRow('UR pulled', sLoop.tally.ur, pLoop.tally.ur, v => v.toLocaleString())}
+                    ${loopCompareRow('SSR pulled', sLoop.tally.ssr, pLoop.tally.ssr, v => v.toLocaleString())}
+                    ${loopCompareRow('SR pulled', sLoop.tally.sr, pLoop.tally.sr, v => v.toLocaleString())}
+                    ${loopCompareRow('Rare pulled', sLoop.tally.rare, pLoop.tally.rare, v => v.toLocaleString())}
+                    ${loopCompareRow('Common pulled', sLoop.tally.common, pLoop.tally.common, v => v.toLocaleString())}
+
+                    <div style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin:12px 0 8px;">Lifetime economics</div>
+                    ${loopCompareRow('Total packs', sLoop.totalPacks, pLoop.totalPacks, v => v.toLocaleString())}
+                    ${loopCompareRow('Total spent', sLoop.totalSpent, pLoop.totalSpent, v => `🟡 ${v.toLocaleString()}`, false)}
+                    ${loopCompareRow('Total recovered', sLoop.totalDismantle, pLoop.totalDismantle, v => `🟡 ${v.toLocaleString()}`)}
+                    ${loopCompareRow('Net loss', sLoop.totalSpent - sLoop.totalDismantle, pLoop.totalSpent - pLoop.totalDismantle, v => `🟡 ${v.toLocaleString()}`, false)}
+                    ${loopCompareRow('Recovery %', parseFloat(sRecovPct), parseFloat(pRecovPct), v => `${v.toFixed(1)}%`)}
+
+                    <div style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin:12px 0 8px;">Avg amber per rarity pull (lifetime)</div>
+                    ${loopCompareRow('Cost per UR', sLoop.tally.ur ? sLoop.totalSpent/sLoop.tally.ur : Infinity, pLoop.tally.ur ? pLoop.totalSpent/pLoop.tally.ur : Infinity, v => isFinite(v) ? `🟡 ${Math.round(v).toLocaleString()}` : '∞', false)}
+                    ${loopCompareRow('Cost per SSR', sLoop.tally.ssr ? sLoop.totalSpent/sLoop.tally.ssr : Infinity, pLoop.tally.ssr ? pLoop.totalSpent/pLoop.tally.ssr : Infinity, v => isFinite(v) ? `🟡 ${Math.round(v).toLocaleString()}` : '∞', false)}
+                    ${loopCompareRow('Cost per SR', sLoop.tally.sr ? sLoop.totalSpent/sLoop.tally.sr : Infinity, pLoop.tally.sr ? pLoop.totalSpent/pLoop.tally.sr : Infinity, v => isFinite(v) ? `🟡 ${Math.round(v).toLocaleString()}` : '∞', false)}
+                    ${loopCompareRow('Cost per Rare', sLoop.tally.rare ? sLoop.totalSpent/sLoop.tally.rare : Infinity, pLoop.tally.rare ? pLoop.totalSpent/pLoop.tally.rare : Infinity, v => isFinite(v) ? `🟡 ${Math.round(v).toLocaleString()}` : '∞', false)}
+                    ${loopCompareRow('Cost per Common', sLoop.tally.common ? sLoop.totalSpent/sLoop.tally.common : Infinity, pLoop.tally.common ? pLoop.totalSpent/pLoop.tally.common : Infinity, v => isFinite(v) ? `🟡 ${Math.round(v).toLocaleString()}` : '∞', false)}
+
+                    <div style="background:var(--bg-gray);border-left:3px solid ${loopWinnerColor};border-radius:0 8px 8px 0;padding:12px 14px;font-size:13px;line-height:1.5;color:var(--text-dark);margin-top:14px;">
+                        <div style="font-size:11px;font-weight:800;color:${loopWinnerColor};letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Verdict</div>
+                        ${verdict}
+                    </div>
+                </div>
+            </div>`;
+    } else {
+        const pack = TCG_PACKS.find(p => p.id === packId);
+        if (!pack) return;
+        const costPerPack = parseInt(document.getElementById('sim-cost-input')?.value || pack.cost);
+        const { tally, totalDismantle } = _tcgSimRunPack(pack, count);
+        const total = count * 5;
+
+        modal.innerHTML = `
+            <div style="background:var(--bg-card);border-radius:16px;padding:24px;width:100%;max-width:560px;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+                    <div>
+                        <div style="font-weight:800;font-size:17px;">🎲 ${pack.name} — ${count.toLocaleString()} Pack Simulation</div>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${total.toLocaleString()} total cards rolled</div>
+                    </div>
+                    <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
+                </div>
+                <div style="margin-bottom:4px;">
+                    ${statRow('ur', tally.ur.length, total)}
+                    ${statRow('ssr', tally.ssr.length, total)}
+                    ${statRow('sr', tally.sr.length, total)}
+                    ${statRow('rare', tally.rare, total)}
+                    ${statRow('common', tally.common, total)}
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;padding-left:4px;">Rightmost column = total dismantle value for that rarity</div>
+                ${valueBlock(pack.name, costPerPack, totalDismantle, count, tally)}
+                <div style="margin-top:18px;">
+                    <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">UR Pulls (${tally.ur.length})</div>
+                    <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px;margin-bottom:14px;">
+                        ${tally.ur.length ? cardRows(tally.ur, 'ur') : '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">None pulled</div>'}
+                    </div>
+                    <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">SSR Pulls (${tally.ssr.length})</div>
+                    <div style="max-height:240px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px;margin-bottom:14px;">
+                        ${tally.ssr.length ? cardRows(tally.ssr, 'ssr') : '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">None pulled</div>'}
+                    </div>
+                    <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">SR Pulls (${tally.sr.length})</div>
+                    <div style="max-height:240px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px;">
+                        ${tally.sr.length ? cardRows(tally.sr, 'sr') : '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">None pulled</div>'}
+                    </div>
+                </div>
+            </div>`;
+    }
+
     document.body.appendChild(modal);
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 };
@@ -6676,7 +7251,7 @@ const TCG_PACKS = [
         salePrice: 100,
         gradient: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
         description: '5 cards · 1 guaranteed Rare+',
-        odds: 'Common 90% · Rare 9.5% · SR 0.4% · SSR 0.1%\nGuaranteed slot: Rare 95% · SR 4.5% · SSR 0.5%\n+0.1% chance per pack for a bonus UR card',
+        odds: 'Common 90% · Rare 9.5% · SR 0.4% · SSR 0.1%\nGuaranteed slot: Rare 95% · SR 4.6% · SSR 0.4%\n+0.1% chance per pack for a bonus UR card',
         guaranteedSR: false,
     },
     {
@@ -6686,7 +7261,7 @@ const TCG_PACKS = [
         salePrice: 750,
         gradient: 'linear-gradient(135deg,#b45309,#f59e0b)',
         description: '5 cards · 1 guaranteed SR+',
-        odds: 'Common 75% · Rare 21% · SR 3% · SSR 1%\nGuaranteed slot: SR 95% · SSR 5%\n+0.1% chance per pack for a bonus UR card',
+        odds: 'Common 75% · Rare 21% · SR 3% · SSR 1%\nGuaranteed slot: SR 95% · SSR 5%\n+0.2% chance per pack for a bonus UR card',
         guaranteedSR: true,
     }
 ];
@@ -6891,13 +7466,21 @@ window.loadWheelTab = async function() {
 
 function _wheelRender(el, config, state) {
     if (!el) return;
-    const n = state.sections.length;
-    const sliceAngle = 360 / n;
+    // Disc is always rebuilt from scratch — reset rotation reference so _wheelSpin
+    // always computes angles relative to the new element starting at rotate(0deg).
+    window._wheelCurrentRotation = 0;
+
     const used = state.usedIndices || {};
     const today = _wheelTodayKey();
-    const canSpin = state.lastSpinDate !== today || (state.extraSpinsAvailable || 0) > 0;
-    const remainingSpins = n - Object.keys(used).length;
     const ur = _wheelGetMonthlyUrCard();
+
+    // Only non-claimed sections appear on the wheel; they expand to fill the circle.
+    const availSections = state.sections
+        .map((s, originalIdx) => ({ s, originalIdx }))
+        .filter(({ originalIdx }) => !used[originalIdx]);
+    const n = availSections.length;
+    const totalSections = state.sections.length;
+    const canSpin = n > 0 && (state.lastSpinDate !== today || (state.extraSpinsAvailable || 0) > 0);
 
     const isDesktop = window.matchMedia('(min-width: 900px)').matches;
     const wheelSize = isDesktop ? 560 : 300;
@@ -6906,16 +7489,20 @@ function _wheelRender(el, config, state) {
     const iconFontSize = isDesktop ? 26 : 18;
     const radius = wheelSize / 2 - (isDesktop ? 58 : 32);
 
-    const gradientStops = state.sections.map((s, i) => {
-        const color = used[i] ? '#2a2a2a' : _wheelSectionColor(s, i);
-        return `${color} ${i * sliceAngle}deg ${(i + 1) * sliceAngle}deg`;
-    }).join(', ');
-
-    const icons = state.sections.map((s, i) => {
-        const angle = (i + 0.5) * sliceAngle;
-        const dim = used[i] ? 'opacity:0.25;' : '';
-        return `<div class="wheel-slice-icon" style="${dim}width:${iconBoxSize}px;height:${iconBoxSize}px;margin:-${iconBoxSize / 2}px;font-size:${iconFontSize}px;transform:rotate(${angle}deg) translate(0, -${radius}px) rotate(-${angle}deg);">${_wheelSectionIcon(s)}</div>`;
-    }).join('');
+    let gradientStops, icons;
+    if (n > 0) {
+        const sliceAngle = 360 / n;
+        gradientStops = availSections.map(({ s }, i) =>
+            `${_wheelSectionColor(s, i)} ${i * sliceAngle}deg ${(i + 1) * sliceAngle}deg`
+        ).join(', ');
+        icons = availSections.map(({ s }, i) => {
+            const angle = (i + 0.5) * sliceAngle;
+            return `<div class="wheel-slice-icon" style="width:${iconBoxSize}px;height:${iconBoxSize}px;margin:-${iconBoxSize / 2}px;font-size:${iconFontSize}px;transform:rotate(${angle}deg) translate(0, -${radius}px) rotate(-${angle}deg);">${_wheelSectionIcon(s)}</div>`;
+        }).join('');
+    } else {
+        gradientStops = '#2a2a2a 0deg 360deg';
+        icons = `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:${isDesktop?'18px':'13px'};color:var(--text-muted);font-weight:700;text-align:center;padding:20px;pointer-events:none;">All prizes<br>claimed! 🎉</div>`;
+    }
 
     const adminPanel = window.isAdmin ? `
         <div style="margin-top:30px;padding:16px;border:1px solid var(--border-color);border-radius:12px;text-align:left;background:var(--bg-gray);">
@@ -6996,7 +7583,7 @@ function _wheelRender(el, config, state) {
                 </div>
             </div>
 
-            <div style="margin-top:12px;font-size:13px;color:var(--text-muted);">${remainingSpins} of ${n} sections left this month</div>
+            <div style="margin-top:12px;font-size:13px;color:var(--text-muted);">${n} of ${totalSections} sections left this month</div>
 
             ${window.isAdmin && !config.enabled ? `<div style="margin-top:16px;padding:10px 16px;background:rgba(239,68,68,0.12);border:1px solid #ef4444;border-radius:10px;color:#ef4444;font-size:12px;font-weight:700;display:inline-block;">⚠️ Wheel is hidden from regular users — admin preview only</div>` : ''}
             ${adminPanel}
@@ -7165,6 +7752,454 @@ window._tcgFindCard = async function(nameQuery, rarities) {
     console.table(hits);
     console.log(`Found ${hits.length} match(es) for "${nameQuery}"`);
     return hits;
+};
+
+// Admin sub-tab switcher
+window.switchAdminSubtab = function(tab) {
+    ['moderation','economy','cards','gifts'].forEach(t => {
+        const el = document.getElementById('admin-subtab-' + t);
+        const btn = document.getElementById('admin-subtab-' + t + '-btn');
+        if (el) el.style.display = t === tab ? '' : 'none';
+        if (btn) {
+            btn.style.background = t === tab ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+            btn.style.color = t === tab ? '#222' : 'var(--text-dark)';
+            btn.style.fontWeight = t === tab ? '800' : '600';
+        }
+    });
+};
+
+window._adminScanLopsidedTrades = async function() {
+    if (!window.isAdmin) return;
+    const el = document.getElementById('lopsided-trade-results');
+    if (!el) return;
+    el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">Scanning all trades…</div>';
+    try {
+        const [accSnap, comSnap] = await Promise.all([
+            getDocs(query(collection(db, 'trades'), where('status', '==', 'accepted'))),
+            getDocs(query(collection(db, 'trades'), where('status', '==', 'completed')))
+        ]);
+        const trades = [];
+        accSnap.forEach(d => trades.push({ id: d.id, ...d.data() }));
+        comSnap.forEach(d => trades.push({ id: d.id, ...d.data() }));
+
+        // For each trade, identify who received something for free
+        const byRecipient = {};
+        for (const t of trades) {
+            const giveVal = (t.offerCards || []).length + (t.offerAmber || 0) / 50;
+            const getVal  = (t.requestCards || []).length + (t.requestAmber || 0) / 50;
+            let beneficiary, beneficiaryName, donorUid, donorName;
+            if (giveVal > 0 && getVal === 0) {
+                beneficiary = t.toUid; beneficiaryName = t.toName;
+                donorUid = t.fromUid; donorName = t.fromName;
+            } else if (getVal > 0 && giveVal === 0) {
+                beneficiary = t.fromUid; beneficiaryName = t.fromName;
+                donorUid = t.toUid; donorName = t.toName;
+            }
+            if (!beneficiary) continue;
+            if (!byRecipient[beneficiary]) byRecipient[beneficiary] = { name: beneficiaryName, trades: [] };
+            byRecipient[beneficiary].trades.push({ ...t, donorUid, donorName });
+        }
+
+        // Flag: same donor gifted free items 2+ times, OR 3+ total free gifts from anyone
+        const flagged = Object.entries(byRecipient).map(([uid, data]) => {
+            const byDonor = {};
+            data.trades.forEach(t => { if (!byDonor[t.donorUid]) byDonor[t.donorUid] = []; byDonor[t.donorUid].push(t); });
+            const repeatedDonors = Object.entries(byDonor).filter(([, ts]) => ts.length >= 2);
+            return { uid, name: data.name, trades: data.trades, byDonor, repeatedDonors };
+        }).filter(u => u.repeatedDonors.length > 0 || u.trades.length >= 3)
+          .sort((a, b) => b.trades.length - a.trades.length);
+
+        if (!flagged.length) {
+            el.innerHTML = '<div style="color:#22c55e;font-size:12px;font-weight:700;margin-top:4px;">✅ No suspicious trade patterns found.</div>';
+            return;
+        }
+        el.innerHTML = `
+            <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:#ef4444;">⚠️ ${flagged.length} account(s) flagged for receiving one-sided trades</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Flags accounts that received free cards/amber (other side gave nothing) — especially when the same donor repeats this pattern.</div>
+            ${flagged.map(u => {
+                const hasRepeated = u.repeatedDonors.length > 0;
+                const rc = hasRepeated ? '#ef4444' : '#f59e0b';
+                const rl = hasRepeated
+                    ? `🔴 High — same account gifted them free items ${u.repeatedDonors[0][1].length}x`
+                    : `🟡 Medium — ${u.trades.length} one-sided trades received from different accounts`;
+                return `
+                <div style="background:var(--bg-white);border:1px solid ${rc}55;border-radius:8px;padding:12px;margin-bottom:8px;">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+                        <span style="font-weight:800;font-size:13px;cursor:pointer;color:var(--accent-blue);text-decoration:underline;" onclick="viewUserProfile('${u.uid}')">${u.name}</span>
+                        <span style="font-size:11px;font-weight:700;color:${rc};">${rl}</span>
+                        <button onclick="window._adminShowModModal('${u.uid}')" style="margin-left:auto;padding:3px 10px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">Mod</button>
+                    </div>
+                    ${u.trades.map(t => {
+                        const date = (t.updatedAt?.toDate?.() || t.createdAt?.toDate?.())?.toLocaleDateString() || '?';
+                        const isTo = u.uid === t.toUid;
+                        const gCards = isTo ? (t.offerCards||[]).length : (t.requestCards||[]).length;
+                        const gAmber = isTo ? (t.offerAmber||0) : (t.requestAmber||0);
+                        const gStr = [gCards ? `${gCards} card${gCards!==1?'s':''}` : '', gAmber ? `🟡${gAmber.toLocaleString()}` : ''].filter(Boolean).join(' + ') || '?';
+                        return `<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border-color);display:flex;gap:8px;flex-wrap:wrap;">
+                            <span><strong>${t.donorName || 'Unknown'}</strong> gave them ${gStr}</span>
+                            <span style="color:var(--text-muted);margin-left:auto;">${date}</span>
+                        </div>`;
+                    }).join('')}
+                </div>`;
+            }).join('')}`;
+    } catch(e) {
+        el.innerHTML = `<div style="color:#ef4444;font-size:12px;">❌ ${e.message}</div>`;
+    }
+};
+
+window._adminScanAltAccounts = async function() {
+    if (!window.isAdmin) return;
+    const el = document.getElementById('alt-account-results');
+    if (!el) return;
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Scanning all profiles…</div>';
+    try {
+        const snap = await getDocs(collection(db, 'profiles'));
+        const byFp = {};
+        snap.forEach(d => {
+            const data = d.data();
+            if (!data.deviceFingerprint) return;
+            if (!byFp[data.deviceFingerprint]) byFp[data.deviceFingerprint] = [];
+            const created = data.accountCreatedAt?.toDate?.() || null;
+            byFp[data.deviceFingerprint].push({
+                uid: d.id,
+                name: data.displayName || d.id,
+                amber: data.amber || 0,
+                reviews: data.reviewCount || 0,
+                seen: data.fingerprintUpdatedAt?.toDate?.()?.toLocaleDateString() || '?',
+                createdAt: created ? created.getTime() : null,
+                createdStr: created ? created.toLocaleDateString() : 'unknown'
+            });
+        });
+        const dupes = Object.entries(byFp).filter(([, users]) => users.length > 1);
+        if (!dupes.length) {
+            el.innerHTML = '<div style="color:#22c55e;font-size:12px;font-weight:700;margin-top:4px;">✅ No duplicate fingerprints found.</div>';
+            return;
+        }
+
+        el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Found matches — checking trade history…</div>';
+
+        // Fetch trades between the accounts in a fingerprint group
+        async function _fetchGroupTrades(users) {
+            const uidSet = new Set(users.map(u => u.uid));
+            const seen = new Set();
+            const trades = [];
+            for (const u of users) {
+                try {
+                    const tSnap = await getDocs(query(collection(db, 'trades'), where('participants', 'array-contains', u.uid)));
+                    tSnap.forEach(d => {
+                        if (seen.has(d.id)) return;
+                        seen.add(d.id);
+                        const t = d.data();
+                        // Only include trades where BOTH participants are in this flagged group
+                        if (t.participants && t.participants.length === 2 && t.participants.every(p => uidSet.has(p))) {
+                            trades.push({ id: d.id, ...t });
+                        }
+                    });
+                } catch(e) {}
+            }
+            return trades;
+        }
+
+        // Score a trade: positive = fromUid gave more, negative = toUid gave more
+        function _tradeBalance(t) {
+            const giveCards = (t.offerCards || []).length;
+            const getCards = (t.requestCards || []).length;
+            const giveAmber = t.offerAmber || 0;
+            const getAmber = t.requestAmber || 0;
+            // Rough value: 1 card unit = 50 amber
+            return (giveCards + giveAmber / 50) - (getCards + getAmber / 50);
+        }
+
+        function _tradeSummaryHTML(trades, users) {
+            if (!trades.length) return `<div style="font-size:11px;color:var(--text-muted);padding:6px 0 2px;">No completed trades between these accounts.</div>`;
+            const nameMap = Object.fromEntries(users.map(u => [u.uid, u.name]));
+            const completed = trades.filter(t => ['accepted','completed'].includes(t.status));
+            const pending = trades.filter(t => t.status === 'pending');
+            const oneSided = completed.filter(t => {
+                const bal = _tradeBalance(t);
+                const giveVal = (t.offerCards||[]).length + (t.offerAmber||0)/50;
+                const getVal = (t.requestCards||[]).length + (t.requestAmber||0)/50;
+                return (giveVal > 0 && getVal === 0) || (getVal > 0 && giveVal === 0);
+            });
+            const flagColor = oneSided.length > 0 ? '#ef4444' : completed.length > 0 ? '#f59e0b' : '#6b7280';
+            const rows = completed.map(t => {
+                const bal = _tradeBalance(t);
+                const giver = bal > 0 ? t.fromUid : t.toUid;
+                const getter = bal > 0 ? t.toUid : t.fromUid;
+                const giverName = nameMap[giver] || giver;
+                const getterName = nameMap[getter] || getter;
+                const giveCards = bal > 0 ? (t.offerCards||[]).length : (t.requestCards||[]).length;
+                const getCards = bal > 0 ? (t.requestCards||[]).length : (t.offerCards||[]).length;
+                const giveAmber = bal > 0 ? (t.offerAmber||0) : (t.requestAmber||0);
+                const getAmber = bal > 0 ? (t.requestAmber||0) : (t.offerAmber||0);
+                const isSided = (giveCards + giveAmber > 0) && (getCards + getAmber === 0);
+                const date = t.updatedAt?.toDate?.()?.toLocaleDateString() || t.createdAt?.toDate?.()?.toLocaleDateString() || '?';
+                const giveStr = [giveCards ? `${giveCards} card${giveCards!==1?'s':''}` : '', giveAmber ? `🟡${giveAmber}` : ''].filter(Boolean).join(' + ') || 'nothing';
+                const getStr = [getCards ? `${getCards} card${getCards!==1?'s':''}` : '', getAmber ? `🟡${getAmber}` : ''].filter(Boolean).join(' + ') || 'nothing';
+                return `<div style="font-size:11px;padding:4px 0;border-bottom:1px solid var(--border-color);display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                    ${isSided ? '<span style="color:#ef4444;font-weight:800;flex-shrink:0;">⚠ ONE-SIDED</span>' : '<span style="color:#22c55e;font-weight:700;flex-shrink:0;">✓</span>'}
+                    <span><strong>${giverName}</strong> gave ${giveStr} → <strong>${getterName}</strong> gave ${getStr}</span>
+                    <span style="color:var(--text-muted);margin-left:auto;flex-shrink:0;">${date}</span>
+                </div>`;
+            }).join('');
+            return `
+                <div style="margin-top:10px;padding:8px 10px;background:${flagColor}11;border:1px solid ${flagColor}44;border-radius:8px;">
+                    <div style="font-size:11px;font-weight:800;color:${flagColor};margin-bottom:6px;">
+                        ${oneSided.length > 0 ? `🚨 ${oneSided.length} one-sided trade${oneSided.length!==1?'s':''} detected` : completed.length > 0 ? `↔ ${completed.length} trade${completed.length!==1?'s':''} between accounts` : ''}${pending.length ? ` · ${pending.length} pending` : ''}
+                    </div>
+                    ${rows}
+                </div>`;
+        }
+
+        // Risk score from account creation dates
+        function _fpRisk(users, trades) {
+            const dates = users.map(u => u.createdAt).filter(Boolean);
+            let risk = 'low';
+            if (dates.length >= 2) {
+                const days = (Math.max(...dates) - Math.min(...dates)) / 86400000;
+                if (days <= 7) risk = 'high';
+                else if (days <= 30) risk = 'medium';
+            }
+            // Escalate risk if one-sided trades exist
+            const oneSided = trades.filter(t => {
+                if (!['accepted','completed'].includes(t.status)) return false;
+                const giveVal = (t.offerCards||[]).length + (t.offerAmber||0)/50;
+                const getVal = (t.requestCards||[]).length + (t.requestAmber||0)/50;
+                return (giveVal > 0 && getVal === 0) || (getVal > 0 && giveVal === 0);
+            });
+            if (oneSided.length > 0 && risk === 'low') risk = 'medium';
+            if (oneSided.length > 1) risk = 'high';
+            return risk;
+        }
+
+        const riskColor = { high: '#ef4444', medium: '#f59e0b', low: '#6b7280' };
+        const riskLabel = { high: '🔴 High suspicion', medium: '🟡 Medium suspicion', low: '⚪ Low — likely coincidence' };
+
+        // Fetch trade data for all groups in parallel
+        const groupsWithTrades = await Promise.all(
+            dupes.map(async ([fp, users]) => ({ fp, users, trades: await _fetchGroupTrades(users) }))
+        );
+
+        // Sort by risk descending
+        groupsWithTrades.sort((a, b) => {
+            const order = { high: 2, medium: 1, low: 0 };
+            return order[_fpRisk(b.users, b.trades)] - order[_fpRisk(a.users, a.trades)];
+        });
+
+        el.innerHTML = `
+            <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:#ef4444;">⚠️ ${dupes.length} shared fingerprint(s) across ${dupes.reduce((n,[,u])=>n+u.length,0)} accounts</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Fingerprint is captured at account creation. Shared fingerprints mean accounts were likely created on the same device/browser. Use creation dates + trade history to judge.</div>
+            ${groupsWithTrades.map(({ fp, users, trades }) => {
+                const risk = _fpRisk(users, trades);
+                return `
+                <div style="background:var(--bg-white);border:1px solid ${riskColor[risk]}66;border-radius:8px;padding:12px;margin-bottom:8px;">
+                    <div style="font-size:11px;font-weight:700;color:${riskColor[risk]};margin-bottom:8px;">${riskLabel[risk]}</div>
+                    <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;font-family:monospace;word-break:break-all;">FP: ${fp}</div>
+                    ${users.map(u => `
+                        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border-color);flex-wrap:wrap;">
+                            <span style="font-weight:700;font-size:12px;cursor:pointer;color:var(--accent-blue);text-decoration:underline;" onclick="viewUserProfile('${u.uid}')">${u.name}</span>
+                            <span style="font-size:11px;color:var(--text-muted);">📅 ${u.createdStr} · 🟡 ${u.amber.toLocaleString()} · ${u.reviews} reviews · fp set ${u.seen}</span>
+                            <button onclick="window._adminShowModModal('${u.uid}')" style="margin-left:auto;padding:3px 10px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">Mod</button>
+                        </div>
+                    `).join('')}
+                    ${_tradeSummaryHTML(trades, users)}
+                </div>`;
+            }).join('')}
+        `;
+    } catch(e) {
+        el.innerHTML = `<div style="color:#ef4444;font-size:12px;">❌ ${e.message}</div>`;
+    }
+};
+
+// ── User Moderation ─────────────────────────────────────────────────────────
+
+window._modUserCache = {};
+
+window._adminSearchUserForMod = async function() {
+    if (!window.isAdmin) return;
+    const term = document.getElementById('mod-search-input')?.value?.trim()?.toLowerCase();
+    if (!term) return;
+    const el = document.getElementById('mod-search-results');
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:6px 0;">Searching…</div>';
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'profiles'),
+            where('displayNameLower', '>=', term),
+            where('displayNameLower', '<=', term + ''),
+            limit(15)
+        ));
+        if (snap.empty) { el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:6px 0;">No users found.</div>'; return; }
+        snap.docs.forEach(d => { window._modUserCache[d.id] = { uid: d.id, ...d.data() }; });
+        el.innerHTML = snap.docs.map(d => {
+            const u = d.data();
+            const isBanned = u.banned;
+            const expires = u.banExpiresAt?.toDate?.();
+            const activeBan = isBanned && (!expires || expires > new Date());
+            const statusColor = activeBan ? '#ef4444' : '#22c55e';
+            const statusText = activeBan ? (expires ? `Banned until ${expires.toLocaleDateString()}` : 'Permanently banned') : 'Active';
+            return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border-color);">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${u.displayName || d.id}</div>
+                    <div style="font-size:11px;margin-top:1px;">
+                        <span style="color:${statusColor};font-weight:700;">${statusText}</span>
+                        <span style="color:var(--text-muted);"> · 🟡 ${(u.amber||0).toLocaleString()} · ${u.reviewCount||0} reviews</span>
+                    </div>
+                </div>
+                <button onclick="window._adminShowModModal('${d.id}')" style="padding:7px 14px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:700;font-size:12px;cursor:pointer;flex-shrink:0;">Mod</button>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        el.innerHTML = `<div style="color:#ef4444;font-size:12px;padding:6px 0;">Error: ${e.message}</div>`;
+    }
+};
+
+window._adminShowModModal = async function(uid) {
+    if (!window.isAdmin) return;
+    document.getElementById('admin-mod-modal')?.remove();
+    const snap = await getDoc(doc(db, 'profiles', uid));
+    const u = snap.exists() ? { uid, ...snap.data() } : { uid };
+    window._modUserCache[uid] = u;
+    const isBanned = u.banned;
+    const expires = u.banExpiresAt?.toDate?.() || null;
+    const activeBan = isBanned && (!expires || expires > new Date());
+    const banExpiryStr = expires ? expires.toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' }) : 'Never (permanent)';
+    const modal = document.createElement('div');
+    modal.id = 'admin-mod-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10010;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+    modal.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:480px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.5);max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                <div>
+                    <div style="font-size:16px;font-weight:800;">⚠️ Moderate User</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${u.displayName || uid} <span style="font-family:monospace;font-size:10px;opacity:0.6;">${uid}</span></div>
+                </div>
+                <button onclick="document.getElementById('admin-mod-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+                <div style="background:var(--bg-gray);border-radius:8px;padding:8px 14px;font-size:12px;"><span style="color:var(--text-muted);display:block;margin-bottom:2px;">Amber</span><strong>🟡 ${(u.amber||0).toLocaleString()}</strong></div>
+                <div style="background:var(--bg-gray);border-radius:8px;padding:8px 14px;font-size:12px;"><span style="color:var(--text-muted);display:block;margin-bottom:2px;">Reviews</span><strong>${u.reviewCount||0}</strong></div>
+                <div style="background:${activeBan?'rgba(239,68,68,0.1)':'var(--bg-gray)'};border:1px solid ${activeBan?'rgba(239,68,68,0.4)':'transparent'};border-radius:8px;padding:8px 14px;font-size:12px;">
+                    <span style="color:var(--text-muted);display:block;margin-bottom:2px;">Status</span>
+                    <strong style="color:${activeBan?'#ef4444':'#22c55e'};">${activeBan?(expires?'Temp ban':'Perm ban'):'Active'}</strong>
+                </div>
+            </div>
+            ${activeBan ? `<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;">
+                <div style="font-weight:700;color:#ef4444;margin-bottom:4px;">Active Ban</div>
+                <div style="color:var(--text-dark);">Expires: ${banExpiryStr}</div>
+                ${u.banReason ? `<div style="color:var(--text-muted);margin-top:3px;">Reason: ${u.banReason}</div>` : ''}
+                <button onclick="window._adminUnbanUser('${uid}')" style="margin-top:10px;padding:6px 14px;border-radius:8px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-weight:700;font-size:12px;cursor:pointer;">Lift Ban</button>
+            </div>` : ''}
+            <div style="border:1px solid var(--border-color);border-radius:12px;padding:16px;margin-bottom:14px;">
+                <div style="font-size:13px;font-weight:800;margin-bottom:12px;">${activeBan?'Update Ban':'Issue Ban'}</div>
+                <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);display:block;margin-bottom:5px;">Duration</label>
+                <select id="mod-ban-duration" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;margin-bottom:10px;">
+                    <option value="1">1 day</option>
+                    <option value="3">3 days</option>
+                    <option value="7">7 days</option>
+                    <option value="14">14 days</option>
+                    <option value="30">30 days</option>
+                    <option value="90">90 days</option>
+                    <option value="0">Permanent</option>
+                </select>
+                <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);display:block;margin-bottom:5px;">Reason (shown to user)</label>
+                <input type="text" id="mod-ban-reason" placeholder="e.g. Alt account abuse, cheating…" value="${(u.banReason||'').replace(/"/g,'&quot;')}" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;box-sizing:border-box;margin-bottom:12px;">
+                <button onclick="window._adminBanUser('${uid}')" style="width:100%;padding:10px;border-radius:8px;border:none;background:#f59e0b;color:#222;font-weight:800;font-size:13px;cursor:pointer;">${activeBan?'Update Ban':'Issue Ban'}</button>
+            </div>
+            <div style="border:1px solid rgba(239,68,68,0.4);border-radius:12px;padding:16px;background:rgba(239,68,68,0.04);">
+                <div style="font-size:13px;font-weight:800;color:#ef4444;margin-bottom:6px;">☢️ Nuke Account</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Deletes all cards, binders, reviews, and tier lists. Replaces the profile with a tombstone. <strong style="color:#ef4444;">Cannot be undone.</strong></div>
+                <div id="mod-nuke-status" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;"></div>
+                <button onclick="window._adminNukeUser('${uid}','${(u.displayName||uid).replace(/'/g,"\\'")}')" style="padding:10px 22px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">☢️ Nuke Account</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+};
+
+window._adminBanUser = async function(uid) {
+    if (!window.isAdmin) return;
+    const days = parseInt(document.getElementById('mod-ban-duration')?.value || '1');
+    const reason = document.getElementById('mod-ban-reason')?.value?.trim() || '';
+    const banExpiresAt = days > 0 ? new Date(Date.now() + days * 86400000) : null;
+    try {
+        await updateDoc(doc(db, 'profiles', uid), { banned: true, banExpiresAt, banReason: reason });
+        document.getElementById('admin-mod-modal')?.remove();
+        alert(`✅ ${days > 0 ? `${days}-day` : 'Permanent'} ban issued.`);
+        window._adminSearchUserForMod();
+    } catch(e) { alert('Failed: ' + e.message); }
+};
+
+window._adminUnbanUser = async function(uid) {
+    if (!window.isAdmin) return;
+    if (!confirm('Lift this ban?')) return;
+    try {
+        await updateDoc(doc(db, 'profiles', uid), { banned: false, banExpiresAt: null, banReason: '' });
+        document.getElementById('admin-mod-modal')?.remove();
+        alert('✅ Ban lifted.');
+        window._adminSearchUserForMod();
+    } catch(e) { alert('Failed: ' + e.message); }
+};
+
+async function _adminBatchDelete(docs) {
+    for (let i = 0; i < docs.length; i += 499) {
+        const batch = writeBatch(db);
+        docs.slice(i, i + 499).forEach(d => batch.delete(d.ref));
+        await batch.commit();
+    }
+}
+
+window._adminNukeUser = async function(uid, displayName) {
+    if (!window.isAdmin) return;
+    if (!confirm(`NUKE "${displayName}"?\n\nThis permanently deletes:\n• All cards & binders\n• All reviews & tier lists\n• Their profile & amber balance\n\nThey will also be permanently banned.\n\nThis CANNOT be undone.`)) return;
+    const setStatus = msg => {
+        const s = document.getElementById('mod-nuke-status');
+        if (s) s.textContent = msg;
+    };
+    try {
+        setStatus('Deleting cards…');
+        const cards = await getDocs(collection(db, 'card_collections', uid, 'cards'));
+        await _adminBatchDelete(cards.docs);
+
+        setStatus('Deleting binders…');
+        const binders = await getDocs(collection(db, 'card_binders', uid, 'binders'));
+        await _adminBatchDelete(binders.docs);
+
+        setStatus('Deleting reviews…');
+        const reviews = await getDocs(query(collection(db, 'reviews'), where('uid', '==', uid)));
+        await _adminBatchDelete(reviews.docs);
+
+        setStatus('Deleting tier lists…');
+        const tiers = await getDocs(query(collection(db, 'tier_lists'), where('uid', '==', uid)));
+        await _adminBatchDelete(tiers.docs);
+
+        setStatus('Deleting follows…');
+        const [followFrom, followTo] = await Promise.all([
+            getDocs(query(collection(db, 'follows'), where('followerUid', '==', uid))),
+            getDocs(query(collection(db, 'follows'), where('followedUid', '==', uid)))
+        ]);
+        await _adminBatchDelete([...followFrom.docs, ...followTo.docs]);
+
+        setStatus('Tombstoning profile…');
+        await setDoc(doc(db, 'profiles', uid), {
+            displayName: '[Deleted Account]',
+            displayNameLower: '[deleted account]',
+            banned: true,
+            banExpiresAt: null,
+            banReason: 'Account removed by administrator.',
+            nuked: true,
+            amber: 0,
+            reviewCount: 0,
+            indepthCount: 0,
+            completedCount: 0
+        });
+
+        document.getElementById('admin-mod-modal')?.remove();
+        alert(`✅ "${displayName}" has been nuked and permanently banned.`);
+        window._adminSearchUserForMod();
+    } catch(e) {
+        setStatus('❌ Error: ' + e.message);
+        console.error('Nuke failed:', e);
+    }
 };
 
 // Admin: dedup all friend entries across all users. Run from console:
@@ -7375,7 +8410,10 @@ window._wheelSpin = async function(testUrSpin = false) {
         pickIdx = available[Math.floor(Math.random() * available.length)];
     }
     const section = state.sections[pickIdx];
-    const n = state.sections.length;
+
+    // Visual position of pickIdx within the shrunken wheel (available sections only).
+    const visualIdx = available.indexOf(pickIdx);
+    const n = available.length;
     const sliceAngle = 360 / n;
 
     const SPIN_DURATION = 8000;
@@ -7383,7 +8421,7 @@ window._wheelSpin = async function(testUrSpin = false) {
     const pointerEl = document.getElementById('wheel-pointer');
     const outerEl = document.getElementById('wheel-outer');
     const prevRotation = window._wheelCurrentRotation || 0;
-    const targetAngle = prevRotation + (360 * 12) - (pickIdx * sliceAngle) - (sliceAngle / 2) - (prevRotation % 360);
+    const targetAngle = prevRotation + (360 * 12) - (visualIdx * sliceAngle) - (sliceAngle / 2) - (prevRotation % 360);
     if (wheelEl) {
         wheelEl.style.transition = `transform ${SPIN_DURATION}ms cubic-bezier(0.12,0.6,0.18,1)`;
         wheelEl.style.transform = `rotate(${targetAngle}deg)`;
@@ -7579,7 +8617,7 @@ const PLINKO_STAR_COLOR = '#ff5e9c';
 const PLINKO_DAILY_CAP = 3000;
 
 function _plinkoTodayKey(d = new Date()) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
 // Small deterministic PRNG so every player sees the same multiplier bridge
@@ -8296,8 +9334,8 @@ window._plinkoExecuteDrop = async function(dropX) {
     const totalDrops = (state.totalDrops || 0) + 1;
     let streak = state.streak || 0;
     if (freeAvailable) {
-        const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-        streak = (state.lastDropDate === _plinkoTodayKey(yesterday)) ? streak + 1 : 1;
+        const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+        streak = (state.lastDropDate === yesterday) ? streak + 1 : 1;
     }
     try {
         const update = { totalDrops, streak };
@@ -8879,9 +9917,9 @@ function _tcgRollPackCards(pack) {
         cards.push(_tcgPickCard(Math.random() < 0.05 ? 'ssr' : 'sr'));
     } else {
         const r = Math.random();
-        if      (r < 0.005) cards.push(_tcgPickCard('ssr'));
-        else if (r < 0.05)  cards.push(_tcgPickCard('sr'));
-        else                cards.push(_tcgPickCard('rare'));
+        if      (r < 0.004) cards.push(_tcgPickCard('ssr'));  // 0.4%
+        else if (r < 0.05)  cards.push(_tcgPickCard('sr'));   // 4.6%
+        else                cards.push(_tcgPickCard('rare')); // 95%
     }
     // 4 remaining slots
     for (let i = 0; i < 4; i++) {
@@ -8900,9 +9938,10 @@ function _tcgRollPackCards(pack) {
         }
         cards.push(_tcgPickCard(rarity));
     }
-    // UR is an extremely rare bonus pull — ~0.1% chance per pack (any pack type),
-    // replacing one random slot.
-    if (Math.random() < 0.001) {
+    // UR is an extremely rare bonus pull, replacing one random slot.
+    // Premium has double the chance (0.2%) vs Standard (0.1%).
+    const urChance = pack.guaranteedSR ? 0.002 : 0.001;
+    if (Math.random() < urChance) {
         cards[Math.floor(Math.random() * cards.length)] = _tcgPickCard('ur');
     }
     return cards.sort(() => Math.random() - 0.5);
@@ -9647,13 +10686,15 @@ window._tcgOpenShowcasePicker = async function() {
     modal.onclick = (e) => { if (e.target === modal) { modal.remove(); window._tcgRenderProfileShowcase(uid); } };
 
     modal.innerHTML = `
-        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:640px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:85vh;overflow-y:auto;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                <div style="font-size:17px;font-weight:800;color:var(--text-dark);">Edit Card Showcase</div>
-                <button onclick="document.getElementById('tcg-showcase-picker-modal').remove();window._tcgRenderProfileShowcase('${uid}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
+        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:85vh;display:flex;flex-direction:column;">
+            <div style="padding:24px 24px 0;flex-shrink:0;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                    <div style="font-size:17px;font-weight:800;color:var(--text-dark);">Edit Card Showcase</div>
+                    <button onclick="document.getElementById('tcg-showcase-picker-modal').remove();window._tcgRenderProfileShowcase('${uid}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
+                </div>
+                <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Pick up to 6 cards to feature on your profile.</p>
             </div>
-            <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Pick up to 6 cards to feature on your profile.</p>
-            <div id="tcg-showcase-picker-grid" style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;"><div style="padding:40px;color:var(--text-muted);">Loading…</div></div>
+            <div id="tcg-showcase-picker-grid" style="overflow-y:auto;padding:0 24px 24px;display:flex;flex-wrap:wrap;gap:14px;justify-content:center;"><div style="padding:40px;color:var(--text-muted);">Loading…</div></div>
         </div>`;
     document.body.appendChild(modal);
 
@@ -10477,6 +11518,16 @@ window._tcgAddCardsToBinderModal = async function(binderId, uid) {
 
     const existingIds = new Set(binder.cardIds || []);
     const available = allCards.filter(c => !existingIds.has(c.id));
+    window._tcgBinderAddPending = new Set();
+    window._tcgBinderAddId = binderId;
+    window._tcgBinderAddUid = uid;
+
+    function refreshFooter() {
+        const n = window._tcgBinderAddPending.size;
+        const btn = document.getElementById('binder-add-confirm-btn');
+        if (btn) btn.textContent = n ? `Add ${n} Card${n>1?'s':''} to Binder` : 'Select cards above';
+        if (btn) btn.disabled = !n;
+    }
 
     const modal = document.createElement('div');
     modal.id = 'tcg-binder-add-modal';
@@ -10484,8 +11535,11 @@ window._tcgAddCardsToBinderModal = async function(binderId, uid) {
     modal.innerHTML = `
         <div style="background:var(--bg-white);border-radius:16px;padding:24px;width:100%;max-width:760px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-shrink:0;">
-                <h3 style="margin:0;">Add Cards to ${binder.name.replace(/</g,'&lt;')}</h3>
-                <button onclick="document.getElementById('tcg-binder-add-modal').remove()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;">Close</button>
+                <div>
+                    <h3 style="margin:0 0 2px;">Add Cards to ${binder.name.replace(/</g,'&lt;')}</h3>
+                    <div style="font-size:12px;color:var(--text-muted);">Tap cards to select, then confirm below.</div>
+                </div>
+                <button onclick="document.getElementById('tcg-binder-add-modal').remove()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;">Cancel</button>
             </div>
             ${available.length ? `
             <div style="flex-shrink:0;margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -10497,44 +11551,75 @@ window._tcgAddCardsToBinderModal = async function(binderId, uid) {
                     ${['all','ur','ssr','sr','rare','common'].map(r => `<button data-rarity="${r}" onclick="window._tcgBinderModalRarity='${r}';window._tcgFilterBinderModal()" style="padding:5px 12px;border-radius:20px;border:1px solid ${r==='all'?'var(--accent-yellow)':'var(--border-color)'};background:${r==='all'?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${r==='all'?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${r==='all'?'All':r.toUpperCase()}</button>`).join('')}
                 </div>
             </div>
-            <div id="tcg-binder-add-grid" style="overflow-y:auto;flex:1;">
+            <div id="tcg-binder-add-grid" style="overflow-y:auto;flex:1;margin-bottom:12px;">
                 <div style="display:flex;flex-wrap:wrap;gap:14px;">
                     ${available.map(c => `
-                        <div data-name="${(c.name||'').toLowerCase().replace(/"/g,'')}" data-anime="${(c.anime||'').toLowerCase().replace(/"/g,'')}" data-rarity="${c.rarity||''}" data-id="${c.id}" onclick="window._tcgAddCardToBinder('${binderId}','${uid}','${c.id}')" style="cursor:pointer;width:154px;height:216px;overflow:hidden;transition:transform .1s;flex-shrink:0;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'">
-                            <div style="transform:scale(0.7);transform-origin:top left;">${_tcgBuildCardFace(c)}</div>
+                        <div data-name="${(c.name||'').toLowerCase().replace(/"/g,'')}" data-anime="${(c.anime||'').toLowerCase().replace(/"/g,'')}" data-rarity="${c.rarity||''}" data-id="${c.id}" onclick="window._tcgToggleBinderAddCard('${c.id}',this)" style="cursor:pointer;width:154px;height:216px;overflow:hidden;border-radius:10px;border:3px solid transparent;box-sizing:border-box;transition:border-color .15s;flex-shrink:0;position:relative;">
+                            <div style="transform:scale(0.7);transform-origin:top left;pointer-events:none;">${_tcgBuildCardFace(c)}</div>
+                            <div class="binder-sel-check" style="display:none;position:absolute;inset:0;background:rgba(245,158,11,0.18);border-radius:8px;align-items:center;justify-content:center;">
+                                <div style="background:#f59e0b;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="font-size:20px;color:#000;">check</span></div>
+                            </div>
                         </div>`).join('')}
                 </div>
+            </div>
+            <div style="flex-shrink:0;padding-top:12px;border-top:1px solid var(--border-color);">
+                <button id="binder-add-confirm-btn" onclick="window._tcgConfirmBinderAdd()" disabled style="width:100%;padding:13px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:14px;cursor:pointer;opacity:0.5;">Select cards above</button>
             </div>` : `<p style="color:var(--text-muted);">All your cards are already in this binder.</p>`}
         </div>`;
     document.body.appendChild(modal);
     window._tcgBinderModalRarity = 'all';
     _tcgObserveSSRCards(modal);
+    window._tcgBinderAddRefreshFooter = refreshFooter;
+};
+
+window._tcgToggleBinderAddCard = function(cardId, el) {
+    const pending = window._tcgBinderAddPending;
+    if (!pending) return;
+    const check = el.querySelector('.binder-sel-check');
+    if (pending.has(cardId)) {
+        pending.delete(cardId);
+        el.style.borderColor = 'transparent';
+        if (check) check.style.display = 'none';
+    } else {
+        pending.add(cardId);
+        el.style.borderColor = '#f59e0b';
+        if (check) check.style.display = 'flex';
+    }
+    window._tcgBinderAddRefreshFooter?.();
+};
+
+window._tcgConfirmBinderAdd = async function() {
+    const pending = window._tcgBinderAddPending;
+    const binderId = window._tcgBinderAddId;
+    const uid = window._tcgBinderAddUid;
+    if (!pending?.size || !binderId || !uid) return;
+    const btn = document.getElementById('binder-add-confirm-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+    try {
+        const ids = [...pending];
+        await updateDoc(doc(db, 'card_binders', uid, 'binders', binderId), { cardIds: arrayUnion(...ids) });
+        document.getElementById('tcg-binder-add-modal')?.remove();
+        window._tcgOpenUserBinder(binderId, uid);
+    } catch(e) {
+        alert('Failed: ' + e.message);
+        if (btn) { btn.disabled = false; window._tcgBinderAddRefreshFooter?.(); }
+    }
 };
 
 window._tcgFilterBinderModal = function() {
     const q = (document.getElementById('tcg-binder-add-search')?.value || '').toLowerCase().trim();
     const rarity = window._tcgBinderModalRarity || 'all';
-    // Update rarity button styles
     document.querySelectorAll('#tcg-binder-add-modal [data-rarity]').forEach(btn => {
         const active = btn.dataset.rarity === rarity;
         btn.style.borderColor = active ? 'var(--accent-yellow)' : 'var(--border-color)';
         btn.style.background = active ? 'rgba(245,158,11,0.12)' : 'var(--bg-gray)';
         btn.style.color = active ? '#f59e0b' : 'var(--text-muted)';
     });
-    // Filter card tiles
     document.querySelectorAll('#tcg-binder-add-grid [data-id]').forEach(el => {
         const nameMatch = !q || el.dataset.name.includes(q) || el.dataset.anime.includes(q);
         const rarityMatch = rarity === 'all' || el.dataset.rarity === rarity;
         el.style.display = nameMatch && rarityMatch ? '' : 'none';
     });
-};
-
-window._tcgAddCardToBinder = async function(binderId, uid, cardId) {
-    try {
-        await updateDoc(doc(db, 'card_binders', uid, 'binders', binderId), { cardIds: arrayUnion(cardId) });
-        document.getElementById('tcg-binder-add-modal')?.remove();
-        window._tcgOpenUserBinder(binderId, uid);
-    } catch(e) { alert('Failed: ' + e.message); }
 };
 
 window._tcgRemoveCardFromBinder = async function(binderId, uid, cardId) {
@@ -10571,13 +11656,15 @@ window._tcgOpenUserBinder = async function(binderId, uid, page = 0) {
         `<button onclick="window._tcgOpenUserBinder('${binderId}','${uid}',${i})" style="padding:9px 13px;border-radius:8px;border:none;background:${i===safePage?'var(--accent-yellow)':'var(--bg-gray)'};color:${i===safePage?'#000':'var(--text-dark)'};font-weight:700;font-size:13px;cursor:pointer;">${i+1}</button>`
     ).join('');
 
+    const isOwner = auth.currentUser?.uid === uid;
     el.innerHTML = `
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
             <button onclick="window._tcgRenderMyCollection('mybinders')" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:12px;font-weight:700;cursor:pointer;">← Back</button>
-            <div>
+            <div style="flex:1;">
                 <div style="font-size:18px;font-weight:800;">📒 ${binder.name}</div>
                 <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${binderCards.length} cards · Page ${safePage+1} of ${totalPages}</div>
             </div>
+            ${isOwner ? `<button onclick="window._tcgAddCardsToBinderModal('${binderId}','${uid}')" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-size:12px;font-weight:800;cursor:pointer;">+ Add Cards</button>` : ''}
         </div>
         <div class="tcg-card-grid" style="display:grid;grid-template-columns:repeat(3,220px);gap:18px;margin-bottom:24px;">
             ${pageCards.map(card => card ?
@@ -11705,39 +12792,53 @@ function _auctionFmtCountdown(ms) {
     return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-// Process any expired live auction items (client-side close)
+// Process any expired auction items (client-side close).
+// Bug fix: items are always stored as status='queued' — there was never any code
+// to transition them to 'live', so the old status='live' query never matched anything.
+// Now we query both 'queued' and 'live' and use a transaction to atomically claim
+// each item before processing, so multiple simultaneous clients can't double-settle.
 async function _auctionProcessExpired() {
     try {
-        const info = _auctionInfo();
         const now = new Date();
-        // Find live items whose closeTime has passed
-        const snap = await getDocs(query(
-            collection(db, 'auction_listings'),
-            where('status', '==', 'live')
-        ));
-        const expired = snap.docs.filter(d => {
+        const [snapQ, snapL] = await Promise.all([
+            getDocs(query(collection(db, 'auction_listings'), where('status', '==', 'queued'))),
+            getDocs(query(collection(db, 'auction_listings'), where('status', '==', 'live')))
+        ]);
+        const expired = [...snapQ.docs, ...snapL.docs].filter(d => {
             const ct = d.data().closeTime;
             return ct && (ct.toDate ? ct.toDate() : new Date(ct)) <= now;
         });
         if (!expired.length) return;
 
         for (const d of expired) {
-            const item = d.data();
             try {
+                // Atomically claim this item — only one client wins the race
+                let item;
+                try {
+                    await runTransaction(db, async tx => {
+                        const fresh = await tx.get(d.ref);
+                        if (!fresh.exists()) throw new Error('gone');
+                        const s = fresh.data().status;
+                        if (s !== 'queued' && s !== 'live') throw new Error('already_settled');
+                        item = fresh.data();
+                        tx.update(d.ref, { status: 'settling' });
+                    });
+                } catch(claimErr) {
+                    if (claimErr.message === 'already_settled' || claimErr.message === 'gone') continue;
+                    throw claimErr;
+                }
+
                 if (item.currentBidderUid) {
-                    // Someone won — transfer card to winner, amber already deducted
+                    // Winner — transfer card, pay seller
                     await _tcgApplyTradeSide(item.currentBidderUid, [], [item.card]);
                     await updateDoc(d.ref, { status: 'won' });
-                    // Pay seller
                     await updateDoc(doc(db, 'profiles', item.uid), { amber: increment(item.currentBid) });
-                    // Notify winner
                     await addDoc(collection(db, 'notifications'), {
                         targetUid: item.currentBidderUid, type: 'auction_won',
                         senderUid: item.uid, senderName: item.displayName || 'Someone',
                         message: `You won the auction for ${item.card?.name || 'a card'}!`,
                         timestamp: now, read: false
                     });
-                    // Notify seller
                     await addDoc(collection(db, 'notifications'), {
                         targetUid: item.uid, type: 'auction_sold',
                         senderUid: item.currentBidderUid, senderName: item.currentBidderName || 'Someone',
@@ -11749,9 +12850,136 @@ async function _auctionProcessExpired() {
                     await _tcgApplyTradeSide(item.uid, [], [item.card]);
                     await updateDoc(d.ref, { status: 'unsold' });
                 }
-            } catch(e) { console.warn('auction close error for', d.id, e); }
+            } catch(e) { console.warn('auction settle error for', d.id, e.message); }
         }
     } catch(e) { console.warn('_auctionProcessExpired', e); }
+}
+
+// Admin one-shot repair: settle all past auction items still stuck as 'queued'
+window._auctionAdminRepair = async function() {
+    if (!window.isAdmin) return;
+    const statusEl = document.getElementById('auction-repair-status');
+    const setStatus = msg => { if (statusEl) statusEl.textContent = msg; };
+    setStatus('Scanning for unsettled items…');
+    try {
+        const now = new Date();
+        const snap = await getDocs(query(collection(db, 'auction_listings'), where('status', '==', 'queued')));
+        const stuck = snap.docs.filter(d => {
+            const ct = d.data().closeTime;
+            return ct && (ct.toDate ? ct.toDate() : new Date(ct)) <= now;
+        });
+        if (!stuck.length) { setStatus('✅ No stuck items found — everything looks good.'); return; }
+        setStatus(`Found ${stuck.length} stuck item(s). Settling…`);
+        let won = 0, unsold = 0, errors = 0;
+        for (const d of stuck) {
+            try {
+                let item;
+                try {
+                    await runTransaction(db, async tx => {
+                        const fresh = await tx.get(d.ref);
+                        if (!fresh.exists()) throw new Error('gone');
+                        if (!['queued','live'].includes(fresh.data().status)) throw new Error('already_settled');
+                        item = fresh.data();
+                        tx.update(d.ref, { status: 'settling' });
+                    });
+                } catch(e) { if (e.message === 'already_settled' || e.message === 'gone') continue; throw e; }
+
+                if (item.currentBidderUid) {
+                    await _tcgApplyTradeSide(item.currentBidderUid, [], [item.card]);
+                    await updateDoc(d.ref, { status: 'won' });
+                    await updateDoc(doc(db, 'profiles', item.uid), { amber: increment(item.currentBid) });
+                    await addDoc(collection(db, 'notifications'), {
+                        targetUid: item.currentBidderUid, type: 'auction_won',
+                        senderUid: item.uid, senderName: item.displayName || 'Someone',
+                        message: `You won the auction for ${item.card?.name || 'a card'}! (Settled retroactively)`,
+                        timestamp: now, read: false
+                    });
+                    await addDoc(collection(db, 'notifications'), {
+                        targetUid: item.uid, type: 'auction_sold',
+                        senderUid: item.currentBidderUid, senderName: item.currentBidderName || 'Someone',
+                        message: `Your ${item.card?.name || 'card'} sold for 🟡 ${item.currentBid?.toLocaleString()} Amber! (Settled retroactively)`,
+                        timestamp: now, read: false
+                    });
+                    won++;
+                } else {
+                    await _tcgApplyTradeSide(item.uid, [], [item.card]);
+                    await updateDoc(d.ref, { status: 'unsold' });
+                    unsold++;
+                }
+            } catch(e) { console.error('repair error', d.id, e); errors++; }
+        }
+        setStatus(`✅ Done — ${won} won, ${unsold} returned to seller${errors ? `, ${errors} error(s) (check console)` : ''}.`);
+    } catch(e) {
+        setStatus('❌ Error: ' + e.message);
+        console.error('_auctionAdminRepair', e);
+    }
+};
+
+// Shared card HTML builder used by all three auction sections.
+function _auctionBuildCardHTML(item, myUid, mode) {
+    const isSeller = item.uid === myUid;
+    const isTopBidder = item.currentBidderUid === myUid;
+    const card = item.card || {};
+    const snapId = _tcgStoreSnap(card);
+    const rc  = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' };
+    const rll = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
+    const rl = rll[card.rarity] || card.rarity || '';
+    const rc2 = rc[card.rarity] || 'var(--text-muted)';
+    const maxV = RARITY_MAX_VERSIONS[card.rarity] || 5000;
+    const version = card.founder ? '1 of 1' : card.monthlyUr ? 'Wheel UR' : card.serial != null ? `#${card.serial} / ${maxV}` : '';
+
+    let bidSection = '', actionHtml = '';
+    if (mode === 'live') {
+        bidSection = `<div style="background:var(--bg-gray);border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+            <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${item.bidCount > 0 ? 'Current Bid' : 'Starting Bid'}</div>
+            <div style="font-size:16px;font-weight:800;color:#f59e0b;">🟡 ${(item.currentBid||item.startingBid||0).toLocaleString()}</div>
+            ${item.currentBidderName ? `<div style="font-size:10px;color:var(--text-muted);">by ${item.currentBidderName}</div>` : `<div style="font-size:10px;color:var(--text-muted);">No bids yet</div>`}
+        </div>`;
+        if (isSeller) actionHtml = `<div style="font-size:11px;color:var(--text-muted);text-align:center;font-weight:700;">Your listing</div>`;
+        else if (isTopBidder) actionHtml = `<div style="font-size:11px;color:#4CAF50;text-align:center;font-weight:800;">✓ You're winning!</div>`;
+        else actionHtml = `<button onclick="window._auctionOpenBidModal('${item.id}')" style="padding:8px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-weight:800;font-size:11px;cursor:pointer;width:100%;">Place Bid</button>`;
+    } else if (mode === 'upcoming') {
+        bidSection = `<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Starting bid: <span style="font-weight:800;color:#f59e0b;">🟡 ${item.startingBid?.toLocaleString()}</span></div>`;
+        if (isSeller) actionHtml = `<button onclick="window._auctionWithdrawItem(this,'${item.id}')" style="padding:7px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;font-size:11px;cursor:pointer;width:100%;">Withdraw</button>`;
+        else actionHtml = `<div style="font-size:11px;color:var(--text-muted);text-align:center;">Bidding opens soon — start saving! 🟡</div>`;
+    } else { // past
+        const won = item.status === 'won';
+        bidSection = won
+            ? `<div style="background:rgba(74,222,128,0.08);border-radius:8px;padding:8px 10px;margin-bottom:6px;border:1px solid rgba(74,222,128,0.25);">
+                <div style="font-size:10px;color:#4ade80;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Sold</div>
+                <div style="font-size:16px;font-weight:800;color:#f59e0b;">🟡 ${(item.currentBid||item.startingBid||0).toLocaleString()}</div>
+                <div style="font-size:10px;color:var(--text-muted);">Won by ${item.currentBidderName || 'Unknown'}</div>
+               </div>`
+            : `<div style="background:var(--bg-gray);border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+                <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;">No Bids — Unsold</div>
+                <div style="font-size:11px;color:var(--text-muted);">Returned to seller</div>
+               </div>`;
+    }
+
+    return `<div style="background:var(--bg-white);border-radius:14px;border:1px solid ${mode === 'live' && isTopBidder ? '#4CAF50' : 'var(--border-color)'};overflow:hidden;display:flex;flex-direction:column;${mode === 'live' && isTopBidder ? 'box-shadow:0 0 0 2px #4CAF5044;' : ''}">
+        <div onclick="window._tcgViewCardSnapshot(${snapId})" style="cursor:pointer;position:relative;background:var(--bg-gray);display:flex;justify-content:center;padding:12px 14px 8px;">
+            <div style="height:220px;overflow:hidden;border-radius:6px;pointer-events:none;display:flex;justify-content:center;width:100%;">
+                <div style="flex-shrink:0;transform:scale(0.718);transform-origin:top center;width:220px;height:308px;">${_tcgBuildCardFace(card)}</div>
+            </div>
+            ${isSeller ? `<div style="position:absolute;top:10px;left:10px;background:#f59e0b;color:#222;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;pointer-events:none;">Yours</div>` : ''}
+        </div>
+        <div style="padding:10px 12px 12px;flex:1;display:flex;flex-direction:column;gap:4px;">
+            <div>
+                <div style="font-size:11px;font-weight:800;color:${rc2};">${rl}${version ? ` · ${version}` : ''}</div>
+                <div style="font-size:13px;font-weight:800;color:var(--text-dark);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${card.name||''}</div>
+                <div style="font-size:11px;color:var(--text-muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${card.anime||''}</div>
+            </div>
+            ${bidSection}
+            <div style="font-size:10px;color:var(--text-muted);">${item.displayName||''}</div>
+            ${actionHtml ? `<div style="margin-top:auto;padding-top:4px;">${actionHtml}</div>` : ''}
+        </div>
+    </div>`;
+}
+
+function _auctionBuildGrid(items, myUid, mode) {
+    return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;">
+        ${items.map(item => _auctionBuildCardHTML(item, myUid, mode)).join('')}
+    </div>`;
 }
 
 window._auctionRender = async function() {
@@ -11762,140 +12990,176 @@ window._auctionRender = async function() {
         return;
     }
 
-    // Stop any previous listener + timer
     if (_auctionListener) { _auctionListener(); _auctionListener = null; }
     if (_auctionTimerInterval) { clearInterval(_auctionTimerInterval); _auctionTimerInterval = null; }
 
     await _auctionProcessExpired();
-
     const info = _auctionInfo();
     const myUid = auth.currentUser.uid;
 
+    const fmtDateLabel = dateStr => new Date(dateStr + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
     el.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px;">
-            <div style="font-size:15px;font-weight:800;color:var(--text-dark);">🔨 Auction House</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:10px;">
+            <div style="font-size:15px;font-weight:800;">🔨 Auction House</div>
             <button onclick="window._auctionOpenSubmitModal()" style="padding:10px 20px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">+ Submit a Card</button>
         </div>
-        <div id="auction-status-bar" style="margin-bottom:20px;"></div>
-        <div id="auction-grid-container"><div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div></div>`;
 
-    // Countdown timer
-    function updateStatusBar() {
-        const i = _auctionInfo();
-        const bar = document.getElementById('auction-status-bar');
-        if (!bar) return;
-        if (i.isLive) {
-            bar.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span style="background:#4CAF50;color:#fff;border-radius:8px;padding:4px 12px;font-size:12px;font-weight:800;">🔴 LIVE</span>
-                <span style="font-size:13px;color:var(--text-muted);">Closes in <strong id="auction-countdown" style="color:var(--text-dark);font-variant-numeric:tabular-nums;">${_auctionFmtCountdown(i.msToClose)}</strong></span>
-            </div>`;
-        } else {
-            bar.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span style="background:var(--bg-gray);color:var(--text-muted);border:1px solid var(--border-color);border-radius:8px;padding:4px 12px;font-size:12px;font-weight:800;">UPCOMING</span>
-                <span style="font-size:13px;color:var(--text-muted);">Opens in <strong id="auction-countdown" style="color:var(--text-dark);font-variant-numeric:tabular-nums;">${_auctionFmtCountdown(i.msToOpen)}</strong></span>
-                <span style="font-size:12px;color:var(--text-muted);">Cards submitted now go into the next pool (opens ${i.nextOpenTime.toLocaleString('en-US',{timeZone:'America/New_York',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true})} ET)</span>
-            </div>`;
-        }
-    }
-    updateStatusBar();
+        <div style="margin-bottom:32px;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+                <span style="font-size:17px;font-weight:900;">🔴 Live Auction</span>
+                <span style="background:#ef4444;color:#fff;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:800;">LIVE</span>
+                <span style="font-size:13px;color:var(--text-muted);">Closes in <strong id="auction-countdown" style="color:var(--text-dark);font-variant-numeric:tabular-nums;">${_auctionFmtCountdown(info.msToClose)}</strong></span>
+                <span style="font-size:12px;color:var(--text-muted);">${fmtDateLabel(info.livePoolDate)}</span>
+            </div>
+            <div id="auction-current-grid"><div style="text-align:center;padding:30px;color:var(--text-muted);">Loading…</div></div>
+        </div>
+
+        <div style="border-top:2px solid var(--border-color);margin-bottom:32px;"></div>
+
+        <div style="margin-bottom:32px;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+                <span style="font-size:17px;font-weight:900;">⏰ Upcoming Auction</span>
+                <span style="font-size:13px;color:var(--text-muted);">Opens in <strong id="auction-upcoming-countdown" style="color:var(--text-dark);font-variant-numeric:tabular-nums;">${_auctionFmtCountdown(info.msToOpen)}</strong></span>
+                <span style="font-size:12px;color:var(--text-muted);">${fmtDateLabel(info.submitPoolDate)}</span>
+            </div>
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">Cards below go live at 7pm ET — start saving your amber if you see something you want!</div>
+            <div id="auction-upcoming-grid"><div style="text-align:center;padding:20px;color:var(--text-muted);">Loading…</div></div>
+        </div>
+
+        <div style="border-top:2px solid var(--border-color);margin-bottom:24px;"></div>
+
+        <div>
+            <div style="font-size:17px;font-weight:900;margin-bottom:16px;">📜 Past Auctions</div>
+            <div id="auction-past-container"><div style="text-align:center;padding:20px;color:var(--text-muted);">Loading…</div></div>
+        </div>`;
+
+    // Countdown timer — updates both live and upcoming countdowns
     _auctionTimerInterval = setInterval(() => {
-        const cd = document.getElementById('auction-countdown');
-        if (!cd) { clearInterval(_auctionTimerInterval); return; }
         const i = _auctionInfo();
-        cd.textContent = _auctionFmtCountdown(i.isLive ? i.msToClose : i.msToOpen);
-        // If status changed, re-render fully
-        if ((i.isLive && !_auctionLastWasLive) || (!i.isLive && _auctionLastWasLive)) {
-            window._auctionRender();
-        }
+        const cd  = document.getElementById('auction-countdown');
+        const cd2 = document.getElementById('auction-upcoming-countdown');
+        if (!cd && !cd2) { clearInterval(_auctionTimerInterval); return; }
+        if (cd)  cd.textContent  = _auctionFmtCountdown(i.msToClose);
+        if (cd2) cd2.textContent = _auctionFmtCountdown(i.msToOpen);
+        if ((i.isLive && !_auctionLastWasLive) || (!i.isLive && _auctionLastWasLive)) window._auctionRender();
         _auctionLastWasLive = i.isLive;
     }, 1000);
     window._auctionLastWasLive = info.isLive;
 
-    // Real-time listener on current items
-    const queryPool = info.isLive ? info.livePoolDate : info.submitPoolDate;
-    const statusFilter = info.isLive ? 'live' : 'queued';
-
-    function renderGrid(docs) {
-        const grid = document.getElementById('auction-grid-container');
-        if (!grid) return;
-        if (!docs.length) {
-            grid.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0;">${info.isLive ? 'No items in this auction.' : 'No cards submitted for the next auction yet. Be the first!'}</p>`;
-            return;
-        }
-        const rc  = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' };
-        const rll = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
-        grid.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;">
-            ${docs.map(item => {
-                const isSeller = item.uid === myUid;
-                const isTopBidder = item.currentBidderUid === myUid;
-                const card = item.card || {};
-                const snapId = _tcgStoreSnap(card);
-                const rl = rll[card.rarity] || card.rarity || '';
-                const rc2 = rc[card.rarity] || 'var(--text-muted)';
-                const maxV = RARITY_MAX_VERSIONS[card.rarity] || 5000;
-                const version = card.founder ? '1 of 1' : card.monthlyUr ? 'Wheel UR' : card.serial != null ? `#${card.serial} / ${maxV}` : '';
-
-                let actionHtml = '';
-                if (item.status === 'queued') {
-                    actionHtml = isSeller
-                        ? `<button onclick="window._auctionWithdrawItem(this,'${item.id}')" style="padding:7px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;font-size:11px;cursor:pointer;width:100%;">Withdraw</button>`
-                        : `<div style="font-size:11px;color:var(--text-muted);text-align:center;">Starts ${info.nextOpenTime.toLocaleString('en-US',{timeZone:'America/New_York',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true})} ET</div>`;
-                } else if (item.status === 'live') {
-                    if (isSeller) {
-                        actionHtml = `<div style="font-size:11px;color:var(--text-muted);text-align:center;font-weight:700;">Your listing</div>`;
-                    } else if (isTopBidder) {
-                        actionHtml = `<div style="font-size:11px;color:#4CAF50;text-align:center;font-weight:800;">✓ You're winning!</div>`;
-                    } else {
-                        actionHtml = `<button onclick="window._auctionOpenBidModal('${item.id}')" style="padding:8px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-weight:800;font-size:11px;cursor:pointer;width:100%;">Place Bid</button>`;
-                    }
-                }
-
-                const bidSection = item.status === 'live'
-                    ? `<div style="background:var(--bg-gray);border-radius:8px;padding:8px 10px;margin-bottom:6px;">
-                        <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${item.bidCount > 0 ? 'Current Bid' : 'Starting Bid'}</div>
-                        <div style="font-size:16px;font-weight:800;color:#f59e0b;">🟡 ${(item.currentBid||item.startingBid).toLocaleString()}</div>
-                        ${item.currentBidderName ? `<div style="font-size:10px;color:var(--text-muted);">by ${item.currentBidderName}</div>` : `<div style="font-size:10px;color:var(--text-muted);">No bids yet</div>`}
-                       </div>`
-                    : `<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Starting bid: <span style="font-weight:800;color:#f59e0b;">🟡 ${item.startingBid?.toLocaleString()}</span></div>`;
-
-                return `<div style="background:var(--bg-white);border-radius:14px;border:1px solid ${isTopBidder?'#4CAF50':'var(--border-color)'};overflow:hidden;display:flex;flex-direction:column;${isTopBidder?'box-shadow:0 0 0 2px #4CAF5044;':''}">
-                    <div onclick="window._tcgViewCardSnapshot(${snapId})" style="cursor:pointer;position:relative;background:var(--bg-gray);display:flex;justify-content:center;padding:12px 14px 8px;">
-                        <div style="height:220px;overflow:hidden;border-radius:6px;pointer-events:none;display:flex;justify-content:center;width:100%;">
-                            <div style="flex-shrink:0;transform:scale(0.718);transform-origin:top center;width:220px;height:308px;">${_tcgBuildCardFace(card)}</div>
-                        </div>
-                        ${isSeller ? '<div style="position:absolute;top:10px;left:10px;background:#f59e0b;color:#222;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;pointer-events:none;">Yours</div>' : ''}
-                    </div>
-                    <div style="padding:10px 12px 12px;flex:1;display:flex;flex-direction:column;gap:4px;">
-                        <div>
-                            <div style="font-size:11px;font-weight:800;color:${rc2};">${rl}${version ? ` · ${version}` : ''}</div>
-                            <div style="font-size:13px;font-weight:800;color:var(--text-dark);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${card.name||''}</div>
-                            <div style="font-size:11px;color:var(--text-muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${card.anime||''}</div>
-                        </div>
-                        ${bidSection}
-                        <div style="font-size:10px;color:var(--text-muted);">${item.displayName||''}</div>
-                        <div style="margin-top:auto;padding-top:4px;">${actionHtml}</div>
-                    </div>
-                </div>`;
-            }).join('')}
-        </div>`;
-        _tcgObserveSSRCards(grid);
-    }
-
+    // === Real-time listener: current live pool ===
     _auctionListener = onSnapshot(
-        query(collection(db, 'auction_listings'), where('poolDate', '==', queryPool)),
+        query(collection(db, 'auction_listings'), where('poolDate', '==', info.livePoolDate)),
         snap => {
+            const grid = document.getElementById('auction-current-grid');
+            if (!grid) return;
             const items = [];
             snap.forEach(d => {
                 const data = d.data();
-                if (data.status === statusFilter || (info.isLive && data.status === 'live')) {
-                    items.push({ id: d.id, ...data });
-                }
+                if (!['withdrawn'].includes(data.status)) items.push({ id: d.id, ...data });
             });
             items.sort((a,b) => (b.createdAt?.toMillis?.()??0)-(a.createdAt?.toMillis?.()??0));
-            renderGrid(items);
+            grid.innerHTML = items.length
+                ? _auctionBuildGrid(items, myUid, 'live')
+                : '<p style="color:var(--text-muted);text-align:center;padding:30px 0;">No items in this auction.</p>';
+            if (items.length) _tcgObserveSSRCards(grid);
         },
         err => console.warn('auction listener error', err)
     );
+
+    // === One-time load: upcoming pool ===
+    try {
+        const upSnap = await getDocs(query(
+            collection(db, 'auction_listings'),
+            where('poolDate', '==', info.submitPoolDate)
+        ));
+        const upGrid = document.getElementById('auction-upcoming-grid');
+        if (upGrid) {
+            const items = [];
+            upSnap.forEach(d => { const data = d.data(); if (data.status === 'queued') items.push({ id: d.id, ...data }); });
+            items.sort((a,b) => (b.createdAt?.toMillis?.()??0)-(a.createdAt?.toMillis?.()??0));
+            upGrid.innerHTML = items.length
+                ? _auctionBuildGrid(items, myUid, 'upcoming')
+                : '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">No cards submitted yet — be the first! 🃏</p>';
+            if (items.length) _tcgObserveSSRCards(upGrid);
+        }
+    } catch(e) { console.warn('upcoming load error', e); }
+
+    // === One-time load: past pools ===
+    try {
+        const pastSnap = await getDocs(query(
+            collection(db, 'auction_listings'),
+            where('poolDate', '<', info.livePoolDate),
+            orderBy('poolDate', 'desc'),
+            limit(60)
+        ));
+        const pastContainer = document.getElementById('auction-past-container');
+        if (pastContainer) {
+            const byDate = {};
+            pastSnap.forEach(d => {
+                const data = d.data();
+                if (!byDate[data.poolDate]) byDate[data.poolDate] = [];
+                byDate[data.poolDate].push({ id: d.id, ...data });
+            });
+            window._auctionPastData = byDate;
+            const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
+            if (!dates.length) {
+                pastContainer.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">No past auctions yet.</p>';
+            } else {
+                pastContainer.innerHTML = dates.map((date, idx) => {
+                    const items = byDate[date];
+                    const sold = items.filter(i => i.status === 'won');
+                    const totalAmber = sold.reduce((s,i) => s + (i.currentBid||0), 0);
+                    const key = date.replace(/-/g,'_');
+                    const expanded = idx === 0;
+                    return `
+                        <div style="margin-bottom:10px;border:1px solid var(--border-color);border-radius:12px;overflow:hidden;">
+                            <div onclick="window._auctionTogglePastPool('${date}')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 18px;background:var(--bg-gray);gap:12px;flex-wrap:wrap;">
+                                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                                    <span style="font-weight:800;font-size:14px;">${fmtDateLabel(date)}</span>
+                                    <span style="font-size:12px;color:var(--text-muted);">${items.length} card${items.length!==1?'s':''}</span>
+                                    <span style="font-size:12px;color:#4ade80;font-weight:700;">${sold.length} sold${totalAmber ? ` · 🟡 ${totalAmber.toLocaleString()}` : ''}</span>
+                                </div>
+                                <span id="past-toggle-${key}" style="color:var(--text-muted);font-size:16px;font-weight:700;">${expanded ? '▲' : '▼'}</span>
+                            </div>
+                            <div id="past-grid-${key}" style="padding:${expanded ? '16px' : '0'};display:${expanded ? 'block' : 'none'};">
+                                ${expanded ? _auctionBuildGrid(items, myUid, 'past') : ''}
+                            </div>
+                        </div>`;
+                }).join('');
+                if (dates.length) {
+                    const firstGrid = document.getElementById(`past-grid-${dates[0].replace(/-/g,'_')}`);
+                    if (firstGrid) _tcgObserveSSRCards(firstGrid);
+                }
+            }
+        }
+    } catch(e) { console.warn('past auctions load error', e); }
+};
+
+window._auctionTogglePastPool = function(date) {
+    const key = date.replace(/-/g,'_');
+    const grid = document.getElementById(`past-grid-${key}`);
+    const toggle = document.getElementById(`past-toggle-${key}`);
+    if (!grid) return;
+    const isOpen = grid.style.display !== 'none';
+    if (isOpen) {
+        grid.style.display = 'none';
+        grid.style.padding = '0';
+        if (toggle) toggle.textContent = '▼';
+    } else {
+        if (!grid.dataset.rendered) {
+            const items = (window._auctionPastData || {})[date] || [];
+            const myUid = auth.currentUser?.uid || '';
+            grid.innerHTML = items.length
+                ? _auctionBuildGrid(items, myUid, 'past')
+                : '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">No data.</p>';
+            grid.dataset.rendered = '1';
+            _tcgObserveSSRCards(grid);
+        }
+        grid.style.display = 'block';
+        grid.style.padding = '16px';
+        if (toggle) toggle.textContent = '▲';
+    }
 };
 
 window._auctionSubmitPickerState = { filter: 'all', sort: 'rarity', search: '' };
@@ -12095,7 +13359,7 @@ window._auctionSubmitCard = async function(btn) {
             poolDate: info.submitPoolDate,
             openTime: info.nextOpenTime,
             closeTime: new Date(info.nextOpenTime.getTime() + 24 * 3600000),
-            status: info.isLive ? 'queued' : 'queued',
+            status: 'queued',
             createdAt: new Date()
         });
 
@@ -12131,7 +13395,7 @@ window._auctionOpenBidModal = async function(itemId) {
     document.getElementById('tcg-auction-bid-modal')?.remove();
 
     const snap = await getDoc(doc(db, 'auction_listings', itemId));
-    if (!snap.exists() || snap.data().status !== 'live') { alert('This auction item is no longer available.'); return; }
+    if (!snap.exists() || !['live','queued'].includes(snap.data().status)) { alert('This auction item is no longer available.'); return; }
     const item = { id: snap.id, ...snap.data() };
     const minBid = (item.currentBid || item.startingBid) + 10;
     const myUid = auth.currentUser.uid;
@@ -12197,7 +13461,7 @@ window._auctionPlaceBid = async function(btn, itemId, minBid) {
             const itemSnap = await tx.get(itemRef);
             if (!itemSnap.exists()) throw new Error('Item not found.');
             const item = itemSnap.data();
-            if (item.status !== 'live') throw new Error('This auction has ended.');
+            if (!['live','queued'].includes(item.status)) throw new Error('This auction has ended.');
             if (item.uid === myUid) throw new Error('You cannot bid on your own item.');
             if (item.currentBidderUid === myUid) throw new Error('You are already the top bidder.');
             const currentMin = (item.currentBid || item.startingBid) + (item.bidCount > 0 ? 10 : 0);
@@ -13410,6 +14674,13 @@ window._renderHotTakesFeed = function() {
 };
 
 window._renderHotTakeCard = function(ht, uid) {
+    if (ht.spoiler && ht.id && !window._revealedSpoilers?.has(ht.id)) {
+        const inner = window._renderHotTakeCardInner(ht, uid);
+        return _wrapSpoilerOverlay(inner, ht.id, ht.spoilerHint || '');
+    }
+    return window._renderHotTakeCardInner(ht, uid);
+};
+window._renderHotTakeCardInner = function(ht, uid) {
     const agrees = (ht.agreeUids||[]).length;
     const disagrees = (ht.disagreeUids||[]).length;
     const agreed = uid && (ht.agreeUids||[]).includes(uid);
@@ -13489,13 +14760,19 @@ window.postHotTake = async function() {
     const displayName = pd?.data()?.displayName || auth.currentUser.displayName;
     const avatar = pd?.data()?.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
     try {
+        const _htSpoiler = !!(document.getElementById('hot-take-spoiler')?.checked);
+        const _htSpoilerHint = _htSpoiler ? (document.getElementById('ht-spoiler-hint')?.value.trim() || '') : '';
         const ref = await addDoc(collection(db, 'hot_takes'), {
             uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar,
-            text, agreeUids: [], disagreeUids: [], likes: [], dislikes: [], timestamp: new Date(), commentCount: 0
+            text, spoiler: _htSpoiler, spoilerHint: _htSpoilerHint, agreeUids: [], disagreeUids: [], likes: [], dislikes: [], timestamp: new Date(), commentCount: 0
         });
         input.value = '';
         document.getElementById('ht-char-count').innerText = '0';
-        window._hotTakesList.unshift({ id: ref.id, uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar, text, agreeUids: [], disagreeUids: [], timestamp: { toDate: () => new Date() }, commentCount: 0 });
+        const htSpCb = document.getElementById('hot-take-spoiler');
+        if (htSpCb) htSpCb.checked = false;
+        const htHintWrap = document.getElementById('ht-spoiler-hint-wrap');
+        if (htHintWrap) { htHintWrap.style.display = 'none'; const hi = document.getElementById('ht-spoiler-hint'); if (hi) hi.value = ''; }
+        window._hotTakesList.unshift({ id: ref.id, uid: auth.currentUser.uid, authorName: displayName, authorAvatar: avatar, text, spoiler: _htSpoiler, spoilerHint: _htSpoilerHint, agreeUids: [], disagreeUids: [], timestamp: { toDate: () => new Date() }, commentCount: 0 });
         window._renderHotTakesFeed();
         window.awardAchievements(['ht_first']).catch(() => {});
         const htCount = window._hotTakesList.filter(h => h.uid === auth.currentUser?.uid).length;
@@ -13604,12 +14881,16 @@ window.submitGeneralPost = async function() {
             await uploadBytes(sRef, compressed);
             imageUrl = await getDownloadURL(sRef);
         }
+        const _gpSpoiler = !!(document.getElementById('general-post-spoiler')?.checked);
+        const _gpSpoilerHint = _gpSpoiler ? (document.getElementById('gp-spoiler-hint')?.value.trim() || '') : '';
         await addDoc(collection(db, 'general_posts'), {
             uid: auth.currentUser.uid,
             authorName: displayName,
             authorAvatar: avatar,
             text,
             imageUrl,
+            spoiler: _gpSpoiler,
+            spoilerHint: _gpSpoilerHint,
             likes: [],
             dislikes: [],
             commentCount: 0,
@@ -13668,6 +14949,13 @@ window._renderGeneralPostFeed = function() {
 };
 
 window._renderGeneralPostCard = function(post, uid) {
+    if (post.spoiler && post.id && !window._revealedSpoilers?.has(post.id)) {
+        const inner = window._renderGeneralPostCardInner(post, uid);
+        return _wrapSpoilerOverlay(inner, post.id, post.spoilerHint || '');
+    }
+    return window._renderGeneralPostCardInner(post, uid);
+};
+window._renderGeneralPostCardInner = function(post, uid) {
     const isOwner = uid && post.uid === uid;
     const ago = formatTimeAgo(post.timestamp);
     const likes = post.likes || [];
@@ -17790,7 +19078,8 @@ window.submitBwPostComment = async function(event, btn, postId, postCollection) 
             addDoc(collection(db, 'notifications'), {
                 targetUid: ownerUid, type: 'post_comment',
                 senderUid: auth.currentUser.uid, senderName: auth.currentUser.displayName, senderAvatar: av,
-                message: 'commented on your post', timestamp: new Date(), read: false
+                message: 'commented on your post', timestamp: new Date(), read: false,
+                postId, postCollection
             }).catch(() => {});
         }).catch(() => {});
     } catch(e) { console.error('Comment failed', e); alert('Failed to post comment: ' + (e?.message || e)); }
@@ -20814,6 +22103,12 @@ window.goToMeloBeeTab = function() {
 // ── TCG Dungeon Raid (admin-only while in dev) ────────────────────────────────
 // Gate config: duration, party size, difficulty (vs party "Power"), and
 // amber reward ranges. Success chance = clamp(50 + (partyPower-difficulty)*4, 15, 95).
+const DUNGEON_DIFFICULTY_CONFIG = {
+    easy:   { id:'easy',   label:'Easy',   icon:'🟢', diffMult:0.65, rewardMult:0.8,  desc:'Relaxed gates — great for collecting daily amber with any deck.' },
+    medium: { id:'medium', label:'Medium', icon:'🟡', diffMult:1.0,  rewardMult:1.0,  desc:'Standard challenge — the original dungeon experience.' },
+    hard:   { id:'hard',   label:'Hard',   icon:'🔴', diffMult:1.5,  rewardMult:1.5,  desc:'Gates hit harder. Bring your strongest URs and plan your party.' },
+};
+
 const DUNGEON_GATES = {
     e: { id:'e', name:'E-Rank Gate', icon:'🟢', durationMs: 1*3600e3, partySize:1, difficulty:1,  rewardMin:20,  rewardMax:50,   failReward:5 },
     d: { id:'d', name:'D-Rank Gate', icon:'🔵', durationMs: 1*3600e3, partySize:1, difficulty:3,  rewardMin:50,  rewardMax:75,   failReward:15 },
@@ -20878,8 +22173,8 @@ function _dungeonComboBonus(cards) {
     return cards.reduce((sum, c) => sum + ((animeCounts[c.anime || ''] || 0) > 1 ? 1 : 0), 0);
 }
 
-function _dungeonSuccessChance(partyPower, difficulty) {
-    return Math.max(15, Math.min(95, 50 + (partyPower - difficulty) * 4));
+function _dungeonSuccessChance(partyPower, difficulty, diffMult = 1) {
+    return Math.max(15, Math.min(95, Math.round(50 + (partyPower - difficulty * diffMult) * 4)));
 }
 
 // Rotating "what's the crew up to" flavor text, bucketed by raid progress.
@@ -21017,7 +22312,7 @@ async function _dungeonSaveProgress(uid, progress) {
 // and per-gate results reset.
 function _dungeonResetForNewDay(progress, todayKey) {
     return {
-        date: todayKey, poolIndex: 0, results: [],
+        date: todayKey, poolIndex: 0, results: [], difficulty: null,
         totalRaids: progress?.totalRaids || 0,
         streak: progress?.streak || 0,
         lastRaidDate: progress?.lastRaidDate || null,
@@ -21054,6 +22349,8 @@ window.loadDungeonTab = async function() {
     window._dungeonProgress = progress;
     if (state) {
         _dungeonRenderActive(el, state);
+    } else if (!progress.difficulty) {
+        _dungeonRenderDifficultyPicker(el);
     } else {
         _dungeonRenderGateSelect(el);
     }
@@ -21081,6 +22378,30 @@ window._dungeonResetDaily = async function() {
     window.loadDungeonTab();
 };
 
+// Admin-only: clears today's chosen difficulty so the picker shows again —
+// lets admin test the difficulty selection screen without waiting for midnight.
+window._dungeonResetDifficulty = async function() {
+    if (!window.isAdmin || !auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const progress = window._dungeonProgress;
+    if (!progress) return;
+    const updated = { ...progress, difficulty: null };
+    window._dungeonProgress = updated;
+    await _dungeonSaveProgress(uid, updated);
+    window.loadDungeonTab();
+};
+
+window._dungeonPickDifficulty = async function(difficulty) {
+    if (!auth.currentUser) return;
+    if (!DUNGEON_DIFFICULTY_CONFIG[difficulty]) return;
+    const uid = auth.currentUser.uid;
+    const progress = window._dungeonProgress || { date: _dungeonTodayKey(), poolIndex: 0, results: [] };
+    const updated = { ...progress, difficulty };
+    window._dungeonProgress = updated;
+    await _dungeonSaveProgress(uid, updated);
+    _dungeonRenderGateSelect(document.getElementById('dungeon-tab-content'));
+};
+
 // Admin-only: cancels an in-progress raid with no payout and no effect on
 // the daily pool progress — for backing out of a gate started by mistake.
 window._dungeonStopRaid = async function() {
@@ -21102,11 +22423,45 @@ window._dungeonStopRaid = async function() {
     window.loadDungeonTab();
 };
 
+function _dungeonRenderDifficultyPicker(el) {
+    const diffs = Object.values(DUNGEON_DIFFICULTY_CONFIG);
+    const colors = { easy: '#22c55e', medium: '#f59e0b', hard: '#ef4444' };
+    const glows  = { easy: 'rgba(34,197,94,0.18)', medium: 'rgba(245,158,11,0.18)', hard: 'rgba(239,68,68,0.18)' };
+
+    const cardHTML = diffs.map(d => `
+        <div onclick="window._dungeonPickDifficulty('${d.id}')" style="flex:1;min-width:200px;cursor:pointer;border-radius:16px;border:2px solid ${colors[d.id]};background:${glows[d.id]};padding:22px 18px;text-align:center;transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 28px ${glows[d.id]}'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+            <div style="font-size:36px;margin-bottom:8px;">${d.icon}</div>
+            <div style="font-size:18px;font-weight:900;color:${colors[d.id]};margin-bottom:6px;">${d.label}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.5;">${d.desc}</div>
+            <div style="font-size:13px;font-weight:700;color:${colors[d.id]};margin-bottom:4px;">Rewards ×${d.rewardMult.toFixed(1)}</div>
+            <div style="font-size:11px;color:var(--text-muted);">Success threshold ×${d.diffMult.toFixed(2)}</div>
+            <button style="margin-top:16px;width:100%;padding:10px;border-radius:10px;border:none;background:${colors[d.id]};color:#fff;font-weight:800;font-size:14px;cursor:pointer;">Choose ${d.label}</button>
+        </div>`).join('');
+
+    el.innerHTML = `
+        <div class="bw-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:24px;text-align:center;border:1px solid rgba(255,255,255,0.08);position:relative;overflow:hidden;">
+            <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(139,69,19,0.3) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(75,0,130,0.25) 0%,transparent 60%);pointer-events:none;"></div>
+            <div style="position:relative;z-index:1;">
+                <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
+                <div class="banner-hero-title" style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">⚔️ TCG Dungeon ⚔️</div>
+                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;">Choose your difficulty for today's run. This locks in for the entire day.</div>
+            </div>
+        </div>
+        <div style="text-align:center;margin-bottom:20px;">
+            <div style="font-size:18px;font-weight:900;margin-bottom:4px;">Choose Today's Difficulty</div>
+            <div style="font-size:13px;color:var(--text-muted);">Gates reset at midnight ET — pick wisely. Hard gates are harder to clear but pay out significantly more amber.</div>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px;">${cardHTML}</div>
+    `;
+}
+
 function _dungeonRenderGateSelect(el) {
     const testMode = window.isAdmin && localStorage.getItem('weebee_dungeon_testmode') === '1';
     const progress = window._dungeonProgress || { date: _dungeonTodayKey(), poolIndex: 0, results: [] };
     const pool = _dungeonGeneratePool(progress.date);
     const poolIndex = progress.poolIndex;
+    const diffCfg = DUNGEON_DIFFICULTY_CONFIG[progress.difficulty || 'medium'];
+    const diffColors = { easy:'#22c55e', medium:'#f59e0b', hard:'#ef4444' };
 
     const poolStripHTML = pool.map((gid, i) => {
         const g = DUNGEON_GATES[gid];
@@ -21145,13 +22500,16 @@ function _dungeonRenderGateSelect(el) {
             </div>`;
     } else {
         const g = DUNGEON_GATES[pool[poolIndex]];
+        const adjMin = Math.round(g.rewardMin * diffCfg.rewardMult);
+        const adjMax = Math.round(g.rewardMax * diffCfg.rewardMult);
+        const adjFail = Math.round(g.failReward * diffCfg.rewardMult);
         mainHTML = `
             <div style="background:var(--bg-gray);border-radius:14px;padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
                 <div>
                     <div style="font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">Gate ${poolIndex + 1} of 5</div>
                     <div style="font-weight:800;font-size:16px;margin-bottom:4px;">${g.icon} ${g.name}</div>
                     <div style="font-size:12px;color:var(--text-muted);">
-                        ⏱️ ${testMode ? `<span style="color:#FFD700;">30s (test)</span> <s>${_dungeonFormatDuration(g.durationMs)}</s>` : _dungeonFormatDuration(g.durationMs)} · 👥 ${g.partySize} card${g.partySize>1?'s':''} · 🟡 ${g.rewardMin}-${g.rewardMax} amber on success, ${g.failReward} on failure
+                        ⏱️ ${testMode ? `<span style="color:#FFD700;">30s (test)</span> <s>${_dungeonFormatDuration(g.durationMs)}</s>` : _dungeonFormatDuration(g.durationMs)} · 👥 ${g.partySize} card${g.partySize>1?'s':''} · 🟡 ${adjMin}–${adjMax} amber on success, ${adjFail} on failure
                     </div>
                 </div>
                 <button class="action-btn" onclick="window._dungeonOpenPartySelect('${g.id}')" style="font-weight:800;">Enter Gate →</button>
@@ -21168,7 +22526,13 @@ function _dungeonRenderGateSelect(el) {
             </div>
         </div>
         ${_dungeonLifetimeSummaryHTML(progress)}
-        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">${poolStripHTML}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">${poolStripHTML}</div>
+            <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;border:1px solid ${diffColors[diffCfg.id]};background:rgba(0,0,0,0.18);">
+                <span style="font-size:13px;">${diffCfg.icon}</span>
+                <span style="font-size:12px;font-weight:800;color:${diffColors[diffCfg.id]};">${diffCfg.label}</span>
+            </div>
+        </div>
         <div id="dungeon-gate-list">${mainHTML}</div>
         <div id="dungeon-party-select" style="display:none;"></div>
         ${window.isAdmin ? `
@@ -21178,6 +22542,9 @@ function _dungeonRenderGateSelect(el) {
             </button>
             <button onclick="window._dungeonResetDaily()" class="cancel-btn" style="font-size:12px;opacity:0.6;">
                 🔄 Reset Today's Gates (Admin)
+            </button>
+            <button onclick="window._dungeonResetDifficulty()" class="cancel-btn" style="font-size:12px;opacity:0.6;">
+                🎚️ Reset Difficulty Picker (Admin)
             </button>
         </div>` : ''}
         <div style="margin-top:24px;">
@@ -21299,7 +22666,8 @@ function _dungeonRenderPartySelect(panel) {
     const basePartyPower = selectedCards.reduce((sum, c) => sum + _dungeonCardPower(c), 0);
     const combo = _dungeonComboBonus(selectedCards);
     const partyPower = basePartyPower + combo;
-    const chance = _dungeonSuccessChance(partyPower, gate.difficulty);
+    const diffCfg = DUNGEON_DIFFICULTY_CONFIG[window._dungeonProgress?.difficulty || 'medium'];
+    const chance = _dungeonSuccessChance(partyPower, gate.difficulty, diffCfg.diffMult);
     const canStart = selected.size === gate.partySize;
     const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
 
@@ -21318,7 +22686,7 @@ function _dungeonRenderPartySelect(panel) {
             <img src="${c.image||''}" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;${fatigued?'filter:grayscale(0.6);':''}" loading="lazy">
             <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);color:#fff;font-size:10px;padding:4px 6px;text-align:center;">
                 <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
-                <div style="color:${inCombo?'#d8a4ff':'#FFD700'};">${rarityLabels[c.rarity]||c.rarity} · Power ${_dungeonCardPower(c)}${inCombo?' +1':''}️</div>
+                <div style="color:${inCombo?'#d8a4ff':'#FFD700'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${rarityLabels[c.rarity]||c.rarity} · ⚡${_dungeonCardPower(c)}${inCombo?' +1':''}</div>
             </div>
             ${fatigued ? `<div style="position:absolute;top:0;left:0;right:0;background:rgba(0,0,0,0.7);color:#FFD700;font-size:10px;font-weight:800;text-align:center;padding:4px 0;">😴 Resting</div>` : ''}
             ${inCombo ? `<div style="position:absolute;top:4px;left:4px;background:#a855f7;color:#fff;font-size:9px;font-weight:900;padding:2px 5px;border-radius:4px;">COMBO</div>` : ''}
@@ -21351,7 +22719,7 @@ function _dungeonRenderPartySelect(panel) {
                 <option value="name-desc" ${sort==='name-desc'?'selected':''}>Name (Z → A)</option>
             </select>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-bottom:20px;">${cardsHTML}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:10px;margin-bottom:20px;">${cardsHTML}</div>
         <button class="action-btn" style="width:100%;justify-content:center;padding:14px;font-size:15px;font-weight:800;${canStart?'':'opacity:0.5;cursor:not-allowed;'}" ${canStart?`onclick="window._dungeonStartRaid()"`:''}>Begin Raid (${_dungeonFormatDuration(gate.durationMs)})</button>
     `;
 }
@@ -21386,9 +22754,13 @@ window._dungeonStartRaid = async function() {
     const gate = DUNGEON_GATES[ps.gateId];
     const cards = ps.cards.filter(c => ps.selected.has(c.id));
     const partyPower = cards.reduce((sum,c) => sum + _dungeonCardPower(c), 0) + _dungeonComboBonus(cards);
-    const chance = _dungeonSuccessChance(partyPower, gate.difficulty);
+    const progress = window._dungeonProgress || { date: _dungeonTodayKey(), poolIndex: 0, results: [] };
+    const diffCfg = DUNGEON_DIFFICULTY_CONFIG[progress.difficulty || 'medium'];
+    const chance = _dungeonSuccessChance(partyPower, gate.difficulty, diffCfg.diffMult);
     const success = Math.random()*100 < chance;
-    const reward = success ? Math.round(gate.rewardMin + Math.random()*(gate.rewardMax-gate.rewardMin)) : gate.failReward;
+    const reward = success
+        ? Math.round((gate.rewardMin + Math.random()*(gate.rewardMax-gate.rewardMin)) * diffCfg.rewardMult)
+        : Math.round(gate.failReward * diffCfg.rewardMult);
     const testMode = window.isAdmin && localStorage.getItem('weebee_dungeon_testmode') === '1';
     const durationMs = testMode ? 30000 : gate.durationMs;
     const now = Date.now();
@@ -21409,7 +22781,6 @@ window._dungeonStartRaid = async function() {
         await setDoc(doc(db, 'raid_state', uid), state);
 
         // Send these cards "resting" for the next gate in the pool.
-        const progress = window._dungeonProgress || { date: _dungeonTodayKey(), poolIndex: 0, results: [] };
         const fatigue = { ...(progress.fatigue || {}) };
         for (const c of cards) fatigue[c.id] = progress.poolIndex + 2;
         window._dungeonProgress = { ...progress, fatigue };
@@ -21740,6 +23111,7 @@ window._dungeonShareSummary = async function() {
         displayName: profile.displayName || auth.currentUser.displayName || 'WeeBee User',
         avatar: profile.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName||'WeeBee')}&backgroundColor=ffc107&fontColor=333333`,
         type: 'summary',
+        difficulty: progress.difficulty || null,
         gates: pool.map((gateId, i) => ({
             gateId,
             success: progress.results[i].success,
@@ -21772,6 +23144,7 @@ window._dungeonShareResult = async function() {
         displayName: profile.displayName || auth.currentUser.displayName || 'WeeBee User',
         avatar: profile.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName||'WeeBee')}&backgroundColor=ffc107&fontColor=333333`,
         gateId: state.gateId,
+        difficulty: window._dungeonProgress?.difficulty || null,
         party: state.party,
         success: state.success,
         reward: state.reward,
@@ -21800,6 +23173,7 @@ function _dungeonGenerateSummaryPostHTML(post) {
     const isDisliked = uid && dislikes.includes(uid);
     const safeId = post.id;
     const col = 'dungeon_posts';
+    const diffCfg = DUNGEON_DIFFICULTY_CONFIG[post.difficulty] || null;
 
     const rarityBorderColor = r => ({ ur:'#ff3c00', ssr:'#00d4ff', sr:'#a78bfa', rare:'#f59e0b', common:'#9aa1a8' }[r] || '#9aa1a8');
 
@@ -21854,7 +23228,7 @@ function _dungeonGenerateSummaryPostHTML(post) {
                 <strong style="color:var(--text-dark);">${post.displayName}</strong>
                 ${window.getRankBadgeHTML ? window.getRankBadgeHTML(window.userRankCache[post.uid]||0,14) : ''}
                 ${window.getPinnedBadgesHTML ? window.getPinnedBadgesHTML(post.uid) : ''}
-                <span style="display:inline-block;background:#8e44ad;color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">⚔️ TCG Dungeon — Daily Run</span><br>
+                <span style="display:inline-block;background:#8e44ad;color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">⚔️ TCG Dungeon — Daily Run</span>${diffCfg ? `<span style="display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:4px;vertical-align:middle;background:rgba(0,0,0,0.08);color:var(--text-dark);">${diffCfg.icon} ${diffCfg.label}</span>` : ''}<br>
                 <span style="font-size:12px;color:var(--text-muted);">${formatTimeAgo(post.timestamp)}</span>
             </div>
         </div>
@@ -21893,6 +23267,7 @@ function _dungeonGenerateSummaryPostHTML(post) {
 window.generateDungeonPostCardHTML = function(post) {
     if (post.type === 'summary') return _dungeonGenerateSummaryPostHTML(post);
     const gate = DUNGEON_GATES[post.gateId] || {};
+    const diffCfg = DUNGEON_DIFFICULTY_CONFIG[post.difficulty] || null;
     const uid = auth.currentUser?.uid;
     const isOwner = uid && post.uid === uid;
     const likes = post.likes || [];
@@ -21922,7 +23297,7 @@ window.generateDungeonPostCardHTML = function(post) {
                 <strong style="color:var(--text-dark);">${post.displayName}</strong>
                 ${window.getRankBadgeHTML ? window.getRankBadgeHTML(window.userRankCache[post.uid]||0,14) : ''}
                 ${window.getPinnedBadgesHTML ? window.getPinnedBadgesHTML(post.uid) : ''}
-                <span style="display:inline-block;background:#8e44ad;color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">⚔️ TCG Dungeon</span><br>
+                <span style="display:inline-block;background:#8e44ad;color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">⚔️ TCG Dungeon</span>${diffCfg ? `<span style="display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;margin-left:4px;vertical-align:middle;background:rgba(0,0,0,0.08);color:var(--text-dark);">${diffCfg.icon} ${diffCfg.label}</span>` : ''}<br>
                 <span style="font-size:12px;color:var(--text-muted);">${gate.icon||''} ${gate.name||'Dungeon Raid'} · ${formatTimeAgo(post.timestamp)}</span>
             </div>
         </div>

@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=94">
+    <link rel="stylesheet" href="styles.css?v=95">
 </head>
 <body>
     <div class="app-container">
@@ -591,8 +591,17 @@
                         <div style="background:var(--bg-gray); border-radius:14px; padding:16px; margin-bottom:20px;">
                             <textarea id="hot-take-input" placeholder="Drop your hot take... (max 280 characters)" maxlength="280" rows="3" style="width:100%; background:var(--bg-white); border:1px solid var(--border-color); border-radius:8px; padding:12px; font-size:14px; color:var(--text-dark); resize:none; box-sizing:border-box; font-family:inherit;" oninput="document.getElementById('ht-char-count').innerText=this.value.length"></textarea>
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-                                <span id="ht-char-count" style="font-size:12px; color:var(--text-muted);">0</span><span style="font-size:12px; color:var(--text-muted);">/280</span>
+                                <div style="display:flex;align-items:center;gap:12px;">
+                                    <span id="ht-char-count" style="font-size:12px; color:var(--text-muted);">0</span><span style="font-size:12px; color:var(--text-muted);">/280</span>
+                                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-muted);">
+                                        <input type="checkbox" id="hot-take-spoiler" style="width:14px;height:14px;accent-color:var(--accent-yellow);cursor:pointer;" onchange="document.getElementById('ht-spoiler-hint-wrap').style.display=this.checked?'flex':'none'">
+                                        Spoiler
+                                    </label>
+                                </div>
                                 <button onclick="window.postHotTake()" class="submit-btn" style="padding:8px 20px;">🔥 Post Hot Take</button>
+                            </div>
+                            <div id="ht-spoiler-hint-wrap" style="display:none;align-items:center;gap:8px;margin-top:8px;">
+                                <input type="text" id="ht-spoiler-hint" placeholder="What anime does this spoil? (optional)" maxlength="80" style="flex:1;padding:7px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;">
                             </div>
                         </div>
 
@@ -999,225 +1008,297 @@
 
                     <!-- ADMIN TAB -->
                     <div id="tcg-tab-admin" class="tcg-tab-content" style="display:none;">
-                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; flex-wrap:wrap; gap:10px;">
-                            <div>
-                                <h2 style="margin:0 0 4px;">TCG Admin Tools <span style="font-size:12px; font-weight:700; color:var(--accent-yellow); border:1px solid var(--accent-yellow); border-radius:6px; padding:2px 8px; vertical-align:middle;">ADMIN</span></h2>
-                                <p style="color:var(--text-muted); font-size:13px; margin:0;">Card generator, pool seeder, and pool browser. Only visible to admins.</p>
-                            </div>
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+                            <h2 style="margin:0;">Admin <span style="font-size:12px; font-weight:700; color:var(--accent-yellow); border:1px solid var(--accent-yellow); border-radius:6px; padding:2px 8px; vertical-align:middle;">ADMIN</span></h2>
                         </div>
 
-                        <!-- Maintenance Mode Toggle -->
-                        <div style="background:#1a0a0a; border:1px solid #7f1d1d; border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                        <!-- Maintenance Mode — always visible -->
+                        <div style="background:#1a0a0a; border:1px solid #7f1d1d; border-radius:12px; padding:14px 18px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                             <div style="flex:1; min-width:200px;">
-                                <div style="font-size:13px; font-weight:700; margin-bottom:2px; color:#ef4444;">🔒 Maintenance Mode</div>
-                                <div style="font-size:12px; color:var(--text-muted);">Locks out all non-admin users immediately and shows the maintenance page. Admins can still sign in.</div>
+                                <div style="font-size:13px; font-weight:700; color:#ef4444;">🔒 Maintenance Mode</div>
+                                <div style="font-size:12px; color:var(--text-muted);">Locks out all non-admin users immediately. Admins can still sign in.</div>
                             </div>
-                            <button id="admin-maintenance-btn" onclick="window._adminToggleMaintenance()" style="padding:10px 20px; border-radius:8px; border:none; background:#ef4444; color:#fff; font-weight:800; font-size:13px; cursor:pointer; flex-shrink:0;">🔴 Turn On Maintenance</button>
+                            <button id="admin-maintenance-btn" onclick="window._adminToggleMaintenance()" style="padding:9px 18px; border-radius:8px; border:none; background:#ef4444; color:#fff; font-weight:800; font-size:13px; cursor:pointer; flex-shrink:0;">🔴 Turn On Maintenance</button>
                         </div>
 
-                        <!-- Gift Wheel UR (shortcut to Prize Wheel admin tool) -->
-                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                            <div style="flex:1; min-width:200px;">
-                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">🌟 Gift Monthly Wheel UR</div>
-                                <div style="font-size:12px; color:var(--text-muted);">Manually gift the current month's UR card to a user (for trade issues, compensation, etc.)</div>
-                                <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                        <!-- Sub-tab nav -->
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:18px;">
+                            <button id="admin-subtab-moderation-btn" onclick="window.switchAdminSubtab('moderation')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:800; font-size:13px; cursor:pointer;">👮 Moderation</button>
+                            <button id="admin-subtab-economy-btn" onclick="window.switchAdminSubtab('economy')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🟡 Economy</button>
+                            <button id="admin-subtab-cards-btn" onclick="window.switchAdminSubtab('cards')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🎴 Card Pool</button>
+                            <button id="admin-subtab-gifts-btn" onclick="window.switchAdminSubtab('gifts')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🎁 Gifts</button>
+                        </div>
+
+                        <!-- ── MODERATION ── -->
+                        <div id="admin-subtab-moderation">
+
+                            <!-- User Moderation -->
+                            <div style="background:#1a0a0a; border:1px solid #7f1d1d; border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px; color:#ef4444;">⚠️ User Moderation</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Search for a user to ban, set ban duration, or permanently nuke their account and data.</div>
+                                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                    <input type="text" id="mod-search-input" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._adminSearchUserForMod();}" style="flex:1; min-width:180px; padding:8px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                    <button onclick="window._adminSearchUserForMod()" style="padding:8px 18px; border-radius:8px; border:none; background:#ef4444; color:#fff; font-weight:800; font-size:12px; cursor:pointer;">Search</button>
+                                </div>
+                                <div id="mod-search-results" style="margin-top:10px;"></div>
+                            </div>
+
+                            <!-- Alt Account Detection -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🕵️ Alt Account Scanner</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Groups accounts that share a device fingerprint (captured at account creation). Shows trade history between flagged accounts and a risk score. Use as a starting point — check the details before acting.</div>
+                                <button onclick="window._adminScanAltAccounts()" style="padding:8px 18px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:800; font-size:12px; cursor:pointer;">Scan for Alts</button>
+                                <div id="alt-account-results" style="margin-top:12px;"></div>
+                            </div>
+
+                            <!-- Lopsided Trade Scanner -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">⚖️ Lopsided Trade Scanner</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Flags accounts that have received free cards or amber (other side gave nothing). Especially suspicious when the same donor repeats this pattern — common sign of alt-account resource draining.</div>
+                                <button onclick="window._adminScanLopsidedTrades()" style="padding:8px 18px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:800; font-size:12px; cursor:pointer;">Scan Trades</button>
+                                <div id="lopsided-trade-results" style="margin-top:12px;"></div>
+                            </div>
+
+                            <!-- Trade Transaction Log -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                                    <div>
+                                        <div style="font-size:14px; font-weight:800; margin-bottom:2px;">📋 Trade Log</div>
+                                        <div style="font-size:12px; color:var(--text-muted);">All trades across all users — click any row to see full details.</div>
+                                    </div>
+                                    <button onclick="window._tcgAdminLoadTradeLog()" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Refresh</button>
+                                </div>
+                                <div id="tcg-admin-trade-log" style="background:var(--bg-white); border-radius:10px; padding:16px;">
+                                    <p style="color:var(--text-muted); margin:0; font-size:13px;">Click Refresh to load trades.</p>
+                                </div>
+                            </div>
+
+                            <!-- Repair Stuck Auctions -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                                <div style="flex:1; min-width:200px;">
+                                    <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🔧 Repair Unsettled Auctions</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Settles expired auctions stuck in 'queued' status — sends cards to winners, returns unsold items to sellers.</div>
+                                    <div id="auction-repair-status" style="font-size:12px; color:var(--text-muted); margin-top:6px;"></div>
+                                </div>
+                                <button onclick="window._auctionAdminRepair()" style="padding:9px 18px; border-radius:8px; border:none; background:#ef4444; color:#fff; font-weight:800; font-size:13px; cursor:pointer; flex-shrink:0;">Run Repair</button>
+                            </div>
+
+                        </div>
+
+                        <!-- ── ECONOMY ── -->
+                        <div id="admin-subtab-economy" style="display:none;">
+
+                            <!-- Flash Sale -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                                <div style="flex:1;">
+                                    <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🎉 Pack Store Flash Sale</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Rolls pack prices back to their sale price. Stays active until toggled off.</div>
+                                </div>
+                                <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; cursor:pointer;">
+                                    <input id="tcg-sale-enabled" type="checkbox" onchange="window._tcgSaveSaleConfig()"> Flash sale active
+                                </label>
+                                <span id="tcg-sale-status" style="font-size:13px; color:var(--text-muted);"></span>
+                            </div>
+
+                            <!-- Amber Wallet -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                                    <div>
+                                        <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🟡 Amber Wallet</div>
+                                        <div style="font-size:12px; color:var(--text-muted);">Live balances and full amber transaction log.</div>
+                                    </div>
+                                    <button onclick="window._amberLoadWallet()" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Refresh</button>
+                                </div>
+                                <div id="amber-wallet-content" style="background:var(--bg-white); border-radius:10px; padding:16px;">
+                                    <p style="color:var(--text-muted); margin:0; font-size:13px;">Click Refresh to load wallet data.</p>
+                                </div>
+                            </div>
+
+                            <!-- Send Amber -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">➕ Send Amber to User</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Refund or compensate a user — e.g. accidental duplicate pack purchases.</div>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                                    <input type="text" id="amber-pay-search" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsers();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                    <button onclick="window._tcgAdminSearchUsers()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
+                                </div>
+                                <div id="amber-pay-results" style="margin-top:10px;"></div>
+                            </div>
+
+                            <!-- Deduct Amber -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px; color:#ef4444;">➖ Deduct Amber from User</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Claw back amber from exploit payouts. Balance will not go below 0.</div>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                                    <input type="text" id="amber-deduct-search" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsersForDeduct();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                    <button onclick="window._tcgAdminSearchUsersForDeduct()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
+                                </div>
+                                <div id="amber-deduct-results" style="margin-top:10px;"></div>
+                            </div>
+
+                        </div>
+
+                        <!-- ── CARD POOL ── -->
+                        <div id="admin-subtab-cards" style="display:none;">
+
+                            <!-- Card Generator -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:8px;">✨ Card Generator</div>
+                                <div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;">
+                                    <div>
+                                        <label style="display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:6px;">Source Anime</label>
+                                        <select id="tcg-anime-select" onchange="window._tcgApplyAnimeDefaults()" style="padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px;">
+                                            <option value="20">Naruto</option>
+                                            <option value="21">One Piece</option>
+                                            <option value="269">Bleach</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:6px;">Rare Cutoff (top N)</label>
+                                        <input type="number" id="tcg-rare-cutoff" value="15" min="1" max="30" style="width:90px; padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; box-sizing:border-box;">
+                                    </div>
+                                    <button onclick="window.tcgGenerateCards()" id="tcg-generate-btn" style="padding:11px 22px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:14px; cursor:pointer;">Pull Characters &amp; Generate</button>
+                                    <span id="tcg-status" style="font-size:13px; color:var(--text-muted);"></span>
+                                </div>
+                                <div id="tcg-card-grid" class="wb-card-grid" style="margin-top:12px;"></div>
+                            </div>
+
+                            <!-- Card Pool Seeder -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                                <div style="flex:1; min-width:200px;">
+                                    <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🌱 Card Pool Seeder</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Fetches top 100 anime → top 30 chars each → saves to Firestore with rarity tags. Takes ~60s.</div>
+                                    <span id="tcg-seed-status" style="font-size:12px; color:var(--text-muted);"></span>
+                                </div>
+                                <button id="tcg-seed-btn" onclick="window._tcgSeedCardPool()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Seed Pool</button>
+                                <button id="tcg-purge-btn" onclick="window._tcgPurgeOrphans()" style="padding:10px 20px; border-radius:8px; border:1px solid #ef4444; background:transparent; color:#ef4444; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Purge Orphans</button>
+                                <button onclick="window._tcgBrowsePool()" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Browse Pool</button>
+                            </div>
+
+                            <!-- Sync Hand-Curated Art -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                                <div style="flex:1; min-width:200px;">
+                                    <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🎨 Sync Hand-Curated SR/SSR/UR Art</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Copies hand-curated cards into the pool so they're searchable and editable. Safe to re-run.</div>
+                                    <span id="tcg-srssr-migrate-status" style="font-size:12px; color:var(--text-muted);"></span>
+                                </div>
+                                <button onclick="window._tcgMigrateSRSSRToPool()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Sync to Pool</button>
+                                <button onclick="window._tcgPurgeStaleSRSSR()" style="padding:10px 20px; border-radius:8px; border:1px solid #ef4444; background:transparent; color:#ef4444; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;" title="Removes stale SR/SSR/UR entries inflating pull rates">Remove Stale</button>
+                            </div>
+
+                            <!-- Pool Capacity -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:12px;">
+                                    <div style="flex:1;">
+                                        <div style="font-size:14px; font-weight:800; margin-bottom:2px;">📊 Pool Capacity</div>
+                                        <div style="font-size:12px; color:var(--text-muted);">Serial slots remaining per rarity. Red = running low.</div>
+                                    </div>
+                                    <button onclick="window._tcgRenderPoolMeters()" style="padding:9px 18px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Refresh</button>
+                                </div>
+                                <div id="tcg-pool-meters"></div>
+                            </div>
+
+                            <!-- Image Validator -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                                <div style="flex:1; min-width:200px;">
+                                    <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🖼️ Validate Card Images</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Test-loads every card's image. Failed images are flagged and excluded from pack pulls.</div>
+                                </div>
+                                <button onclick="window._tcgValidateImages()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Scan &amp; Fix</button>
+                            </div>
+                            <div id="tcg-image-validate-results" style="margin-bottom:16px;"></div>
+
+                            <!-- Remove Duplicate Cards -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                                <div style="flex:1; min-width:200px;">
+                                    <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🗑️ Remove Duplicate Cards</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Scans every collection for cards with the same name, rarity, and serial. Keeps earliest copy.</div>
+                                    <span id="tcg-dedup-status" style="font-size:12px; color:var(--text-muted);"></span>
+                                </div>
+                                <button onclick="window._tcgDeduplicateCollections(true)" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Dry Run</button>
+                                <button onclick="window._tcgDeduplicateCollections(false)" style="padding:10px 20px; border-radius:8px; border:1px solid #ef4444; background:transparent; color:#ef4444; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Delete Dupes</button>
+                            </div>
+
+                            <!-- Pack Odds Simulator -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:10px;">🎲 Pack Odds Simulator</div>
+                                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                                    <select id="sim-pack-select" onchange="window._tcgSimSyncCost()" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; font-weight:700;">
+                                        <option value="standard">Standard Pack</option>
+                                        <option value="premium">Premium Pack</option>
+                                        <option value="compare">⚖️ Compare Both</option>
+                                    </select>
+                                    <select id="sim-count-select" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; font-weight:700;">
+                                        <option value="100">100 packs</option>
+                                        <option value="500">500 packs</option>
+                                        <option value="1000" selected>1,000 packs</option>
+                                        <option value="5000">5,000 packs</option>
+                                    </select>
+                                    <div id="sim-cost-wrap" style="display:flex;align-items:center;gap:6px;">
+                                        <span style="font-size:12px;color:var(--text-muted);white-space:nowrap;">🟡 Cost/pack:</span>
+                                        <input id="sim-cost-input" type="number" min="1" value="150" style="width:80px;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;font-weight:700;">
+                                    </div>
+                                    <div id="sim-cost-compare-wrap" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;">
+                                        <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:12px;color:var(--text-muted);white-space:nowrap;">🟡 Standard:</span><input id="sim-cost-std" type="number" min="1" value="150" style="width:76px;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;font-weight:700;"></div>
+                                        <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:12px;color:var(--text-muted);white-space:nowrap;">🟡 Premium:</span><input id="sim-cost-prm" type="number" min="1" value="1000" style="width:76px;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;font-weight:700;"></div>
+                                        <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:12px;color:var(--text-muted);white-space:nowrap;">🎴 Std budget:</span><input id="sim-budget-std" type="number" min="1" value="1500" style="width:86px;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;font-weight:700;"></div>
+                                        <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:12px;color:var(--text-muted);white-space:nowrap;">🎴 Prm budget:</span><input id="sim-budget-prm" type="number" min="1" value="10000" style="width:86px;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;font-weight:700;"></div>
+                                    </div>
+                                    <button onclick="window._tcgSimulatePacks()" style="padding:9px 18px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:800; font-size:13px; cursor:pointer;">Run Simulation</button>
+                                </div>
+                            </div>
+
+                            <!-- Pool Browser -->
+                            <div id="tcg-pool-browser" style="margin-bottom:16px;"></div>
+
+                        </div>
+
+                        <!-- ── GIFTS ── -->
+                        <div id="admin-subtab-gifts" style="display:none;">
+
+                            <!-- Gift Wheel UR -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🌟 Gift Monthly Wheel UR</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Manually gift the current month's UR card to a user (compensation, trade issues, etc.)</div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
                                     <input type="text" id="tcg-admin-wheel-ur-search" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._wheelAdminSearchUsersForUR('tcg-admin-wheel-ur');}" style="flex:1; min-width:160px; padding:8px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
                                     <button onclick="window._wheelAdminSearchUsersForUR('tcg-admin-wheel-ur')" style="padding:8px 14px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:12px; cursor:pointer;">Search</button>
                                 </div>
                                 <div id="tcg-admin-wheel-ur-results" style="margin-top:8px;"></div>
                             </div>
-                        </div>
 
-                        <!-- Pack Odds Simulator -->
-                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                            <div style="flex:1; min-width:200px;">
-                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">🎲 Pack Odds Simulator</div>
-                                <div style="font-size:12px; color:var(--text-muted);">Simulates pack openings using live odds. No cards are saved.</div>
-                            </div>
-                            <select id="sim-pack-select" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; font-weight:700;">
-                                <option value="standard">Standard Pack</option>
-                                <option value="premium">Premium Pack</option>
-                            </select>
-                            <select id="sim-count-select" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; font-weight:700;">
-                                <option value="100">100 packs</option>
-                                <option value="500">500 packs</option>
-                                <option value="1000" selected>1,000 packs</option>
-                                <option value="5000">5,000 packs</option>
-                            </select>
-                            <button onclick="window._tcgSimulatePacks()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:800; font-size:13px; cursor:pointer;">Run Simulation</button>
-                        </div>
-
-                        <!-- Deduplicate Collections -->
-                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                            <div style="flex:1; min-width:200px;">
-                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">🗑️ Remove Duplicate Cards</div>
-                                <div style="font-size:12px; color:var(--text-muted);">Scans every user's collection for cards with the same name, rarity, and serial. Keeps the earliest-pulled copy, deletes the rest.</div>
-                                <span id="tcg-dedup-status" style="font-size:12px; color:var(--text-muted);"></span>
-                            </div>
-                            <button onclick="window._tcgDeduplicateCollections(true)" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Dry Run</button>
-                            <button onclick="window._tcgDeduplicateCollections(false)" style="padding:10px 20px; border-radius:8px; border:1px solid #ef4444; background:transparent; color:#ef4444; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Delete Dupes</button>
-                        </div>
-
-                        <!-- Flash Sale Toggle -->
-                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                            <div>
-                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">🎉 Pack Store Flash Sale</div>
-                                <div style="font-size:12px; color:var(--text-muted);">Rolls pack prices back to their sale price. Stays on until toggled off.</div>
-                            </div>
-                            <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700;">
-                                <input id="tcg-sale-enabled" type="checkbox" onchange="window._tcgSaveSaleConfig()"> Flash sale active
-                            </label>
-                            <span id="tcg-sale-status" style="font-size:13px; color:var(--text-muted);"></span>
-                        </div>
-
-                        <div style="background:var(--bg-gray); border-radius:12px; padding:18px; margin:18px 0; display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;">
-                            <div>
-                                <label style="display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:6px;">Source Anime</label>
-                                <select id="tcg-anime-select" onchange="window._tcgApplyAnimeDefaults()" style="padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px;">
-                                    <option value="20">Naruto</option>
-                                    <option value="21">One Piece</option>
-                                    <option value="269">Bleach</option>
+                            <!-- Gift Founder Card -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🏅 Gift Founder Card</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Gifts a 1-of-1 Founder edition card to a user's collection. Pick the design then search for the recipient.</div>
+                                <select id="founder-gift-select" onchange="window._tcgRenderFounderPreview()" style="padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; margin-bottom:14px;">
+                                    <option value="oguri_cap">Oguri Cap (Uma Musume Pretty Derby, UR)</option>
+                                    <option value="naruto">Naruto Uzumaki (Naruto, UR)</option>
+                                    <option value="choji">Choji Akimichi (Naruto, UR)</option>
+                                    <option value="brook">Brook (One Piece, UR)</option>
+                                    <option value="rengoku">Rengoku (Demon Slayer, UR)</option>
+                                    <option value="shoyo_hinata">Shoyo Hinata (Haikyu, UR)</option>
+                                    <option value="alphonse_elric">Alphonse Elric (Fullmetal Alchemist, UR)</option>
+                                    <option value="makima">Makima (Chainsaw Man, UR)</option>
+                                    <option value="dreaded">Dreaded (WeeBee Original, UR)</option>
+                                    <option value="rock_lee">Rock Lee (Naruto, UR)</option>
+                                    <option value="zoro">Zoro (One Piece, UR)</option>
+                                    <option value="luffy">Luffy (One Piece, UR)</option>
+                                    <option value="no_face">No Face (Spirited Away, UR)</option>
+                                    <option value="sung_jinwoo">Sung Jinwoo (Solo Leveling, UR)</option>
+                                    <option value="astro_boy">Astro Boy (Astro Boy, UR)</option>
+                                    <option value="arthur_boyle">Arthur Boyle (Fire Force, UR)</option>
+                                    <option value="alucard">Alucard (Hellsing Ultimate, UR)</option>
+                                    <option value="gohan">Gohan (Dragon Ball, UR)</option>
                                 </select>
-                            </div>
-                            <div>
-                                <label style="display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:6px;">Rare Cutoff (top N most popular)</label>
-                                <input type="number" id="tcg-rare-cutoff" value="15" min="1" max="30" style="width:90px; padding:10px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:14px; box-sizing:border-box;">
-                            </div>
-                            <button onclick="window.tcgGenerateCards()" id="tcg-generate-btn" style="padding:11px 22px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:14px; cursor:pointer;">
-                                Pull Characters &amp; Generate Cards
-                            </button>
-                            <span id="tcg-status" style="font-size:13px; color:var(--text-muted);"></span>
-                        </div>
-
-                        <!-- Card Pool Seeder -->
-                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                            <div>
-                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Card Pool Seeder</div>
-                                <div style="font-size:12px; color:var(--text-muted);">Fetches top 100 anime → top 30 chars each → saves to Firestore with rarity tags. Takes ~60s.</div>
-                            </div>
-                            <button id="tcg-seed-btn" onclick="window._tcgSeedCardPool()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Seed Card Pool</button>
-                            <button id="tcg-purge-btn" onclick="window._tcgPurgeOrphans()" style="padding:10px 20px; border-radius:8px; border:1px solid #ef4444; background:transparent; color:#ef4444; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Purge Orphans</button>
-                            <span id="tcg-seed-status" style="font-size:12px; color:var(--text-muted); flex:1;"></span>
-                            <button onclick="window._tcgBrowsePool()" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Browse Pool</button>
-                        </div>
-
-                        <!-- SR/SSR → Pool Migration -->
-                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                            <div>
-                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Sync Hand-Curated SR/SSR/UR Art</div>
-                                <div style="font-size:12px; color:var(--text-muted);">Copies the hand-curated SR/SSR/UR cards into the pool below so they're searchable and editable/deletable. Click this any time you add new cards to those arrays. Safe to re-run.</div>
-                            </div>
-                            <button onclick="window._tcgMigrateSRSSRToPool()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Sync Cards to Pool</button>
-                            <button onclick="window._tcgPurgeStaleSRSSR()" style="padding:10px 20px; border-radius:8px; border:1px solid #ef4444; background:transparent; color:#ef4444; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;" title="Removes leftover SR/SSR/UR entries from earlier card versions that are inflating some characters' pull rates">Remove Stale Entries</button>
-                            <span id="tcg-srssr-migrate-status" style="font-size:12px; color:var(--text-muted); flex:1;"></span>
-                        </div>
-
-                        <!-- Pool Capacity Meters -->
-                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px;">
-                            <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:14px;">
-                                <div>
-                                    <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Pool Capacity</div>
-                                    <div style="font-size:12px; color:var(--text-muted);">Serial slots remaining across all users for each rarity. Red = running low, add more cards.</div>
+                                <div id="founder-card-preview" style="margin-bottom:14px;"></div>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                                    <input type="text" id="founder-gift-search" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsersForFounder();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                    <button onclick="window._tcgAdminSearchUsersForFounder()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
                                 </div>
-                                <button onclick="window._tcgRenderPoolMeters()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Refresh</button>
+                                <div id="founder-gift-results" style="margin-top:10px;"></div>
                             </div>
-                            <div id="tcg-pool-meters"></div>
-                        </div>
 
-                        <!-- Image Validator -->
-                        <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                            <div>
-                                <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Validate Card Images</div>
-                                <div style="font-size:12px; color:var(--text-muted);">Test-loads every card's image. Any that fail are flagged and excluded from pack pulls until you fix or delete them.</div>
-                            </div>
-                            <button onclick="window._tcgValidateImages()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Scan &amp; Fix Images</button>
-                        </div>
-                        <div id="tcg-image-validate-results" style="margin-bottom:18px;"></div>
-
-                        <!-- Pool Browser -->
-                        <div id="tcg-pool-browser" style="margin-bottom:18px;"></div>
-
-                        <div id="tcg-card-grid" class="wb-card-grid"></div>
-
-                        <!-- Amber Wallet (admin) -->
-                        <div style="margin:40px 0 0; padding-top:32px; border-top:1px solid var(--border-color);">
-                            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
-                                <div>
-                                    <h3 style="margin:0 0 4px;">Amber Currency <span style="font-size:11px; font-weight:700; color:#f59e0b; border:1px solid #f59e0b; border-radius:6px; padding:2px 8px; vertical-align:middle;">ADMIN</span></h3>
-                                    <p style="color:var(--text-muted); font-size:13px; margin:0;">Live balances and transaction log.</p>
-                                </div>
-                                <button onclick="window._amberLoadWallet()" style="padding:9px 18px; border-radius:8px; border:none; background:var(--bg-gray); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Refresh</button>
-                            </div>
-                            <div id="amber-wallet-content" style="background:var(--bg-gray); border-radius:12px; padding:20px;">
-                                <p style="color:var(--text-muted); margin:0;">Click Refresh to load wallet data.</p>
-                            </div>
-                        </div>
-
-                        <!-- Send Amber (admin) -->
-                        <div style="margin:24px 0 0;">
-                            <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:10px;">Send Amber to User</div>
-                            <p style="color:var(--text-muted); font-size:12px; margin:0 0 10px;">Use this to refund/compensate users — e.g. accidental duplicate pack purchases.</p>
-                            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                                <input type="text" id="amber-pay-search" placeholder="Search by display name..." onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsers();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
-                                <button onclick="window._tcgAdminSearchUsers()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
-                            </div>
-                            <div id="amber-pay-results" style="margin-top:10px;"></div>
-                        </div>
-
-                        <!-- Deduct Amber (admin) -->
-                        <div style="margin:24px 0 0;">
-                            <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#ef4444; margin-bottom:10px;">Deduct Amber from User</div>
-                            <p style="color:var(--text-muted); font-size:12px; margin:0 0 10px;">Use this to claw back amber from exploit payouts — e.g. multi-click dismantle bug. Balance will not go below 0.</p>
-                            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                                <input type="text" id="amber-deduct-search" placeholder="Search by display name..." onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsersForDeduct();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
-                                <button onclick="window._tcgAdminSearchUsersForDeduct()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
-                            </div>
-                            <div id="amber-deduct-results" style="margin-top:10px;"></div>
-                        </div>
-
-                        <!-- Gift Founder Card (admin) -->
-                        <div style="margin:24px 0 0;">
-                            <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:10px;">Gift Founder Card</div>
-                            <p style="color:var(--text-muted); font-size:12px; margin:0 0 10px;">Gifts a 1-of-1 "Founder" edition card to a user's collection. Pick the design, then search for the recipient.</p>
-                            <select id="founder-gift-select" onchange="window._tcgRenderFounderPreview()" style="padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; margin-bottom:14px;">
-                                <option value="oguri_cap">Oguri Cap (Uma Musume Pretty Derby, UR)</option>
-                                <option value="naruto">Naruto Uzumaki (Naruto, UR)</option>
-                                <option value="choji">Choji Akimichi (Naruto, UR)</option>
-                                <option value="brook">Brook (One Piece, UR)</option>
-                                <option value="rengoku">Rengoku (Demon Slayer, UR)</option>
-                                <option value="shoyo_hinata">Shoyo Hinata (Haikyu, UR)</option>
-                                <option value="alphonse_elric">Alphonse Elric (Fullmetal Alchemist, UR)</option>
-                                <option value="makima">Makima (Chainsaw Man, UR)</option>
-                                <option value="dreaded">Dreaded (WeeBee Original, UR)</option>
-                                <option value="rock_lee">Rock Lee (Naruto, UR)</option>
-                                <option value="zoro">Zoro (One Piece, UR)</option>
-                                <option value="luffy">Luffy (One Piece, UR)</option>
-                                <option value="no_face">No Face (Spirited Away, UR)</option>
-                                <option value="sung_jinwoo">Sung Jinwoo (Solo Leveling, UR)</option>
-                                <option value="astro_boy">Astro Boy (Astro Boy, UR)</option>
-                                <option value="arthur_boyle">Arthur Boyle (Fire Force, UR)</option>
-                                <option value="alucard">Alucard (Hellsing Ultimate, UR)</option>
-                            </select>
-                            <div id="founder-card-preview" style="margin-bottom:14px;"></div>
-                            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                                <input type="text" id="founder-gift-search" placeholder="Search by display name..." onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsersForFounder();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
-                                <button onclick="window._tcgAdminSearchUsersForFounder()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
-                            </div>
-                            <div id="founder-gift-results" style="margin-top:10px;"></div>
-                        </div>
-
-                        <!-- Trade Transaction Log (admin) -->
-                        <div style="margin:40px 0 0; padding-top:32px; border-top:1px solid var(--border-color);">
-                            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
-                                <div>
-                                    <h3 style="margin:0 0 4px;">Trade Transactions <span style="font-size:11px; font-weight:700; color:var(--accent-yellow); border:1px solid var(--accent-yellow); border-radius:6px; padding:2px 8px; vertical-align:middle;">ADMIN</span></h3>
-                                    <p style="color:var(--text-muted); font-size:13px; margin:0;">All trades across all users — click any row to see full details.</p>
-                                </div>
-                                <button onclick="window._tcgAdminLoadTradeLog()" style="padding:9px 18px; border-radius:8px; border:none; background:var(--bg-gray); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Refresh</button>
-                            </div>
-                            <div id="tcg-admin-trade-log" style="background:var(--bg-gray); border-radius:12px; padding:20px;">
-                                <p style="color:var(--text-muted); margin:0;">Click Refresh to load trades.</p>
-                            </div>
                         </div>
 
                     </div>
@@ -1594,6 +1675,13 @@
             </div>
             <label>Your Thoughts</label>
             <textarea id="quick-score-text" rows="4" placeholder="What did you think?"></textarea>
+            <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;font-size:14px;color:var(--text-dark);">
+                <input type="checkbox" id="quick-review-spoiler" style="width:16px;height:16px;accent-color:var(--accent-yellow);cursor:pointer;" onchange="document.getElementById('quick-spoiler-hint-wrap').style.display=this.checked?'block':'none'">
+                Mark as spoiler
+            </label>
+            <div id="quick-spoiler-hint-wrap" style="display:none;margin-top:8px;">
+                <input type="text" id="quick-spoiler-hint" placeholder="What anime does this spoil? (optional)" maxlength="80" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
+            </div>
             <div class="modal-actions">
                 <button onclick="closeAllModals()" class="cancel-btn">Cancel</button>
                 <button onclick="submitQuickReview()" class="submit-btn">Submit Review</button>
@@ -1659,6 +1747,13 @@
         <div class="modal-content">
             <h3>Review Preview</h3>
             <div id="preview-content"></div>
+            <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer;font-size:14px;color:var(--text-dark);">
+                <input type="checkbox" id="indepth-review-spoiler" style="width:16px;height:16px;accent-color:var(--accent-yellow);cursor:pointer;" onchange="document.getElementById('indepth-spoiler-hint-wrap').style.display=this.checked?'block':'none'">
+                Mark as spoiler
+            </label>
+            <div id="indepth-spoiler-hint-wrap" style="display:none;margin-top:8px;">
+                <input type="text" id="indepth-spoiler-hint" placeholder="What anime does this spoil? (optional)" maxlength="80" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
+            </div>
             <div class="modal-actions" style="margin-top: 20px;">
                 <button onclick="openInDepthModal()" class="cancel-btn">Edit</button>
                 <button onclick="submitInDepthReview()" class="submit-btn">Submit to WeeBee</button>
@@ -2454,13 +2549,21 @@
                 <div style="display:flex;align-items:center;gap:12px;">
                     <button onclick="document.getElementById('gp-image-input').click()" class="action-btn" style="font-size:13px;padding:6px 14px;background:var(--bg-gray);color:var(--text-dark);display:flex;align-items:center;gap:6px;"><span class="material-symbols-outlined" style="font-size:16px;">add_photo_alternate</span> Photo</button>
                     <span><span id="gp-char-count" style="font-size:12px;color:var(--text-muted);">0</span><span style="font-size:12px;color:var(--text-muted);">/2000</span></span>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-muted);">
+                        <input type="checkbox" id="general-post-spoiler" style="width:14px;height:14px;accent-color:var(--accent-yellow);cursor:pointer;" onchange="document.getElementById('gp-spoiler-hint-wrap').style.display=this.checked?'flex':'none'">
+                        Spoiler
+                    </label>
                 </div>
                 <button id="gp-submit-btn" onclick="window.submitGeneralPost()" class="submit-btn" style="padding:9px 22px;">Post</button>
+            </div>
+            <div id="gp-spoiler-hint-wrap" style="display:none;align-items:center;gap:8px;margin-top:8px;">
+                <input type="text" id="gp-spoiler-hint" placeholder="What anime does this spoil? (optional)" maxlength="80" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;">
             </div>
         </div>
     </div>
 
     <script src="characters.js"></script>
-    <script type="module" src="app.js?v=368"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
+    <script type="module" src="app.js?v=402"></script>
 </body>
 </html>
