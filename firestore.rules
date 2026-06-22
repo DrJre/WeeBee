@@ -362,9 +362,9 @@ service cloud.firestore {
     }
 
     // ── TCG card collections (per-user subcollection) ─────────────────────────
-    // Admin collection-group query for the dedup tool (collectionGroup('cards')).
+    // collectionGroup('cards') — used by the public versions page and admin tools.
     match /{path=**}/cards/{card} {
-      allow read: if isAdmin();
+      allow read: if true;
     }
     match /card_collections/{uid}/cards/{card} {
       allow read: if true;

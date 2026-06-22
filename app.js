@@ -852,7 +852,7 @@ onAuthStateChanged(auth, async (user) => {
                     <span style="font-size:14px;">🟡</span><span id="topbar-amber-value">0</span>
                 </div>
                 <span class="topbar-display-name" style="font-weight:600; font-size:14px;">${user.displayName}</span><span id="topbar-rank-badge" style="display:inline-flex; align-items:center; margin-left:2px;"></span>
-                <img src="${avatarUrl}" alt="User" class="avatar" style="cursor:pointer;" onclick="window.topbarAvatarClick(event, '${user.uid}')">
+                <img src="${avatarUrl}" alt="User" class="avatar" style="cursor:pointer;" onclick="window.topbarAvatarClick(event, '${user.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(user.displayName||'U')}&backgroundColor=ffc107&fontColor=333333'">
                 <span class="material-symbols-outlined topbar-chevron" style="font-size:18px; cursor:pointer;" onclick="toggleDropdown(event)">expand_more</span>
             </div>
             <div id="profile-dropdown" class="dropdown-menu" style="display: none; right:0; top:50px;">
@@ -882,9 +882,12 @@ onAuthStateChanged(auth, async (user) => {
                 if (toggle) toggle.checked = data.theme === 'dark';
             }
         }).catch(() => {});
-        // Backfill displayNameLower for case-insensitive search
+        // Backfill displayName + displayNameLower for any user whose profile doc is missing them
         if (user.displayName) {
-            setDoc(doc(db, "profiles", user.uid), { displayNameLower: user.displayName.toLowerCase() }, { merge: true }).catch(() => {});
+            setDoc(doc(db, "profiles", user.uid), {
+                displayName: user.displayName,
+                displayNameLower: user.displayName.toLowerCase()
+            }, { merge: true }).catch(() => {});
         }
         // Backfill account creation timestamp (used by alt-account scanner)
         if (user.metadata?.creationTime) {
@@ -954,6 +957,14 @@ onAuthStateChanged(auth, async (user) => {
             const _cId = _rest.join('~');
             if (_ownerUid && _cId) setTimeout(() => window._tcgOpenCardViewer(_ownerUid, _cId), 600);
         }
+        const _versionsParam = _urlParams.get('versions');
+        if (_versionsParam) {
+            const _vParts = _versionsParam.split('~');
+            if (_vParts.length >= 3) {
+                const [_vName, _vAnime, _vRarity] = _vParts;
+                setTimeout(() => window._tcgOpenVersionsView(_vName, _vAnime, _vRarity), 400);
+            }
+        }
         // Restore last view after login
         const savedView = sessionStorage.getItem('weebee-last-view');
         if (savedView) {
@@ -990,6 +1001,14 @@ onAuthStateChanged(auth, async (user) => {
             const [_ownerUid, ..._rest] = _cardId.split('~');
             const _cId = _rest.join('~');
             if (_ownerUid && _cId) setTimeout(() => window._tcgOpenCardViewer(_ownerUid, _cId), 600);
+        }
+        const _versionsParamAnon = _initialUrlParams.get('versions');
+        if (_versionsParamAnon) {
+            const _vParts = _versionsParamAnon.split('~');
+            if (_vParts.length >= 3) {
+                const [_vName, _vAnime, _vRarity] = _vParts;
+                setTimeout(() => window._tcgOpenVersionsView(_vName, _vAnime, _vRarity), 400);
+            }
         }
     }
     if(window.currentActiveViewId === 'home-view') fetchHomepageReviews();
@@ -2011,7 +2030,16 @@ window.signInWithGoogle = async function() {
     try {
         const result = await signInWithPopup(auth, googleProvider);
         if (getAdditionalUserInfo(result)?.isNewUser) {
-            setDoc(doc(db, "profiles", result.user.uid), { amber: 300 }, { merge: true }).catch(() => {});
+            const u = result.user;
+            const fallbackAvatar = `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(u.displayName || 'U')}&backgroundColor=ffc107&fontColor=333333`;
+            setDoc(doc(db, "profiles", u.uid), {
+                displayName: u.displayName || '',
+                displayNameLower: (u.displayName || '').toLowerCase(),
+                avatar: u.photoURL || fallbackAvatar,
+                bio: '',
+                genres: [],
+                amber: 300
+            }, { merge: true }).catch(() => {});
         }
         window.closeAllModals();
     } catch (error) { alert(error.message); }
@@ -4807,7 +4835,7 @@ window._revealSpoiler = function(postId, event) {
 // hint: short string shown under the lock icon (e.g. "Attack on Titan")
 function _wrapSpoilerOverlay(html, postId, hint) {
     if (window._revealedSpoilers?.has(postId)) return html;
-    return `<div style="position:relative;">${html}<div id="spoiler-overlay-${postId}" onclick="event.stopPropagation()" style="position:absolute;inset:0;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:rgba(8,8,16,0.38);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;border-radius:14px;gap:6px;text-align:center;padding:24px;box-sizing:border-box;">
+    return `<div style="position:relative;">${html}<div id="spoiler-overlay-${postId}" onclick="event.stopPropagation()" style="position:absolute;top:68px;left:0;right:0;bottom:0;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:rgba(8,8,16,0.38);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;border-radius:0 0 14px 14px;gap:6px;text-align:center;padding:24px;box-sizing:border-box;">
         <div style="font-size:30px;line-height:1;">🔒</div>
         <div style="font-size:15px;font-weight:900;color:#fff;margin-top:2px;">Spoiler Warning</div>
         ${hint ? `<div style="font-size:12px;color:rgba(255,255,255,0.75);max-width:220px;line-height:1.4;">Contains spoilers for <strong>${hint}</strong></div>` : ''}
@@ -7638,10 +7666,9 @@ async function _wheelLoadState(uid) {
     let data = snap.exists() ? snap.data() : null;
     if (!data || data.month !== monthKey) {
         const now = new Date();
-        const remaining = _wheelDaysInMonth(now) - now.getDate() + 1;
         data = {
             month: monthKey,
-            sections: _wheelGenerateSections(remaining + 4),
+            sections: _wheelGenerateSections(_wheelDaysInMonth(now) + 4),
             usedIndices: {},
             lastSpinDate: '',
             extraSpinsAvailable: 0,
@@ -7649,6 +7676,7 @@ async function _wheelLoadState(uid) {
             streak: data?.streak || 0,
             totalSpins: data?.totalSpins || 0,
             streakDate: data?.streakDate || '',
+            monthlyDailySpins: 0,
         };
         await setDoc(ref, data);
     }
@@ -8334,6 +8362,11 @@ window._adminShowModModal = async function(uid) {
                 <input type="text" id="mod-ban-reason" placeholder="e.g. Alt account abuse, cheating…" value="${(u.banReason||'').replace(/"/g,'&quot;')}" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;box-sizing:border-box;margin-bottom:12px;">
                 <button onclick="window._adminBanUser('${uid}')" style="width:100%;padding:10px;border-radius:8px;border:none;background:#f59e0b;color:#222;font-weight:800;font-size:13px;cursor:pointer;">${activeBan?'Update Ban':'Issue Ban'}</button>
             </div>
+            <div style="border:1px solid var(--border-color);border-radius:12px;padding:16px;margin-bottom:14px;">
+                <div style="font-size:13px;font-weight:800;margin-bottom:6px;">🛡️ Trade Trust</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">${u.tradeTrusted ? '✅ Trusted — trade probation bypassed.' : '⏳ Subject to 3-week / 10-review trade gate.'}</div>
+                <button onclick="window._adminToggleTradeTrust('${uid}',${!!u.tradeTrusted})" style="padding:8px 18px;border-radius:8px;border:none;background:${u.tradeTrusted?'#6b7280':'#22c55e'};color:#fff;font-weight:700;font-size:12px;cursor:pointer;">${u.tradeTrusted ? 'Revoke Trade Trust' : 'Grant Trade Trust'}</button>
+            </div>
             <div style="border:1px solid rgba(239,68,68,0.4);border-radius:12px;padding:16px;background:rgba(239,68,68,0.04);">
                 <div style="font-size:13px;font-weight:800;color:#ef4444;margin-bottom:6px;">☢️ Nuke Account</div>
                 <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Deletes all cards, binders, reviews, and tier lists. Replaces the profile with a tombstone. <strong style="color:#ef4444;">Cannot be undone.</strong></div>
@@ -8364,6 +8397,18 @@ window._adminUnbanUser = async function(uid) {
         await updateDoc(doc(db, 'profiles', uid), { banned: false, banExpiresAt: null, banReason: '' });
         document.getElementById('admin-mod-modal')?.remove();
         alert('✅ Ban lifted.');
+        window._adminSearchUserForMod();
+    } catch(e) { alert('Failed: ' + e.message); }
+};
+
+window._adminToggleTradeTrust = async function(uid, currentlyTrusted) {
+    if (!window.isAdmin) return;
+    const action = currentlyTrusted ? 'Revoke trade trust for this user?' : 'Grant trade trust? They will bypass the 3-week probation and 10-review requirement.';
+    if (!confirm(action)) return;
+    try {
+        await updateDoc(doc(db, 'profiles', uid), { tradeTrusted: !currentlyTrusted });
+        document.getElementById('admin-mod-modal')?.remove();
+        alert(currentlyTrusted ? '✅ Trade trust revoked.' : '✅ Trade trust granted.');
         window._adminSearchUserForMod();
     } catch(e) { alert('Failed: ' + e.message); }
 };
@@ -8635,7 +8680,14 @@ window._wheelSpin = async function(testUrSpin = false) {
         if (urIdx === undefined) return alert('UR section is no longer available this month (already claimed or used).');
         pickIdx = urIdx;
     } else {
-        pickIdx = available[Math.floor(Math.random() * available.length)];
+        const _now = new Date();
+        const _daysInMonth = _wheelDaysInMonth(_now);
+        const _isLastDay = _now.getDate() === _daysInMonth;
+        const _isDailySpinNow = state.lastSpinDate !== today;
+        const _monthlyDailySpins = state.monthlyDailySpins || 0;
+        const _urIdx = available.find(i => state.sections[i]?.type === 'monthly_ur');
+        const _perfectPity = _isLastDay && _isDailySpinNow && _monthlyDailySpins === _daysInMonth - 1 && _urIdx !== undefined;
+        pickIdx = _perfectPity ? _urIdx : available[Math.floor(Math.random() * available.length)];
     }
     const section = state.sections[pickIdx];
 
@@ -8687,6 +8739,7 @@ window._wheelSpin = async function(testUrSpin = false) {
         extraSpinsAvailable: extraSpins,
         totalSpins,
         streak,
+        monthlyDailySpins: isDailySpin ? (state.monthlyDailySpins || 0) + 1 : (state.monthlyDailySpins || 0),
     };
     if (isDailySpin) update.streakDate = today;
     if (section.type === 'monthly_ur') update.pendingUrClaim = false;
@@ -10305,10 +10358,10 @@ window._tcgSearchCards = async function(queryStr) {
     const shown = results.slice(0, 100);
     el.innerHTML = `
         <p style="color:var(--text-muted);font-size:12px;margin:0 0 12px;">Showing ${shown.length} of ${results.length} card${results.length === 1 ? '' : 's'}</p>
-        <div class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;">
-            ${shown.map(c => `<div class="tcg-card-cell"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(c)}</div></div></div>`).join('')}
+        <div class="tcg-card-grid" data-hover-anim-only="1" style="display:flex;flex-wrap:wrap;gap:18px;">
+            ${shown.map(c => `<div class="tcg-card-cell" data-name="${(c.name||'').replace(/"/g,'&quot;')}" data-anime="${(c.anime||'').replace(/"/g,'&quot;')}" data-rarity="${c.rarity||''}" onclick="window._tcgOpenVersionsView(this.dataset.name,this.dataset.anime,this.dataset.rarity)" style="cursor:pointer;" title="View all versions of ${(c.name||'').replace(/"/g,'&quot;')}"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(c)}</div></div></div>`).join('')}
         </div>`;
-    _tcgObserveSSRCards(el);
+    _tcgObserveSSRCardsHoverOnly(el);
 };
 
 window._tcgGrantTestAmber = async function() {
@@ -10412,6 +10465,7 @@ window._tcgShowPackOpening = function(pack, cards) {
 
     document.body.appendChild(modal);
     window._tcgOpeningCards = cards;
+    window._tcgOpeningPack = pack;
 
     const row = modal.querySelector('#tcg-pack-cards-row');
     cards.forEach((card, i) => {
@@ -10538,9 +10592,22 @@ const _ssrAnimObserver = new IntersectionObserver((entries) => {
 function _tcgObserveSSRCards(root = document) {
     const cards = root.matches?.('.wb-card.rarity-ssr, .wb-card.rarity-ur') ? [root] : root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur') || [];
     cards.forEach(el => {
-        if (el.dataset.ssrObserved) return;
+        if (el.dataset.ssrObserved || el.closest('[data-hover-anim-only]')) return;
         el.dataset.ssrObserved = '1';
         _ssrAnimObserver.observe(el);
+    });
+}
+
+// Hover-only variant for the store search grid — CSS prismatic/glow animations only play on hover.
+// GIFs play normally (they're low overhead compared to CSS repaints). The parent grid must have
+// data-hover-anim-only="1" so _tcgObserveSSRCards skips adding these cards to the IntersectionObserver.
+function _tcgObserveSSRCardsHoverOnly(root) {
+    const cards = root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur') || [];
+    cards.forEach(card => {
+        if (card.dataset.hoverOnly) return;
+        card.dataset.hoverOnly = '1';
+        card.addEventListener('mouseenter', () => card.classList.add('tcg-anim-in-view'));
+        card.addEventListener('mouseleave', () => card.classList.remove('tcg-anim-in-view'));
     });
 }
 
@@ -10634,6 +10701,7 @@ window._tcgSubmitPackPost = async function() {
             text,
             imageUrl: null,
             packCards,
+            packType: window._tcgOpeningPack?.name || null,
             likes: [],
             dislikes: [],
             commentCount: 0,
@@ -10685,11 +10753,171 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
             <div><strong>Character:</strong> ${card.name}</div>
             <div><strong>Series:</strong> ${card.anime}</div>
             <div><strong>Rarity:</strong> ${rarityLabel}</div>
-            <div><strong>Version:</strong> ${versionText}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <div><strong>Version:</strong> ${versionText}</div>
+                ${!card.monthlyUr && !card.founder && card.serial != null ? `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="${card.rarity||''}" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">🔢 View All Versions</button>` : ''}
+            </div>
             <div><strong>Owner:</strong> <span onclick="document.getElementById('tcg-card-viewer-modal').remove();viewUserProfile('${safeOwnerUid}')" style="cursor:pointer;color:#f59e0b;font-weight:700;">${ownerName}</span></div>
         </div>
         <button onclick="navigator.clipboard.writeText('${shareUrl}').then(()=>alert('Link copied! Anyone you send it to can view this card.')).catch(()=>alert('Could not copy link'))" style="width:100%;padding:10px 22px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">🔗 Copy Share Link</button>`;
     _tcgObserveSSRCards(body);
+};
+
+// ── Card versions page — shows who owns each serial number of a given card ─────
+const _VERSIONS_MAX = { ur: 50, ssr: 250, sr: 500, rare: 500, common: 500 };
+
+window._tcgOpenVersionsView = function(name, anime, rarity) {
+    const el = document.getElementById('card-versions-content');
+    if (!el) return;
+    document.getElementById('tcg-card-viewer-modal')?.remove();
+    const url = `?versions=${encodeURIComponent(name)}~${encodeURIComponent(anime)}~${encodeURIComponent(rarity)}`;
+    history.pushState({ view: 'card-versions-view' }, '', url);
+    switchView('card-versions-view', false, true);
+    window._tcgLoadVersionsView(el, name, anime, rarity);
+};
+
+window._tcgLoadVersionsView = async function(el, name, anime, rarity) {
+    const maxSerial = _VERSIONS_MAX[rarity] || 500;
+    const rarityLabel = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[rarity] || rarity.toUpperCase();
+    const rarityColor = { ur:'#ff4dff', ssr:'#00d4ff', sr:'#8b5cf6', rare:'#f59e0b', common:'#9aa1a8' }[rarity] || '#aaa';
+
+    el.innerHTML = `<div style="padding:24px 16px;max-width:960px;margin:0 auto;">
+        <button onclick="switchView('tcg-view')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:24px;">← TCG Store</button>
+        <div class="loading">Loading versions...</div>
+    </div>`;
+
+    try {
+        // Pull all owned copies of this card design
+        const snap = await getDocs(query(
+            collectionGroup(db, 'cards'),
+            where('name', '==', name),
+            where('anime', '==', anime),
+            where('rarity', '==', rarity)
+        ));
+
+        // Map serial → ownerUid; track founder cards separately
+        const ownerMap = {};
+        let sampleCard = null;
+        let founderCard = null;
+        let founderOwnerUid = null;
+        snap.forEach(d => {
+            const data = d.data();
+            if (data.monthlyUr) return;
+            if (data.founder) {
+                if (!founderCard) { founderCard = data; founderOwnerUid = d.ref.parent.parent.id; }
+                return;
+            }
+            if (!sampleCard) sampleCard = data;
+            const serial = data.serial;
+            if (serial != null && serial >= 1 && serial <= maxSerial) {
+                ownerMap[serial] = d.ref.parent.parent.id;
+            }
+        });
+
+        // Founder-only card — no regular serial versions exist
+        if (founderCard && !sampleCard && Object.keys(ownerMap).length === 0) {
+            let founderOwnerName = 'Unknown';
+            let founderOwnerAvatar = '';
+            try {
+                const pd = await getDoc(doc(db, 'profiles', founderOwnerUid));
+                if (pd.exists()) { founderOwnerName = pd.data().displayName || 'Unknown'; founderOwnerAvatar = pd.data().avatar || ''; }
+            } catch(e) {}
+            el.innerHTML = `
+            <div style="padding:24px 16px;max-width:960px;margin:0 auto;">
+                <button onclick="switchView('tcg-view')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:24px;">← TCG Store</button>
+                <div style="display:flex;justify-content:center;margin-bottom:28px;">
+                    <div style="width:297px;height:416px;display:flex;align-items:flex-start;justify-content:center;">
+                        <div style="transform:scale(1.35);transform-origin:top center;">${_tcgBuildCardFace(founderCard)}</div>
+                    </div>
+                </div>
+                <div style="text-align:center;margin-bottom:24px;">
+                    <div style="font-size:22px;font-weight:900;">${name}</div>
+                    <div style="font-size:13px;color:var(--text-muted);margin-top:2px;">${anime}</div>
+                    <div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:4px 14px;border-radius:20px;border:1px solid #ffd700;background:rgba(255,215,0,0.1);">
+                        <span style="font-size:12px;font-weight:800;color:#ffd700;">⭐ Founder Edition · 1 of 1</span>
+                    </div>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:24px;background:var(--bg-gray);border-radius:16px;max-width:280px;margin:0 auto;">
+                    <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Owner</div>
+                    <img src="${founderOwnerAvatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(founderOwnerName)}&backgroundColor=ffc107&fontColor=333333`}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid #ffd700;cursor:pointer;" onclick="viewUserProfile('${founderOwnerUid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(founderOwnerName)}&backgroundColor=ffc107&fontColor=333333'">
+                    <div style="font-size:14px;font-weight:800;cursor:pointer;" onclick="viewUserProfile('${founderOwnerUid}')">${founderOwnerName}</div>
+                </div>
+            </div>`;
+            _tcgObserveSSRCards(el);
+            return;
+        }
+
+        // Fall back to card pool for the card face if nobody owns a regular serial yet
+        if (!sampleCard) {
+            await _tcgEnsureCardPool();
+            sampleCard = _tcgFullCardPool().find(c => c.name === name && c.anime === anime && c.rarity === rarity) || null;
+        }
+
+        // Batch-fetch profiles for all unique owners
+        const uids = [...new Set(Object.values(ownerMap))];
+        const profileMap = {};
+        await Promise.all(uids.map(async uid => {
+            try {
+                const pd = await getDoc(doc(db, 'profiles', uid));
+                profileMap[uid] = pd.exists() ? pd.data() : {};
+            } catch(e) { profileMap[uid] = {}; }
+        }));
+
+        const claimedCount = Object.keys(ownerMap).length;
+        const placeholder = `<div style="width:52px;height:52px;border-radius:50%;border:2px solid rgba(128,128,128,0.25);position:relative;overflow:hidden;flex-shrink:0;"><div style="position:absolute;width:2px;height:74px;background:rgba(128,128,128,0.25);top:50%;left:50%;transform:translate(-50%,-50%) rotate(45deg);"></div></div>`;
+
+        let gridHTML = '';
+        for (let i = 1; i <= maxSerial; i++) {
+            const ownerUid = ownerMap[i];
+            if (ownerUid) {
+                const p = profileMap[ownerUid] || {};
+                const displayName = p.displayName || 'Unknown';
+                const safeDisplayName = displayName.replace(/'/g, "\\'");
+                const avatar = p.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
+                const safeAvatar = avatar.replace(/'/g, "%27");
+                gridHTML += `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;" onclick="viewUserProfile('${ownerUid}')">
+                    <div style="font-size:9px;font-weight:800;color:${rarityColor};">#${i}</div>
+                    <img src="${avatar}" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid ${rarityColor};" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333'">
+                    <div style="font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px;text-align:center;">${displayName}</div>
+                </div>`;
+            } else {
+                gridHTML += `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+                    <div style="font-size:9px;font-weight:800;color:var(--text-muted);">#${i}</div>
+                    ${placeholder}
+                    <div style="font-size:9px;color:var(--text-muted);">No Owner</div>
+                </div>`;
+            }
+        }
+
+        el.innerHTML = `
+        <div style="padding:24px 16px;max-width:960px;margin:0 auto;">
+            <button onclick="switchView('tcg-view')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:24px;">← TCG Store</button>
+            ${sampleCard ? `
+            <div style="display:flex;justify-content:center;margin-bottom:28px;">
+                <div style="width:297px;height:416px;display:flex;align-items:flex-start;justify-content:center;">
+                    <div style="transform:scale(1.35);transform-origin:top center;">${_tcgBuildCardFace(sampleCard)}</div>
+                </div>
+            </div>` : ''}
+            <div style="text-align:center;margin-bottom:24px;">
+                <div style="font-size:22px;font-weight:900;">${name}</div>
+                <div style="font-size:13px;color:var(--text-muted);margin-top:2px;">${anime}</div>
+                <div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:4px 12px;border-radius:20px;border:1px solid ${rarityColor};background:rgba(0,0,0,0.1);">
+                    <span style="font-size:12px;font-weight:800;color:${rarityColor};">${rarityLabel}</span>
+                </div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:8px;">${claimedCount} / ${maxSerial} claimed</div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:14px 6px;">
+                ${gridHTML}
+            </div>
+        </div>`;
+        _tcgObserveSSRCards(el);
+    } catch(e) {
+        el.innerHTML = `<div style="padding:24px;">
+            <button onclick="switchView('tcg-view')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:16px;">← TCG Store</button>
+            <p style="color:#ef4444;font-size:13px;">Failed to load versions.</p>
+            ${e.message.includes('console.firebase.google.com') ? `<a href="${e.message.match(/https:\/\/[^\s]+/)?.[0]||''}" target="_blank" style="display:inline-block;margin-top:6px;padding:8px 16px;border-radius:8px;background:#4f46e5;color:white;font-size:13px;font-weight:700;text-decoration:none;">🔧 Create Required Firestore Index →</a><p style="font-size:12px;color:var(--text-muted);margin-top:8px;">After creating the index, wait ~1 minute then reload the page.</p>` : `<p style="font-size:12px;color:var(--text-muted);">${e.message}</p>`}
+        </div>`;
+    }
 };
 
 // ── Card snapshot viewer (no Firestore fetch — works for trade/bulletin cards) ─
@@ -10703,7 +10931,7 @@ function _tcgStoreSnap(card) {
     return id;
 }
 
-window._tcgViewCardSnapshot = function(snapId) {
+window._tcgViewCardSnapshot = async function(snapId) {
     const card = window._tcgSnapStore[snapId];
     if (!card) return;
     document.getElementById('tcg-card-viewer-modal')?.remove();
@@ -10711,11 +10939,29 @@ window._tcgViewCardSnapshot = function(snapId) {
     modal.id = 'tcg-card-viewer-modal';
     modal.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
     modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
     const maxV = RARITY_MAX_VERSIONS[card.rarity] || 5000;
     const versionText = card.founder ? 'Founder Edition · 1 of 1'
         : card.monthlyUr ? (card.stampText || 'Prize Wheel UR')
         : card.serial != null ? `${card.serial} / ${maxV}${(card.edition||1)>1?` · Edition ${card.edition}`:''}` : '—';
     const rarityLabel = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[card.rarity] || card.rarity;
+    const showVersionsBtn = !card.monthlyUr && !card.founder && card.serial != null;
+
+    // Check if the logged-in user already owns this card design
+    let ownershipHTML = '';
+    if (auth.currentUser && card.name && card.rarity) {
+        try {
+            const myCards = await _tcgLoadCollection(auth.currentUser.uid);
+            const owned = myCards.filter(c => c.name === card.name && c.anime === card.anime && c.rarity === card.rarity);
+            if (owned.length > 0) {
+                const copies = owned.length === 1 ? `#${owned[0].serial ?? '?'}` : `${owned.length} copies`;
+                ownershipHTML = `<div style="display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);font-size:12px;font-weight:700;color:#22c55e;width:100%;box-sizing:border-box;">✅ You own this card (${copies})</div>`;
+            } else {
+                ownershipHTML = `<div style="display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);font-size:12px;font-weight:700;color:#ef4444;width:100%;box-sizing:border-box;">❌ Not in your collection</div>`;
+            }
+        } catch(e) {}
+    }
+
     modal.innerHTML = `
         <div style="background:var(--bg-white);border-radius:18px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.5);max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;align-items:center;gap:14px;width:300px;max-width:100%;box-sizing:border-box;">
             <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
@@ -10723,11 +10969,15 @@ window._tcgViewCardSnapshot = function(snapId) {
                 <button onclick="document.getElementById('tcg-card-viewer-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
             </div>
             <div style="margin:6px 0;">${_tcgBuildCardFace(card)}</div>
+            ${ownershipHTML}
             <div style="width:100%;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text-dark);">
                 <div><strong>Character:</strong> ${card.name || '—'}</div>
                 <div><strong>Series:</strong> ${card.anime || '—'}</div>
                 <div><strong>Rarity:</strong> ${rarityLabel}</div>
-                <div><strong>Version:</strong> ${versionText}</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                    <div><strong>Version:</strong> ${versionText}</div>
+                    ${showVersionsBtn ? `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="${card.rarity||''}" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">🔢 View All Versions</button>` : ''}
+                </div>
             </div>
         </div>`;
     document.body.appendChild(modal);
@@ -11324,6 +11574,13 @@ window._tcgSmartDismantleModal = async function(uid) {
     render();
     document.body.appendChild(modal);
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+    // Pre-load collection in background so the anime datalist is populated before the user types
+    _tcgLoadCollection(uid).then(cards => {
+        allCards = cards;
+        const dl = document.getElementById('sd-anime-list');
+        if (dl) dl.innerHTML = [...new Set(cards.map(c => c.anime))].sort().map(a => `<option value="${a}">`).join('');
+    }).catch(() => {});
 };
 
 window._tcgBulkDismantle = async function(uid, profileUid) {
@@ -12333,15 +12590,18 @@ async function _tcgCheckTradeEligibility() {
     const created = new Date(auth.currentUser.metadata.creationTime);
     if (created < TRADE_GATE_CUTOFF) return true; // grandfathered — no restrictions
 
-    const daysSince = (Date.now() - created.getTime()) / 86400000;
-    if (daysSince < 21) {
-        const daysLeft = Math.ceil(21 - daysSince);
-        alert(`Your account needs to be at least 3 weeks old to trade. Come back in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}!`);
-        return false;
-    }
     try {
         const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid));
-        const reviews = pd.exists() ? (pd.data().reviewCount || 0) : 0;
+        const data = pd.exists() ? pd.data() : {};
+        if (data.tradeTrusted) return true; // admin-verified, skip all gates
+
+        const daysSince = (Date.now() - created.getTime()) / 86400000;
+        if (daysSince < 21) {
+            const daysLeft = Math.ceil(21 - daysSince);
+            alert(`Your account needs to be at least 3 weeks old to trade. Come back in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}!`);
+            return false;
+        }
+        const reviews = data.reviewCount || 0;
         if (reviews < 10) {
             alert(`You need Bronze rank (10 reviews) to trade. You have ${reviews} review${reviews !== 1 ? 's' : ''} — ${10 - reviews} more to go!`);
             return false;
@@ -13700,26 +13960,30 @@ window._auctionPlaceBid = async function(btn, itemId, minBid) {
             const item = itemSnap.data();
             if (!['live','queued'].includes(item.status)) throw new Error('This auction has ended.');
             if (item.uid === myUid) throw new Error('You cannot bid on your own item.');
-            if (item.currentBidderUid === myUid) throw new Error('You are already the top bidder.');
+            const isRebid = item.currentBidderUid === myUid;
             const currentMin = (item.currentBid || item.startingBid) + (item.bidCount > 0 ? 10 : 0);
             if (bidAmount < currentMin) throw new Error(`Minimum bid is now 🟡 ${currentMin.toLocaleString()}.`);
 
-            // Check bidder's amber balance
+            // Check bidder's amber balance.
+            // Re-bidders get their previous bid refunded, so they only need the difference.
             const bidderProfile = await tx.get(doc(db, 'profiles', myUid));
             const myAmber = bidderProfile.exists() ? (bidderProfile.data().amber || 0) : 0;
-            if (bidAmount > myAmber) throw new Error(`You only have 🟡 ${myAmber.toLocaleString()} Amber.`);
-
-            prevBidderUid  = item.currentBidderUid;
-            prevBidAmount  = item.currentBid || item.startingBid;
+            prevBidderUid = item.currentBidderUid;
+            prevBidAmount = item.currentBid || item.startingBid;
+            const amberNeeded = isRebid ? bidAmount - prevBidAmount : bidAmount;
+            if (amberNeeded > myAmber) throw new Error(`You only have 🟡 ${myAmber.toLocaleString()} Amber.`);
 
             let myProfile = {};
             try { const mp = await tx.get(doc(db,'profiles',myUid)); if (mp.exists()) myProfile = mp.data(); } catch(e) {}
 
-            // Deduct from new bidder
-            tx.update(doc(db, 'profiles', myUid), { amber: increment(-bidAmount) });
-            // Refund previous bidder (if any)
-            if (prevBidderUid && prevBidderUid !== myUid) {
-                tx.update(doc(db, 'profiles', prevBidderUid), { amber: increment(prevBidAmount) });
+            // Amber: if re-bidding, net update is the difference; otherwise deduct new bid & refund prev bidder.
+            if (isRebid) {
+                tx.update(doc(db, 'profiles', myUid), { amber: increment(-(bidAmount - prevBidAmount)) });
+            } else {
+                tx.update(doc(db, 'profiles', myUid), { amber: increment(-bidAmount) });
+                if (prevBidderUid) {
+                    tx.update(doc(db, 'profiles', prevBidderUid), { amber: increment(prevBidAmount) });
+                }
             }
             // Update listing
             tx.update(itemRef, {
@@ -15220,12 +15484,15 @@ window._renderGeneralPostCardInner = function(post, uid) {
                     <span style="font-size:12px;color:var(--text-muted);">${ago}</span>
                 </div>
             </div>
-            ${post.packCards?.length ? `<button onclick="event.stopPropagation();window.switchView('tcg-view')" class="action-btn" style="background:var(--accent-yellow);color:#222;font-weight:700;flex:1 1 100%;margin-top:8px;">🃏 Open Packs in the TCG Store</button>` : ''}
+            ${post.packCards?.length ? `<div style="display:flex;align-items:center;gap:8px;flex:1 1 100%;margin-top:8px;flex-wrap:wrap;">
+                ${post.packType ? `<span style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;font-size:11px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.3px;">🃏 ${post.packType}</span>` : ''}
+                <button onclick="event.stopPropagation();window.switchView('tcg-view')" class="action-btn" style="background:var(--accent-yellow);color:#222;font-weight:700;">Open Packs in the TCG Store</button>
+            </div>` : ''}
         </div>
         <p id="gp-text-${post.id}" style="font-size:15px;line-height:1.55;margin:0 0 12px;color:var(--text-dark);white-space:pre-wrap;">${post.text}${post.edited ? ' <span style="font-size:11px;color:var(--text-muted);font-style:italic;">(edited)</span>' : ''}</p>
         ${post.imageUrl ? `<img src="${post.imageUrl}" style="width:100%;max-height:400px;object-fit:contain;border-radius:10px;margin-bottom:12px;background:rgba(0,0,0,0.04);" loading="lazy">` : ''}
         ${post.packCards?.length ? `<div class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;justify-content:center;padding:14px 0;margin-bottom:12px;">
-            ${post.packCards.map(c => `<div class="tcg-card-cell"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(c)}</div></div></div>`).join('')}
+            ${post.packCards.map(c => { const _sid = _tcgStoreSnap(c); return `<div class="tcg-card-cell" onclick="event.stopPropagation();window._tcgViewCardSnapshot(${_sid})" style="cursor:pointer;"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(c)}</div></div></div>`; }).join('')}
         </div>` : ''}
         <div class="review-actions">
             <div class="action-stat">
@@ -17712,7 +17979,7 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
         const _tabHashes = { 'home-view': '', 'discover-view': 'discover', 'my-list-view': 'mylist', 'news-view': 'news', 'community-view': 'community', 'games-view': 'games', 'tcg-view': 'tcg' };
         const _tabHash = _tabHashes[targetId];
         // Clear ?anime= or ?profile= params when navigating to non-detail views
-        if (targetId !== 'anime-detail-view' && targetId !== 'profile-view') {
+        if (targetId !== 'anime-detail-view' && targetId !== 'profile-view' && targetId !== 'card-versions-view') {
             history.replaceState({}, '', window.location.pathname);
         }
         const _newUrl = _tabHash !== undefined
@@ -22648,6 +22915,19 @@ window._dungeonPickDifficulty = async function(difficulty) {
     _dungeonRenderGateSelect(document.getElementById('dungeon-tab-content'));
 };
 
+window._dungeonChangeDifficulty = async function() {
+    if (!auth.currentUser) return;
+    const progress = window._dungeonProgress;
+    if (!progress) return;
+    // Lock difficulty once any gate has been entered
+    if ((progress.poolIndex || 0) > 0 || (progress.results || []).length > 0) return;
+    const uid = auth.currentUser.uid;
+    const updated = { ...progress, difficulty: null };
+    window._dungeonProgress = updated;
+    await _dungeonSaveProgress(uid, updated);
+    _dungeonRenderDifficultyPicker(document.getElementById('dungeon-tab-content'));
+};
+
 // Admin-only: cancels an in-progress raid with no payout and no effect on
 // the daily pool progress — for backing out of a gate started by mistake.
 window._dungeonStopRaid = async function() {
@@ -22774,9 +23054,12 @@ function _dungeonRenderGateSelect(el) {
         ${_dungeonLifetimeSummaryHTML(progress)}
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
             <div style="display:flex;gap:8px;flex-wrap:wrap;">${poolStripHTML}</div>
-            <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;border:1px solid ${diffColors[diffCfg.id]};background:rgba(0,0,0,0.18);">
-                <span style="font-size:13px;">${diffCfg.icon}</span>
-                <span style="font-size:12px;font-weight:800;color:${diffColors[diffCfg.id]};">${diffCfg.label}</span>
+            <div style="display:inline-flex;align-items:center;gap:8px;">
+                <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;border:1px solid ${diffColors[diffCfg.id]};background:rgba(0,0,0,0.18);">
+                    <span style="font-size:13px;">${diffCfg.icon}</span>
+                    <span style="font-size:12px;font-weight:800;color:${diffColors[diffCfg.id]};">${diffCfg.label}</span>
+                </div>
+                ${poolIndex === 0 && !progress.results?.length ? `<button onclick="window._dungeonChangeDifficulty()" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;">← Change</button>` : ''}
             </div>
         </div>
         <div id="dungeon-gate-list">${mainHTML}</div>
