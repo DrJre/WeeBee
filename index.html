@@ -56,7 +56,7 @@
                         <span class="material-symbols-outlined">list_alt</span><span class="nav-label"> My List</span>
                     </button>
                     <button class="nav-btn" data-target="news-view" onclick="switchView('news-view')" style="position:relative;">
-                        <span class="material-symbols-outlined">newspaper</span><span class="nav-label"> News</span>
+                        <span class="material-symbols-outlined">newspaper</span><span class="nav-label"> What's New</span>
                         <span id="news-badge" style="display:none; position:absolute; top:2px; right:2px; background:#FF4444; color:white; border-radius:50%; min-width:16px; height:16px; font-size:10px; font-weight:bold; align-items:center; justify-content:center; padding:0 3px;">0</span>
                     </button>
                     <button class="nav-btn" data-target="community-view" onclick="switchView('community-view')">
@@ -110,7 +110,7 @@
                 <span class="material-symbols-outlined">list_alt</span> My List
             </button>
             <button class="nav-btn" data-target="news-view" onclick="switchView('news-view'); closeMobileMenu()">
-                <span class="material-symbols-outlined">newspaper</span> News
+                <span class="material-symbols-outlined">newspaper</span> What's New
             </button>
             <button class="nav-btn" data-target="community-view" onclick="switchView('community-view'); closeMobileMenu()">
                 <span class="material-symbols-outlined">groups</span> Community
@@ -147,20 +147,14 @@
 
             <div class="content-views">
                 <div id="home-view" class="view active">
+                    <div id="home-welcome-strip" style="display:none;"></div>
+                    <div id="home-schedule-section"></div>
+
                     <h2>Trending Airing Anime</h2>
                     <div class="carousel-container">
                         <button class="carousel-arrow left" onclick="scrollCarousel('trending-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
                         <div class="carousel" id="trending-carousel"><div class="loading">Fetching trending anime...</div></div>
                         <button class="carousel-arrow right" onclick="scrollCarousel('trending-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
-                    </div>
-
-                    <div id="home-news-section" style="display:none; margin-bottom: 40px; margin-top: 20px;">
-                        <h2>News from your Follows</h2>
-                        <div class="carousel-container">
-                            <button class="carousel-arrow left" onclick="scrollCarousel('home-news-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
-                            <div class="carousel" id="home-news-carousel"><div class="loading">Fetching news...</div></div>
-                            <button class="carousel-arrow right" onclick="scrollCarousel('home-news-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
-                        </div>
                     </div>
 
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px; margin-bottom:16px;">
@@ -463,6 +457,7 @@
                 </div>
 
                 <div id="news-view" class="view">
+                    <div id="weekly-schedule-section" style="margin-bottom:40px;"><div class="loading">Loading schedule…</div></div>
                     <div id="news-seasonal-section" style="display:none; margin-bottom:40px;">
                         <div class="discover-section-header">
                             <span class="material-symbols-outlined section-icon" style="color:#FF9800;">how_to_vote</span>
@@ -2564,6 +2559,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=402"></script>
+    <script type="module" src="app.js?v=414"></script>
 </body>
 </html>

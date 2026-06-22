@@ -159,6 +159,7 @@ window.updateTopbarRank = async function() {
         window.userPinnedBadgesCache[auth.currentUser.uid] = pd.exists() ? (pd.data().pinnedBadges || []) : [];
         const el = document.getElementById('topbar-rank-badge');
         if (el) el.innerHTML = window.getRankBadgeHTML(count, 16);
+        window._renderHomeWelcomeStrip?.();
     } catch(e) {}
 };
  
@@ -381,10 +382,13 @@ window._amberSubscribeTopbar = function() {
     if (window.amberUnsubscribe) { window.amberUnsubscribe(); window.amberUnsubscribe = null; }
     window.amberUnsubscribe = onSnapshot(doc(db, 'profiles', auth.currentUser.uid), (snap) => {
         const amber = snap.exists() ? (snap.data().amber || 0) : 0;
+        window._cachedAmber = amber;
         const badge = document.getElementById('topbar-amber-badge');
         const val = document.getElementById('topbar-amber-value');
         if (val) val.textContent = amber.toLocaleString();
         if (badge) badge.style.display = 'flex';
+        const hw = document.getElementById('hw-amber');
+        if (hw) hw.textContent = amber.toLocaleString();
     });
 };
 
@@ -4523,41 +4527,265 @@ async function loadReviewBatch(append = false) {
     window._feedLoading = false;
 }
 
-window.fetchHomepageReviews = async function() {
-    // Launch activity feed — don't await, runs in background
-    window.fetchHomeActivityFeed();
+// ─── Weekly Anime Schedule (AniList) ─────────────────────────────────────────
 
-    // Load news from followed anime
-    if (auth.currentUser) {
+function _scheduleWeekBounds() {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun
+    const sun = new Date(now);
+    sun.setDate(now.getDate() - day);
+    sun.setHours(0, 0, 0, 0);
+    const nextSun = new Date(sun);
+    nextSun.setDate(sun.getDate() + 7);
+    return { start: Math.floor(sun.getTime() / 1000), end: Math.floor(nextSun.getTime() / 1000) };
+}
+
+function _scheduleTzAbbr() {
+    try { return new Date().toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop(); } catch(e) { return ''; }
+}
+
+function _scheduleFormatTime(ts) {
+    return new Date(ts * 1000).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+async function _aniListFetchWeekSchedule() {
+    const { start, end } = _scheduleWeekBounds();
+    const cacheKey = `anilist_sched3_${start}`;
+    try {
+        const cached = await getDoc(doc(db, 'anime_cache', cacheKey));
+        if (cached.exists()) {
+            const d = cached.data();
+            const age = Date.now() - (d.cachedAt?.toDate?.() || new Date(0)).getTime();
+            if (age < 4 * 3600 * 1000) return d.entries || [];
+        }
+    } catch(e) {}
+
+    const BLOCKED_GENRES = new Set(['Hentai', 'Erotica']);
+    const gql = `query($page:Int,$after:Int,$before:Int){Page(page:$page,perPage:50){pageInfo{hasNextPage}airingSchedules(airingAt_greater:$after,airingAt_lesser:$before,sort:TIME){airingAt episode media{id idMal isAdult genres title{romaji english}coverImage{large}format}}}}`;
+    const entries = [];
+    let page = 1, more = true;
+    while (more && page <= 6) {
         try {
-            const fQ = query(collection(db, "follows"), where("followerUid", "==", auth.currentUser.uid), where("type", "==", "anime"));
-            const fSnap = await getDocs(fQ);
-            let followedMalIds = [];
-            fSnap.forEach(d => followedMalIds.push(d.data().targetId));
-            const newsSection = document.getElementById('home-news-section');
-            const newsCarousel = document.getElementById('home-news-carousel');
-            if (followedMalIds.length > 0) {
-                newsSection.style.display = 'block';
-                newsCarousel.innerHTML = '';
-                for (let animeId of followedMalIds.slice(0, 2)) {
-                    try {
-                        const r = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/news`);
-                        const d = await r.json();
-                        if (d.data) d.data.slice(0, 3).forEach(n => {
-                            newsCarousel.innerHTML += `<div class="news-card" style="min-width:300px;flex-shrink:0;">
-                                <img src="${n.images?.jpg?.image_url || 'https://via.placeholder.com/300x150'}">
-                                <div class="news-content" style="padding:10px;">
-                                    <h3 style="font-size:14px;margin-bottom:5px;">${n.title}</h3>
-                                    <a href="${n.url}" target="_blank" class="news-link" style="display:inline-block;margin-top:auto;font-size:10px;">Read Article</a>
-                                </div>
-                            </div>`;
-                        });
-                    } catch(e) {}
-                }
-                if (newsCarousel.innerHTML === '') newsCarousel.innerHTML = '<p class="empty-msg" style="color:var(--text-muted);padding:10px;">No recent news for your followed anime.</p>';
-            } else { newsSection.style.display = 'none'; }
-        } catch(e) {}
-    } else { document.getElementById('home-news-section').style.display = 'none'; }
+            const res = await fetch('https://graphql.anilist.co', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ query: gql, variables: { page, after: start, before: end } })
+            });
+            const json = await res.json();
+            const pd = json?.data?.Page;
+            if (!pd) break;
+            pd.airingSchedules.forEach(s => {
+                if (!s.media || !s.media.idMal) return;
+                if (s.media.isAdult) return;
+                if ((s.media.genres || []).some(g => BLOCKED_GENRES.has(g))) return;
+                entries.push(s);
+            });
+            more = pd.pageInfo.hasNextPage;
+            page++;
+            if (more) await new Promise(r => setTimeout(r, 350));
+        } catch(e) { break; }
+    }
+    try { setDoc(doc(db, 'anime_cache', cacheKey), { entries, cachedAt: serverTimestamp() }).catch(() => {}); } catch(e) {}
+    return entries;
+}
+
+function _scheduleGroupByDay(entries) {
+    const days = [[], [], [], [], [], [], []];
+    entries.forEach(e => { const d = new Date(e.airingAt * 1000).getDay(); days[d].push(e); });
+    return days; // index 0=Sun, 1=Mon … 6=Sat
+}
+
+function _scheduleBuildGridHTML(byDay, opts = {}) {
+    const { compact = false } = opts;
+    const today = new Date().getDay();
+    const DAY_LABELS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const now = new Date();
+    const tz = _scheduleTzAbbr();
+    const imgW = compact ? 52 : 68, imgH = compact ? 72 : 95;
+    const colMinW = compact ? 120 : 140;
+
+    return `<div style="display:grid;grid-template-columns:repeat(7,minmax(${colMinW}px,1fr));gap:${compact ? 8 : 12}px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch;">
+        ${DAY_LABELS.map((label, di) => {
+            const entries = byDay[di] || [];
+            const isToday = di === today;
+            const dayDate = new Date(now);
+            dayDate.setDate(now.getDate() - today + di);
+            const dateNum = dayDate.getDate();
+            const headerBg = isToday ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
+            const headerColor = isToday ? '#222' : 'var(--text-muted)';
+
+            const todayStart = new Date(now); todayStart.setHours(0,0,0,0);
+            const cards = entries.length ? entries.map(e => {
+                const title = e.media.title.english || e.media.title.romaji;
+                const time = _scheduleFormatTime(e.airingAt);
+                const img = e.media.coverImage?.large || '';
+                const isPast = e.airingAt < todayStart.getTime() / 1000;
+                const todayBorder = isToday ? 'border:2px solid var(--accent-yellow);' : 'border:1px solid var(--border-color);';
+                return `<div onclick="loadAnimeDetails(${e.media.idMal})" style="display:flex;gap:8px;align-items:flex-start;padding:8px;border-radius:10px;background:var(--bg-white);${todayBorder}${isPast ? 'opacity:0.55;' : ''}cursor:pointer;">
+                    <img src="${img}" style="width:${imgW}px;height:${imgH}px;object-fit:cover;border-radius:6px;flex-shrink:0;" loading="lazy">
+                    <div style="min-width:0;flex:1;">
+                        <div style="font-size:${compact ? 11 : 12}px;font-weight:800;color:var(--text-dark);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;line-height:1.3;margin-bottom:4px;">${title}</div>
+                        <div style="font-size:10px;font-weight:700;color:var(--accent-yellow);">Ep ${e.episode}</div>
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${time}${!compact ? ' <span style="opacity:0.6;">'+tz+'</span>' : ''}</div>
+                    </div>
+                </div>`;
+            }).join('') : `<div style="text-align:center;padding:16px 8px;color:var(--text-muted);font-size:11px;opacity:0.5;">—</div>`;
+
+            return `<div>
+                <div style="background:${headerBg};color:${headerColor};font-size:11px;font-weight:800;letter-spacing:0.5px;text-align:center;border-radius:8px;padding:6px 4px;margin-bottom:8px;">
+                    ${label} <span style="opacity:0.7;font-weight:600;">${dateNum}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;">${cards}</div>
+            </div>`;
+        }).join('')}
+    </div>`;
+}
+
+window._renderHomeSchedule = async function() {
+    const el = document.getElementById('home-schedule-section');
+    if (!el) return;
+    if (!auth.currentUser) { el.innerHTML = ''; return; }
+
+    el.innerHTML = `<div style="margin-bottom:24px;"><div class="loading" style="padding:12px 0;font-size:13px;">Loading your schedule…</div></div>`;
+
+    try {
+        const [scheduleEntries, listSnap] = await Promise.all([
+            _aniListFetchWeekSchedule(),
+            getDocs(query(collection(db, 'anime_lists'), where('uid', '==', auth.currentUser.uid), where('status', '==', 'watching')))
+        ]);
+
+        const watchingIds = new Set();
+        listSnap.forEach(d => { if (d.data().mal_id) watchingIds.add(Number(d.data().mal_id)); });
+
+        const filtered = scheduleEntries.filter(e => watchingIds.has(Number(e.media.idMal)));
+        const byDay = _scheduleGroupByDay(filtered);
+        const hasAny = filtered.length > 0;
+
+        const btnStyle = 'padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);';
+
+        el.innerHTML = `<div style="margin-bottom:24px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+                <div>
+                    <div style="font-size:16px;font-weight:800;color:var(--text-dark);margin-bottom:3px;">📅 Your Watch Schedule</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${hasAny ? `Anime from your watching list airing this week · times in ${_scheduleTzAbbr()}` : 'No anime from your watching list are airing this week.'}</div>
+                </div>
+                <div style="display:flex;gap:8px;flex-shrink:0;">
+                    <button onclick="switchView('my-list-view')" style="${btnStyle}">My List</button>
+                    <button onclick="switchView('news-view')" style="${btnStyle}">Full Schedule →</button>
+                </div>
+            </div>
+            ${hasAny
+                ? _scheduleBuildGridHTML(byDay, { compact: true })
+                : `<div style="background:var(--bg-gray);border-radius:12px;padding:20px;text-align:center;">
+                    <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Mark anime as <strong>Currently Watching</strong> on your list to see them here.</div>
+                    <button onclick="switchView('my-list-view')" class="action-btn" style="font-size:13px;">Go to My List</button>
+                  </div>`
+            }
+        </div>`;
+    } catch(e) { el.innerHTML = ''; }
+};
+
+window._renderFullSchedule = async function() {
+    const el = document.getElementById('weekly-schedule-section');
+    if (!el) return;
+    el.innerHTML = `<div class="loading" style="padding:20px 0;">Loading this week's schedule…</div>`;
+    try {
+        const entries = await _aniListFetchWeekSchedule();
+        const byDay = _scheduleGroupByDay(entries);
+        const tz = _scheduleTzAbbr();
+        el.innerHTML = `
+            <div class="discover-section-header" style="margin-bottom:16px;">
+                <span class="material-symbols-outlined section-icon" style="color:#6366f1;">calendar_month</span>
+                <div>
+                    <h2 style="margin:0 0 2px;">This Week's Schedule</h2>
+                    <p style="margin:0;font-size:13px;color:var(--text-muted);">All currently airing anime · times shown in ${tz}</p>
+                </div>
+            </div>
+            ${_scheduleBuildGridHTML(byDay, { compact: false })}`;
+    } catch(e) { el.innerHTML = `<div style="color:var(--text-muted);padding:20px 0;">Couldn't load schedule. Try again later.</div>`; }
+};
+
+window._homeGoTo = function(dest) {
+    if (dest === 'buzzword') {
+        // BuzzWord is the default active games tab — just switch the view.
+        switchView('games-view');
+    } else if (dest === 'plinko') {
+        switchView('games-view');
+        setTimeout(() => {
+            const btn = document.getElementById('games-tab-plinko-btn');
+            window.switchGamesTab({ currentTarget: btn }, 'games-tab-plinko');
+        }, 50);
+    } else if (dest === 'dungeon') {
+        switchView('tcg-view');
+        setTimeout(() => {
+            const btn = document.querySelector('#tcg-view .tcg-tab-btn[onclick*="tcg-tab-dungeon"]');
+            window.switchTcgTab({ currentTarget: btn }, 'tcg-tab-dungeon');
+        }, 50);
+    }
+};
+
+window._renderHomeWelcomeStrip = function() {
+    const strip = document.getElementById('home-welcome-strip');
+    if (!strip) return;
+    if (!auth.currentUser) { strip.style.display = 'none'; return; }
+
+    const user = auth.currentUser;
+    const uid = user.uid;
+    const displayName = user.displayName || 'there';
+    const avatar = user.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
+    const count = window.myReviewCount || window.userRankCache[uid] || 0;
+    const rank = window.getRankInfo(count);
+    const rankBadge = window.getRankBadgeHTML(count, 18);
+    const founderBadge = window.getFounderBadgeHTML(uid, 16);
+    const pinnedBadges = window.getPinnedBadgesHTML(uid, 16);
+    const amber = window._cachedAmber ?? null;
+    const amberHTML = amber !== null
+        ? `<span id="hw-amber" style="font-weight:700;font-size:14px;color:var(--text-dark);">${amber.toLocaleString()}</span>`
+        : `<span id="hw-amber" style="font-weight:700;font-size:14px;color:var(--text-dark);">—</span>`;
+
+    const tileStyle = 'display:flex;align-items:center;gap:7px;padding:9px 14px;border-radius:12px;background:var(--bg-white);border:1px solid var(--border-color);font-size:13px;font-weight:700;color:var(--text-dark);cursor:pointer;transition:background 0.15s;white-space:nowrap;';
+
+    strip.style.display = 'block';
+    strip.innerHTML = `
+        <div style="background:var(--bg-gray);border-radius:18px;padding:18px 20px 16px;margin-bottom:24px;">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+                <img src="${avatar}" style="width:52px;height:52px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid var(--border-color);">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:18px;font-weight:800;color:var(--text-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Hey, ${displayName}!</div>
+                    <div style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:5px;margin-top:3px;flex-wrap:wrap;">
+                        ${rankBadge}
+                        <span style="font-weight:700;color:var(--text-dark);">${rank.name}</span>
+                        <span style="opacity:0.35;">·</span>
+                        <span>${count} review${count !== 1 ? 's' : ''}</span>
+                        ${founderBadge || pinnedBadges ? `<span style="opacity:0.35;">·</span>${founderBadge}${pinnedBadges}` : ''}
+                    </div>
+                </div>
+                <div onclick="switchView('tcg-view')" title="Amber balance" style="flex-shrink:0;display:flex;align-items:center;gap:5px;background:rgba(245,158,11,0.12);border-radius:20px;padding:7px 13px;cursor:pointer;border:1px solid rgba(245,158,11,0.25);">
+                    <span style="font-size:16px;">🟡</span>
+                    ${amberHTML}
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button onclick="window._homeGoTo('buzzword')" style="${tileStyle}" onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='var(--bg-white)'">
+                    <span class="material-symbols-outlined" style="font-size:17px;color:#6366f1;">quiz</span> BuzzWord
+                </button>
+                <button onclick="window._homeGoTo('plinko')" style="${tileStyle}" onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='var(--bg-white)'">
+                    <span style="font-size:15px;">🟡</span> Plinko
+                </button>
+                <button onclick="window._homeGoTo('dungeon')" style="${tileStyle}" onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='var(--bg-white)'">
+                    <span style="font-size:15px;">⚔️</span> Dungeon
+                </button>
+                <button onclick="switchView('discover-view')" style="${tileStyle}" onmouseover="this.style.background='var(--bg-gray-darker)'" onmouseout="this.style.background='var(--bg-white)'">
+                    <span class="material-symbols-outlined" style="font-size:17px;color:#f59e0b;">explore</span> Discover
+                </button>
+            </div>
+        </div>`;
+};
+
+window.fetchHomepageReviews = async function() {
+    window._renderHomeWelcomeStrip();
+    window._renderHomeSchedule();
+    window.fetchHomeActivityFeed();
 };
 
 // --- UNIFIED ACTIVITY FEED ---
@@ -10789,6 +11017,7 @@ window._tcgMultiSelect = { active: false, selected: new Set() };
 // Sort preference for "My Cards" — persists across re-renders/filter changes
 // within the session. 'rarity' (default), 'newest', or 'oldest' (by pulledAt).
 window._tcgCardSort = 'rarity';
+window._tcgCardFilter = 'all';
 window._tcgCardSearch = '';
 window._tcgProfileCardSort = 'rarity';
 window._tcgProfileCardSearch = '';
@@ -11113,8 +11342,15 @@ window._tcgBulkDismantle = async function(uid, profileUid) {
     const favNote = skippedFavs ? ` (${skippedFavs} favorited card${skippedFavs>1?'s':''} skipped)` : '';
     if (!confirm(`Dismantle ${selectedCards.length} card(s) for 🟡 ${total.toLocaleString()} Amber total?${favNote} This cannot be undone.`)) { window._tcgDismantling = false; return; }
     try {
-        for (const c of selectedCards) {
-            await deleteDoc(doc(db, 'card_collections', uid, 'cards', c.id));
+        // Batch deletes so all cards are removed atomically before awarding amber.
+        // Firestore batches cap at 500 ops; split if needed.
+        const BATCH_SIZE = 499;
+        for (let i = 0; i < selectedCards.length; i += BATCH_SIZE) {
+            const batch = writeBatch(db);
+            selectedCards.slice(i, i + BATCH_SIZE).forEach(c => {
+                batch.delete(doc(db, 'card_collections', uid, 'cards', c.id));
+            });
+            await batch.commit();
         }
         if (total > 0) await _awardAmber(total, 'tcg:dismantle');
         window._tcgCollectionCache.delete(uid);
@@ -11237,12 +11473,13 @@ window._tcgRenderMyCollection = async function(activeTab = 'mycards', forceRefre
 
     const content = document.getElementById('tcg-collection-content');
     const uid = auth.currentUser.uid;
-    if (activeTab === 'mycards') await window._tcgRenderMyCardsTab(content, uid);
+    if (activeTab === 'mycards') await window._tcgRenderMyCardsTab(content, uid, window._tcgCardFilter || 'all');
     else if (activeTab === 'premade') window._tcgRenderPremadeBinderSelect(content);
     else await _tcgRenderMyBindersTab(content, uid);
 };
 
-window._tcgRenderMyCardsTab = async function(el, uid, filter = 'all') {
+window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFilter || 'all') {
+    window._tcgCardFilter = filter;
     let cards;
     try { cards = await _tcgLoadCollection(uid); }
     catch(e) { el.innerHTML = `<p style="color:var(--text-muted);">Failed to load: ${e.message}</p>`; return; }
@@ -17518,6 +17755,7 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
         window._tcgRenderSearchRarityFilters();
     }
     if(targetId === 'news-view') {
+        window._renderFullSchedule();
         fetchGlobalNews();
         window.loadPatchNotes();
         window.clearPatchNoteBadge();
@@ -22137,14 +22375,22 @@ function _dungeonMsUntilReset() {
 }
 
 function _dungeonGeneratePool(dateKey) {
-    const rng = _plinkoSeededRandom(_plinkoSeedFromString('dungeon-' + dateKey));
+    // Use a date-ordinal seed so each day gets a genuinely different pool.
+    // _plinkoSeedFromString weighted the shared 'dungeon-YYYY-MM-' prefix
+    // too heavily — all June 2026 dates had near-identical seeds → S always first.
+    const [y, m, d] = (dateKey || _dungeonTodayKey()).split('-').map(Number);
+    const ordinal = (y - 2020) * 366 + (m - 1) * 31 + d;
+    const seed = Math.abs(Math.imul(ordinal, 2654435761) | 0) || 1;
+    const rng = _plinkoSeededRandom(seed);
     const tiers = ['e', 'd', 'c', 'b', 'a', 's'];
     const pool = [];
-    let sUsed = false;
+    let sUsed = false, eUsed = false;
     while (pool.length < 5) {
         const tier = tiers[Math.floor(rng() * tiers.length)];
         if (tier === 's' && sUsed) continue;
+        if (tier === 'e' && eUsed) continue;
         if (tier === 's') sUsed = true;
+        if (tier === 'e') eUsed = true;
         pool.push(tier);
     }
     return pool;
