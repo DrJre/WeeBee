@@ -1281,6 +1281,65 @@
                                     </div>
                                     <button onclick="window._tcgSimulatePacks()" style="padding:9px 18px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:800; font-size:13px; cursor:pointer;">Run Simulation</button>
                                 </div>
+
+                                <!-- Custom Odds Section -->
+                                <div id="sim-custom-section" style="margin-top:10px;">
+                                    <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;cursor:pointer;user-select:none;">
+                                        <input type="checkbox" id="sim-use-custom-odds" onchange="window._tcgSimToggleCustomOdds()" style="width:14px;height:14px;cursor:pointer;">
+                                        Custom Odds Mode
+                                        <span style="font-size:11px;font-weight:400;color:var(--text-muted);">— sim only, real pack odds unchanged</span>
+                                    </label>
+                                    <div id="sim-custom-odds-wrap" style="display:none;margin-top:10px;display:none;">
+                                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+
+                                            <!-- Standard Pack -->
+                                            <div style="background:var(--bg-white);border-radius:10px;padding:12px 14px;border:1px solid var(--border-color);">
+                                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                                                    <div style="font-size:12px;font-weight:800;color:#4f46e5;">Standard Pack</div>
+                                                    <button onclick="window._tcgSimResetStdOdds()" style="padding:2px 8px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;">Reset</button>
+                                                </div>
+                                                <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">GUARANTEED SLOT</div>
+                                                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+                                                    <label style="font-size:11px;display:flex;align-items:center;gap:3px;">SSR <input id="sim-std-slot1-ssr" type="number" step="0.01" min="0" max="100" value="0.4" style="width:52px;padding:4px 6px;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:11px;font-weight:700;">%</label>
+                                                    <label style="font-size:11px;display:flex;align-items:center;gap:3px;">SR <input id="sim-std-slot1-sr" type="number" step="0.01" min="0" max="100" value="4.6" style="width:52px;padding:4px 6px;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:11px;font-weight:700;">%</label>
+                                                    <span style="font-size:10px;color:var(--text-muted);align-self:center;">rem→Rare</span>
+                                                </div>
+                                                <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">REGULAR SLOTS ×4</div>
+                                                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+                                                    <label style="font-size:11px;display:flex;align-items:center;gap:3px;">SSR <input id="sim-std-slots-ssr" type="number" step="0.01" min="0" max="100" value="0.1" style="width:52px;padding:4px 6px;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:11px;font-weight:700;">%</label>
+                                                    <label style="font-size:11px;display:flex;align-items:center;gap:3px;">SR <input id="sim-std-slots-sr" type="number" step="0.01" min="0" max="100" value="0.4" style="width:52px;padding:4px 6px;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:11px;font-weight:700;">%</label>
+                                                    <label style="font-size:11px;display:flex;align-items:center;gap:3px;">Rare <input id="sim-std-slots-rare" type="number" step="0.01" min="0" max="100" value="9.5" style="width:52px;padding:4px 6px;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:11px;font-weight:700;">%</label>
+                                                    <span style="font-size:10px;color:var(--text-muted);align-self:center;">rem→Common</span>
+                                                </div>
+                                                <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">UR BONUS</div>
+                                                <label style="font-size:11px;display:flex;align-items:center;gap:3px;"><input id="sim-std-ur-bonus" type="number" step="0.01" min="0" max="100" value="0.1" style="width:52px;padding:4px 6px;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:11px;font-weight:700;">% chance</label>
+                                            </div>
+
+                                            <!-- Premium Pack -->
+                                            <div style="background:var(--bg-white);border-radius:10px;padding:12px 14px;border:1px solid var(--border-color);">
+                                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                                                    <div style="font-size:12px;font-weight:800;color:#b45309;">Premium Pack</div>
+                                                    <button onclick="window._tcgSimResetPrmOdds()" style="padding:2px 8px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;">Reset</button>
+                                                </div>
+                                                <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">GUARANTEED SLOT</div>
+                                                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+                                                    <label style="font-size:11px;display:flex;align-items:center;gap:3px;">SSR <input id="sim-prm-slot1-ssr" type="number" step="0.01" min="0" max="100" value="5" style="width:52px;padding:4px 6px;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:11px;font-weight:700;">%</label>
+                                                    <span style="font-size:10px;color:var(--text-muted);align-self:center;">rem→SR (guaranteed)</span>
+                                                </div>
+                                                <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">REGULAR SLOTS ×4</div>
+                                                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+                                                    <label style="font-size:11px;display:flex;align-items:center;gap:3px;">SSR <input id="sim-prm-slots-ssr" type="number" step="0.01" min="0" max="100" value="1" style="width:52px;padding:4px 6px;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:11px;font-weight:700;">%</label>
+                                                    <label style="font-size:11px;display:flex;align-items:center;gap:3px;">SR <input id="sim-prm-slots-sr" type="number" step="0.01" min="0" max="100" value="3" style="width:52px;padding:4px 6px;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:11px;font-weight:700;">%</label>
+                                                    <label style="font-size:11px;display:flex;align-items:center;gap:3px;">Rare <input id="sim-prm-slots-rare" type="number" step="0.01" min="0" max="100" value="21" style="width:52px;padding:4px 6px;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:11px;font-weight:700;">%</label>
+                                                    <span style="font-size:10px;color:var(--text-muted);align-self:center;">rem→Common</span>
+                                                </div>
+                                                <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">UR BONUS</div>
+                                                <label style="font-size:11px;display:flex;align-items:center;gap:3px;"><input id="sim-prm-ur-bonus" type="number" step="0.01" min="0" max="100" value="0.5" style="width:52px;padding:4px 6px;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:11px;font-weight:700;">% chance</label>
+                                            </div>
+
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Pool Browser -->

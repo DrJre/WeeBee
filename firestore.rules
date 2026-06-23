@@ -11,7 +11,7 @@ service cloud.firestore {
     match /reviews/{doc} {
       allow read: if true;
       allow create: if isAuth();
-      allow delete: if isOwner(resource.data.uid);
+      allow delete: if isOwner(resource.data.uid) || isAdmin();
       // Owner can edit anything; other signed-in users can only toggle
       // their own like/dislike reaction.
       allow update: if isOwner(resource.data.uid) || (
@@ -25,7 +25,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isAuth();
       allow update: if isAuth();
-      allow delete: if isOwner(resource.data.uid);
+      allow delete: if isOwner(resource.data.uid) || isAdmin();
     }
 
     match /hot_takes/{doc} {
@@ -474,7 +474,7 @@ service cloud.firestore {
     // ── TCG user binders ─────────────────────────────────────────────────────
     match /card_binders/{uid}/binders/{binder} {
       allow read: if true;
-      allow write: if isOwner(uid);
+      allow write: if isOwner(uid) || isAdmin();
     }
 
     // ── Cross-device game progress sync ──────────────────────────────────────
@@ -550,7 +550,7 @@ service cloud.firestore {
          request.resource.data.status == 'completed' &&
          request.resource.data.source == 'bulletin')
       ));
-      allow update: if isAuth() && request.auth.uid in resource.data.participants;
+      allow update: if isAdmin() || (isAuth() && request.auth.uid in resource.data.participants);
     }
 
     // ── TCG card trade locks ────────────────────────────────────────────────

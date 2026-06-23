@@ -1,4 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getFirestore, collection, collectionGroup, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch, waitForPendingWrites, deleteField } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
@@ -4836,7 +4836,7 @@ window._revealSpoiler = function(postId, event) {
 // hint: short string shown under the lock icon (e.g. "Attack on Titan")
 function _wrapSpoilerOverlay(html, postId, hint) {
     if (window._revealedSpoilers?.has(postId)) return html;
-    return `<div style="position:relative;">${html}<div id="spoiler-overlay-${postId}" onclick="event.stopPropagation()" style="position:absolute;top:68px;left:0;right:0;bottom:0;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:rgba(8,8,16,0.38);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;border-radius:0 0 14px 14px;gap:6px;text-align:center;padding:24px;box-sizing:border-box;">
+    return `<div class="spoiler-post-wrap" style="position:relative;overflow:hidden;">${html}<div id="spoiler-overlay-${postId}" onclick="event.stopPropagation()" style="position:absolute;top:0;left:0;right:0;bottom:0;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:rgba(8,8,16,0.38);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;border-radius:14px;gap:6px;text-align:center;padding:24px;box-sizing:border-box;">
         <div style="font-size:30px;line-height:1;">🔒</div>
         <div style="font-size:15px;font-weight:900;color:#fff;margin-top:2px;">Spoiler Warning</div>
         ${hint ? `<div style="font-size:12px;color:rgba(255,255,255,0.75);max-width:220px;line-height:1.4;">Contains spoilers for <strong>${hint}</strong></div>` : ''}
@@ -7082,11 +7082,58 @@ window._tcgSimSyncCost = function() {
     }
 };
 
-function _tcgSimRunPack(pack, count) {
+function _tcgSimPopulateCustomDefaults() {
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    set('sim-std-slot1-ssr', 0.4); set('sim-std-slot1-sr', 4.6);
+    set('sim-std-slots-ssr', 0.1); set('sim-std-slots-sr', 0.4); set('sim-std-slots-rare', 9.5);
+    set('sim-std-ur-bonus', 0.1);
+    set('sim-prm-slot1-ssr', 5);
+    set('sim-prm-slots-ssr', 1);   set('sim-prm-slots-sr', 3);   set('sim-prm-slots-rare', 21);
+    set('sim-prm-ur-bonus', 0.5);
+}
+
+window._tcgSimToggleCustomOdds = function() {
+    const wrap = document.getElementById('sim-custom-odds-wrap');
+    const checked = document.getElementById('sim-use-custom-odds')?.checked;
+    if (wrap) wrap.style.display = checked ? 'block' : 'none';
+    if (checked) _tcgSimPopulateCustomDefaults();
+};
+
+window._tcgSimResetStdOdds = function() {
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    set('sim-std-slot1-ssr', 0.4); set('sim-std-slot1-sr', 4.6);
+    set('sim-std-slots-ssr', 0.1); set('sim-std-slots-sr', 0.4); set('sim-std-slots-rare', 9.5);
+    set('sim-std-ur-bonus', 0.1);
+};
+
+window._tcgSimResetPrmOdds = function() {
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    set('sim-prm-slot1-ssr', 5);
+    set('sim-prm-slots-ssr', 1); set('sim-prm-slots-sr', 3); set('sim-prm-slots-rare', 21);
+    set('sim-prm-ur-bonus', 0.5);
+};
+
+function _tcgGetSimCustomOdds() {
+    const g = (id, def) => { const v = parseFloat(document.getElementById(id)?.value); return isNaN(v) ? def : v; };
+    return {
+        standard: {
+            slot1: { ssr: g('sim-std-slot1-ssr', 0.4), sr: g('sim-std-slot1-sr', 4.6) },
+            slots: { ssr: g('sim-std-slots-ssr', 0.1), sr: g('sim-std-slots-sr', 0.4), rare: g('sim-std-slots-rare', 9.5) },
+            urBonus: g('sim-std-ur-bonus', 0.1)
+        },
+        premium: {
+            slot1: { ssr: g('sim-prm-slot1-ssr', 5), sr: 0 },
+            slots: { ssr: g('sim-prm-slots-ssr', 1), sr: g('sim-prm-slots-sr', 3), rare: g('sim-prm-slots-rare', 21) },
+            urBonus: g('sim-prm-ur-bonus', 0.5)
+        }
+    };
+}
+
+function _tcgSimRunPack(pack, count, customOdds) {
     const tally = { ur: [], ssr: [], sr: [], rare: 0, common: 0 };
     let totalDismantle = 0;
     for (let i = 0; i < count; i++) {
-        const cards = _tcgRollPackCards(pack);
+        const cards = _tcgRollPackCards(pack, customOdds);
         for (const c of cards) {
             const dv = TCG_DISMANTLE_RATES[c.rarity] || 0;
             totalDismantle += dv;
@@ -7102,6 +7149,8 @@ window._tcgSimulatePacks = function() {
     _tcgEnsureCardPool();
     const packId = document.getElementById('sim-pack-select')?.value || 'standard';
     const count = parseInt(document.getElementById('sim-count-select')?.value || '1000');
+    const useCustom = document.getElementById('sim-use-custom-odds')?.checked;
+    const allCustomOdds = useCustom ? _tcgGetSimCustomOdds() : null;
 
     const rarityColor = { ur: '#ffd700', ssr: '#c084fc', sr: '#f97316', rare: '#60a5fa', common: '#9ca3af' };
     const rarityLabel = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common' };
@@ -7179,7 +7228,7 @@ window._tcgSimulatePacks = function() {
 
     // Simulate buying packs, dismantling every card, reinvesting amber until broke.
     // Actually rolls cards each round so lifetime rarity tallies are accurate.
-    function simulateReinvest(startAmber, pack, costPerPack) {
+    function simulateReinvest(startAmber, pack, costPerPack, customOdds) {
         let amber = startAmber;
         let totalPacks = 0;
         let totalSpent = 0;
@@ -7191,7 +7240,7 @@ window._tcgSimulatePacks = function() {
             const spent = packs * costPerPack;
             let gained = 0;
             for (let i = 0; i < packs; i++) {
-                for (const c of _tcgRollPackCards(pack)) {
+                for (const c of _tcgRollPackCards(pack, customOdds)) {
                     tally[c.rarity] = (tally[c.rarity] || 0) + 1;
                     gained += TCG_DISMANTLE_RATES[c.rarity] || 0;
                 }
@@ -7212,8 +7261,10 @@ window._tcgSimulatePacks = function() {
         const prmCost = parseInt(document.getElementById('sim-cost-prm')?.value || prmPack.cost);
         const sBudget = parseInt(document.getElementById('sim-budget-std')?.value || '1500');
         const pBudget = parseInt(document.getElementById('sim-budget-prm')?.value || '10000');
-        const { tally: sTally, totalDismantle: sTD } = _tcgSimRunPack(stdPack, count);
-        const { tally: pTally, totalDismantle: pTD } = _tcgSimRunPack(prmPack, count);
+        const stdOdds = allCustomOdds?.standard || null;
+        const prmOdds = allCustomOdds?.premium || null;
+        const { tally: sTally, totalDismantle: sTD } = _tcgSimRunPack(stdPack, count, stdOdds);
+        const { tally: pTally, totalDismantle: pTD } = _tcgSimRunPack(prmPack, count, prmOdds);
         const sAvg = sTD / count, pAvg = pTD / count;
         const sNet = sAvg - stdCost, pNet = pAvg - prmCost;
         const sRoi = (sAvg / stdCost * 100).toFixed(1), pRoi = (pAvg / prmCost * 100).toFixed(1);
@@ -7223,8 +7274,8 @@ window._tcgSimulatePacks = function() {
         // Reinvestment loop — actually rolls cards each round for accurate lifetime tallies
         const sStartAmber = Math.floor(sBudget / stdCost) * stdCost;
         const pStartAmber = Math.floor(pBudget / prmCost) * prmCost;
-        const sLoop = simulateReinvest(sStartAmber, stdPack, stdCost);
-        const pLoop = simulateReinvest(pStartAmber, prmPack, prmCost);
+        const sLoop = simulateReinvest(sStartAmber, stdPack, stdCost, stdOdds);
+        const pLoop = simulateReinvest(pStartAmber, prmPack, prmCost, prmOdds);
 
         const loopWinnerPacks = sLoop.totalPacks >= pLoop.totalPacks ? 'Standard' : 'Premium';
         const loopWinnerColor = sLoop.totalPacks >= pLoop.totalPacks ? '#4f46e5' : '#b45309';
@@ -7424,7 +7475,7 @@ window._tcgSimulatePacks = function() {
             <div style="background:var(--bg-card);border-radius:16px;padding:24px;width:100%;max-width:620px;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
                     <div>
-                        <div style="font-weight:800;font-size:17px;">⚖️ Pack Comparison — ${count.toLocaleString()} Packs Each</div>
+                        <div style="font-weight:800;font-size:17px;">⚖️ Pack Comparison — ${count.toLocaleString()} Packs Each${allCustomOdds ? `<span style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:#f59e0b22;border:1px solid #f59e0b88;color:#f59e0b;font-size:10px;font-weight:800;letter-spacing:1px;vertical-align:middle;">CUSTOM ODDS</span>` : ''}</div>
                         <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${(count*10).toLocaleString()} total cards rolled across both packs</div>
                     </div>
                     <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
@@ -7533,14 +7584,26 @@ window._tcgSimulatePacks = function() {
         const pack = TCG_PACKS.find(p => p.id === packId);
         if (!pack) return;
         const costPerPack = parseInt(document.getElementById('sim-cost-input')?.value || pack.cost);
-        const { tally, totalDismantle } = _tcgSimRunPack(pack, count);
+        const customOdds = allCustomOdds ? (packId === 'premium' ? allCustomOdds.premium : allCustomOdds.standard) : null;
+        const { tally, totalDismantle } = _tcgSimRunPack(pack, count, customOdds);
         const total = count * 5;
+
+        const customBadge = customOdds
+            ? `<span style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:#f59e0b22;border:1px solid #f59e0b88;color:#f59e0b;font-size:10px;font-weight:800;letter-spacing:1px;vertical-align:middle;">CUSTOM ODDS</span>`
+            : '';
+        const customSummary = customOdds ? `
+            <div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:var(--bg-gray);font-size:11px;color:var(--text-muted);line-height:1.7;">
+                <span style="font-weight:700;color:#f59e0b;">Custom odds used:</span>
+                Slot 1 — SSR ${customOdds.slot1.ssr}% · SR ${customOdds.slot1.sr}% · remainder ${pack.guaranteedSR ? 'SR' : 'Rare'}<br>
+                Slots 2–5 — SSR ${customOdds.slots.ssr}% · SR ${customOdds.slots.sr}% · Rare ${customOdds.slots.rare}% · Common ${Math.max(0, 100 - customOdds.slots.ssr - customOdds.slots.sr - customOdds.slots.rare).toFixed(2)}%<br>
+                UR Bonus ${customOdds.urBonus}%
+            </div>` : '';
 
         modal.innerHTML = `
             <div style="background:var(--bg-card);border-radius:16px;padding:24px;width:100%;max-width:560px;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
                     <div>
-                        <div style="font-weight:800;font-size:17px;">🎲 ${pack.name} — ${count.toLocaleString()} Pack Simulation</div>
+                        <div style="font-weight:800;font-size:17px;">🎲 ${pack.name} — ${count.toLocaleString()} Pack Simulation${customBadge}</div>
                         <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${total.toLocaleString()} total cards rolled</div>
                     </div>
                     <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
@@ -7553,6 +7616,7 @@ window._tcgSimulatePacks = function() {
                     ${statRow('common', tally.common, total)}
                 </div>
                 <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;padding-left:4px;">Rightmost column = total dismantle value for that rarity</div>
+                ${customSummary}
                 ${valueBlock(pack.name, costPerPack, totalDismantle, count, tally)}
                 <div style="margin-top:18px;">
                     <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">UR Pulls (${tally.ur.length})</div>
@@ -7750,7 +7814,7 @@ const TCG_PACKS = [
         salePrice: 750,
         gradient: 'linear-gradient(135deg,#b45309,#f59e0b)',
         description: '5 cards · 1 guaranteed SR+',
-        odds: 'Common 75% · Rare 21% · SR 3% · SSR 1%\nGuaranteed slot: SR 95% · SSR 5%\n+0.2% chance per pack for a bonus UR card',
+        odds: 'Common 75% · Rare 21% · SR 3% · SSR 1%\nGuaranteed slot: SR 95% · SSR 5%\n+0.5% chance per pack for a bonus UR card',
         guaranteedSR: true,
     }
 ];
@@ -8360,8 +8424,14 @@ window._adminScanAltAccounts = async function() {
             });
         });
         const dupes = Object.entries(byFp).filter(([, users]) => users.length > 1);
-        if (!dupes.length) {
-            el.innerHTML = '<div style="color:#22c55e;font-size:12px;font-weight:700;margin-top:4px;">✅ No duplicate fingerprints found.</div>';
+        let clearedFps = new Set();
+        try {
+            const clearSnap = await getDoc(doc(db, 'meta', 'alt_cleared'));
+            if (clearSnap.exists()) (clearSnap.data().fps || []).forEach(fp => clearedFps.add(fp));
+        } catch(e) {}
+        const visibleDupes = dupes.filter(([fp]) => !clearedFps.has(fp));
+        if (!visibleDupes.length) {
+            el.innerHTML = '<div style="color:#22c55e;font-size:12px;font-weight:700;margin-top:4px;">✅ No flagged account groups found.</div>';
             return;
         }
 
@@ -8466,7 +8536,7 @@ window._adminScanAltAccounts = async function() {
 
         // Fetch trade data for all groups in parallel
         const groupsWithTrades = await Promise.all(
-            dupes.map(async ([fp, users]) => ({ fp, users, trades: await _fetchGroupTrades(users) }))
+            visibleDupes.map(async ([fp, users]) => ({ fp, users, trades: await _fetchGroupTrades(users) }))
         );
 
         // Sort by risk descending
@@ -8475,14 +8545,29 @@ window._adminScanAltAccounts = async function() {
             return order[_fpRisk(b.users, b.trades)] - order[_fpRisk(a.users, a.trades)];
         });
 
+        // Auto-flag high-risk profiles so trade checks can enforce the block
+        const highRiskGroups = groupsWithTrades.filter(({ users, trades }) => _fpRisk(users, trades) === 'high');
+        if (highRiskGroups.length) {
+            try {
+                await Promise.all(highRiskGroups.flatMap(({ fp, users }) =>
+                    users.map(u => updateDoc(doc(db,'profiles',u.uid), { altHighRisk: true, altFp: fp }))
+                ));
+            } catch(e) {}
+        }
+
         el.innerHTML = `
-            <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:#ef4444;">⚠️ ${dupes.length} shared fingerprint(s) across ${dupes.reduce((n,[,u])=>n+u.length,0)} accounts</div>
-            <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Fingerprint is captured at account creation. Shared fingerprints mean accounts were likely created on the same device/browser. Use creation dates + trade history to judge.</div>
+            <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:#ef4444;">⚠️ ${visibleDupes.length} shared fingerprint(s) across ${visibleDupes.reduce((n,[,u])=>n+u.length,0)} accounts</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Fingerprint is captured at account creation. Shared fingerprints mean accounts were likely created on the same device/browser. Use creation dates + trade history to judge. High suspicion accounts are automatically blocked from trading each other.</div>
             ${groupsWithTrades.map(({ fp, users, trades }) => {
                 const risk = _fpRisk(users, trades);
+                const fpEncoded = fp.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+                const uidsJson = JSON.stringify(users.map(u=>u.uid)).replace(/"/g,'&quot;');
                 return `
                 <div style="background:var(--bg-white);border:1px solid ${riskColor[risk]}66;border-radius:8px;padding:12px;margin-bottom:8px;">
-                    <div style="font-size:11px;font-weight:700;color:${riskColor[risk]};margin-bottom:8px;">${riskLabel[risk]}</div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                        <div style="font-size:11px;font-weight:700;color:${riskColor[risk]};">${riskLabel[risk]}</div>
+                        <button data-fp="${fpEncoded}" data-uids="${uidsJson}" onclick="window._adminClearAltSuspicion(this)" style="padding:3px 10px;border-radius:6px;border:none;background:#6b7280;color:#fff;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">✕ Clear Suspicion</button>
+                    </div>
                     <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;font-family:monospace;word-break:break-all;">FP: ${fp}</div>
                     ${users.map(u => `
                         <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border-color);flex-wrap:wrap;">
@@ -8497,6 +8582,23 @@ window._adminScanAltAccounts = async function() {
         `;
     } catch(e) {
         el.innerHTML = `<div style="color:#ef4444;font-size:12px;">❌ ${e.message}</div>`;
+    }
+};
+
+window._adminClearAltSuspicion = async function(btn) {
+    if (!window.isAdmin) return;
+    const fp = btn.dataset.fp;
+    const uids = JSON.parse(btn.dataset.uids.replace(/&quot;/g, '"'));
+    if (!confirm(`Clear suspicion for this fingerprint group (${uids.length} accounts)? They'll be hidden from future scans and trade blocking will be lifted.`)) return;
+    btn.disabled = true; btn.textContent = 'Clearing…';
+    try {
+        await setDoc(doc(db, 'meta', 'alt_cleared'), { fps: arrayUnion(fp) }, { merge: true });
+        await Promise.all(uids.map(uid => updateDoc(doc(db,'profiles',uid), { altHighRisk: false })));
+        const group = btn.closest('[style*="border-radius:8px"]');
+        if (group) group.remove();
+    } catch(e) {
+        alert('Failed to clear: ' + e.message);
+        btn.disabled = false; btn.textContent = '✕ Clear Suspicion';
     }
 };
 
@@ -8791,7 +8893,7 @@ window._tcgDeduplicateCollections = async function(dryRun = true) {
                 let key;
                 if (c.founder) {
                     key = `founder|${c.name}|${c.rarity}`;
-                } else if (c.monthlyUr) {
+                } else if ((c.monthlyUr||c.tradedMonthlyUr)) {
                     key = `monthlyUr|${c.name}|${c.stampText || ''}`;
                 } else {
                     key = `${c.name}|${c.rarity}|${c.serial ?? 'null'}|${c.edition ?? 1}`;
@@ -8849,7 +8951,7 @@ window._tcgScanCrossUserDupes = async function() {
         for (const d of allSnap.docs) {
             const uid = d.ref.parent.parent.id;
             const c = d.data();
-            if (c.founder || c.monthlyUr) continue;
+            if (c.founder || (c.monthlyUr||c.tradedMonthlyUr)) continue;
             const key = `${c.name}|${c.rarity}|${c.serial ?? 'null'}|${c.edition ?? 1}`;
             if (!byKey.has(key)) byKey.set(key, []);
             byKey.get(key).push({ uid, ref: d.ref, data: c });
@@ -8945,7 +9047,7 @@ window._tcgRenderPoolMeters = async function() {
         const issued = { ur:0, ssr:0, sr:0, rare:0, common:0 };
         issuedSnap.forEach(d => {
             const c = d.data();
-            if (c.founder || c.monthlyUr) return;
+            if (c.founder || (c.monthlyUr||c.tradedMonthlyUr)) return;
             const r = c.rarity;
             if (issued[r] != null) issued[r]++;
         });
@@ -10515,39 +10617,61 @@ window._tcgPurgeOrphans = async function() {
     }
 };
 
-function _tcgRollPackCards(pack) {
+function _tcgRollPackCards(pack, customOdds) {
     const cards = [];
-    // Guaranteed slot
-    if (pack.guaranteedSR) {
-        cards.push(_tcgPickCard(Math.random() < 0.05 ? 'ssr' : 'sr'));
-    } else {
-        const r = Math.random();
-        if      (r < 0.004) cards.push(_tcgPickCard('ssr'));  // 0.4%
-        else if (r < 0.05)  cards.push(_tcgPickCard('sr'));   // 4.6%
-        else                cards.push(_tcgPickCard('rare')); // 95%
-    }
-    // 4 remaining slots
-    for (let i = 0; i < 4; i++) {
-        const r = Math.random();
-        let rarity;
-        if (pack.guaranteedSR) {
-            if      (r < 0.01)   rarity = 'ssr';
-            else if (r < 0.04)   rarity = 'sr';
-            else if (r < 0.25)   rarity = 'rare';
-            else                 rarity = 'common';
-        } else {
-            if      (r < 0.001)  rarity = 'ssr';
-            else if (r < 0.005)  rarity = 'sr';
-            else if (r < 0.10)   rarity = 'rare';
-            else                 rarity = 'common';
+    if (customOdds) {
+        // Slot 1 — guaranteed slot with custom odds
+        const r1 = Math.random() * 100;
+        const { ssr: s1ssr, sr: s1sr } = customOdds.slot1;
+        if      (r1 < s1ssr)          cards.push(_tcgPickCard('ssr'));
+        else if (r1 < s1ssr + s1sr)   cards.push(_tcgPickCard('sr'));
+        else                           cards.push(_tcgPickCard(pack.guaranteedSR ? 'sr' : 'rare'));
+        // Slots 2-5 — regular slots with custom odds
+        const { ssr, sr, rare } = customOdds.slots;
+        for (let i = 0; i < 4; i++) {
+            const r2 = Math.random() * 100;
+            if      (r2 < ssr)              cards.push(_tcgPickCard('ssr'));
+            else if (r2 < ssr + sr)         cards.push(_tcgPickCard('sr'));
+            else if (r2 < ssr + sr + rare)  cards.push(_tcgPickCard('rare'));
+            else                            cards.push(_tcgPickCard('common'));
         }
-        cards.push(_tcgPickCard(rarity));
-    }
-    // UR is an extremely rare bonus pull, replacing one random slot.
-    // Premium: 0.5%, Standard: 0.1%.
-    const urChance = pack.guaranteedSR ? 0.005 : 0.001;
-    if (Math.random() < urChance) {
-        cards[Math.floor(Math.random() * cards.length)] = _tcgPickCard('ur');
+        // UR bonus
+        if (Math.random() * 100 < customOdds.urBonus) {
+            cards[Math.floor(Math.random() * cards.length)] = _tcgPickCard('ur');
+        }
+    } else {
+        // Guaranteed slot
+        if (pack.guaranteedSR) {
+            cards.push(_tcgPickCard(Math.random() < 0.05 ? 'ssr' : 'sr'));
+        } else {
+            const r = Math.random();
+            if      (r < 0.004) cards.push(_tcgPickCard('ssr'));  // 0.4%
+            else if (r < 0.05)  cards.push(_tcgPickCard('sr'));   // 4.6%
+            else                cards.push(_tcgPickCard('rare')); // 95%
+        }
+        // 4 remaining slots
+        for (let i = 0; i < 4; i++) {
+            const r = Math.random();
+            let rarity;
+            if (pack.guaranteedSR) {
+                if      (r < 0.01)   rarity = 'ssr';
+                else if (r < 0.04)   rarity = 'sr';
+                else if (r < 0.25)   rarity = 'rare';
+                else                 rarity = 'common';
+            } else {
+                if      (r < 0.001)  rarity = 'ssr';
+                else if (r < 0.005)  rarity = 'sr';
+                else if (r < 0.10)   rarity = 'rare';
+                else                 rarity = 'common';
+            }
+            cards.push(_tcgPickCard(rarity));
+        }
+        // UR is an extremely rare bonus pull, replacing one random slot.
+        // Premium: 0.5%, Standard: 0.1%.
+        const urChance = pack.guaranteedSR ? 0.005 : 0.001;
+        if (Math.random() < urChance) {
+            cards[Math.floor(Math.random() * cards.length)] = _tcgPickCard('ur');
+        }
     }
     return cards.sort(() => Math.random() - 0.5);
 }
@@ -10876,7 +11000,7 @@ function _tcgBuildCardFace(card) {
     const maxV = RARITY_MAX_VERSIONS[rarity] || 5000;
     const serialLine = card.founder
         ? `<div class="wb-founder-label">Founder</div>`
-        : (card.monthlyUr
+        : ((card.monthlyUr||card.tradedMonthlyUr)
             ? `<div class="wb-card-stamp">${card.stampText}</div>`
             : (card.serial != null
                 ? `<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:0.5px;margin-top:4px;">${card.serial} / ${maxV}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>`
@@ -11062,7 +11186,7 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
     } catch(e) { body.innerHTML = '<p style="color:var(--text-muted);">Failed to load card.</p>'; return; }
 
     const maxV = RARITY_MAX_VERSIONS[card.rarity] || 5000;
-    const versionText = card.founder ? 'Founder Edition · 1 of 1' : (card.monthlyUr ? card.stampText : (card.serial != null ? `${card.serial} / ${maxV}${(card.edition||1)>1?` · Edition ${card.edition}`:''}` : '—'));
+    const versionText = card.founder ? 'Founder Edition · 1 of 1' : ((card.monthlyUr||card.tradedMonthlyUr) ? card.stampText : (card.serial != null ? `${card.serial} / ${maxV}${(card.edition||1)>1?` · Edition ${card.edition}`:''}` : '—'));
     const rarityLabel = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[card.rarity] || card.rarity;
     const safeOwnerUid = ownerUid.replace(/'/g,"\\'");
     const shareUrl = `${window.location.origin}${window.location.pathname}?card=${encodeURIComponent(ownerUid)}~${encodeURIComponent(cardId)}`;
@@ -11079,7 +11203,7 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
             <div><strong>Rarity:</strong> ${rarityLabel}</div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                 <div><strong>Version:</strong> ${versionText}</div>
-                ${!card.monthlyUr && !card.founder && card.serial != null ? `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="${card.rarity||''}" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">🔢 View All Versions</button>` : ''}
+                ${!(card.monthlyUr||card.tradedMonthlyUr) && !card.founder && card.serial != null ? `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="${card.rarity||''}" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">🔢 View All Versions</button>` : ''}
             </div>
             <div><strong>Owner:</strong> <span onclick="document.getElementById('tcg-card-viewer-modal').remove();viewUserProfile('${safeOwnerUid}')" style="cursor:pointer;color:#f59e0b;font-weight:700;">${ownerName}</span></div>
         </div>
@@ -11126,7 +11250,7 @@ window._tcgLoadVersionsView = async function(el, name, anime, rarity) {
         let founderOwnerUid = null;
         snap.forEach(d => {
             const data = d.data();
-            if (data.monthlyUr) return;
+            if ((data.monthlyUr||data.tradedMonthlyUr)) return;
             if (data.founder) {
                 if (!founderCard) { founderCard = data; founderOwnerUid = d.ref.parent.parent.id; }
                 return;
@@ -11266,10 +11390,10 @@ window._tcgViewCardSnapshot = async function(snapId) {
 
     const maxV = RARITY_MAX_VERSIONS[card.rarity] || 5000;
     const versionText = card.founder ? 'Founder Edition · 1 of 1'
-        : card.monthlyUr ? (card.stampText || 'Prize Wheel UR')
+        : (card.monthlyUr||card.tradedMonthlyUr) ? (card.stampText || 'Prize Wheel UR')
         : card.serial != null ? `${card.serial} / ${maxV}${(card.edition||1)>1?` · Edition ${card.edition}`:''}` : '—';
     const rarityLabel = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[card.rarity] || card.rarity;
-    const showVersionsBtn = !card.monthlyUr && !card.founder && card.serial != null;
+    const showVersionsBtn = !(card.monthlyUr||card.tradedMonthlyUr) && !card.founder && card.serial != null;
 
     // Check if the logged-in user already owns this card design
     let ownershipHTML = '';
@@ -11469,7 +11593,7 @@ window._tcgRenderProfileShowcase = async function(uid) {
                 ${cards.map(card => `
                     <div class="showcase-card-item" style="display:flex;flex-direction:column;align-items:center;gap:6px;">
                         <div class="showcase-card-frame" style="width:140px;height:196px;overflow:hidden;"><div class="showcase-card-scale" style="transform:scale(0.636);transform-origin:top left;">${_tcgBuildCardFace(card)}</div></div>
-                        ${card.founder ? `<div style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : (card.monthlyUr ? `<div style="font-size:11px;color:#ffd700;font-weight:700;">${card.stampText}</div>` : (card.serial != null ? `<div style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''))}
+                        ${card.founder ? `<div style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : ((card.monthlyUr||card.tradedMonthlyUr) ? `<div style="font-size:11px;color:#ffd700;font-weight:700;">${card.stampText}</div>` : (card.serial != null ? `<div style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''))}
                     </div>`).join('')}
             </div>
         </div>`;
@@ -11800,7 +11924,7 @@ window._tcgSmartDismantleModal = async function(uid) {
 
         // Filter
         previewCards = allCards.filter(c => {
-            if (c.founder || c.monthlyUr || (window._tcgFavoriteIds?.has(c.id))) return false; // never auto-dismantle special/favorited
+            if (c.founder || (c.monthlyUr||c.tradedMonthlyUr) || (window._tcgFavoriteIds?.has(c.id))) return false; // never auto-dismantle special/favorited
             if (!selectedRarities.has(c.rarity)) return false;
             if (protectedTerms.some(term => (c.anime || '').toLowerCase().includes(term))) return false;
             if (skipPinned && pinnedSet.has(c.id)) return false;
@@ -12141,7 +12265,7 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
         </div>` : ''}
         <div class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;">
             ${filtered.map(card => {
-                const serial = card.founder ? 'Founder Edition' : (card.monthlyUr ? card.stampText : (card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : ''));
+                const serial = card.founder ? 'Founder Edition' : ((card.monthlyUr||card.tradedMonthlyUr) ? card.stampText : (card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : ''));
                 const dismantleAmount = TCG_DISMANTLE_RATES[card.rarity] || 0;
                 const isPinned = pinnedIds.includes(card.id);
                 const isFav = favoriteIds.includes(card.id);
@@ -12232,11 +12356,11 @@ window._tcgOpenPremadeBinder = async function(animeName, page = 0) {
                 const copies = ownedMap[key] || [];
                 const isOwned = copies.length > 0;
                 const first = copies[0];
-                const serial = isOwned && first?.founder ? 'Founder Edition' : (isOwned && first?.monthlyUr ? first.stampText : (isOwned && first?.serial != null ? `${first.serial} / ${RARITY_MAX_VERSIONS[c.rarity]||5000}${(first.edition||1)>1?` · Ed.${first.edition}`:''}` : ''));
+                const serial = isOwned && first?.founder ? 'Founder Edition' : (isOwned && (first?.monthlyUr||first?.tradedMonthlyUr) ? first.stampText : (isOwned && first?.serial != null ? `${first.serial} / ${RARITY_MAX_VERSIONS[c.rarity]||5000}${(first.edition||1)>1?` · Ed.${first.edition}`:''}` : ''));
                 return `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;">
                     <div class="tcg-card-scale-wrap">
                         <div class="tcg-card-scale" style="${isOwned?'':'filter:grayscale(1) brightness(0.3);pointer-events:none;'}">
-                            ${_tcgBuildCardFace({ ...c, serial: first?.serial, edition: first?.edition, founder: first?.founder, monthlyUr: first?.monthlyUr, stampText: first?.stampText })}
+                            ${_tcgBuildCardFace({ ...c, serial: first?.serial, edition: first?.edition, founder: first?.founder, monthlyUr: (first?.monthlyUr||first?.tradedMonthlyUr), stampText: first?.stampText })}
                         </div>
                     </div>
                     <div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${isOwned?(serial||'Collected'):'Not collected'}</div>
@@ -12495,7 +12619,7 @@ window._tcgOpenUserBinder = async function(binderId, uid, page = 0) {
                 `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;">
                     <span class="material-symbols-outlined" onclick="window._tcgRemoveCardFromBinder('${binderId}','${uid}','${card.id}')" style="position:absolute;top:8px;right:4px;font-size:18px;cursor:pointer;color:#ef4444;background:rgba(0,0,0,0.5);border-radius:50%;padding:2px;z-index:2;" title="Remove from binder">close</span>
                     <div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>
-                    ${card.founder ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : (card.monthlyUr ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">${card.stampText}</div>` : (card.serial != null ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''))}
+                    ${card.founder ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : ((card.monthlyUr||card.tradedMonthlyUr) ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">${card.stampText}</div>` : (card.serial != null ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''))}
                 </div>` :
                 `<div class="tcg-card-cell"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale" onclick="window._tcgAddCardsToBinderModal('${binderId}','${uid}')" style="width:220px;height:308px;border-radius:14px;background:var(--bg-gray-darker);border:2px dashed var(--border-color);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--text-muted);cursor:pointer;">+</div></div></div>`
             ).join('')}
@@ -12589,7 +12713,7 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
         </div>` : ''}
         ${cards.length ? `<div class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;">
             ${sortedCards.map(card => {
-                const serial = card.founder ? 'Founder Edition' : (card.monthlyUr ? card.stampText : (card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : ''));
+                const serial = card.founder ? 'Founder Edition' : ((card.monthlyUr||card.tradedMonthlyUr) ? card.stampText : (card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : ''));
                 const dismantleAmount = TCG_DISMANTLE_RATES[card.rarity] || 0;
                 const isPinned = pinnedIds.includes(card.id);
                 const selected = isOwner && ms.active && ms.selected.has(card.id);
@@ -12647,7 +12771,7 @@ window._tcgOpenProfileBinder = async function(binderId, uid, page = 0) {
             ${pageCards.map(card => card ?
                 `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;">
                     <div class="tcg-card-scale-wrap" onclick="window._tcgOpenCardViewer('${uid}','${card.id}')" style="cursor:pointer;"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>
-                    ${card.founder ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : (card.monthlyUr ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">${card.stampText}</div>` : (card.serial != null ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''))}
+                    ${card.founder ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">Founder Edition</div>` : ((card.monthlyUr||card.tradedMonthlyUr) ? `<div class="tcg-card-caption" style="font-size:11px;color:#ffd700;font-weight:700;">${card.stampText}</div>` : (card.serial != null ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : ''))}
                 </div>` :
                 `<div class="tcg-card-cell"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale" style="width:220px;height:308px;border-radius:14px;background:var(--bg-gray-darker);border:1px dashed var(--border-color);"></div></div></div>`
             ).join('')}
@@ -12915,6 +13039,18 @@ window._tcgOpenTradeConfirm = function(otherUid, existingTradeId, otherName) {
 // at least 21 days old before they can send or accept trades.
 const TRADE_GATE_CUTOFF = new Date('2026-06-19T00:00:00Z');
 
+async function _tcgAreAltBlocked(uid1, uid2) {
+    try {
+        const [p1, p2] = await Promise.all([
+            getDoc(doc(db,'profiles',uid1)),
+            getDoc(doc(db,'profiles',uid2))
+        ]);
+        const d1 = p1.exists() ? p1.data() : {};
+        const d2 = p2.exists() ? p2.data() : {};
+        return !!(d1.altHighRisk && d2.altHighRisk && d1.deviceFingerprint && d1.deviceFingerprint === d2.deviceFingerprint);
+    } catch(e) { return false; }
+}
+
 async function _tcgCheckTradeEligibility() {
     if (!auth.currentUser) return false;
     const created = new Date(auth.currentUser.metadata.creationTime);
@@ -12980,6 +13116,13 @@ window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, other
                 window._tcgProposalInProgress = false;
                 return;
             }
+        }
+
+        if (await _tcgAreAltBlocked(myUid, otherUid)) {
+            alert('Trading is blocked between these accounts due to suspected shared account activity. Contact an admin if you believe this is an error.');
+            if (btn) { btn.disabled = false; btn.textContent = 'Confirm Trade and Send'; }
+            window._tcgProposalInProgress = false;
+            return;
         }
 
         if (existingTradeId) {
@@ -13053,7 +13196,7 @@ window._tcgOpenTradeReview = async function(tradeId) {
         const snapId = _tcgStoreSnap(c);
         const rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[c.rarity] || c.rarity;
         const rc = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' }[c.rarity] || 'var(--text-muted)';
-        const serial = c.serial != null ? `#${c.serial}` : (c.monthlyUr ? 'Wheel UR' : (c.founder ? '1 of 1' : ''));
+        const serial = c.serial != null ? `#${c.serial}` : ((c.monthlyUr||c.tradedMonthlyUr) ? 'Wheel UR' : (c.founder ? '1 of 1' : ''));
         return `<div onclick="window._tcgViewCardSnapshot(${snapId})" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px;border-radius:8px;border:1px solid var(--border-color);">
             <div style="width:88px;height:123px;overflow:hidden;pointer-events:none;"><div style="transform:scale(0.4);transform-origin:top left;">${_tcgBuildCardFace(c)}</div></div>
             <div style="text-align:center;width:88px;">
@@ -13151,18 +13294,15 @@ async function _tcgApplyTradeSide(uid, removeIds, addCards) {
     for (const id of (removeIds||[])) {
         try { await deleteDoc(doc(db,'card_collections',uid,'cards',id)); } catch(e) {}
     }
-    // Wheel UR cards (monthlyUr:true) require pendingUrClaim==true in wheel_state
-    // to pass the Firestore create rule. For traded URs the recipient never spun
-    // the wheel, so we temporarily set the flag before writing and clear it after.
-    const hasMonthlyUr = (addCards||[]).some(c => c.monthlyUr);
-    if (hasMonthlyUr) {
-        try { await setDoc(doc(db,'wheel_state',uid), { pendingUrClaim: true }, { merge: true }); } catch(e) {}
-    }
     for (const card of (addCards||[])) {
-        try { await addDoc(collection(db,'card_collections',uid,'cards'), card); } catch(e) {}
-    }
-    if (hasMonthlyUr) {
-        try { await setDoc(doc(db,'wheel_state',uid), { pendingUrClaim: false }, { merge: true }); } catch(e) {}
+        try {
+            // monthlyUr:true cards are gated by pendingUrClaim in Firestore rules,
+            // which is unreliable across async writes due to rule-evaluation consistency.
+            // Convert to tradedMonthlyUr:true — same display behaviour, no rule gate.
+            const { monthlyUr, ...rest } = card;
+            const cardToWrite = monthlyUr ? { ...rest, tradedMonthlyUr: true } : card;
+            await addDoc(collection(db,'card_collections',uid,'cards'), cardToWrite);
+        } catch(e) {}
     }
     window._tcgCollectionCache.delete(uid);
 }
@@ -13234,19 +13374,23 @@ window._tcgAcceptTrade = async function(tradeId) {
             throw e;
         }
 
-        // Lock BOTH sides atomically before transferring:
-        // 1. Lock the recipient's outgoing cards (requestCardIds under myUid) —
-        //    this is what prevents the same card being given away in two accepted trades simultaneously.
-        // 2. Lock the offerer's cards (offerCardIds under fromUid) — guards against
-        //    the sender offering the same card in multiple pending trades.
-        // Verify BOTH sides still have their cards, then lock both sides.
-        // Checking the offerer's cards catches the case where they already traded
-        // or sold those cards via the bulletin/auction after sending this offer.
+        if (await _tcgAreAltBlocked(myUid, t.fromUid)) {
+            try { await updateDoc(ref, { status: 'pending', updatedAt: new Date() }); } catch(e2) {}
+            alert('Trading is blocked between these accounts due to suspected shared account activity. Contact an admin if you believe this is an error.');
+            window._tcgAcceptInProgress = false;
+            return;
+        }
+
+        // Verify both sides still own their cards (read-only), then lock only OUR
+        // outgoing cards. Firestore rules only allow a user to lock their own cards
+        // (ownerUid == auth.uid), so we can never lock the offerer's side here.
+        // The offerer's cards are verified to still exist before we proceed; their
+        // client will delete them when _tcgProcessAcceptedTrades runs on their side.
         const myCardsOk = await _tcgCardsStillOwned(myUid, t.requestCardIds);
         const offerCardsOk = await _tcgCardsStillOwned(t.fromUid, t.offerCardIds);
         const myLocked = (myCardsOk && offerCardsOk) && await _tcgAcquireCardLocks(myUid, t.requestCardIds, tradeId);
-        const offerLocked = myLocked && await _tcgAcquireCardLocks(t.fromUid, t.offerCardIds, tradeId);
-        if (!myCardsOk || !offerCardsOk || !myLocked || !offerLocked) {
+        console.error('[TradeAccept] Validity checks', { tradeId, myCardsOk, offerCardsOk, myLocked, requestCardIds: t.requestCardIds, offerCardIds: t.offerCardIds });
+        if (!myCardsOk || !offerCardsOk || !myLocked) {
             if (myLocked) await _tcgReleaseCardLocks(myUid, t.requestCardIds);
             await updateDoc(ref, { status: 'invalid', updatedAt: new Date() });
             document.getElementById('tcg-trade-review-modal')?.remove();
@@ -13362,8 +13506,7 @@ window._tcgProcessAcceptedTrades = async function() {
                 const myCardsOk = await _tcgCardsStillOwned(myUid, t.requestCardIds);
                 const offerCardsOk = await _tcgCardsStillOwned(t.fromUid, t.offerCardIds);
                 const myLocked = (myCardsOk && offerCardsOk) && await _tcgAcquireCardLocks(myUid, t.requestCardIds, d.id);
-                const locked = myLocked && await _tcgAcquireCardLocks(t.fromUid, t.offerCardIds, d.id);
-                if (!myCardsOk || !offerCardsOk || !myLocked || !locked) {
+                if (!myCardsOk || !offerCardsOk || !myLocked) {
                     if (myLocked) await _tcgReleaseCardLocks(myUid, t.requestCardIds);
                     await updateDoc(d.ref, { status: 'invalid', updatedAt: new Date() });
                     continue;
@@ -13484,7 +13627,7 @@ function _tcgBulletinPickerGridHTML(mode, cards) {
         const snapId = _tcgStoreSnap(c);
         const selected = selectedIds?.has(c.id);
         const rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[c.rarity] || c.rarity;
-        const serial = c.serial != null ? `#${c.serial}` : (c.monthlyUr ? 'Wheel UR' : (c.founder ? '1 of 1' : ''));
+        const serial = c.serial != null ? `#${c.serial}` : ((c.monthlyUr||c.tradedMonthlyUr) ? 'Wheel UR' : (c.founder ? '1 of 1' : ''));
         return `<div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;">
             <div onclick="window.${toggleFn}(this,'${c.id}')" data-card-id="${c.id}" style="cursor:pointer;padding:4px;border-radius:10px;border:2px solid ${selected?selColor:'transparent'};background:${selected?selBg:'transparent'};">
                 <div style="width:110px;height:154px;overflow:hidden;border-radius:4px;pointer-events:none;">
@@ -13805,7 +13948,7 @@ function _auctionBuildCardHTML(item, myUid, mode) {
     const rl = rll[card.rarity] || card.rarity || '';
     const rc2 = rc[card.rarity] || 'var(--text-muted)';
     const maxV = RARITY_MAX_VERSIONS[card.rarity] || 5000;
-    const version = card.founder ? '1 of 1' : card.monthlyUr ? 'Wheel UR' : card.serial != null ? `#${card.serial} / ${maxV}` : '';
+    const version = card.founder ? '1 of 1' : (card.monthlyUr||card.tradedMonthlyUr) ? 'Wheel UR' : card.serial != null ? `#${card.serial} / ${maxV}` : '';
 
     let bidSection = '', actionHtml = '';
     if (mode === 'live') {
@@ -13815,7 +13958,10 @@ function _auctionBuildCardHTML(item, myUid, mode) {
             ${item.currentBidderName ? `<div style="font-size:10px;color:var(--text-muted);">by ${item.currentBidderName}</div>` : `<div style="font-size:10px;color:var(--text-muted);">No bids yet</div>`}
         </div>`;
         if (isSeller) actionHtml = `<div style="font-size:11px;color:var(--text-muted);text-align:center;font-weight:700;">Your listing</div>`;
-        else if (isTopBidder) actionHtml = `<div style="font-size:11px;color:#4CAF50;text-align:center;font-weight:800;">✓ You're winning!</div>`;
+        else if (isTopBidder) actionHtml = `<div style="display:flex;flex-direction:column;gap:5px;">
+            <div style="font-size:11px;color:#4CAF50;text-align:center;font-weight:800;">✓ You're winning!</div>
+            <button onclick="window._auctionOpenBidModal('${item.id}')" style="padding:7px;border-radius:8px;border:1px solid #4CAF50;background:transparent;color:#4CAF50;font-weight:800;font-size:11px;cursor:pointer;width:100%;">Raise Bid</button>
+        </div>`;
         else actionHtml = `<button onclick="window._auctionOpenBidModal('${item.id}')" style="padding:8px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-weight:800;font-size:11px;cursor:pointer;width:100%;">Place Bid</button>`;
     } else if (mode === 'upcoming') {
         bidSection = `<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Starting bid: <span style="font-weight:800;color:#f59e0b;">🟡 ${item.startingBid?.toLocaleString()}</span></div>`;
@@ -14291,8 +14437,9 @@ window._auctionOpenBidModal = async function(itemId) {
     const snap = await getDoc(doc(db, 'auction_listings', itemId));
     if (!snap.exists() || !['live','queued'].includes(snap.data().status)) { alert('This auction item is no longer available.'); return; }
     const item = { id: snap.id, ...snap.data() };
-    const minBid = (item.currentBid || item.startingBid) + 10;
     const myUid = auth.currentUser.uid;
+    const isRebid = item.currentBidderUid === myUid;
+    const minBid = (item.currentBid || item.startingBid) + 10;
 
     const modal = document.createElement('div');
     modal.id = 'tcg-auction-bid-modal';
@@ -14305,10 +14452,14 @@ window._auctionOpenBidModal = async function(itemId) {
     let myAmber = 0;
     try { const pd = await getDoc(doc(db,'profiles',myUid)); if (pd.exists()) myAmber = pd.data().amber||0; } catch(e) {}
 
+    const diffNote = isRebid
+        ? `<div style="font-size:11px;color:#4CAF50;margin-top:6px;font-weight:700;">✓ You're the top bidder — you'll only be charged the difference.</div>`
+        : '';
+
     modal.innerHTML = `
         <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:400px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-                <div style="font-size:17px;font-weight:800;">Place a Bid</div>
+                <div style="font-size:17px;font-weight:800;">${isRebid ? 'Raise Your Bid' : 'Place a Bid'}</div>
                 <button onclick="document.getElementById('tcg-auction-bid-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
             </div>
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;background:var(--bg-gray);border-radius:12px;padding:12px;">
@@ -14322,16 +14473,17 @@ window._auctionOpenBidModal = async function(itemId) {
                 </div>
             </div>
             <div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;margin-bottom:16px;">
-                <div style="font-size:11px;color:var(--text-muted);font-weight:700;">Current bid</div>
+                <div style="font-size:11px;color:var(--text-muted);font-weight:700;">${isRebid ? 'Your current bid' : 'Current bid'}</div>
                 <div style="font-size:20px;font-weight:800;color:#f59e0b;">🟡 ${(item.currentBid||item.startingBid).toLocaleString()}</div>
-                ${item.currentBidderName ? `<div style="font-size:11px;color:var(--text-muted);">by ${item.currentBidderName}</div>` : '<div style="font-size:11px;color:var(--text-muted);">No bids yet</div>'}
+                ${!isRebid && item.currentBidderName ? `<div style="font-size:11px;color:var(--text-muted);">by ${item.currentBidderName}</div>` : ''}
             </div>
             <label style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Your Bid (min 🟡 ${minBid.toLocaleString()})</label>
             <input id="auction-bid-amount" type="number" min="${minBid}" step="10" value="${minBid}" style="width:100%;margin-top:6px;padding:10px 12px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:16px;font-weight:700;box-sizing:border-box;">
             <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Your balance: 🟡 ${myAmber.toLocaleString()} Amber</div>
+            ${diffNote}
             <div style="display:flex;gap:10px;margin-top:18px;">
                 <button onclick="document.getElementById('tcg-auction-bid-modal').remove()" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;">Cancel</button>
-                <button id="auction-bid-btn" onclick="window._auctionPlaceBid(this,'${itemId}',${minBid})" style="flex:2;padding:12px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-weight:800;font-size:14px;cursor:pointer;">Confirm Bid</button>
+                <button id="auction-bid-btn" onclick="window._auctionPlaceBid(this,'${itemId}',${minBid})" style="flex:2;padding:12px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-weight:800;font-size:14px;cursor:pointer;">${isRebid ? 'Raise Bid' : 'Confirm Bid'}</button>
             </div>
         </div>`;
     document.body.appendChild(modal);
@@ -14621,7 +14773,7 @@ window._tcgRefreshBulletinGrid = function() {
             const rarityC = rc[first.rarity] || 'var(--text-muted)';
             const maxV = RARITY_MAX_VERSIONS[first.rarity] || 5000;
             const version = first.founder ? '1 of 1'
-                : first.monthlyUr ? 'Wheel UR'
+                : (first.monthlyUr||first.tradedMonthlyUr) ? 'Wheel UR'
                 : first.serial != null ? `#${first.serial} / ${maxV}` : '';
             const timeAgo = formatTimeAgo(listing.createdAt);
             const offerBadge = offerCount > 0
@@ -14853,7 +15005,7 @@ window._tcgOpenBulletinOfferModal = async function(listingId) {
     const listingMiniCards = (listing.cards || []).map(c => {
         const snapId = _tcgStoreSnap(c);
         const rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[c.rarity] || c.rarity;
-        const serial = c.serial != null ? `#${c.serial}` : (c.monthlyUr ? 'Wheel UR' : (c.founder ? '1 of 1' : ''));
+        const serial = c.serial != null ? `#${c.serial}` : ((c.monthlyUr||c.tradedMonthlyUr) ? 'Wheel UR' : (c.founder ? '1 of 1' : ''));
         return `<div onclick="window._tcgViewCardSnapshot(${snapId})" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-card);">
             <div style="width:88px;height:123px;overflow:hidden;border-radius:6px;flex-shrink:0;pointer-events:none;">
                 <div style="transform:scale(0.4);transform-origin:top left;width:220px;height:308px;">${_tcgBuildCardFace(c)}</div>
@@ -15077,7 +15229,7 @@ window._tcgOpenBulletinOffersView = async function(listingId) {
         const miniCards = (o.offerCards || []).map(c => {
             const snapId = _tcgStoreSnap(c);
             const rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[c.rarity] || c.rarity;
-            const serial = c.serial != null ? `#${c.serial}` : (c.monthlyUr ? 'Wheel UR' : '');
+            const serial = c.serial != null ? `#${c.serial}` : ((c.monthlyUr||c.tradedMonthlyUr) ? 'Wheel UR' : '');
             return `<div onclick="window._tcgViewCardSnapshot(${snapId})" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px;border-radius:7px;border:1px solid var(--border-color);background:var(--bg-card);">
                 <div style="width:66px;height:92px;overflow:hidden;border-radius:4px;flex-shrink:0;pointer-events:none;">
                     <div style="transform:scale(0.3);transform-origin:top left;width:220px;height:308px;">${_tcgBuildCardFace(c)}</div>
@@ -15168,6 +15320,15 @@ window._tcgAcceptBulletinOffer = async function(btn, listingId, offerId) {
                 offerorCompleted: false,
             });
         });
+
+        if (await _tcgAreAltBlocked(myUid, offer.fromUid)) {
+            try { await updateDoc(doc(db, 'bulletin_listings', listingId), { status: 'active' }); } catch(e2) {}
+            try { await updateDoc(doc(db, 'bulletin_offers', offerId), { status: 'pending' }); } catch(e2) {}
+            alert('Trading is blocked between these accounts due to suspected shared account activity. Contact an admin if you believe this is an error.');
+            btn.disabled = false; btn.textContent = 'Accept';
+            window._tcgBulletinActionInProgress = false;
+            return;
+        }
 
         // Validate offeror's amber balance before proceeding
         const offerAmber = offer.offerAmber || 0;
@@ -15541,11 +15702,92 @@ window._tcgAdminTradeDetail = async function(tradeId) {
                 </div>
             </div>
             ${(t.history||[]).length ? `<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">Counter History (${t.history.length} round${t.history.length!==1?'s':''})</div><div style="font-size:12px;color:var(--text-muted);">${t.history.map((h,i) => `Round ${i+1}: ${(h.offerCards||[]).length} cards from ${h.fromUid?.slice(0,8)||'?'}… ↔ ${(h.requestCards||[]).length} cards from ${h.toUid?.slice(0,8)||'?'}…`).join('<br>')}</div></div>` : ''}
+            <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);display:flex;gap:10px;flex-wrap:wrap;">
+                <button onclick="window._tcgAdminDiagnoseTrade('${tradeId}')" style="padding:8px 16px;border-radius:8px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;font-weight:700;font-size:12px;cursor:pointer;">🔍 Diagnose (Check Cards + Locks)</button>
+                ${['pending','processing','invalid','cancelled','declined'].includes(t.status) ? '' : ''}
+                <button onclick="window._tcgAdminResetTrade('${tradeId}')" style="padding:8px 16px;border-radius:8px;border:1px solid #f59e0b;background:transparent;color:#f59e0b;font-weight:700;font-size:12px;cursor:pointer;">🔄 Reset to Pending</button>
+            </div>
+            <div id="tcg-admin-trade-diag-${tradeId}" style="margin-top:12px;font-size:12px;"></div>
         `;
     } catch(e) {
         const body = document.getElementById('tcg-admin-trade-detail-body');
         if (body) body.innerHTML = `<p style="color:#ef4444;">Failed: ${e.message}</p>`;
     }
+};
+
+window._tcgAdminDiagnoseTrade = async function(tradeId) {
+    if (!window.isAdmin) return;
+    const diagEl = document.getElementById(`tcg-admin-trade-diag-${tradeId}`);
+    if (!diagEl) return;
+    diagEl.innerHTML = '<span style="color:var(--text-muted);">Checking…</span>';
+    try {
+        const snap = await getDoc(doc(db,'trades',tradeId));
+        if (!snap.exists()) { diagEl.innerHTML = '<span style="color:#ef4444;">Trade not found.</span>'; return; }
+        const t = snap.data();
+
+        const checkCards = async (uid, ids, label) => {
+            const results = [];
+            for (const id of (ids||[])) {
+                const s = await getDoc(doc(db,'card_collections',uid,'cards',id));
+                results.push(`<div style="font-family:monospace;font-size:11px;">${s.exists() ? '✅' : '❌'} ${id.slice(0,12)}… — ${s.exists() ? (s.data()?.name||'?')+' '+s.data()?.rarity+'#'+s.data()?.serial : 'MISSING'}</div>`);
+            }
+            return results.length ? results.join('') : '<div style="color:var(--text-muted);font-size:11px;font-style:italic;">No card IDs</div>';
+        };
+
+        const checkLocks = async (uid, ids) => {
+            const results = [];
+            for (const id of (ids||[])) {
+                const lockRef = doc(db,'card_trade_locks',`${uid}_${id}`);
+                const s = await getDoc(lockRef);
+                if (s.exists()) {
+                    results.push(`<div style="font-family:monospace;font-size:11px;">🔒 ${id.slice(0,12)}… locked by trade <strong>${s.data().tradeId}</strong> <button onclick="window._tcgAdminClearLock('${uid}','${id}',this)" style="padding:1px 6px;border-radius:4px;border:none;background:#ef4444;color:#fff;font-size:10px;cursor:pointer;margin-left:4px;">Clear Lock</button></div>`);
+                }
+            }
+            return results;
+        };
+
+        const [offerCheck, reqCheck] = await Promise.all([
+            checkCards(t.fromUid, t.offerCardIds, 'Offered'),
+            checkCards(t.toUid, t.requestCardIds, 'Requested')
+        ]);
+        const [offerLocks, reqLocks] = await Promise.all([
+            checkLocks(t.fromUid, t.offerCardIds),
+            checkLocks(t.toUid, t.requestCardIds)
+        ]);
+        const allLocks = [...offerLocks, ...reqLocks];
+
+        diagEl.innerHTML = `
+            <div style="background:var(--bg-gray);border-radius:8px;padding:12px;">
+                <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">${t.fromName||'Sender'}'s Cards (offerCardIds)</div>
+                ${offerCheck}
+                <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin:10px 0 6px;">${t.toName||'Recipient'}'s Cards (requestCardIds)</div>
+                ${reqCheck}
+                ${allLocks.length ? `<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#ef4444;margin:10px 0 6px;">Active Locks</div>${allLocks.join('')}` : '<div style="font-size:11px;color:#10b981;margin-top:8px;">✅ No stale locks found</div>'}
+            </div>`;
+    } catch(e) { diagEl.innerHTML = `<span style="color:#ef4444;">Diagnose failed: ${e.message}</span>`; }
+};
+
+window._tcgAdminClearLock = async function(uid, cardId, btn) {
+    if (!window.isAdmin) return;
+    btn.disabled = true; btn.textContent = '…';
+    try {
+        await deleteDoc(doc(db,'card_trade_locks',`${uid}_${cardId}`));
+        btn.closest('div').innerHTML = `<span style="color:#10b981;font-size:11px;">✅ Lock cleared for ${cardId.slice(0,12)}…</span>`;
+    } catch(e) {
+        btn.disabled = false; btn.textContent = 'Clear Lock';
+        alert('Failed: ' + e.message);
+    }
+};
+
+window._tcgAdminResetTrade = async function(tradeId) {
+    if (!window.isAdmin) return;
+    if (!confirm(`Reset trade ${tradeId} to "pending"? This allows the recipient to attempt accepting again.`)) return;
+    try {
+        await updateDoc(doc(db,'trades',tradeId), { status: 'pending', updatedAt: new Date() });
+        alert('Trade reset to pending.');
+        document.getElementById('tcg-admin-trade-detail-modal')?.remove();
+        window._tcgAdminLoadTradeLog();
+    } catch(e) { alert('Failed: ' + e.message); }
 };
 
 // Modal — search for a user by display name to start a new trade with
@@ -23248,6 +23490,12 @@ function _dungeonGeneratePool(dateKey) {
         if (tier === 'e') eUsed = true;
         pool.push(tier);
     }
+    // Guarantee at least one S gate — replace a random non-E gate if none was generated
+    if (!sUsed) {
+        const candidates = pool.map((t, i) => t !== 'e' ? i : -1).filter(i => i !== -1);
+        const replaceIdx = candidates[Math.floor(rng() * candidates.length)];
+        pool[replaceIdx] = 's';
+    }
     return pool;
 }
 
@@ -23257,7 +23505,7 @@ const DUNGEON_RARITY_POWER = { common:1, rare:2, sr:4, ssr:8, ur:16 };
 
 function _dungeonCardPower(card) {
     let power = DUNGEON_RARITY_POWER[card.rarity] || 1;
-    if (card.founder || card.monthlyUr) power += 3;
+    if (card.founder || (card.monthlyUr||card.tradedMonthlyUr)) power += 3;
     else if (card.serial != null) {
         if (card.serial < 10) power += 3;
         else if (card.serial < 100) power += 2;

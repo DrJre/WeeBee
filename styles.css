@@ -515,6 +515,8 @@ h3 { font-size: 18px; margin-bottom: 15px; }
 .review-card.interactive:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.08); }
 
 .review-header { display: flex; align-items: center; gap: 15px; margin-bottom: 15px; position: relative; z-index: 2; }
+.spoiler-post-wrap { margin-bottom: 20px; }
+.spoiler-post-wrap .review-header { z-index: 21; }
 .review-header span { color: var(--text-muted); font-size: 14px; }
 .review-text { font-size: 14px; line-height: 1.6; margin-bottom: 15px; position: relative; z-index: 2; white-space: pre-wrap; }
 .review-anime-thumb { position: absolute; top: 0; right: 0; height: 100%; width: 185px; object-fit: cover; opacity: 0.85; -webkit-mask-image: linear-gradient(to right, transparent 0%, black 55%); mask-image: linear-gradient(to right, transparent 0%, black 55%); z-index: 3; cursor: pointer; border-radius: 0 var(--border-radius) var(--border-radius) 0; transition: height 0.3s ease, border-radius 0.3s ease, opacity 0.2s; }
