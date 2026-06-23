@@ -150,11 +150,16 @@
                     <div id="home-welcome-strip" style="display:none;"></div>
                     <div id="home-schedule-section"></div>
 
-                    <h2>Trending Airing Anime</h2>
-                    <div class="carousel-container">
-                        <button class="carousel-arrow left" onclick="scrollCarousel('trending-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
-                        <div class="carousel" id="trending-carousel"><div class="loading">Fetching trending anime...</div></div>
-                        <button class="carousel-arrow right" onclick="scrollCarousel('trending-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                    <!-- Spring Awards banner — shown when a seasonal vote is upcoming or live, replaces trending carousel -->
+                    <div id="home-awards-banner" style="display:none; margin-bottom:24px;"></div>
+
+                    <div id="home-trending-section">
+                        <h2>Trending Airing Anime</h2>
+                        <div class="carousel-container">
+                            <button class="carousel-arrow left" onclick="scrollCarousel('trending-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <div class="carousel" id="trending-carousel"><div class="loading">Fetching trending anime...</div></div>
+                            <button class="carousel-arrow right" onclick="scrollCarousel('trending-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                        </div>
                     </div>
 
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px; margin-bottom:16px;">
@@ -1072,10 +1077,32 @@
                             <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                                 <div style="flex:1; min-width:200px;">
                                     <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🔧 Repair Unsettled Auctions</div>
-                                    <div style="font-size:12px; color:var(--text-muted);">Settles expired auctions stuck in 'queued' status — sends cards to winners, returns unsold items to sellers.</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Settles expired auctions stuck in queued, live, or settling status — sends cards to winners, returns unsold items to sellers.</div>
                                     <div id="auction-repair-status" style="font-size:12px; color:var(--text-muted); margin-top:6px;"></div>
                                 </div>
                                 <button onclick="window._auctionAdminRepair()" style="padding:9px 18px; border-radius:8px; border:none; background:#ef4444; color:#fff; font-weight:800; font-size:13px; cursor:pointer; flex-shrink:0;">Run Repair</button>
+                            </div>
+
+                            <!-- Force-Deliver Won Auction (undelivered card) -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:4px;">📦 Force-Deliver Won Auction</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">For auctions stuck in 'won' status where the card was never actually delivered. Paste the Firestore listing ID and hit Deliver.</div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                    <input id="auction-force-id" type="text" placeholder="Listing doc ID (from Firestore)" style="flex:1;min-width:200px;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;">
+                                    <button onclick="window._auctionForceDeliver(document.getElementById('auction-force-id').value.trim())" style="padding:9px 18px;border-radius:8px;border:none;background:#f59e0b;color:#222;font-weight:800;font-size:13px;cursor:pointer;flex-shrink:0;">Deliver</button>
+                                </div>
+                                <div id="auction-force-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;"></div>
+                            </div>
+
+                            <!-- Repair Bulletin Trade -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:4px;">🛠️ Repair Bulletin Trade</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">For trades where the listing owner got their cards but the offeror didn't. Paste the <strong>bulletin_offers</strong> doc ID from Firestore. Each broken offer needs to be repaired separately.</div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                    <input id="repair-bulletin-offer-id" type="text" placeholder="bulletin_offers doc ID" style="flex:1;min-width:200px;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;">
+                                    <button onclick="window._repairBulletinTrade()" style="padding:9px 18px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;cursor:pointer;flex-shrink:0;">Look Up</button>
+                                </div>
+                                <div id="repair-bulletin-result" style="margin-top:10px;"></div>
                             </div>
 
                         </div>
@@ -1212,6 +1239,19 @@
                                 </div>
                                 <button onclick="window._tcgDeduplicateCollections(true)" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Dry Run</button>
                                 <button onclick="window._tcgDeduplicateCollections(false)" style="padding:10px 20px; border-radius:8px; border:1px solid #ef4444; background:transparent; color:#ef4444; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Delete Dupes</button>
+                            </div>
+
+                            <!-- Cross-User Serial Dupe Scanner -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:8px;">
+                                    <div style="flex:1; min-width:200px;">
+                                        <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🔍 Cross-User Serial Dupe Scanner</div>
+                                        <div style="font-size:12px; color:var(--text-muted);">Finds cards where two+ users own the same serial. You pick which copy to delete per card.</div>
+                                        <span id="tcg-crossdupe-status" style="font-size:12px; color:var(--text-muted);"></span>
+                                    </div>
+                                    <button onclick="window._tcgScanCrossUserDupes()" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Scan</button>
+                                </div>
+                                <div id="tcg-crossdupe-results"></div>
                             </div>
 
                             <!-- Pack Odds Simulator -->
@@ -2563,6 +2603,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=414"></script>
+    <script type="module" src="app.js?v=430"></script>
 </body>
 </html>

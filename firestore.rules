@@ -563,8 +563,11 @@ service cloud.firestore {
     // applied.
     match /card_trade_locks/{lockId} {
       allow read: if true;
-      allow create: if isAuth() &&
-        get(/databases/$(database)/documents/trades/$(request.resource.data.tradeId)).data.participants.hasAny([request.auth.uid]);
+      // Users can only lock cards they own — prevents one user from blocking
+      // another user's cards. The tradeId field identifies which trade holds
+      // the lock; bulletin trades use a "bulletin_" prefix instead of a
+      // trades-collection doc ID.
+      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
       allow delete: if isAuth();
     }
   }

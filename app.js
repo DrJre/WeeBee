@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, collectionGroup, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch, waitForPendingWrites } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, collection, collectionGroup, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch, waitForPendingWrites, deleteField } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-analytics.js";
@@ -870,6 +870,7 @@ onAuthStateChanged(auth, async (user) => {
         window._syncGameProgressFromCloud();
         window._amberSubscribeTopbar();
         window._tcgProcessAcceptedTrades();
+        window._tcgProcessAcceptedBulletinOffers();
         // Apply saved custom cursor + theme preference (cloud-synced so it
         // follows the user across devices instead of defaulting to dark).
         getDoc(doc(db, 'profiles', user.uid)).then(pd => {
@@ -5115,6 +5116,178 @@ window.loadActiveSeasonalVote = async function() {
     } catch(e) { console.error('loadActiveSeasonalVote', e); }
 };
 
+// Opens a modal to manage nominees for the coming-soon state.
+// Saves to seasonal_votes/{season_year} with state:'upcoming' so the banner
+// appears without voting being open. Admin can add nominees by MAL ID
+// (auto-fetches title + cover from Jikan) or remove ones already added.
+window.openSeasonalNomineeManager = function() {
+    if (!window.isAdmin) return;
+    const existing = window.activeSeasonalVote?.candidates || [];
+    const modal = document.createElement('div');
+    modal.id = 'seasonal-nominee-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+    const renderList = () => {
+        const listEl = modal.querySelector('#nominee-list');
+        if (!listEl) return;
+        const candidates = window._seasonalNomineeDraft || [];
+        listEl.innerHTML = candidates.length
+            ? candidates.map((c, i) => `
+                <div style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;background:var(--bg-gray);">
+                    <img src="${c.image}" style="width:36px;height:50px;object-fit:cover;border-radius:4px;flex-shrink:0;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.title}</div>
+                        <div style="font-size:11px;color:var(--text-muted);">MAL ID: ${c.mal_id}</div>
+                    </div>
+                    <button onclick="window._seasonalNomineeDraft.splice(${i},1); window.openSeasonalNomineeManager(); document.getElementById('seasonal-nominee-modal')?.remove();" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:18px;padding:4px;">✕</button>
+                </div>`).join('')
+            : '<p style="color:var(--text-muted);font-size:13px;margin:0;">No nominees yet.</p>';
+    };
+    window._seasonalNomineeDraft = window._seasonalNomineeDraft || [...existing];
+    modal.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:16px;padding:24px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                <div style="font-size:17px;font-weight:800;">🏆 Spring 2026 Nominees</div>
+                <button onclick="document.getElementById('seasonal-nominee-modal')?.remove();" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--text-muted);">✕</button>
+            </div>
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Add nominees by MAL ID, or auto-load the top Spring 2026 anime from the Discover page pool.</div>
+            <button id="nominee-autoload-btn" onclick="window._autoLoadSeasonalNominees()" style="width:100%;padding:9px;border-radius:8px;border:1px dashed var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;margin-bottom:14px;">⬇️ Auto-load from Spring 2026 (top 10 by popularity)</button>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <input id="nominee-mal-id" type="number" placeholder="Or add by MAL ID manually" style="flex:1;padding:9px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;">
+                <button id="nominee-add-btn" onclick="window._addSeasonalNominee()" style="padding:9px 16px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-weight:700;font-size:13px;cursor:pointer;">Add</button>
+            </div>
+            <div id="nominee-add-status" style="font-size:12px;color:var(--text-muted);margin-bottom:10px;min-height:16px;"></div>
+            <div id="nominee-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                <input id="nominee-season-label" type="text" placeholder="Season label (e.g. Spring 2026)" value="${window.activeSeasonalVote?.season || 'Spring 2026'}" style="flex:1;min-width:160px;padding:9px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;">
+                <button onclick="window._saveSeasonalUpcoming()" style="padding:9px 18px;border-radius:8px;border:none;background:#FF9800;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">Save Coming Soon Banner</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    renderList();
+    modal.querySelector('#nominee-mal-id')?.addEventListener('keydown', e => { if (e.key === 'Enter') window._addSeasonalNominee(); });
+};
+
+window._addSeasonalNominee = async function() {
+    const input = document.getElementById('nominee-mal-id');
+    const statusEl = document.getElementById('nominee-add-status');
+    const btn = document.getElementById('nominee-add-btn');
+    const malId = parseInt(input?.value?.trim());
+    if (!malId) return;
+    if ((window._seasonalNomineeDraft || []).some(c => c.mal_id === malId)) {
+        statusEl.textContent = 'Already added.'; statusEl.style.color = 'var(--text-muted)'; return;
+    }
+    btn.disabled = true; btn.textContent = 'Fetching…'; statusEl.textContent = '';
+    try {
+        const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}`);
+        const { data } = await res.json();
+        if (!data) throw new Error('Not found');
+        window._seasonalNomineeDraft = window._seasonalNomineeDraft || [];
+        window._seasonalNomineeDraft.push({
+            mal_id: data.mal_id,
+            title: data.title_english || data.title,
+            image: data.images?.jpg?.large_image_url || data.images?.jpg?.image_url || ''
+        });
+        input.value = '';
+        statusEl.textContent = `Added: ${data.title_english || data.title}`; statusEl.style.color = '#4CAF50';
+        document.getElementById('nominee-list').innerHTML = '';
+        window.openSeasonalNomineeManager();
+        document.getElementById('seasonal-nominee-modal')?.remove();
+    } catch(e) {
+        statusEl.textContent = `Error: ${e.message}`; statusEl.style.color = '#ef4444';
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Add'; }
+    }
+};
+
+window._autoLoadSeasonalNominees = async function() {
+    const btn = document.getElementById('nominee-autoload-btn');
+    const statusEl = document.getElementById('nominee-add-status');
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading from Jikan…'; }
+    try {
+        const res = await fetch('https://api.jikan.moe/v4/seasons/2026/spring?limit=25');
+        const { data } = await res.json();
+        const seenIds = new Set(), seenTitles = new Set();
+        const baseTitle = t => (t || '').toLowerCase().replace(/[\s:·\-]+(season|part|cour|s\d|p\d|\d+).*$/i, '').trim();
+        const nominees = (data || [])
+            .filter(a => a.type === 'TV' && a.images?.jpg?.image_url && !a.explicit_genres?.length)
+            .sort((a, b) => (b.members || 0) - (a.members || 0))
+            .filter(a => {
+                if (seenIds.has(a.mal_id)) return false;
+                const bt = baseTitle(a.title_english || a.title);
+                if (seenTitles.has(bt)) return false;
+                seenIds.add(a.mal_id); seenTitles.add(bt);
+                return true;
+            })
+            .slice(0, 10)
+            .map(a => ({ mal_id: a.mal_id, title: a.title_english || a.title, image: a.images.jpg.large_image_url || a.images.jpg.image_url }));
+        window._seasonalNomineeDraft = nominees;
+        statusEl.textContent = `Loaded ${nominees.length} nominees from Spring 2026. Remove any you don't want before saving.`;
+        statusEl.style.color = '#4CAF50';
+        // Re-render the list in place
+        const listEl = document.getElementById('nominee-list');
+        if (listEl) {
+            listEl.innerHTML = nominees.map((c, i) => `
+                <div style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;background:var(--bg-gray);">
+                    <img src="${c.image}" style="width:36px;height:50px;object-fit:cover;border-radius:4px;flex-shrink:0;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.title}</div>
+                        <div style="font-size:11px;color:var(--text-muted);">MAL ID: ${c.mal_id}</div>
+                    </div>
+                    <button onclick="window._seasonalNomineeDraft.splice(${i},1);this.closest('div[style]').remove();" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:18px;padding:4px;">✕</button>
+                </div>`).join('');
+        }
+    } catch(e) {
+        if (statusEl) { statusEl.textContent = 'Failed to load: ' + e.message; statusEl.style.color = '#ef4444'; }
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '⬇️ Auto-load from Spring 2026 (top 10 by popularity)'; }
+    }
+};
+
+window._saveSeasonalUpcoming = async function() {
+    if (!window.isAdmin) return;
+    const nominees = window._seasonalNomineeDraft || [];
+    if (!nominees.length) { alert('Add at least one nominee first.'); return; }
+    const seasonLabel = document.getElementById('nominee-season-label')?.value?.trim() || 'Spring 2026';
+    const docId = seasonLabel.toLowerCase().replace(/\s+/g, '_');
+    try {
+        await setDoc(doc(db, 'seasonal_votes', docId), {
+            season: seasonLabel, state: 'upcoming', closed: false,
+            candidates: nominees, voteCounts: {}, createdAt: new Date()
+        });
+        window.activeSeasonalVote = { id: docId, season: seasonLabel, state: 'upcoming', closed: false, candidates: nominees, voteCounts: {} };
+        window._seasonalNomineeDraft = null;
+        document.getElementById('seasonal-nominee-modal')?.remove();
+        window.renderSeasonalVoting();
+    } catch(e) { alert('Failed to save: ' + e.message); }
+};
+
+// Transitions the upcoming doc to live voting — sets proper start/end dates and removes the upcoming state.
+window.startSeasonalVoteFromUpcoming = async function() {
+    if (!window.isAdmin || !window.activeSeasonalVote) return;
+    if (!confirm('Open voting now? The "coming soon" banner will switch to live voting.')) return;
+    const vote = window.activeSeasonalVote;
+    const now = new Date();
+    const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    try {
+        await updateDoc(doc(db, 'seasonal_votes', vote.id), { state: deleteField(), startDate: now, endDate });
+        vote.state = undefined; vote.startDate = now; vote.endDate = endDate;
+        window.mySeasonalVote = null;
+        window.renderSeasonalVoting();
+    } catch(e) { alert('Failed: ' + e.message); }
+};
+
+// Removes the coming-soon banner entirely (marks doc closed so sections hide).
+window.cancelSeasonalUpcoming = async function() {
+    if (!window.isAdmin || !window.activeSeasonalVote) return;
+    if (!confirm('Remove the coming-soon banner? This deletes the upcoming vote doc.')) return;
+    try {
+        await deleteDoc(doc(db, 'seasonal_votes', window.activeSeasonalVote.id));
+        window.activeSeasonalVote = null;
+        window._seasonalNomineeDraft = null;
+        window.renderSeasonalVoting();
+    } catch(e) { alert('Failed: ' + e.message); }
+};
+
 window.startSeasonalVote = async function(isTest) {
     if (!window.isAdmin) return;
     const btn = document.getElementById('admin-start-vote-btn');
@@ -5197,6 +5370,56 @@ window.closeSeasonalVote = async function(voteId) {
 
 window.renderSeasonalVoting = function() {
     const vote = window.activeSeasonalVote;
+    const isUpcoming = vote && vote.state === 'upcoming';
+    const isLive = vote && !vote.state && !vote.closed;
+    const isClosed = vote && vote.closed;
+
+    // ── Home page: swap trending carousel for awards banner ──────────────────
+    const homeBanner = document.getElementById('home-awards-banner');
+    const homeTrending = document.getElementById('home-trending-section');
+    if (homeBanner && homeTrending) {
+        if (vote && (isUpcoming || isLive || isClosed)) {
+            homeTrending.style.display = 'none';
+            homeBanner.style.display = 'block';
+            const nominees = vote.candidates || [];
+            const thumbs = nominees.slice(0, 10).map(c =>
+                `<img src="${c.image}" onclick="loadAnimeDetails(${c.mal_id})" title="${c.title}"
+                    style="width:64px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0;border:2px solid rgba(255,255,255,0.15);transition:transform 0.15s;"
+                    onmouseover="this.style.transform='scale(1.06)'" onmouseout="this.style.transform='scale(1)'">`
+            ).join('');
+            const statusBadge = isUpcoming
+                ? `<span style="background:rgba(255,152,0,0.18);color:#FF9800;border:1px solid rgba(255,152,0,0.4);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:800;letter-spacing:1px;">VOTE OPENS SOON</span>`
+                : isLive
+                ? `<span style="background:rgba(76,175,80,0.18);color:#4CAF50;border:1px solid rgba(76,175,80,0.4);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:800;letter-spacing:1px;">🗳️ VOTING OPEN</span>`
+                : `<span style="background:rgba(150,150,150,0.18);color:var(--text-muted);border:1px solid var(--border-color);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:800;letter-spacing:1px;">VOTING CLOSED</span>`;
+            const ctaBtn = isLive
+                ? `<button onclick="switchView('discover-view')" style="margin-top:14px;padding:9px 22px;border-radius:20px;border:2px solid rgba(255,255,255,0.6);background:rgba(255,255,255,0.12);color:#fff;font-weight:800;font-size:13px;cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.22)'" onmouseout="this.style.background='rgba(255,255,255,0.12)'">Cast Your Vote →</button>`
+                : isUpcoming
+                ? `<button onclick="switchView('discover-view')" style="margin-top:14px;padding:9px 22px;border-radius:20px;border:2px solid rgba(255,255,255,0.5);background:transparent;color:rgba(255,255,255,0.75);font-weight:700;font-size:13px;cursor:pointer;">View Nominees →</button>`
+                : '';
+            homeBanner.innerHTML = `
+                <div style="border-radius:16px;overflow:hidden;background:linear-gradient(135deg,#1a0533 0%,#2d1b69 40%,#0d3b2e 100%);padding:24px 28px;position:relative;">
+                    <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2220%22 cy=%2220%22 r=%2240%22 fill=%22rgba(255,152,0,0.06)%22/><circle cx=%2280%22 cy=%2270%22 r=%2250%22 fill=%22rgba(99,102,241,0.07)%22/></svg>');pointer-events:none;"></div>
+                    <div style="position:relative;z-index:1;display:flex;flex-direction:column;gap:10px;">
+                        <div>${statusBadge}</div>
+                        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+                            <div>
+                                <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,200,80,0.7);margin-bottom:6px;">WeeBee Awards</div>
+                                <div style="font-size:26px;font-weight:900;color:#fff;line-height:1.15;margin-bottom:4px;">Anime of the Season</div>
+                                <div style="font-size:16px;font-weight:700;color:rgba(255,255,255,0.6);">${vote.season || 'Spring 2026'}</div>
+                                ${ctaBtn}
+                            </div>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;max-width:700px;">${thumbs}</div>
+                        </div>
+                    </div>
+                </div>`;
+        } else {
+            homeTrending.style.display = '';
+            homeBanner.style.display = 'none';
+        }
+    }
+
+    // ── Discover + News sections ─────────────────────────────────────────────
     const containers = [
         { sectionId: 'discover-seasonal-section', contentId: 'discover-seasonal-content', titleId: 'discover-seasonal-title', subId: 'discover-seasonal-sub', adminId: 'discover-seasonal-admin' },
         { sectionId: 'news-seasonal-section', contentId: 'news-seasonal-content', titleId: 'news-seasonal-title', subId: 'news-seasonal-sub', adminId: null }
@@ -5205,72 +5428,82 @@ window.renderSeasonalVoting = function() {
         const section = document.getElementById(sectionId);
         const content = document.getElementById(contentId);
         if (!section || !content) return;
-        // Admin panel
+
+        // Admin controls
         if (adminId && window.isAdmin) {
             const adminEl = document.getElementById(adminId);
             if (adminEl) {
-                adminEl.style.display = 'flex';
-                adminEl.style.gap = '10px';
-                adminEl.style.flexWrap = 'wrap';
+                adminEl.style.cssText = 'display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;';
                 if (!vote) {
                     adminEl.innerHTML = `
-                        <button id="admin-start-vote-btn" onclick="startSeasonalVote(false)" class="action-btn" style="background:#FF9800; color:white;"><span class="material-symbols-outlined">how_to_vote</span> Start Seasonal Vote</button>
-                        <button onclick="startSeasonalVote(true)" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">science</span> Start Test Vote (5 min)</button>`;
-                } else if (!vote.closed) {
-                    adminEl.innerHTML = `<button onclick="closeSeasonalVote('${vote.id}')" class="action-btn" style="background:#f44336; color:white;"><span class="material-symbols-outlined">gavel</span> End Vote Now</button>`;
+                        <button onclick="window.openSeasonalNomineeManager()" class="action-btn" style="background:#7c3aed;color:white;"><span class="material-symbols-outlined">how_to_vote</span> Set Nominees (Coming Soon)</button>
+                        <button onclick="startSeasonalVote(true)" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);"><span class="material-symbols-outlined">science</span> Start Test Vote (5 min)</button>`;
+                } else if (isUpcoming) {
+                    adminEl.innerHTML = `
+                        <button onclick="window.openSeasonalNomineeManager()" class="action-btn" style="background:#7c3aed;color:white;"><span class="material-symbols-outlined">edit</span> Edit Nominees</button>
+                        <button onclick="window.startSeasonalVoteFromUpcoming()" class="action-btn" style="background:#FF9800;color:white;"><span class="material-symbols-outlined">play_arrow</span> Open Voting Now</button>
+                        <button onclick="window.cancelSeasonalUpcoming()" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);"><span class="material-symbols-outlined">close</span> Remove Banner</button>`;
+                } else if (isLive) {
+                    adminEl.innerHTML = `<button onclick="closeSeasonalVote('${vote.id}')" class="action-btn" style="background:#f44336;color:white;"><span class="material-symbols-outlined">gavel</span> End Vote Now</button>`;
                 } else {
-                    adminEl.innerHTML = `<span style="font-size:13px; color:var(--text-muted); padding:8px;">Vote closed ✓</span>`;
+                    adminEl.innerHTML = `<span style="font-size:13px;color:var(--text-muted);padding:8px;">Vote closed ✓</span>`;
                 }
             }
         }
+
         if (!vote) {
-            section.style.display = 'none';
-            if (window.isAdmin && adminId) {
-                const adminEl = document.getElementById(adminId);
-                if (adminEl) {
-                    adminEl.style.cssText = 'display:flex; gap:10px; flex-wrap:wrap;';
-                    adminEl.innerHTML = `
-                        <button id="admin-start-vote-btn" onclick="startSeasonalVote(false)" class="action-btn" style="background:#FF9800; color:white;"><span class="material-symbols-outlined">how_to_vote</span> Start Seasonal Vote</button>
-                        <button onclick="startSeasonalVote(true)" class="action-btn" style="background:var(--bg-gray-darker); color:var(--text-dark);"><span class="material-symbols-outlined">science</span> Start Test Vote (5 min)</button>`;
-                }
-            }
+            section.style.display = window.isAdmin && adminId ? 'block' : 'none';
             return;
         }
+
         section.style.display = 'block';
-        if (titleId) { const t = document.getElementById(titleId); if (t) t.innerText = `Anime of the Season — ${vote.season}`; }
-        const endDate = vote.endDate?.toDate ? vote.endDate.toDate() : new Date(vote.endDate);
-        const timeLeft = Math.max(0, endDate - new Date());
-        const daysLeft = Math.floor(timeLeft / 86400000);
-        const hoursLeft = Math.floor((timeLeft % 86400000) / 3600000);
-        const subText = vote.closed ? 'Voting has closed — results below' : timeLeft < 3600000 ? `Voting closes in ${hoursLeft}h` : daysLeft > 0 ? `Voting closes in ${daysLeft}d ${hoursLeft}h` : `Voting closes soon`;
+        const seasonLabel = vote.season || 'Spring 2026';
+        if (titleId) { const t = document.getElementById(titleId); if (t) t.innerText = `Anime of the Season — ${seasonLabel}`; }
+
+        let subText;
+        if (isUpcoming) {
+            subText = 'Nominees announced — voting opens soon';
+        } else if (isClosed) {
+            subText = 'Voting has closed — results below';
+        } else {
+            const endDate = vote.endDate?.toDate ? vote.endDate.toDate() : new Date(vote.endDate);
+            const timeLeft = Math.max(0, endDate - new Date());
+            const daysLeft = Math.floor(timeLeft / 86400000);
+            const hoursLeft = Math.floor((timeLeft % 86400000) / 3600000);
+            subText = timeLeft < 3600000 ? `Voting closes in ${hoursLeft}h` : daysLeft > 0 ? `Voting closes in ${daysLeft}d ${hoursLeft}h` : 'Voting closes soon';
+        }
         if (subId) { const s = document.getElementById(subId); if (s) s.innerText = subText; }
+
         const totalVotes = Object.values(vote.voteCounts || {}).reduce((a, b) => a + b, 0);
-        const hasVoted = !!window.mySeasonalVote || vote.closed;
+        const hasVoted = !isUpcoming && (!!window.mySeasonalVote || isClosed);
         const placeIcons = ['emoji_events', 'military_tech', 'military_tech'];
         const placeColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
         const winnerIds = vote.winners ? vote.winners.map(w => String(w.mal_id)) : [];
         const sortedCandidates = hasVoted
             ? [...vote.candidates].sort((a, b) => (vote.voteCounts?.[b.mal_id] || 0) - (vote.voteCounts?.[a.mal_id] || 0))
             : vote.candidates;
-        content.innerHTML = `<div class="seasonal-vote-grid" style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px;">` +
+
+        content.innerHTML = `<div class="seasonal-vote-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;">` +
             sortedCandidates.map(c => {
                 const votes = vote.voteCounts?.[c.mal_id] || 0;
                 const pct = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
                 const isMyVote = String(c.mal_id) === String(window.mySeasonalVote);
                 const winnerIdx = winnerIds.indexOf(String(c.mal_id));
                 const isWinner = winnerIdx !== -1;
-                const placeLabel = vote.closed && isWinner ? vote.winners[winnerIdx].label : '';
-                return `<div style="border-radius:12px; overflow:hidden; background:var(--bg-gray); position:relative; border:2px solid ${isMyVote ? 'var(--accent-yellow)' : isWinner ? placeColors[winnerIdx] : 'transparent'}; cursor:pointer;" onclick="loadAnimeDetails(${c.mal_id})">
+                const placeLabel = isClosed && isWinner ? vote.winners[winnerIdx].label : '';
+                return `<div style="border-radius:12px;overflow:hidden;background:var(--bg-gray);position:relative;border:2px solid ${isMyVote ? 'var(--accent-yellow)' : isWinner ? placeColors[winnerIdx] : 'transparent'};cursor:pointer;" onclick="loadAnimeDetails(${c.mal_id})">
                     ${isWinner ? `<div style="position:absolute;top:6px;left:6px;z-index:2;"><span class="material-symbols-outlined" style="font-size:20px;color:${placeColors[winnerIdx]};text-shadow:0 1px 3px rgba(0,0,0,0.5);">${placeIcons[winnerIdx]}</span></div>` : ''}
+                    ${isUpcoming ? `<div style="position:absolute;top:6px;right:6px;z-index:2;background:rgba(255,152,0,0.9);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:800;color:#fff;letter-spacing:0.5px;">NOMINEE</div>` : ''}
                     ${isMyVote ? `<div style="position:absolute;top:6px;right:6px;z-index:2;background:var(--accent-yellow);border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="font-size:14px;color:#333;">check</span></div>` : ''}
                     <img src="${c.image}" style="width:100%;height:220px;object-fit:cover;display:block;">
                     <div style="padding:8px;">
                         <div style="font-size:12px;font-weight:700;line-height:1.3;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.title}">${c.title}</div>
                         ${hasVoted ? `<div style="background:var(--bg-gray-darker);border-radius:4px;height:6px;margin-bottom:4px;overflow:hidden;"><div style="background:${isMyVote ? 'var(--accent-yellow)' : isWinner ? placeColors[winnerIdx] : 'var(--text-muted)'};height:100%;width:${pct}%;transition:width 0.4s;"></div></div><div style="font-size:11px;color:var(--text-muted);">${pct}% · ${votes} vote${votes !== 1 ? 's' : ''}</div>` : ''}
-                        ${!hasVoted ? `<button onclick="event.stopPropagation(); submitSeasonalVote(${c.mal_id})" class="action-btn" style="width:100%;justify-content:center;padding:6px;font-size:12px;margin-top:4px;">Vote</button>` : ''}
-                        ${hasVoted && !vote.closed && !isMyVote && auth.currentUser ? `<button onclick="event.stopPropagation(); submitSeasonalVote(${c.mal_id})" class="action-btn" style="width:100%;justify-content:center;padding:6px;font-size:11px;margin-top:4px;background:transparent;color:var(--text-dark);border:1px solid var(--border-color);">Change Vote</button>` : ''}
-                        ${isMyVote && !vote.closed ? `<div style="font-size:11px;font-weight:700;color:var(--accent-yellow);margin-top:6px;text-align:center;">✓ Your Vote</div>` : ''}
-                        ${vote.closed && placeLabel ? `<div style="font-size:11px;font-weight:700;color:${placeColors[winnerIdx]};margin-top:4px;">${placeLabel}</div>` : ''}
+                        ${isUpcoming ? `<div style="font-size:11px;color:rgba(255,152,0,0.85);font-weight:700;margin-top:4px;">Voting opens soon</div>` : ''}
+                        ${!hasVoted && !isUpcoming ? `<button onclick="event.stopPropagation();submitSeasonalVote(${c.mal_id})" class="action-btn" style="width:100%;justify-content:center;padding:6px;font-size:12px;margin-top:4px;">Vote</button>` : ''}
+                        ${hasVoted && !isClosed && !isMyVote && auth.currentUser ? `<button onclick="event.stopPropagation();submitSeasonalVote(${c.mal_id})" class="action-btn" style="width:100%;justify-content:center;padding:6px;font-size:11px;margin-top:4px;background:transparent;color:var(--text-dark);border:1px solid var(--border-color);">Change Vote</button>` : ''}
+                        ${isMyVote && !isClosed ? `<div style="font-size:11px;font-weight:700;color:var(--accent-yellow);margin-top:6px;text-align:center;">✓ Your Vote</div>` : ''}
+                        ${isClosed && placeLabel ? `<div style="font-size:11px;font-weight:700;color:${placeColors[winnerIdx]};margin-top:4px;">${placeLabel}</div>` : ''}
                     </div>
                 </div>`;
             }).join('') + '</div>';
@@ -8596,6 +8829,97 @@ window._tcgDeduplicateCollections = async function(dryRun = true) {
     }
 };
 
+// Finds cards where two+ users own the same serial. Renders interactive results
+// so the admin can choose which copy to delete per card individually.
+window._tcgScanCrossUserDupes = async function() {
+    if (!window.isAdmin) return;
+    const statusEl = document.getElementById('tcg-crossdupe-status');
+    const resultsEl = document.getElementById('tcg-crossdupe-results');
+    const setStatus = msg => { if (statusEl) statusEl.textContent = msg; };
+    if (resultsEl) resultsEl.innerHTML = '';
+    setStatus('Loading all cards…');
+
+    try {
+        const allSnap = await getDocs(collectionGroup(db, 'cards'));
+        setStatus(`Scanning ${allSnap.size} cards…`);
+
+        // Group regular (serial-unique) cards by identity key. Skip founder/monthlyUr
+        // since those are intentionally ownable by multiple users.
+        const byKey = new Map();
+        for (const d of allSnap.docs) {
+            const uid = d.ref.parent.parent.id;
+            const c = d.data();
+            if (c.founder || c.monthlyUr) continue;
+            const key = `${c.name}|${c.rarity}|${c.serial ?? 'null'}|${c.edition ?? 1}`;
+            if (!byKey.has(key)) byKey.set(key, []);
+            byKey.get(key).push({ uid, ref: d.ref, data: c });
+        }
+
+        const dupes = [];
+        for (const [, owners] of byKey) {
+            const uniqueUids = new Set(owners.map(o => o.uid));
+            if (uniqueUids.size > 1) dupes.push(owners);
+        }
+
+        if (!dupes.length) { setStatus('✅ No cross-user serial dupes found.'); return; }
+
+        // Load display names for all involved UIDs
+        const allUids = [...new Set(dupes.flatMap(owners => owners.map(o => o.uid)))];
+        const nameMap = {};
+        await Promise.all(allUids.map(async uid => {
+            try {
+                const pd = await getDoc(doc(db, 'profiles', uid));
+                nameMap[uid] = pd.exists() ? (pd.data().displayName || uid.slice(0, 8)) : uid.slice(0, 8);
+            } catch(e) { nameMap[uid] = uid.slice(0, 8); }
+        }));
+
+        setStatus(`⚠️ Found ${dupes.length} dupe(s) — choose which copy to delete for each:`);
+
+        const fmtDate = ts => ts?.toDate ? ts.toDate().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' }) : 'Unknown date';
+
+        const rows = dupes.map((owners, i) => {
+            owners.sort((a, b) => (a.data.pulledAt?.toMillis?.() ?? 0) - (b.data.pulledAt?.toMillis?.() ?? 0));
+            const c = owners[0].data;
+            const cardLabel = `${c.name} · ${c.rarity?.toUpperCase()} · #${c.serial ?? '?'}`;
+
+            const ownerRows = owners.map((o, j) => {
+                const name = nameMap[o.uid] || o.uid.slice(0, 8);
+                const date = fmtDate(o.data.pulledAt);
+                const isOldest = j === 0;
+                return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border-radius:8px;background:${isOldest ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.06)'};border:1px solid ${isOldest ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.2)'};margin-bottom:4px;">
+                    <div>
+                        <div style="font-size:12px;font-weight:800;color:var(--text-dark);">${name} ${isOldest ? '<span style="font-size:10px;color:#22c55e;font-weight:600;">(oldest)</span>' : ''}</div>
+                        <div style="font-size:10px;color:var(--text-muted);">UID: ${o.uid} · Acquired: ${date}</div>
+                    </div>
+                    <button onclick="window._tcgDeleteDupeCopy('${o.ref.path}','${o.uid}',${i})" style="padding:5px 12px;border-radius:6px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0;">Delete this copy</button>
+                </div>`;
+            }).join('');
+
+            return `<div id="crossdupe-row-${i}" style="border:1px solid var(--border-color);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--bg-white);">
+                <div style="font-size:13px;font-weight:800;color:var(--text-dark);margin-bottom:8px;">🃏 ${cardLabel}</div>
+                ${ownerRows}
+            </div>`;
+        });
+
+        if (resultsEl) resultsEl.innerHTML = rows.join('');
+    } catch(e) {
+        setStatus('❌ Error: ' + e.message);
+        console.error('_tcgScanCrossUserDupes:', e);
+    }
+};
+
+// Deletes one specific duplicate copy. Called from the per-card delete button.
+window._tcgDeleteDupeCopy = async function(refPath, uid, rowIndex) {
+    if (!window.isAdmin) return;
+    if (!confirm(`Delete this copy from ${uid}? This cannot be undone.`)) return;
+    try {
+        await deleteDoc(doc(db, refPath));
+        window._tcgCollectionCache?.delete(uid);
+        const row = document.getElementById(`crossdupe-row-${rowIndex}`);
+        if (row) row.innerHTML = `<div style="font-size:12px;color:#22c55e;font-weight:700;padding:4px 0;">✅ Deleted — dupe resolved.</div>`;
+    } catch(e) { alert('Failed to delete: ' + e.message); }
+};
+
 window._tcgRenderPoolMeters = async function() {
     if (!window.isAdmin) return;
     const el = document.getElementById('tcg-pool-meters');
@@ -10220,8 +10544,8 @@ function _tcgRollPackCards(pack) {
         cards.push(_tcgPickCard(rarity));
     }
     // UR is an extremely rare bonus pull, replacing one random slot.
-    // Premium has double the chance (0.2%) vs Standard (0.1%).
-    const urChance = pack.guaranteedSR ? 0.002 : 0.001;
+    // Premium: 0.5%, Standard: 0.1%.
+    const urChance = pack.guaranteedSR ? 0.005 : 0.001;
     if (Math.random() < urChance) {
         cards[Math.floor(Math.random() * cards.length)] = _tcgPickCard('ur');
     }
@@ -11599,8 +11923,15 @@ window._tcgBulkDismantle = async function(uid, profileUid) {
     const favNote = skippedFavs ? ` (${skippedFavs} favorited card${skippedFavs>1?'s':''} skipped)` : '';
     if (!confirm(`Dismantle ${selectedCards.length} card(s) for 🟡 ${total.toLocaleString()} Amber total?${favNote} This cannot be undone.`)) { window._tcgDismantling = false; return; }
     try {
-        // Batch deletes so all cards are removed atomically before awarding amber.
-        // Firestore batches cap at 500 ops; split if needed.
+        // Award amber FIRST so that if deletion fails the user keeps their cards.
+        // Do NOT use _awardAmber() here — it has an empty catch that silently eats
+        // Firestore errors, which would let the code fall through and delete cards
+        // even when the amber write failed. This updateDoc throws on failure.
+        if (total > 0) {
+            await updateDoc(doc(db, 'profiles', uid), { amber: increment(total) });
+            addDoc(collection(db, 'amber_log'), { uid, amount: total, reason: 'tcg:dismantle', timestamp: new Date() }).catch(() => {});
+        }
+        // Batch delete cards. Firestore batches cap at 500 ops; split if needed.
         const BATCH_SIZE = 499;
         for (let i = 0; i < selectedCards.length; i += BATCH_SIZE) {
             const batch = writeBatch(db);
@@ -11609,7 +11940,6 @@ window._tcgBulkDismantle = async function(uid, profileUid) {
             });
             await batch.commit();
         }
-        if (total > 0) await _awardAmber(total, 'tcg:dismantle');
         window._tcgCollectionCache.delete(uid);
         window._tcgMultiSelect.active = false;
         window._tcgMultiSelect.selected.clear();
@@ -12904,11 +13234,20 @@ window._tcgAcceptTrade = async function(tradeId) {
             throw e;
         }
 
-        // Make sure none of the cards involved have already been consumed by
-        // another trade (e.g. the sender offered the same card twice).
+        // Lock BOTH sides atomically before transferring:
+        // 1. Lock the recipient's outgoing cards (requestCardIds under myUid) —
+        //    this is what prevents the same card being given away in two accepted trades simultaneously.
+        // 2. Lock the offerer's cards (offerCardIds under fromUid) — guards against
+        //    the sender offering the same card in multiple pending trades.
+        // Verify BOTH sides still have their cards, then lock both sides.
+        // Checking the offerer's cards catches the case where they already traded
+        // or sold those cards via the bulletin/auction after sending this offer.
         const myCardsOk = await _tcgCardsStillOwned(myUid, t.requestCardIds);
-        const locked = myCardsOk && await _tcgAcquireCardLocks(t.fromUid, t.offerCardIds, tradeId);
-        if (!myCardsOk || !locked) {
+        const offerCardsOk = await _tcgCardsStillOwned(t.fromUid, t.offerCardIds);
+        const myLocked = (myCardsOk && offerCardsOk) && await _tcgAcquireCardLocks(myUid, t.requestCardIds, tradeId);
+        const offerLocked = myLocked && await _tcgAcquireCardLocks(t.fromUid, t.offerCardIds, tradeId);
+        if (!myCardsOk || !offerCardsOk || !myLocked || !offerLocked) {
+            if (myLocked) await _tcgReleaseCardLocks(myUid, t.requestCardIds);
             await updateDoc(ref, { status: 'invalid', updatedAt: new Date() });
             document.getElementById('tcg-trade-review-modal')?.remove();
             alert('This trade is no longer valid — one or more cards have already been used in another trade.');
@@ -12921,6 +13260,7 @@ window._tcgAcceptTrade = async function(tradeId) {
             const myProfile = await getDoc(doc(db,'profiles',myUid));
             const myAmber = myProfile.exists() ? (myProfile.data().amber || 0) : 0;
             if (myAmber < requestAmber) {
+                await _tcgReleaseCardLocks(myUid, t.requestCardIds);
                 await _tcgReleaseCardLocks(t.fromUid, t.offerCardIds);
                 await updateDoc(ref, { status: 'pending', updatedAt: new Date() });
                 alert(`You don't have enough Amber for this trade — you need 🟡 ${requestAmber.toLocaleString()}.`);
@@ -12932,6 +13272,7 @@ window._tcgAcceptTrade = async function(tradeId) {
             const fromAmber = fromProfile.exists() ? (fromProfile.data().amber || 0) : 0;
             if (fromAmber < offerAmber) {
                 await updateDoc(ref, { status: 'invalid', updatedAt: new Date() });
+                await _tcgReleaseCardLocks(myUid, t.requestCardIds);
                 await _tcgReleaseCardLocks(t.fromUid, t.offerCardIds);
                 document.getElementById('tcg-trade-review-modal')?.remove();
                 alert('This trade is no longer valid — the sender no longer has enough Amber to cover their offer.');
@@ -12941,6 +13282,7 @@ window._tcgAcceptTrade = async function(tradeId) {
         }
 
         await _tcgApplyTradeSide(myUid, t.requestCardIds, t.offerCards);
+        await _tcgReleaseCardLocks(myUid, t.requestCardIds);
         await _tcgDeduplicateReceivedCards(myUid, t.offerCards);
         if (offerAmber - requestAmber !== 0) {
             await updateDoc(doc(db,'profiles',myUid), { amber: increment(offerAmber - requestAmber) });
@@ -13018,9 +13360,16 @@ window._tcgProcessAcceptedTrades = async function() {
                 // Fallback path — normally toUid completes immediately in
                 // _tcgAcceptTrade, but re-validate here too just in case.
                 const myCardsOk = await _tcgCardsStillOwned(myUid, t.requestCardIds);
-                const locked = myCardsOk && await _tcgAcquireCardLocks(t.fromUid, t.offerCardIds, d.id);
-                if (!myCardsOk || !locked) { await updateDoc(d.ref, { status: 'invalid', updatedAt: new Date() }); continue; }
+                const offerCardsOk = await _tcgCardsStillOwned(t.fromUid, t.offerCardIds);
+                const myLocked = (myCardsOk && offerCardsOk) && await _tcgAcquireCardLocks(myUid, t.requestCardIds, d.id);
+                const locked = myLocked && await _tcgAcquireCardLocks(t.fromUid, t.offerCardIds, d.id);
+                if (!myCardsOk || !offerCardsOk || !myLocked || !locked) {
+                    if (myLocked) await _tcgReleaseCardLocks(myUid, t.requestCardIds);
+                    await updateDoc(d.ref, { status: 'invalid', updatedAt: new Date() });
+                    continue;
+                }
                 await _tcgApplyTradeSide(myUid, t.requestCardIds, t.offerCards);
+                await _tcgReleaseCardLocks(myUid, t.requestCardIds);
                 await _tcgDeduplicateReceivedCards(myUid, t.offerCards);
                 const offerAmber = t.offerAmber || 0, requestAmber = t.requestAmber || 0;
                 if (offerAmber - requestAmber !== 0) {
@@ -13352,7 +13701,7 @@ async function _auctionProcessExpired() {
     } catch(e) { console.warn('_auctionProcessExpired', e); }
 }
 
-// Admin one-shot repair: settle all past auction items still stuck as 'queued'
+// Admin one-shot repair: settle all past auction items stuck in queued/live/settling
 window._auctionAdminRepair = async function() {
     if (!window.isAdmin) return;
     const statusEl = document.getElementById('auction-repair-status');
@@ -13360,11 +13709,16 @@ window._auctionAdminRepair = async function() {
     setStatus('Scanning for unsettled items…');
     try {
         const now = new Date();
-        const snap = await getDocs(query(collection(db, 'auction_listings'), where('status', '==', 'queued')));
-        const stuck = snap.docs.filter(d => {
+        const [snapQ, snapL, snapS] = await Promise.all([
+            getDocs(query(collection(db, 'auction_listings'), where('status', '==', 'queued'))),
+            getDocs(query(collection(db, 'auction_listings'), where('status', '==', 'live'))),
+            getDocs(query(collection(db, 'auction_listings'), where('status', '==', 'settling'))),
+        ]);
+        // 'settling' items are always expired (they were mid-settlement when something failed)
+        const stuck = [...snapQ.docs, ...snapL.docs].filter(d => {
             const ct = d.data().closeTime;
             return ct && (ct.toDate ? ct.toDate() : new Date(ct)) <= now;
-        });
+        }).concat(snapS.docs);
         if (!stuck.length) { setStatus('✅ No stuck items found — everything looks good.'); return; }
         setStatus(`Found ${stuck.length} stuck item(s). Settling…`);
         let won = 0, unsold = 0, errors = 0;
@@ -13375,7 +13729,7 @@ window._auctionAdminRepair = async function() {
                     await runTransaction(db, async tx => {
                         const fresh = await tx.get(d.ref);
                         if (!fresh.exists()) throw new Error('gone');
-                        if (!['queued','live'].includes(fresh.data().status)) throw new Error('already_settled');
+                        if (!['queued','live','settling'].includes(fresh.data().status)) throw new Error('already_settled');
                         item = fresh.data();
                         tx.update(d.ref, { status: 'settling' });
                     });
@@ -13409,6 +13763,34 @@ window._auctionAdminRepair = async function() {
     } catch(e) {
         setStatus('❌ Error: ' + e.message);
         console.error('_auctionAdminRepair', e);
+    }
+};
+
+// Force-delivers a card from a 'won' auction listing that was never actually
+// delivered (silent Firestore rules failure during client-side settlement).
+// Only callable by the hardcoded Firestore admin UID.
+window._auctionForceDeliver = async function(listingId) {
+    if (!window.isAdmin) return;
+    const statusEl = document.getElementById('auction-force-status');
+    const setStatus = msg => { if (statusEl) statusEl.textContent = msg; };
+    if (!listingId) { setStatus('❌ Enter a listing ID first.'); return; }
+    setStatus('Loading listing…');
+    try {
+        const snap = await getDoc(doc(db, 'auction_listings', listingId));
+        if (!snap.exists()) { setStatus('❌ Listing not found.'); return; }
+        const item = snap.data();
+        setStatus(`Found: ${item.card?.name || '?'} (${item.card?.rarity}) — status: ${item.status} — winner: ${item.currentBidderUid || 'none'}`);
+        if (!item.currentBidderUid) { setStatus('❌ No winner on this listing — nothing to deliver.'); return; }
+        if (!confirm(`Deliver ${item.card?.name} to UID ${item.currentBidderUid}? This writes directly to their collection.`)) return;
+        setStatus('Delivering…');
+        await _tcgApplyTradeSide(item.currentBidderUid, [], [item.card]);
+        if (item.status !== 'won') {
+            await updateDoc(doc(db, 'auction_listings', listingId), { status: 'won', updatedAt: new Date() });
+        }
+        setStatus(`✅ Delivered ${item.card?.name} to ${item.currentBidderUid}. Also notify the seller manually if amber wasn't paid.`);
+    } catch(e) {
+        setStatus('❌ Error: ' + e.message);
+        console.error('_auctionForceDeliver', e);
     }
 };
 
@@ -13829,6 +14211,21 @@ window._auctionSubmitCard = async function(btn) {
         const card = cards.find(c => c.id === cardId);
         if (!card) { alert('Card not found. Refresh and try again.'); return; }
 
+        // Prevent relisting the same physical card (matched by serial + name) if it's
+        // already in any of this user's active listings — catches the case where a
+        // card was erroneously returned to the seller and they try to submit it again.
+        if (card.serial != null) {
+            const serialDupe = existingSnap.docs.some(d => {
+                const data = d.data();
+                if (!['queued', 'live', 'settling'].includes(data.status)) return false;
+                return data.card?.serial === card.serial && data.card?.name === card.name && data.card?.rarity === card.rarity;
+            });
+            if (serialDupe) {
+                alert('This exact card is already in an active auction listing — it may have been returned to you in error. Contact an admin before resubmitting.');
+                return;
+            }
+        }
+
         // Check not on bulletin
         const myListingsSnap = await getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid)));
         const listed = myListingsSnap.docs.filter(d => d.data().status === 'active' && (d.data().cardIds||[]).includes(cardId));
@@ -14037,6 +14434,8 @@ window._tcgRenderBulletinBoard = async function() {
         el.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px 0;">Sign in to view the Trade Bulletin.</p>';
         return;
     }
+    // Process any accepted bulletin offers where we're the offeror before rendering
+    window._tcgProcessAcceptedBulletinOffers();
     const myUid = auth.currentUser.uid;
     el.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
@@ -14736,7 +15135,7 @@ window._tcgOpenBulletinOffersView = async function(listingId) {
 window._tcgAcceptBulletinOffer = async function(btn, listingId, offerId) {
     if (window._tcgBulletinActionInProgress) return;
     if (!auth.currentUser) return;
-    if (!confirm('Accept this offer? Cards will be transferred immediately and all other offers will be declined.')) return;
+    if (!confirm('Accept this offer? Your listed cards will be transferred immediately and all other offers will be declined.')) return;
 
     btn.disabled = true; btn.textContent = 'Accepting…';
     window._tcgBulletinActionInProgress = true;
@@ -14745,6 +15144,9 @@ window._tcgAcceptBulletinOffer = async function(btn, listingId, offerId) {
         const myUid = auth.currentUser.uid;
         let listing, offer;
 
+        // Atomically claim the listing so no other offer can be accepted simultaneously.
+        // We also embed the listing's card data into the offer doc here, so the offeror's
+        // client can process their side independently without needing to re-read the listing.
         await runTransaction(db, async tx => {
             const lSnap = await tx.get(doc(db, 'bulletin_listings', listingId));
             const oSnap = await tx.get(doc(db, 'bulletin_offers', offerId));
@@ -14754,7 +15156,17 @@ window._tcgAcceptBulletinOffer = async function(btn, listingId, offerId) {
             listing = { id: lSnap.id, ...lSnap.data() };
             offer = { id: oSnap.id, ...oSnap.data() };
             tx.update(lSnap.ref, { status: 'closed' });
-            tx.update(oSnap.ref, { status: 'accepted' });
+            tx.update(oSnap.ref, {
+                status: 'accepted',
+                // Store listing card data so the offeror's client can add them without
+                // reading the now-closed listing doc.
+                listingCards: listing.cards || [],
+                listingCardIds: listing.cardIds || [],
+                listingOwnerUid: listing.uid || myUid,
+                listingOwnerName: listing.displayName || auth.currentUser.displayName || 'Unknown',
+                listingOwnerCompleted: false,
+                offerorCompleted: false,
+            });
         });
 
         // Validate offeror's amber balance before proceeding
@@ -14771,71 +15183,62 @@ window._tcgAcceptBulletinOffer = async function(btn, listingId, offerId) {
             }
         }
 
-        // Transfer cards: A (listing owner) loses listed cards, gains offer cards
-        //                 B (offeror) loses offer cards, gains listing cards
-        await _tcgApplyTradeSide(myUid, listing.cardIds || [], offer.offerCards || []);
-        await _tcgApplyTradeSide(offer.fromUid, offer.offerCardIds || [], listing.cards || []);
+        // Verify listing owner's cards still exist, then lock them.
+        // We also verify the offeror's cards exist (read-only check) as an early warning,
+        // but we can't lock them here — Firestore rules only allow each user to lock
+        // their own cards. The offeror's client will lock+verify their own side when it processes.
+        const tradeToken = `bulletin_${listingId}_${offerId}`;
+        const myCardsOk = await _tcgCardsStillOwned(myUid, listing.cardIds || []);
+        const theirCardsOk = myCardsOk && await _tcgCardsStillOwned(offer.fromUid, offer.offerCardIds || []);
+        const myLocked = theirCardsOk && await _tcgAcquireCardLocks(myUid, listing.cardIds || [], tradeToken);
 
-        // Transfer amber: B pays A
+        if (!myCardsOk || !theirCardsOk || !myLocked) {
+            if (myLocked) await _tcgReleaseCardLocks(myUid, listing.cardIds || []);
+            await updateDoc(doc(db, 'bulletin_listings', listingId), { status: 'active' });
+            await updateDoc(doc(db, 'bulletin_offers', offerId), { status: 'pending' });
+            alert('This trade can no longer be completed — one or more cards have already been traded away. The listing has been re-opened.');
+            btn.disabled = false; btn.textContent = 'Accept';
+            return;
+        }
+
+        // Process the listing owner's side: lose listed cards, gain offered cards.
+        // The offeror's side (they lose offered cards, gain listed cards) runs in
+        // _tcgProcessAcceptedBulletinOffers when the offeror's client next loads.
+        await _tcgApplyTradeSide(myUid, listing.cardIds || [], offer.offerCards || []);
+        await _tcgReleaseCardLocks(myUid, listing.cardIds || []);
+
+        // Transfer amber from offeror to listing owner
         if (offerAmber > 0) {
             await updateDoc(doc(db, 'profiles', myUid), { amber: increment(offerAmber) });
             await updateDoc(doc(db, 'profiles', offer.fromUid), { amber: increment(-offerAmber) });
         }
 
-        // If the offeror had any of their transferred cards posted on the bulletin, close those listings
-        if ((offer.offerCardIds || []).length > 0) {
-            try {
-                const offererListings = await getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', offer.fromUid)));
-                const staleListings = offererListings.docs.filter(d => {
-                    const data = d.data();
-                    return data.status === 'active' && (data.cardIds || []).some(id => offer.offerCardIds.includes(id));
-                });
-                if (staleListings.length) {
-                    const cleanupBatch = writeBatch(db);
-                    staleListings.forEach(d => cleanupBatch.update(d.ref, { status: 'withdrawn' }));
-                    await cleanupBatch.commit();
-                }
-            } catch(e) {}
-        }
+        // Mark listing owner's side complete — offeror's client will process the other half
+        await updateDoc(doc(db, 'bulletin_offers', offerId), { listingOwnerCompleted: true });
 
-        // Decline all other pending offers
-        const otherSnap = await getDocs(query(collection(db, 'bulletin_offers'), where('listingOwnerUid', '==', myUid)));
-        const stillPending = otherSnap.docs.filter(d => d.data().listingId === listingId && d.data().status === 'pending');
-        if (stillPending.length) {
-            const batch = writeBatch(db);
-            stillPending.forEach(d => batch.update(d.ref, { status: 'declined' }));
-            await batch.commit();
-        }
-
-        // Log in trade history (non-fatal — cards are already transferred at this point)
-        let myAvatar = '';
-        try { const pd = await getDoc(doc(db, 'profiles', myUid)); if (pd.exists()) myAvatar = pd.data().avatar || ''; } catch(e) {}
+        // Decline all other pending offers on this listing
         try {
-            await addDoc(collection(db, 'trades'), {
-                participants: [myUid, offer.fromUid],
-                fromUid: offer.fromUid, fromName: offer.fromName || 'Unknown', fromAvatar: offer.fromAvatar || '',
-                toUid: myUid, toName: auth.currentUser.displayName || 'Unknown', toAvatar: myAvatar,
-                offerCards: offer.offerCards || [], requestCards: listing.cards || [],
-                offerCardIds: offer.offerCardIds || [], requestCardIds: listing.cardIds || [],
-                offerAmber, requestAmber: 0,
-                status: 'completed', fromCompleted: true, toCompleted: true,
-                source: 'bulletin', bulletinListingId: listingId,
-                history: [], createdAt: new Date(), updatedAt: new Date()
-            });
-        } catch(e) { console.warn('bulletin trade log failed:', e.message); }
+            const otherSnap = await getDocs(query(collection(db, 'bulletin_offers'), where('listingOwnerUid', '==', myUid)));
+            const stillPending = otherSnap.docs.filter(d => d.data().listingId === listingId && d.data().status === 'pending');
+            if (stillPending.length) {
+                const batch = writeBatch(db);
+                stillPending.forEach(d => batch.update(d.ref, { status: 'declined' }));
+                await batch.commit();
+            }
+        } catch(e) {}
 
-        // Notify offeror (non-fatal)
+        // Notify offeror so they know to load their TCG page to receive their cards
         try {
             await addDoc(collection(db, 'notifications'), {
                 targetUid: offer.fromUid, type: 'bulletin_offer_accepted',
                 senderUid: myUid, senderName: auth.currentUser.displayName || 'Someone',
-                message: 'accepted your Trade Bulletin offer! Cards have been transferred.',
+                message: 'accepted your Trade Bulletin offer! Open the TCG page to complete the transfer.',
                 listingId, timestamp: new Date(), read: false
             });
         } catch(e) {}
 
         document.getElementById('tcg-bulletin-offers-modal')?.remove();
-        alert('Offer accepted! Cards have been transferred.');
+        alert('Offer accepted! Your cards have been transferred. The other user will receive their cards when they next open the TCG page.');
         window._tcgRenderBulletinBoard();
     } catch(e) {
         alert('Failed to accept offer: ' + e.message);
@@ -14843,6 +15246,191 @@ window._tcgAcceptBulletinOffer = async function(btn, listingId, offerId) {
     } finally {
         window._tcgBulletinActionInProgress = false;
     }
+};
+
+// Called on login and on TCG page load. Processes the offeror's side of any
+// accepted bulletin trades — removes the offered cards from their collection
+// and adds the listing owner's cards. Mirrors _tcgProcessAcceptedTrades but
+// for the bulletin system (which can't do cross-user writes in a single session).
+window._tcgProcessAcceptedBulletinOffers = async function() {
+    if (!auth.currentUser) return;
+    const myUid = auth.currentUser.uid;
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'bulletin_offers'),
+            where('fromUid', '==', myUid),
+            where('status', '==', 'accepted')
+        ));
+        const pending = snap.docs.filter(d => !d.data().offerorCompleted && d.data().listingOwnerCompleted);
+        if (!pending.length) return;
+
+        for (const d of pending) {
+            const offer = d.data();
+            const tradeToken = `bulletin_${offer.listingId}_${d.id}`;
+
+            // Verify my offered cards still exist in my collection
+            const myCardsOk = await _tcgCardsStillOwned(myUid, offer.offerCardIds || []);
+            if (!myCardsOk) {
+                await updateDoc(d.ref, { offerorCompleted: true, status: 'invalid' });
+                console.warn('Bulletin offer', d.id, '— offeror cards missing, marked invalid');
+                continue;
+            }
+
+            // Lock my cards to prevent concurrent duplication
+            const myLocked = await _tcgAcquireCardLocks(myUid, offer.offerCardIds || [], tradeToken);
+            if (!myLocked) continue; // another process holds the lock; try again next load
+
+            // Process offeror's side: lose offered cards, gain listing owner's cards
+            await _tcgApplyTradeSide(myUid, offer.offerCardIds || [], offer.listingCards || []);
+            await _tcgReleaseCardLocks(myUid, offer.offerCardIds || []);
+
+            // Close any of my own bulletin listings that contained cards I just gave away
+            if ((offer.offerCardIds || []).length > 0) {
+                try {
+                    const myListings = await getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid)));
+                    const stale = myListings.docs.filter(l => {
+                        const data = l.data();
+                        return data.status === 'active' && (data.cardIds || []).some(id => offer.offerCardIds.includes(id));
+                    });
+                    if (stale.length) {
+                        const batch = writeBatch(db);
+                        stale.forEach(l => batch.update(l.ref, { status: 'withdrawn' }));
+                        await batch.commit();
+                    }
+                } catch(e) {}
+            }
+
+            // Log to trade history (non-fatal)
+            try {
+                let myAvatar = '', theirAvatar = '';
+                const [myPd, theirPd] = await Promise.all([
+                    getDoc(doc(db, 'profiles', myUid)),
+                    getDoc(doc(db, 'profiles', offer.listingOwnerUid || '')),
+                ]);
+                if (myPd.exists()) myAvatar = myPd.data().avatar || '';
+                if (theirPd.exists()) theirAvatar = theirPd.data().avatar || '';
+                await addDoc(collection(db, 'trades'), {
+                    participants: [myUid, offer.listingOwnerUid],
+                    fromUid: myUid, fromName: offer.fromName || 'Unknown', fromAvatar: myAvatar,
+                    toUid: offer.listingOwnerUid, toName: offer.listingOwnerName || 'Unknown', toAvatar: theirAvatar,
+                    offerCards: offer.offerCards || [], requestCards: offer.listingCards || [],
+                    offerCardIds: offer.offerCardIds || [], requestCardIds: offer.listingCardIds || [],
+                    offerAmber: offer.offerAmber || 0, requestAmber: 0,
+                    status: 'completed', fromCompleted: true, toCompleted: true,
+                    source: 'bulletin', bulletinListingId: offer.listingId,
+                    history: [], createdAt: new Date(), updatedAt: new Date()
+                });
+            } catch(e) { console.warn('bulletin trade log (offeror side) failed:', e.message); }
+
+            await updateDoc(d.ref, { offerorCompleted: true, offerorCompletedAt: new Date(), status: 'completed' });
+        }
+    } catch(e) { console.warn('_tcgProcessAcceptedBulletinOffers:', e.message); }
+};
+
+// Admin: look up a bulletin_offers doc and show repair options
+window._repairBulletinTrade = async function() {
+    if (!window.isAdmin) return;
+    const offerId = document.getElementById('repair-bulletin-offer-id')?.value?.trim();
+    if (!offerId) { alert('Enter a bulletin_offers doc ID.'); return; }
+    const resultEl = document.getElementById('repair-bulletin-result');
+    resultEl.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Loading…</p>';
+    try {
+        const offerSnap = await getDoc(doc(db, 'bulletin_offers', offerId));
+        if (!offerSnap.exists()) { resultEl.innerHTML = '<p style="color:#ef4444;">Offer doc not found.</p>'; return; }
+        const offer = offerSnap.data();
+
+        // Get listing card data — prefer embedded field (new format), fall back to listing doc (old format)
+        let listingCards = offer.listingCards;
+        let listingOwnerUid = offer.listingOwnerUid;
+        let listingOwnerName = offer.listingOwnerName;
+        if (!listingCards && offer.listingId) {
+            const lSnap = await getDoc(doc(db, 'bulletin_listings', offer.listingId));
+            if (lSnap.exists()) {
+                const ld = lSnap.data();
+                listingCards = ld.cards || [];
+                listingOwnerUid = listingOwnerUid || ld.uid;
+                listingOwnerName = listingOwnerName || ld.displayName;
+            }
+        }
+
+        const cardLine = (c) => `${c.name || '?'} — ${(c.rarity||'').toUpperCase()} #${c.serial ?? '?'}${c.edition ? ' ('+c.edition+')' : ''}`;
+        resultEl.innerHTML = `
+            <div style="margin-top:8px;padding:12px;background:var(--bg-white);border-radius:8px;border:1px solid var(--border-color);font-size:13px;">
+                <p style="margin:0 0 4px;"><strong>Offer ID:</strong> ${offerId}</p>
+                <p style="margin:0 0 4px;"><strong>Status:</strong> ${offer.status} | listingOwnerCompleted: ${offer.listingOwnerCompleted ?? '(old)'} | offerorCompleted: ${offer.offerorCompleted ?? '(old)'}</p>
+                <p style="margin:0 0 4px;"><strong>Listing owner:</strong> ${listingOwnerName || '?'} (${listingOwnerUid || '?'})</p>
+                <p style="margin:0 0 12px;"><strong>Offeror:</strong> ${offer.fromName || '?'} (${offer.fromUid || '?'})</p>
+                <p style="margin:0 0 4px;font-weight:700;color:#10b981;">Cards ${listingOwnerName||'A'} posted — <u>${offer.fromName||'B'} should receive these</u> (deliver to offeror):</p>
+                <ul style="margin:0 0 12px;padding-left:18px;">${(listingCards||[]).map(c=>`<li>${cardLine(c)}</li>`).join('')||'<li>(none / not found)</li>'}</ul>
+                <p style="margin:0 0 4px;font-weight:700;color:#ef4444;">Cards ${offer.fromName||'B'} offered — <u>${listingOwnerName||'A'} already has these</u> (remove from offeror):</p>
+                <ul style="margin:0 0 12px;padding-left:18px;">${(offer.offerCards||[]).map(c=>`<li>${cardLine(c)}</li>`).join('')||'<li>(none)</li>'}</ul>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                    <button onclick="window._repairBulletinDeliver('${offerId}')" style="padding:8px 14px;background:#10b981;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px;">
+                        ✅ Deliver to ${offer.fromName||'offeror'}
+                    </button>
+                    <button onclick="window._repairBulletinRemoveOffered('${offerId}')" style="padding:8px 14px;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px;">
+                        🗑️ Remove from ${offer.fromName||'offeror'}'s collection
+                    </button>
+                    <button onclick="window._repairBulletinFull('${offerId}')" style="padding:8px 14px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px;">
+                        ⚡ Fix Both
+                    </button>
+                </div>
+            </div>`;
+    } catch(e) {
+        resultEl.innerHTML = `<p style="color:#ef4444;">Error: ${e.message}</p>`;
+    }
+};
+
+window._repairBulletinDeliver = async function(offerId) {
+    if (!window.isAdmin) return;
+    try {
+        const offerSnap = await getDoc(doc(db, 'bulletin_offers', offerId));
+        if (!offerSnap.exists()) { alert('Offer not found.'); return; }
+        const offer = offerSnap.data();
+
+        let listingCards = offer.listingCards;
+        if (!listingCards && offer.listingId) {
+            const lSnap = await getDoc(doc(db, 'bulletin_listings', offer.listingId));
+            if (lSnap.exists()) listingCards = lSnap.data().cards || [];
+        }
+        if (!listingCards || !listingCards.length) { alert('No listing card data found — check Firestore manually.'); return; }
+        if (!confirm(`Deliver ${listingCards.length} card(s) to ${offer.fromName || offer.fromUid}?`)) return;
+
+        for (const card of listingCards) {
+            const { id: _id, ...cardData } = card;
+            await addDoc(collection(db, 'card_collections', offer.fromUid, 'cards'), {
+                ...cardData, pulledAt: offer.createdAt || new Date(), source: 'bulletin_repair', repairedAt: new Date()
+            });
+        }
+        await updateDoc(doc(db, 'bulletin_offers', offerId), { offerorCompleted: true, status: 'completed', repairedAt: new Date() });
+        alert(`Delivered ${listingCards.length} card(s) to ${offer.fromName || offer.fromUid}.`);
+        document.getElementById('repair-bulletin-result').innerHTML = '<p style="color:#10b981;font-size:13px;">Cards delivered. Re-run the scanner to verify.</p>';
+    } catch(e) { alert('Error: ' + e.message); }
+};
+
+window._repairBulletinRemoveOffered = async function(offerId) {
+    if (!window.isAdmin) return;
+    try {
+        const offerSnap = await getDoc(doc(db, 'bulletin_offers', offerId));
+        if (!offerSnap.exists()) { alert('Offer not found.'); return; }
+        const offer = offerSnap.data();
+        const ids = offer.offerCardIds || [];
+        if (!ids.length) { alert('No offered card IDs in this doc.'); return; }
+        if (!confirm(`Remove ${ids.length} card(s) from ${offer.fromName || offer.fromUid}'s collection? Only do this if the listing owner already received them.`)) return;
+
+        let removed = 0;
+        for (const cardId of ids) {
+            try { await deleteDoc(doc(db, 'card_collections', offer.fromUid, 'cards', cardId)); removed++; } catch(e) {}
+        }
+        alert(`Removed ${removed}/${ids.length} card(s) from ${offer.fromName || offer.fromUid}'s collection.`);
+    } catch(e) { alert('Error: ' + e.message); }
+};
+
+window._repairBulletinFull = async function(offerId) {
+    if (!window.isAdmin) return;
+    if (!confirm('Fix both sides: deliver listing cards to the offeror AND remove the offered cards from their collection?')) return;
+    await window._repairBulletinDeliver(offerId);
+    await window._repairBulletinRemoveOffered(offerId);
 };
 
 window._tcgDeclineBulletinOffer = async function(btn, offerId, listingId) {
