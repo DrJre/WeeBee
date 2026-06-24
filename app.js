@@ -542,10 +542,23 @@ async function _awardLoginBonus() {
         const yesterday = new Date(Date.now() - 864e5).toISOString().split('T')[0];
         const newStreak = lastDate === yesterday ? streak + 1 : 1;
         const bonus = 100 + Math.min((newStreak - 1) * 5, 100);
-        localStorage.setItem(storageKey, '1');
-        await updateDoc(doc(db, 'profiles', uid), { loginStreak: newStreak, lastLoginDate: today });
+        await setDoc(doc(db, 'profiles', uid), { loginStreak: newStreak, lastLoginDate: today }, { merge: true });
         await _awardAmber(bonus, `login:streak${newStreak}`);
-    } catch(e) {}
+        localStorage.setItem(storageKey, '1');
+        _showAmberToast(bonus, newStreak);
+    } catch(e) { console.error('[LoginBonus]', e); }
+}
+
+function _showAmberToast(amount, streak) {
+    const toast = document.getElementById('amber-toast');
+    if (!toast) return;
+    document.getElementById('toast-amber-amount').textContent = `+${amount} Amber`;
+    document.getElementById('toast-amber-desc').textContent = streak > 1 ? `Day ${streak} streak — keep it up!` : 'Come back tomorrow for more!';
+    const ach = document.getElementById('achievement-toast');
+    toast.style.bottom = (ach && ach.style.display !== 'none') ? '110px' : '24px';
+    toast.style.display = 'flex';
+    clearTimeout(window._amberToastTimer);
+    window._amberToastTimer = setTimeout(() => { toast.style.display = 'none'; }, 4500);
 }
 
 window.checkCommunityAchievements = async function() {
@@ -1325,23 +1338,13 @@ window.fetchNotifications = function() {
             } else if (n.type === 'bulletin_offer' && n.listingId) {
                 onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-trading');window._tcgOpenBulletinOffersView('${n.listingId}')"`;
             } else if (n.type === 'bulletin_offer_accepted') {
-                onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-collection')"`;
+                onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-trading')"`;
             } else if (n.type === 'follow' || n.type === 'friend_accept' || n.type === 'friend_request') {
                 onClickAction = `onclick="viewUserProfile('${n.senderUid}')"`;
             } else if (n.type === 'system') {
                 onClickAction = '';
             } else if ((n.type === 'comment_reply' || n.type === 'post_comment') && n.postId) {
-                if (n.postCollection === 'tier_lists') {
-                    onClickAction = `onclick="window.openTierListViewer('${n.postId}')"`;
-                } else if (n.postCollection === 'hot_takes') {
-                    onClickAction = `onclick="window.switchView('community-view');window.switchCommunityTab(null,'community-tab-hottakes');window.loadHotTakes()"`;
-                } else if (n.postCollection === 'melobee_posts') {
-                    onClickAction = `onclick="window.goToMeloBeeTab()"`;
-                } else if (n.postCollection === 'general_posts') {
-                    onClickAction = `onclick="window.switchView('home-view')"`;
-                } else {
-                    onClickAction = `onclick="window.switchView('home-view')"`;
-                }
+                onClickAction = `onclick="window._openPostByNotification('${n.postId}','${n.postCollection||'general_posts'}')"`;
             } else {
                 onClickAction = `onclick="viewUserProfile('${n.senderUid}')"`;
             }
@@ -4836,7 +4839,7 @@ window._revealSpoiler = function(postId, event) {
 // hint: short string shown under the lock icon (e.g. "Attack on Titan")
 function _wrapSpoilerOverlay(html, postId, hint) {
     if (window._revealedSpoilers?.has(postId)) return html;
-    return `<div class="spoiler-post-wrap" style="position:relative;overflow:hidden;">${html}<div id="spoiler-overlay-${postId}" onclick="event.stopPropagation()" style="position:absolute;top:0;left:0;right:0;bottom:0;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:rgba(8,8,16,0.38);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;border-radius:14px;gap:6px;text-align:center;padding:24px;box-sizing:border-box;">
+    return `<div class="spoiler-post-wrap" style="position:relative;overflow:hidden;">${html}<div id="spoiler-overlay-${postId}" onclick="event.stopPropagation()" style="position:absolute;top:0;left:0;right:0;bottom:0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);background:rgba(8,8,16,0.5);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;border-radius:14px;gap:6px;text-align:center;padding:24px;box-sizing:border-box;">
         <div style="font-size:30px;line-height:1;">🔒</div>
         <div style="font-size:15px;font-weight:900;color:#fff;margin-top:2px;">Spoiler Warning</div>
         ${hint ? `<div style="font-size:12px;color:rgba(255,255,255,0.75);max-width:220px;line-height:1.4;">Contains spoilers for <strong>${hint}</strong></div>` : ''}
@@ -10864,10 +10867,14 @@ window._tcgBuyPack = async function(packId) {
     // Single attempt only — no retry. If the save times out the first write may
     // already be in-flight; retrying would double-save cards to the collection.
     let enrichedCards = null;
+    let isGodPack = false;
     try {
         await _tcgEnsureCardPool();
-        const cards = _tcgRollPackCards(pack);
-        enrichedCards = await _withTimeout(_tcgSavePackToCollection(uid, cards), 15000, 'Pack save');
+        isGodPack = pack.guaranteedSR && Math.random() < 0.0001;
+        const rolledCards = isGodPack
+            ? [_tcgPickCard('ur'), _tcgPickCard('ur'), _tcgPickCard('ssr'), _tcgPickCard('ssr'), _tcgPickCard('ssr')]
+            : _tcgRollPackCards(pack);
+        enrichedCards = await _withTimeout(_tcgSavePackToCollection(uid, rolledCards), 15000, 'Pack save');
         window._tcgCollectionCache.delete(uid);
     } catch(e) {
         console.error('Failed to save pack to collection:', e);
@@ -10882,68 +10889,143 @@ window._tcgBuyPack = async function(packId) {
         return;
     }
 
-    _tcgShowPackOpening(pack, enrichedCards);
+    _tcgShowPackOpening(pack, enrichedCards, isGodPack);
     window._tcgRenderStore();
     window._tcgBuyInProgress = false;
 };
 
-window._tcgShowPackOpening = function(pack, cards) {
-    document.getElementById('tcg-pack-modal')?.remove();
+window._tcgSimulateGodPack = async function() {
+    await _tcgEnsureCardPool();
+    const fakeCards = [
+        { name:'Test UR 1', rarity:'ur', image: (window._tcgURPool||TCG_UR_CARDS)[0]?.image||'', serial:1, anime:'' },
+        { name:'Test UR 2', rarity:'ur', image: (window._tcgURPool||TCG_UR_CARDS)[1]?.image||'', serial:2, anime:'' },
+        { name:'Test SSR 1', rarity:'ssr', image: (window._tcgSSRPool||TCG_SSR_CARDS)[0]?.image||'', serial:1, anime:'' },
+        { name:'Test SSR 2', rarity:'ssr', image: (window._tcgSSRPool||TCG_SSR_CARDS)[1]?.image||'', serial:2, anime:'' },
+        { name:'Test SSR 3', rarity:'ssr', image: (window._tcgSSRPool||TCG_SSR_CARDS)[2]?.image||'', serial:3, anime:'' },
+    ];
+    const fakePack = TCG_PACKS.find(p => p.guaranteedSR) || TCG_PACKS[0];
+    _tcgShowPackOpening(fakePack, fakeCards, true);
+};
 
-    const isMobile = window.matchMedia('(max-width: 768px)').matches;
-    window._tcgStackMode = isMobile;
-    window._tcgStackIndex = 0;
+function _tcgShowGodPackIntro(onDone) {
+    if (!document.getElementById('god-pack-styles')) {
+        const s = document.createElement('style');
+        s.id = 'god-pack-styles';
+        s.textContent = `
+            @keyframes gpParticle { 0%{transform:translateY(-10px) rotate(0deg) scale(1);opacity:1} 100%{transform:translateY(70vh) rotate(600deg) scale(0.3);opacity:0} }
+            @keyframes gpPulseIn  { 0%{transform:scale(0.4) translateY(20px);opacity:0} 70%{transform:scale(1.06) translateY(-4px);opacity:1} 100%{transform:scale(1) translateY(0);opacity:1} }
+            @keyframes gpGlow     { 0%,100%{text-shadow:0 0 24px #ffd700,0 0 60px #f59e0b,0 0 100px #b45309} 50%{text-shadow:0 0 40px #ffd700,0 0 100px #ffd700,0 0 160px #f59e0b} }
+            @keyframes gpRadial   { 0%{opacity:0;transform:scale(0.5)} 40%{opacity:1} 100%{opacity:0.15;transform:scale(1.4)} }
+            @keyframes gpSubtitle { 0%{opacity:0;letter-spacing:8px} 100%{opacity:1;letter-spacing:3px} }
+            @keyframes gpFlicker  { 0%,90%,100%{opacity:1} 92%{opacity:0.7} 95%{opacity:1} 97%{opacity:0.85} }
+        `;
+        document.head.appendChild(s);
+    }
 
-    const modal = document.createElement('div');
-    modal.id = 'tcg-pack-modal';
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.93);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;';
-
-    modal.innerHTML = `
-        <div style="text-align:center;margin-bottom:28px;">
-            <div style="font-size:26px;font-weight:800;color:white;margin-bottom:6px;">${pack.name}</div>
-            <div style="font-size:13px;color:rgba(255,255,255,0.45);">${isMobile ? 'Tap the top card to flip it, tap again to set it aside' : 'Click a card to flip it'}</div>
+    const overlay = document.createElement('div');
+    overlay.id = 'god-pack-intro';
+    overlay.style.cssText = 'position:fixed;inset:0;background:#000;z-index:10001;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;';
+    overlay.innerHTML = `
+        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 55%, rgba(251,191,36,0.18) 0%, rgba(180,83,9,0.08) 40%, transparent 70%);animation:gpRadial 1.2s ease-out forwards;pointer-events:none;"></div>
+        <div id="gp-particles" style="position:absolute;inset:0;pointer-events:none;overflow:hidden;"></div>
+        <div style="position:relative;z-index:2;text-align:center;animation:gpPulseIn 0.9s cubic-bezier(0.22,1,0.36,1) 0.2s both;">
+            <div style="font-size:52px;margin-bottom:10px;animation:gpFlicker 3s ease-in-out 1s infinite;">⚜️</div>
+            <div style="font-size:58px;font-weight:900;color:#ffd700;letter-spacing:5px;line-height:1;animation:gpGlow 1.8s ease-in-out infinite;font-family:Georgia,serif;">GOD PACK</div>
+            <div style="font-size:13px;color:rgba(255,215,0,0.65);margin-top:18px;font-weight:600;animation:gpSubtitle 1s ease-out 0.6s both;">You've been chosen</div>
         </div>
-        <div id="tcg-pack-cards-row" class="${isMobile ? 'tcg-pack-stack' : ''}" style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;max-width:1200px;"></div>
-        ${isMobile ? `<div id="tcg-pack-stack-counter" style="margin-top:16px;font-size:13px;color:rgba(255,255,255,0.6);font-weight:700;"></div>` : ''}
-        <div style="margin-top:32px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
-            <button onclick="window._tcgRevealAll()" style="padding:10px 26px;border-radius:8px;border:none;background:rgba(255,255,255,0.14);color:white;font-weight:700;font-size:14px;cursor:pointer;">Reveal All</button>
-            <button onclick="window._tcgOpenSharePackModal()" style="padding:10px 26px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-weight:700;font-size:14px;cursor:pointer;">Share What You Got</button>
-            <button onclick="document.getElementById('tcg-pack-modal').remove()" style="padding:10px 26px;border-radius:8px;border:none;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.5);font-weight:700;font-size:14px;cursor:pointer;">Close</button>
-        </div>`;
+        <div style="position:absolute;bottom:28px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">tap anywhere to reveal</div>`;
+    document.body.appendChild(overlay);
 
-    document.body.appendChild(modal);
-    window._tcgOpeningCards = cards;
-    window._tcgOpeningPack = pack;
+    const symbols = ['✦','✧','★','⭐','✨','◆','◇','⬥','✵'];
+    const pc = document.getElementById('gp-particles');
+    for (let i = 0; i < 55; i++) {
+        const p = document.createElement('div');
+        const dur = 2.5 + Math.random() * 2.5;
+        const delay = Math.random() * 3.5;
+        const size = 9 + Math.random() * 18;
+        p.style.cssText = `position:absolute;top:-30px;left:${Math.random()*100}%;font-size:${size}px;color:#ffd700;opacity:${0.25 + Math.random()*0.75};animation:gpParticle ${dur}s ease-in ${delay}s infinite;`;
+        p.textContent = symbols[Math.floor(Math.random()*symbols.length)];
+        pc.appendChild(p);
+    }
 
-    const row = modal.querySelector('#tcg-pack-cards-row');
-    cards.forEach((card, i) => {
-        const wrap = document.createElement('div');
-        wrap.className = 'tcg-flip-card';
-        wrap.style.cssText = 'width:220px;height:308px;perspective:900px;flex-shrink:0;';
-        wrap.onclick = () => isMobile ? window._tcgStackCardClick(i) : window._tcgFlipCard(i);
+    const dismiss = () => {
+        overlay.style.transition = 'opacity 0.55s ease';
+        overlay.style.opacity = '0';
+        setTimeout(() => { overlay.remove(); onDone(); }, 580);
+    };
+    overlay.addEventListener('click', dismiss, { once: true });
+    setTimeout(dismiss, 3800);
+}
 
-        const inner = document.createElement('div');
-        inner.className = 'tcg-flip-inner';
-        inner.id = `tcg-inner-${i}`;
+window._tcgShowPackOpening = function(pack, cards, isGodPack = false) {
+    document.getElementById('tcg-pack-modal')?.remove();
+    const build = () => {
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        window._tcgStackMode = isMobile;
+        window._tcgStackIndex = 0;
 
-        // Back face (shown first)
-        const back = document.createElement('div');
-        back.className = 'tcg-flip-back';
-        back.style.cssText = 'background:linear-gradient(155deg,#1e1b4b,#312e81,#1e1b4b);border:2px solid #4338ca;display:flex;align-items:center;justify-content:center;';
-        back.innerHTML = `<div style="text-align:center;pointer-events:none;"><div style="font-size:32px;">🐝</div><div style="font-size:10px;font-weight:800;letter-spacing:2px;color:#6366f1;margin-top:8px;">WEEBEE</div></div>`;
+        const modal = document.createElement('div');
+        modal.id = 'tcg-pack-modal';
+        modal.style.cssText = `position:fixed;inset:0;background:${isGodPack ? 'radial-gradient(ellipse at 50% 0%,rgba(120,53,15,0.35) 0%,rgba(0,0,0,0.96) 60%)' : 'rgba(0,0,0,0.93)'};z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;`;
 
-        // Front face (revealed on flip)
-        const front = document.createElement('div');
-        front.className = 'tcg-flip-front';
-        front.innerHTML = _tcgBuildCardFace(card);
+        const titleHTML = isGodPack
+            ? `<div style="font-size:28px;font-weight:900;color:#ffd700;letter-spacing:3px;margin-bottom:6px;text-shadow:0 0 20px rgba(251,191,36,0.5);font-family:Georgia,serif;">⚜️ GOD PACK ⚜️</div>`
+            : `<div style="font-size:26px;font-weight:800;color:white;margin-bottom:6px;">${pack.name}</div>`;
 
-        inner.appendChild(back);
-        inner.appendChild(front);
-        wrap.appendChild(inner);
-        row.appendChild(wrap);
-    });
+        modal.innerHTML = `
+            <div style="text-align:center;margin-bottom:28px;">
+                ${titleHTML}
+                <div style="font-size:13px;color:rgba(255,255,255,0.45);">${isMobile ? 'Tap the top card to flip it, tap again to set it aside' : 'Click a card to flip it'}</div>
+            </div>
+            <div id="tcg-pack-cards-row" class="${isMobile ? 'tcg-pack-stack' : ''}" style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;max-width:1200px;"></div>
+            ${isMobile ? `<div id="tcg-pack-stack-counter" style="margin-top:16px;font-size:13px;color:rgba(255,255,255,0.6);font-weight:700;"></div>` : ''}
+            <div style="margin-top:32px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+                <button onclick="window._tcgRevealAll()" style="padding:10px 26px;border-radius:8px;border:none;background:${isGodPack ? 'rgba(251,191,36,0.2)' : 'rgba(255,255,255,0.14)'};color:${isGodPack ? '#ffd700' : 'white'};font-weight:700;font-size:14px;cursor:pointer;${isGodPack ? 'border:1px solid rgba(251,191,36,0.4);' : ''}">Reveal All</button>
+                <button onclick="window._tcgOpenSharePackModal()" style="padding:10px 26px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-weight:700;font-size:14px;cursor:pointer;">Share What You Got</button>
+                <button onclick="document.getElementById('tcg-pack-modal').remove()" style="padding:10px 26px;border-radius:8px;border:none;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.5);font-weight:700;font-size:14px;cursor:pointer;">Close</button>
+            </div>`;
 
-    if (isMobile) _tcgUpdateStackPositions();
+        document.body.appendChild(modal);
+        window._tcgOpeningCards = cards;
+        window._tcgOpeningPack = pack;
+        window._tcgOpeningIsGodPack = isGodPack;
+
+        const row = modal.querySelector('#tcg-pack-cards-row');
+        cards.forEach((card, i) => {
+            const wrap = document.createElement('div');
+            wrap.className = 'tcg-flip-card';
+            wrap.style.cssText = 'width:220px;height:308px;perspective:900px;flex-shrink:0;';
+            wrap.onclick = () => isMobile ? window._tcgStackCardClick(i) : window._tcgFlipCard(i);
+
+            const inner = document.createElement('div');
+            inner.className = 'tcg-flip-inner';
+            inner.id = `tcg-inner-${i}`;
+
+            const back = document.createElement('div');
+            back.className = 'tcg-flip-back';
+            if (isGodPack) {
+                back.style.cssText = 'background:linear-gradient(155deg,#78350f,#92400e,#b45309,#f59e0b,#92400e,#78350f);border:2px solid #ffd700;display:flex;align-items:center;justify-content:center;box-shadow:0 0 24px rgba(251,191,36,0.35);';
+                back.innerHTML = `<div style="text-align:center;pointer-events:none;"><div style="font-size:30px;">⚜️</div><div style="font-size:9px;font-weight:900;letter-spacing:2px;color:#ffd700;margin-top:10px;font-family:Georgia,serif;text-shadow:0 0 8px rgba(251,191,36,0.8);">GOD PACK</div></div>`;
+            } else {
+                back.style.cssText = 'background:linear-gradient(155deg,#1e1b4b,#312e81,#1e1b4b);border:2px solid #4338ca;display:flex;align-items:center;justify-content:center;';
+                back.innerHTML = `<div style="text-align:center;pointer-events:none;"><div style="font-size:32px;">🐝</div><div style="font-size:10px;font-weight:800;letter-spacing:2px;color:#6366f1;margin-top:8px;">WEEBEE</div></div>`;
+            }
+
+            const front = document.createElement('div');
+            front.className = 'tcg-flip-front';
+            front.innerHTML = _tcgBuildCardFace(card);
+
+            inner.appendChild(back);
+            inner.appendChild(front);
+            wrap.appendChild(inner);
+            row.appendChild(wrap);
+        });
+
+        if (isMobile) _tcgUpdateStackPositions();
+    };
+
+    if (isGodPack) _tcgShowGodPackIntro(build);
+    else build();
 };
 
 // Repositions cards in the mobile pack-opening stack: the current card sits on top
@@ -11102,6 +11184,7 @@ window._tcgRevealAll = function() {
 window._tcgOpenSharePackModal = function() {
     if (!auth.currentUser) return window.openAuthModal();
     const cards = window._tcgOpeningCards || [];
+    const isGodPack = !!window._tcgOpeningIsGodPack;
     document.getElementById('tcg-share-pack-modal')?.remove();
 
     const modal = document.createElement('div');
@@ -11110,17 +11193,18 @@ window._tcgOpenSharePackModal = function() {
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
 
     modal.innerHTML = `
-        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:560px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;">
+        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:560px;padding:24px;box-shadow:${isGodPack ? '0 0 0 2px #ffd700, 0 20px 60px rgba(0,0,0,0.4)' : '0 20px 60px rgba(0,0,0,0.4)'};max-height:90vh;overflow-y:auto;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-                <div style="font-size:17px;font-weight:800;color:var(--text-dark);">Share Your Pull</div>
+                <div style="font-size:17px;font-weight:800;color:${isGodPack ? '#b45309' : 'var(--text-dark)'};">${isGodPack ? '⚜️ Share Your GOD PACK' : 'Share Your Pull'}</div>
                 <button onclick="document.getElementById('tcg-share-pack-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
             </div>
-            <textarea id="tcg-share-pack-text" placeholder="LOOK WHAT I JUST PULLED" maxlength="2000" rows="3" style="width:100%;background:var(--bg-gray);border:1px solid var(--border-color);border-radius:10px;padding:12px;font-size:14px;color:var(--text-dark);resize:none;box-sizing:border-box;font-family:inherit;"></textarea>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:14px;padding:14px;background:var(--bg-gray);border-radius:12px;">
+            ${isGodPack ? `<div style="background:linear-gradient(135deg,rgba(180,83,9,0.12),rgba(251,191,36,0.1));border:1px solid rgba(251,191,36,0.4);border-radius:10px;padding:10px 14px;font-size:13px;color:#b45309;font-weight:700;margin-bottom:12px;text-align:center;">You pulled 2 URs and 3 SSRs. This moment deserves a post.</div>` : ''}
+            <textarea id="tcg-share-pack-text" placeholder="${isGodPack ? '⚜️ I JUST PULLED A GOD PACK' : 'LOOK WHAT I JUST PULLED'}" maxlength="2000" rows="3" style="width:100%;background:var(--bg-gray);border:1px solid ${isGodPack ? 'rgba(251,191,36,0.5)' : 'var(--border-color)'};border-radius:10px;padding:12px;font-size:14px;color:var(--text-dark);resize:none;box-sizing:border-box;font-family:inherit;"></textarea>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:14px;padding:14px;background:${isGodPack ? 'linear-gradient(135deg,rgba(120,53,15,0.08),rgba(251,191,36,0.06))' : 'var(--bg-gray)'};border-radius:12px;${isGodPack ? 'border:1px solid rgba(251,191,36,0.25);' : ''}">
                 ${cards.map(c => `<div style="width:121px;height:169px;overflow:hidden;flex-shrink:0;"><div style="transform:scale(0.55);transform-origin:top left;">${_tcgBuildCardFace(c)}</div></div>`).join('')}
             </div>
             <div style="display:flex;justify-content:flex-end;margin-top:14px;">
-                <button id="tcg-share-pack-submit" onclick="window._tcgSubmitPackPost()" class="submit-btn" style="padding:9px 22px;">Post</button>
+                <button id="tcg-share-pack-submit" onclick="window._tcgSubmitPackPost()" class="submit-btn" style="padding:9px 22px;${isGodPack ? 'background:linear-gradient(135deg,#b45309,#f59e0b);color:white;' : ''}">Post</button>
             </div>
         </div>`;
 
@@ -11142,7 +11226,7 @@ window._tcgSubmitPackPost = async function() {
         const displayName = pd?.data()?.displayName || auth.currentUser.displayName || 'Anonymous';
         const avatar = pd?.data()?.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
         const packCards = cards.map(c => ({ name: c.name, anime: c.anime, rarity: c.rarity, image: c.image || null, serial: c.serial ?? null, edition: c.edition ?? null }));
-        await addDoc(collection(db, 'general_posts'), {
+        const postData = {
             uid: auth.currentUser.uid,
             authorName: displayName,
             authorAvatar: avatar,
@@ -11154,7 +11238,9 @@ window._tcgSubmitPackPost = async function() {
             dislikes: [],
             commentCount: 0,
             timestamp: new Date()
-        });
+        };
+        if (window._tcgOpeningIsGodPack) postData.isGodPack = true;
+        await addDoc(collection(db, 'general_posts'), postData);
         document.getElementById('tcg-share-pack-modal')?.remove();
         document.getElementById('tcg-pack-modal')?.remove();
         window.fetchHomeActivityFeed?.();
@@ -13126,15 +13212,21 @@ window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, other
     } catch(e) {}
 
     try {
-        // Block if any offered cards are on an active bulletin listing
+        // Block if any offered cards are on an active bulletin listing or in a pending bulletin offer
         if (offerCardIds.length) {
-            const myListingsSnap = await getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid)));
+            const [myListingsSnap, myBulletinOffersSnap] = await Promise.all([
+                getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid))),
+                getDocs(query(collection(db, 'bulletin_offers'), where('fromUid', '==', myUid))),
+            ]);
             const listedCardIds = new Set(
                 myListingsSnap.docs.filter(d => d.data().status === 'active').flatMap(d => d.data().cardIds || [])
             );
-            const bulletinConflict = offerCardIds.filter(id => listedCardIds.has(id));
+            const offeredCardIds = new Set(
+                myBulletinOffersSnap.docs.filter(d => d.data().status === 'pending').flatMap(d => d.data().offerCardIds || [])
+            );
+            const bulletinConflict = offerCardIds.filter(id => listedCardIds.has(id) || offeredCardIds.has(id));
             if (bulletinConflict.length) {
-                alert('One or more of your offered cards is currently posted on the Trade Bulletin. Withdraw those listings before trading them.');
+                alert('One or more of your offered cards is currently on the Trade Bulletin (listed or in a pending offer). Withdraw those before trading them.');
                 if (btn) { btn.disabled = false; btn.textContent = 'Confirm Trade and Send'; }
                 window._tcgProposalInProgress = false;
                 return;
@@ -14892,15 +14984,17 @@ window._tcgOpenPostBulletinModal = async function() {
     window._tcgBulletinPostPickerState = { filter: 'all', sort: 'rarity', search: '' };
 
     try {
-        const [cards, activeListingsSnap] = await Promise.all([
+        const [cards, activeListingsSnap, myOffersSnap, myTradesSnap] = await Promise.all([
             _tcgLoadCollection(myUid),
             getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid))),
+            getDocs(query(collection(db, 'bulletin_offers'), where('fromUid', '==', myUid))),
+            getDocs(query(collection(db, 'trades'), where('fromUid', '==', myUid), where('status', '==', 'pending'))),
         ]);
-        const alreadyListedIds = new Set(
-            activeListingsSnap.docs
-                .filter(d => d.data().status === 'active')
-                .flatMap(d => d.data().cardIds || [])
-        );
+        const alreadyListedIds = new Set([
+            ...activeListingsSnap.docs.filter(d => d.data().status === 'active').flatMap(d => d.data().cardIds || []),
+            ...myOffersSnap.docs.filter(d => d.data().status === 'pending').flatMap(d => d.data().offerCardIds || []),
+            ...myTradesSnap.docs.flatMap(d => d.data().offerCardIds || []),
+        ]);
         window._tcgBulletinPostAlreadyListed = alreadyListedIds;
         window._tcgBulletinPostAllCards = cards;
         const collEl = document.getElementById('bulletin-post-collection');
@@ -14947,7 +15041,11 @@ window._tcgSubmitBulletinListing = async function(btn) {
         const myUid = auth.currentUser.uid;
         const note = document.getElementById('bulletin-post-note')?.value?.trim() || '';
 
-        const existingSnap = await getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid)));
+        const [existingSnap, myOffersSnap, myTradesSnap] = await Promise.all([
+            getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid))),
+            getDocs(query(collection(db, 'bulletin_offers'), where('fromUid', '==', myUid))),
+            getDocs(query(collection(db, 'trades'), where('fromUid', '==', myUid), where('status', '==', 'pending'))),
+        ]);
         const existingCount = existingSnap.docs.filter(d => d.data().status === 'active').length;
         const LISTING_LIMIT = 10;
         if (existingCount >= LISTING_LIMIT) {
@@ -14957,6 +15055,19 @@ window._tcgSubmitBulletinListing = async function(btn) {
         const spotsLeft = LISTING_LIMIT - existingCount;
         if (selectedIds.length > spotsLeft) {
             alert(`You can only post ${spotsLeft} more card${spotsLeft !== 1 ? 's' : ''} (limit is ${LISTING_LIMIT} active listings).`);
+            return;
+        }
+
+        // Block cards already in pending bulletin offers or pending direct trades
+        const pendingOfferCardIds = new Set(
+            myOffersSnap.docs.filter(d => d.data().status === 'pending').flatMap(d => d.data().offerCardIds || [])
+        );
+        const pendingTradeCardIds = new Set(
+            myTradesSnap.docs.flatMap(d => d.data().offerCardIds || [])
+        );
+        const alreadyCommitted = selectedIds.filter(id => pendingOfferCardIds.has(id) || pendingTradeCardIds.has(id));
+        if (alreadyCommitted.length) {
+            alert('One or more selected cards is already in a pending bulletin offer or direct trade. Withdraw those first before listing.');
             return;
         }
 
@@ -15172,10 +15283,11 @@ window._tcgSubmitBulletinOffer = async function(btn, listingId) {
         }
         const listing = { id: lSnap.id, ...lSnap.data() };
 
-        // Check for conflicts: duplicate offer on this listing, same card in another pending offer, or card already on the bulletin
-        const [existSnap, myListingsSnap] = await Promise.all([
+        // Check for conflicts: duplicate offer on this listing, same card in another pending offer, card on the bulletin, or card in a pending direct trade
+        const [existSnap, myListingsSnap, myTradesSnap] = await Promise.all([
             getDocs(query(collection(db, 'bulletin_offers'), where('fromUid', '==', myUid))),
-            getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid)))
+            getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid))),
+            getDocs(query(collection(db, 'trades'), where('fromUid', '==', myUid), where('status', '==', 'pending'))),
         ]);
 
         if (existSnap.docs.some(d => d.data().listingId === listingId && d.data().status === 'pending')) {
@@ -15183,7 +15295,7 @@ window._tcgSubmitBulletinOffer = async function(btn, listingId) {
         }
 
         if (selectedIds.length) {
-            // Cards already offered elsewhere
+            // Cards already offered elsewhere on the bulletin
             const alreadyOfferedIds = new Set(
                 existSnap.docs.filter(d => d.data().status === 'pending').flatMap(d => d.data().offerCardIds || [])
             );
@@ -15199,6 +15311,15 @@ window._tcgSubmitBulletinOffer = async function(btn, listingId) {
             const bulletinConflict = selectedIds.filter(id => listedCardIds.has(id));
             if (bulletinConflict.length) {
                 alert('One or more of your selected cards is posted on the Trade Bulletin. Withdraw those listings before offering them.'); return;
+            }
+
+            // Cards already in a pending direct trade
+            const tradeOfferedIds = new Set(
+                myTradesSnap.docs.flatMap(d => d.data().offerCardIds || [])
+            );
+            const tradeConflict = selectedIds.filter(id => tradeOfferedIds.has(id));
+            if (tradeConflict.length) {
+                alert('One or more of your selected cards is already in a pending direct trade. Cancel that trade first.'); return;
             }
         }
 
@@ -16397,7 +16518,11 @@ window._renderGeneralPostCardInner = function(post, uid) {
     const dislikes = post.dislikes || [];
     const isLiked = uid && likes.includes(uid);
     const isDisliked = uid && dislikes.includes(uid);
-    return `<div class="feed-post-card" style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.22);border-radius:14px;padding:16px;margin-bottom:12px;position:relative;">
+    const isGodPack = !!post.isGodPack;
+    const cardBg = isGodPack
+        ? 'background:linear-gradient(160deg,rgba(120,53,15,0.1),rgba(251,191,36,0.07),rgba(120,53,15,0.05));border:1px solid rgba(251,191,36,0.45);'
+        : 'background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.22);';
+    return `<div class="feed-post-card" style="${cardBg}border-radius:14px;padding:16px;margin-bottom:12px;position:relative;">
         ${isOwner ? `<div style="position:absolute;top:10px;right:10px;z-index:5;" onclick="event.stopPropagation();">
             <div style="position:relative;">
                 <button onclick="window.togglePostMenu('${post.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined" style="font-size:20px;">more_vert</span></button>
@@ -16419,13 +16544,15 @@ window._renderGeneralPostCardInner = function(post, uid) {
                 </div>
             </div>
             ${post.packCards?.length ? `<div style="display:flex;align-items:center;gap:8px;flex:1 1 100%;margin-top:8px;flex-wrap:wrap;">
-                ${post.packType ? `<span style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;font-size:11px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.3px;">🃏 ${post.packType}</span>` : ''}
+                ${isGodPack
+                    ? `<span style="background:linear-gradient(135deg,#78350f,#b45309,#f59e0b);color:white;font-size:11px;font-weight:900;padding:4px 10px;border-radius:6px;letter-spacing:0.5px;box-shadow:0 0 10px rgba(251,191,36,0.3);">⚜️ GOD PACK</span>`
+                    : (post.packType ? `<span style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;font-size:11px;font-weight:800;padding:4px 10px;border-radius:6px;letter-spacing:0.3px;">🃏 ${post.packType}</span>` : '')}
                 <button onclick="event.stopPropagation();window.switchView('tcg-view')" class="action-btn" style="background:var(--accent-yellow);color:#222;font-weight:700;">Open Packs in the TCG Store</button>
             </div>` : ''}
         </div>
         <p id="gp-text-${post.id}" style="font-size:15px;line-height:1.55;margin:0 0 12px;color:var(--text-dark);white-space:pre-wrap;">${post.text}${post.edited ? ' <span style="font-size:11px;color:var(--text-muted);font-style:italic;">(edited)</span>' : ''}</p>
         ${post.imageUrl ? `<img src="${post.imageUrl}" style="width:100%;max-height:400px;object-fit:contain;border-radius:10px;margin-bottom:12px;background:rgba(0,0,0,0.04);" loading="lazy">` : ''}
-        ${post.packCards?.length ? `<div class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;justify-content:center;padding:14px 0;margin-bottom:12px;">
+        ${post.packCards?.length ? `<div class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;justify-content:center;padding:14px;margin-bottom:12px;border-radius:12px;${isGodPack ? 'background:linear-gradient(135deg,rgba(120,53,15,0.08),rgba(251,191,36,0.05));border:1px solid rgba(251,191,36,0.2);' : ''}">
             ${post.packCards.map(c => { const _sid = _tcgStoreSnap(c); return `<div class="tcg-card-cell" onclick="event.stopPropagation();window._tcgViewCardSnapshot(${_sid})" style="cursor:pointer;"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(c)}</div></div></div>`; }).join('')}
         </div>` : ''}
         <div class="review-actions">
@@ -18954,6 +19081,7 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
         window._tcgRenderStore();
         window._tcgRenderShowcaseCarousel();
         window._tcgRenderSearchRarityFilters();
+        window._tcgProcessAcceptedBulletinOffers();
     }
     if(targetId === 'news-view') {
         window._renderFullSchedule();
@@ -20471,6 +20599,87 @@ window.toggleBwPostComments = async function(event, btn, postId) {
                     : '<p style="font-size:13px;color:var(--text-muted);padding:4px 0;">No comments yet.</p>';
             } catch(e) { console.error(e); listEl.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Could not load comments.</p>'; }
         }
+    }
+};
+
+window._openPostByNotification = async function(postId, postCollection) {
+    if (!postId) return;
+    if (postCollection === 'tier_lists') { window.openTierListViewer(postId); return; }
+
+    document.getElementById('post-notif-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'post-notif-modal';
+    modal.className = 'modal-overlay';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:620px;width:94vw;max-height:90vh;overflow-y:auto;padding:24px;border-radius:16px;position:relative;">
+            <button onclick="document.getElementById('post-notif-modal').remove()" style="position:absolute;top:12px;right:12px;background:none;border:none;cursor:pointer;color:var(--text-muted);z-index:5;"><span class="material-symbols-outlined">close</span></button>
+            <div id="post-notif-body" style="padding-top:4px;"><div class="loading" style="padding:40px 0;text-align:center;">Loading…</div></div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+    try {
+        const [postSnap, commentSnap] = await Promise.all([
+            getDoc(doc(db, postCollection, postId)),
+            getDocs(query(collection(db, 'bw_post_comments'), where('postId', '==', postId))),
+        ]);
+        const bodyEl = document.getElementById('post-notif-body');
+        if (!bodyEl) return;
+        if (!postSnap.exists()) {
+            bodyEl.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px 0;">This post no longer exists.</p>';
+            return;
+        }
+        const p = { id: postSnap.id, ...postSnap.data() };
+        const uid = auth.currentUser?.uid;
+        const ago = formatTimeAgo(p.timestamp);
+        const comments = commentSnap.docs
+            .map(d => ({ ...d.data(), _id: d.id }))
+            .sort((a, b) => (a.timestamp?.toMillis?.() || 0) - (b.timestamp?.toMillis?.() || 0));
+        const commentsHTML = comments.length
+            ? comments.map(c => renderBwComment(c._id, c, postId, postCollection)).join('')
+            : '<p style="font-size:13px;color:var(--text-muted);padding:4px 0;">No comments yet.</p>';
+        const commentInputHTML = auth.currentUser ? `
+            <div style="display:flex;gap:10px;margin-top:12px;">
+                <input type="text" class="bw-comment-input" placeholder="Add a comment…" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);" onkeydown="if(event.key==='Enter'){event.preventDefault();this.nextElementSibling.click();}">
+                <button class="action-btn" onclick="window.submitBwPostComment(event,this,'${p.id}','${postCollection}')">Send</button>
+            </div>` : '';
+
+        // For general_posts, reuse the existing full card renderer so pack cards etc. show correctly,
+        // then force-expand its comment section and pre-fill comments.
+        if (postCollection === 'general_posts' && window._renderGeneralPostCardInner) {
+            bodyEl.innerHTML = window._renderGeneralPostCardInner(p, uid);
+            const commSection = bodyEl.querySelector('.bw-post-comments');
+            if (commSection) {
+                commSection.style.display = 'block';
+                const listEl = commSection.querySelector('.bw-comments-list');
+                if (listEl) listEl.innerHTML = commentsHTML;
+            }
+            return;
+        }
+
+        // Generic renderer for hot_takes, melobee_posts, polls, brackets, etc.
+        const text = p.text || p.body || p.question || p.description || '';
+        const av = p.authorAvatar || p.avatar || '';
+        const name = p.authorName || p.displayName || 'Anonymous';
+        bodyEl.innerHTML = `
+            <div class="feed-post-card" style="border:none;padding:0;margin:0;">
+                <div class="review-header" style="margin-bottom:12px;">
+                    <img src="${av}" class="avatar" onclick="viewUserProfile('${p.uid||''}')" style="cursor:pointer;flex-shrink:0;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(name)}&backgroundColor=ffc107&fontColor=333333'">
+                    <div>
+                        <strong style="color:var(--text-dark);">${name}</strong>
+                        <br><span style="font-size:12px;color:var(--text-muted);">${ago}</span>
+                    </div>
+                </div>
+                ${text ? `<p style="font-size:15px;line-height:1.6;white-space:pre-wrap;margin:0 0 16px;color:var(--text-dark);">${text}</p>` : ''}
+                <div class="bw-post-comments" data-post-collection="${postCollection}" style="display:block;padding-top:14px;border-top:1px solid var(--border-color);">
+                    <div class="bw-comments-list">${commentsHTML}</div>
+                    ${commentInputHTML}
+                </div>
+            </div>`;
+    } catch(e) {
+        const bodyEl = document.getElementById('post-notif-body');
+        if (bodyEl) bodyEl.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px 0;">Failed to load post.</p>';
     }
 };
 
@@ -23545,16 +23754,16 @@ window.goToMeloBeeTab = function() {
 const DUNGEON_DIFFICULTY_CONFIG = {
     easy:   { id:'easy',   label:'Easy',   icon:'🟢', diffMult:0.65, rewardMult:0.8,  desc:'Relaxed gates — great for collecting daily amber with any deck.' },
     medium: { id:'medium', label:'Medium', icon:'🟡', diffMult:1.0,  rewardMult:1.0,  desc:'Standard challenge — the original dungeon experience.' },
-    hard:   { id:'hard',   label:'Hard',   icon:'🔴', diffMult:1.5,  rewardMult:1.5,  desc:'Gates hit harder. Bring your strongest URs and plan your party.' },
+    hard:   { id:'hard',   label:'Hard',   icon:'🔴', diffMult:1.3,  rewardMult:1.5,  desc:'Gates hit harder. Bring your strongest URs and plan your party.' },
 };
 
 const DUNGEON_GATES = {
     e: { id:'e', name:'E-Rank Gate', icon:'🟢', durationMs: 1*3600e3, partySize:1, difficulty:2,  rewardMin:20,  rewardMax:50,   failReward:5 },
     d: { id:'d', name:'D-Rank Gate', icon:'🔵', durationMs: 1*3600e3, partySize:1, difficulty:6,  rewardMin:50,  rewardMax:75,   failReward:15 },
-    c: { id:'c', name:'C-Rank Gate', icon:'🟣', durationMs: 1*3600e3, partySize:2, difficulty:18, rewardMin:75,  rewardMax:100,  failReward:20 },
-    b: { id:'b', name:'B-Rank Gate', icon:'🟠', durationMs: 1*3600e3, partySize:3, difficulty:40, rewardMin:300, rewardMax:400,  failReward:75 },
-    a: { id:'a', name:'A-Rank Gate', icon:'🔴', durationMs: 1*3600e3, partySize:4, difficulty:55, rewardMin:500, rewardMax:600,  failReward:125 },
-    s: { id:'s', name:'S-Rank Gate', icon:'⚫', durationMs: 1*3600e3, partySize:5, difficulty:70, rewardMin:800, rewardMax:1200, failReward:200 },
+    c: { id:'c', name:'C-Rank Gate', icon:'🟣', durationMs: 1*3600e3, partySize:2, difficulty:17, rewardMin:75,  rewardMax:100,  failReward:20 },
+    b: { id:'b', name:'B-Rank Gate', icon:'🟠', durationMs: 1*3600e3, partySize:3, difficulty:30, rewardMin:300, rewardMax:400,  failReward:75 },
+    a: { id:'a', name:'A-Rank Gate', icon:'🔴', durationMs: 1*3600e3, partySize:4, difficulty:43, rewardMin:500, rewardMax:600,  failReward:125 },
+    s: { id:'s', name:'S-Rank Gate', icon:'⚫', durationMs: 1*3600e3, partySize:5, difficulty:56, rewardMin:800, rewardMax:1200, failReward:200 },
 };
 
 // Daily 5-gate pool: every player gets the same pool, seeded by the
@@ -23608,7 +23817,7 @@ function _dungeonGeneratePool(dateKey) {
 const DUNGEON_RARITY_POWER = { common:1, rare:5, sr:9, ssr:13, ur:17 };
 
 function _dungeonCardPower(card) {
-    if (card.monthlyUr || card.tradedMonthlyUr) return 13; // Wheel URs are SSR-equivalent in power
+    if (card.monthlyUr || card.tradedMonthlyUr) return 16; // Wheel URs = max SSR power (SSR base 13 + low-serial bonus 3)
     let power = DUNGEON_RARITY_POWER[card.rarity] || 1;
     if (card.founder) power += 3;
     else if (card.serial != null) {
@@ -23714,16 +23923,24 @@ function _dungeonFormatRemaining(ms) {
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-// Small chance for the party to recruit 1-2 bonus common/rare cards on top
-// of the amber reward. Rolled once at raid start; actually saved to the
-// collection when the raid is claimed.
-async function _dungeonGenerateBonusCards() {
+// Small chance for the party to recruit 1-2 bonus cards on top of the amber
+// reward. Rolled at raid start; saved to the collection when claimed.
+// Hard mode A/S-rank gates add SR to the loot table (15% SR, 20% Rare, 65% Common).
+async function _dungeonGenerateBonusCards(gate, difficulty) {
     if (Math.random() > 0.3) return [];
     await _tcgEnsureCardPool();
     const count = Math.random() < 0.7 ? 1 : 2;
+    const isHardHighTier = difficulty === 'hard' && (gate?.id === 'a' || gate?.id === 's');
     const cards = [];
     for (let i = 0; i < count; i++) {
-        cards.push(_tcgPickCard(Math.random() < 0.8 ? 'common' : 'rare'));
+        let rarity;
+        if (isHardHighTier) {
+            const roll = Math.random();
+            rarity = roll < 0.15 ? 'sr' : roll < 0.35 ? 'rare' : 'common';
+        } else {
+            rarity = Math.random() < 0.8 ? 'common' : 'rare';
+        }
+        cards.push(_tcgPickCard(rarity));
     }
     return cards.filter(c => c.image);
 }
@@ -23944,11 +24161,15 @@ function _dungeonRenderGateSelect(el) {
         let icon, bg, border = '';
         if (result) { icon = result.success ? '✅' : '💀'; bg = 'rgba(255,255,255,0.04)'; }
         else { icon = '▶️'; bg = 'rgba(255,215,0,0.12)'; border = 'border:2px solid var(--accent-yellow);'; }
+        const _rPower = result?.party ? result.party.reduce((s,c) => s + _dungeonCardPower(c), 0) + _dungeonComboBonus(result.party) : null;
+        const _rChance = _rPower !== null ? _dungeonSuccessChance(_rPower, g.difficulty, diffCfg.diffMult) : null;
+        const _rColor = _rChance === null ? '#aaa' : _rChance >= 70 ? '#4caf50' : _rChance >= 40 ? '#FFD700' : '#f44336';
         const clickable = result ? `onclick="window._dungeonShowPastResult(${i})" style="flex:1;min-width:60px;text-align:center;background:${bg};border-radius:10px;padding:10px 6px;${border}cursor:pointer;opacity:0.85;" title="View gate ${i+1} result"` : `style="flex:1;min-width:60px;text-align:center;background:${bg};border-radius:10px;padding:10px 6px;${border}"`;
         return `<div ${clickable}>
             <div style="font-size:22px;">${g.icon}</div>
             <div style="font-size:10px;font-weight:700;margin-top:2px;">${g.id.toUpperCase()}-Rank</div>
             <div style="font-size:14px;margin-top:2px;">${icon}</div>
+            ${_rChance !== null ? `<div style="font-size:9px;color:${_rColor};font-weight:700;margin-top:1px;">${_rChance}%</div>` : ''}
         </div>`;
     }).join('');
 
@@ -24235,7 +24456,7 @@ window._dungeonStartRaid = async function() {
     const durationMs = testMode ? 30000 : gate.durationMs;
     const now = Date.now();
     const party = cards.map(c => ({ id: c.id, name: c.name, image: c.image||'', rarity: c.rarity }));
-    const bonusCards = await _dungeonGenerateBonusCards();
+    const bonusCards = await _dungeonGenerateBonusCards(gate, progress.difficulty);
     const state = {
         gateId: gate.id,
         party,
@@ -24323,10 +24544,15 @@ function _dungeonRenderActive(el, state) {
             </div>`;
         }
         const icon = result?.success ? '✅' : '💀';
+        const _dgDiffCfg = DUNGEON_DIFFICULTY_CONFIG[dgProgress.difficulty || 'medium'];
+        const _dgPower = result?.party ? result.party.reduce((s,c) => s + _dungeonCardPower(c), 0) + _dungeonComboBonus(result.party) : null;
+        const _dgChance = _dgPower !== null ? _dungeonSuccessChance(_dgPower, g.difficulty, _dgDiffCfg.diffMult) : null;
+        const _dgColor = _dgChance === null ? '#aaa' : _dgChance >= 70 ? '#4caf50' : _dgChance >= 40 ? '#FFD700' : '#f44336';
         return `<div onclick="window._dungeonShowPastResult(${i})" style="flex:1;min-width:60px;text-align:center;background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 6px;cursor:pointer;opacity:0.85;" title="View gate ${i+1} result">
             <div style="font-size:22px;">${g.icon}</div>
             <div style="font-size:10px;font-weight:700;margin-top:2px;">${g.id.toUpperCase()}-Rank</div>
             <div style="font-size:14px;margin-top:2px;">${icon}</div>
+            ${_dgChance !== null ? `<div style="font-size:9px;color:${_dgColor};font-weight:700;margin-top:1px;">${_dgChance}%</div>` : ''}
         </div>`;
     }).join('');
 
@@ -24452,6 +24678,11 @@ function _dungeonLifetimeSummaryHTML(progress) {
 function _dungeonStatsHTML(state) {
     const s = state.stats;
     if (!s) return '';
+    const gate = DUNGEON_GATES[state.gateId];
+    const diffCfg = DUNGEON_DIFFICULTY_CONFIG[state.difficulty || 'medium'];
+    const partyPower = (state.party||[]).reduce((sum,c) => sum + _dungeonCardPower(c), 0) + _dungeonComboBonus(state.party||[]);
+    const chance = gate ? _dungeonSuccessChance(partyPower, gate.difficulty, diffCfg?.diffMult ?? 1) : null;
+    const chanceColor = chance === null ? 'var(--text-dark)' : chance >= 70 ? '#4caf50' : chance >= 40 ? '#FFD700' : '#f44336';
     return `
         <div style="background:var(--bg-gray);border-radius:14px;padding:18px 20px;">
             <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">📜 Raid Report</div>
@@ -24461,7 +24692,10 @@ function _dungeonStatsHTML(state) {
                 <div><div style="font-size:22px;font-weight:900;">${s.treasure}</div><div style="font-size:11px;color:var(--text-muted);">Treasure Chests Found</div></div>
                 <div><div style="font-size:22px;font-weight:900;">${s.closeCalls}</div><div style="font-size:11px;color:var(--text-muted);">Close Calls</div></div>
             </div>
-            <div style="font-size:13px;text-align:center;color:var(--text-muted);">⭐ MVP: <strong style="color:var(--text-dark);">${s.mvpName}</strong></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+                <div style="font-size:13px;color:var(--text-muted);">⭐ MVP: <strong style="color:var(--text-dark);">${s.mvpName}</strong></div>
+                ${chance !== null ? `<div style="font-size:13px;color:var(--text-muted);">🎯 Success Odds: <strong style="color:${chanceColor};">${chance}%</strong></div>` : ''}
+            </div>
         </div>`;
 }
 
@@ -24738,6 +24972,9 @@ window.generateDungeonPostCardHTML = function(post) {
     if (post.type === 'summary') return _dungeonGenerateSummaryPostHTML(post);
     const gate = DUNGEON_GATES[post.gateId] || {};
     const diffCfg = DUNGEON_DIFFICULTY_CONFIG[post.difficulty] || null;
+    const _postPartyPower = (post.party||[]).reduce((sum,c) => sum + _dungeonCardPower(c), 0) + _dungeonComboBonus(post.party||[]);
+    const _postChance = gate.difficulty != null && diffCfg ? _dungeonSuccessChance(_postPartyPower, gate.difficulty, diffCfg.diffMult) : null;
+    const _postChanceColor = _postChance === null ? 'var(--text-dark)' : _postChance >= 70 ? '#4caf50' : _postChance >= 40 ? '#FFD700' : '#f44336';
     const uid = auth.currentUser?.uid;
     const isOwner = uid && post.uid === uid;
     const likes = post.likes || [];
@@ -24775,6 +25012,7 @@ window.generateDungeonPostCardHTML = function(post) {
             <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;">${tokens}</div>
             <div style="font-size:15px;font-weight:700;text-align:center;margin-bottom:4px;">${post.success ? '🎉 Success!' : '💀 Failed'}</div>
             <div style="font-size:20px;font-weight:900;color:#FFD700;text-align:center;">🟡 ${post.reward} Amber</div>
+            ${_postChance !== null ? `<div style="font-size:12px;text-align:center;color:var(--text-muted);margin-top:5px;">🎯 Odds: <strong style="color:${_postChanceColor};">${_postChance}%</strong></div>` : ''}
         </div>
         ${_dungeonBonusCardsHTML(post)}
         ${_dungeonStatsHTML(post)}
