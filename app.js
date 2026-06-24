@@ -1323,7 +1323,7 @@ window.fetchNotifications = function() {
             } else if (n.type === 'auction_won' || n.type === 'auction_sold' || n.type === 'auction_outbid') {
                 onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-auction')"`;
             } else if (n.type === 'bulletin_offer' && n.listingId) {
-                onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-bulletin');window._tcgOpenBulletinOffersView('${n.listingId}')"`;
+                onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-trading');window._tcgOpenBulletinOffersView('${n.listingId}')"`;
             } else if (n.type === 'bulletin_offer_accepted') {
                 onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-collection')"`;
             } else if (n.type === 'follow' || n.type === 'friend_accept' || n.type === 'friend_request') {
@@ -6405,7 +6405,7 @@ window.switchTcgTab = function(event, tabId) {
         });
     }
     if (tabId === 'tcg-tab-collection') window._tcgRenderMyCollection();
-    if (tabId === 'tcg-tab-trading') window._tcgRenderMyTrades();
+    if (tabId === 'tcg-tab-trading') window._tcgRenderTradingTab();
     if (tabId === 'tcg-tab-auction') window._auctionRender();
     if (tabId === 'tcg-tab-dungeon') window.loadDungeonTab();
     else window._dungeonStopRefresh?.();
@@ -11201,6 +11201,7 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
             <div><strong>Character:</strong> ${card.name}</div>
             <div><strong>Series:</strong> ${card.anime}</div>
             <div><strong>Rarity:</strong> ${rarityLabel}</div>
+            <div><strong>Power:</strong> ${_dungeonCardPower(card)}</div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                 <div><strong>Version:</strong> ${versionText}</div>
                 ${!(card.monthlyUr||card.tradedMonthlyUr) && !card.founder && card.serial != null ? `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="${card.rarity||''}" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">🔢 View All Versions</button>` : ''}
@@ -11422,6 +11423,7 @@ window._tcgViewCardSnapshot = async function(snapId) {
                 <div><strong>Character:</strong> ${card.name || '—'}</div>
                 <div><strong>Series:</strong> ${card.anime || '—'}</div>
                 <div><strong>Rarity:</strong> ${rarityLabel}</div>
+                <div><strong>Power:</strong> ${_dungeonCardPower(card)}</div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                     <div><strong>Version:</strong> ${versionText}</div>
                     ${showVersionsBtn ? `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="${card.rarity||''}" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">🔢 View All Versions</button>` : ''}
@@ -11736,6 +11738,12 @@ window._tcgSetCardSearch = async function(uid, filter) {
 
 window._tcgSetProfileCardSort = function(sort, uid) {
     window._tcgProfileCardSort = sort;
+    const el = document.getElementById('user-tcg-binders-container');
+    if (el) window._tcgRenderProfileBindersList(el, uid);
+};
+
+window._tcgSetProfileCardFilter = function(filter, uid) {
+    window._tcgProfileCardFilter = filter;
     const el = document.getElementById('user-tcg-binders-container');
     if (el) window._tcgRenderProfileBindersList(el, uid);
 };
@@ -12218,6 +12226,8 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
             if (sort === 'serial-high') return (b.serial ?? -Infinity) - (a.serial ?? -Infinity);
             if (sort === 'name-az') return (a.name||'').localeCompare(b.name||'');
             if (sort === 'name-za') return (b.name||'').localeCompare(a.name||'');
+            if (sort === 'power-high') return _dungeonCardPower(b) - _dungeonCardPower(a);
+            if (sort === 'power-low') return _dungeonCardPower(a) - _dungeonCardPower(b);
             return (rarityOrder[a.rarity]??9) - (rarityOrder[b.rarity]??9);
         });
     const counts = { ur:0, ssr:0, sr:0, rare:0, common:0 };
@@ -12245,6 +12255,8 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
                     <option value="oldest" ${sort==='oldest'?'selected':''}>Sort: Oldest</option>
                     <option value="serial-low" ${sort==='serial-low'?'selected':''}>Sort: Serial # (Low-High)</option>
                     <option value="serial-high" ${sort==='serial-high'?'selected':''}>Sort: Serial # (High-Low)</option>
+                    <option value="power-high" ${sort==='power-high'?'selected':''}>Sort: Power (High-Low)</option>
+                    <option value="power-low" ${sort==='power-low'?'selected':''}>Sort: Power (Low-High)</option>
                 </select>
                 <button onclick="window._tcgToggleMultiSelect('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${ms.active?'var(--accent-yellow)':'var(--border-color)'};background:${ms.active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${ms.active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${ms.active ? '✕ Cancel' : '☑ Multiselect'}</button>
                 <button onclick="window._tcgSmartDismantleModal('${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;">⚙ Smart Select</button>
@@ -12655,8 +12667,12 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
     }
     const rarityOrder = { ur:-1, ssr:0, sr:1, rare:2, common:3 };
     const profileSort = window._tcgProfileCardSort || 'rarity';
+    const profileFilter = window._tcgProfileCardFilter || 'all';
     const profileSearchQ = (window._tcgProfileCardSearch || '').toLowerCase().trim();
+    const counts = { ur:0, ssr:0, sr:0, rare:0, common:0 };
+    cards.forEach(c => { if (c.rarity in counts) counts[c.rarity]++; });
     const sortedCards = [...cards]
+        .filter(c => profileFilter === 'all' || c.rarity === profileFilter)
         .filter(c => !profileSearchQ || (c.name||'').toLowerCase().includes(profileSearchQ) || (c.anime||'').toLowerCase().includes(profileSearchQ))
         .sort((a,b) => {
             if (profileSort === 'newest') return _tcgPulledAtMillis(b) - _tcgPulledAtMillis(a);
@@ -12683,8 +12699,15 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
             </div>`).join('')}</div>` :
         `<p style="color:var(--text-muted);margin:0 0 28px;">${isOwner ? 'You haven\'t created any binders yet — head to the TCG tab to make one.' : 'This user hasn\'t created any binders yet.'}</p>`}
 
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+            ${['all','ur','ssr','sr','rare','common'].map(f => {
+                const labels = { all:`All (${cards.length})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
+                const active = f === profileFilter;
+                return `<button onclick="window._tcgSetProfileCardFilter('${f}','${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
+            }).join('')}
+        </div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-            <div style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">🃏 All Cards (${profileSearchQ ? `${sortedCards.length} / ${cards.length}` : cards.length})</div>
+            <div style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">🃏 All Cards (${profileSearchQ || profileFilter !== 'all' ? `${sortedCards.length} / ${cards.length}` : cards.length})</div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 <select onchange="window._tcgSetProfileCardSort(this.value,'${uid}')" style="padding:6px 10px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;">
                     <option value="rarity" ${profileSort==='rarity'?'selected':''}>Sort: Rarity</option>
@@ -13395,7 +13418,7 @@ window._tcgAcceptTrade = async function(tradeId) {
             await updateDoc(ref, { status: 'invalid', updatedAt: new Date() });
             document.getElementById('tcg-trade-review-modal')?.remove();
             alert('This trade is no longer valid — one or more cards have already been used in another trade.');
-            window._tcgRenderMyTrades();
+            window._tcgRenderTradingTab();
             return;
         }
 
@@ -13420,7 +13443,7 @@ window._tcgAcceptTrade = async function(tradeId) {
                 await _tcgReleaseCardLocks(t.fromUid, t.offerCardIds);
                 document.getElementById('tcg-trade-review-modal')?.remove();
                 alert('This trade is no longer valid — the sender no longer has enough Amber to cover their offer.');
-                window._tcgRenderMyTrades();
+                window._tcgRenderTradingTab();
                 return;
             }
         }
@@ -13524,77 +13547,6 @@ window._tcgProcessAcceptedTrades = async function() {
     } catch(e) { console.error('processAcceptedTrades', e); }
 };
 
-// TCG Trading tab — list of the current user's trade offers
-window._tcgRenderMyTrades = async function() {
-    const el = document.getElementById('tcg-trades-container');
-    if (!el || !auth.currentUser) return;
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div>';
-    const myUid = auth.currentUser.uid;
-
-    let trades = [];
-    try {
-        const snap = await getDocs(query(collection(db,'trades'), where('participants','array-contains',myUid)));
-        snap.forEach(d => trades.push({ id: d.id, ...d.data() }));
-    } catch(e) { el.innerHTML = `<p style="color:var(--text-muted);">Failed to load trades.</p>`; return; }
-
-    trades.sort((a,b) => (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0));
-
-    const incoming = trades.filter(t => t.status === 'pending' && t.toUid === myUid);
-    const outgoing = trades.filter(t => t.status === 'pending' && t.fromUid === myUid);
-    const history = trades.filter(t => t.status !== 'pending');
-
-    const miniCards = (cards) => (cards||[]).slice(0,4).map(c => {
-        const snapId = _tcgStoreSnap(c);
-        return `<div onclick="window._tcgViewCardSnapshot(${snapId})" title="${c.name||''}" style="cursor:pointer;width:44px;height:62px;overflow:hidden;border-radius:4px;pointer-events:auto;"><div style="transform:scale(0.2);transform-origin:top left;pointer-events:none;">${_tcgBuildCardFace(c)}</div></div>`;
-    }).join('') + ((cards||[]).length > 4 ? `<div style="font-size:11px;color:var(--text-muted);align-self:center;">+${cards.length-4}</div>` : '');
-
-    const statusBadge = (status) => {
-        const map = { pending: ['Pending','#f59e0b'], accepted: ['Accepted','#3b82f6'], completed: ['Completed','#4CAF50'], declined: ['Declined','#ef4444'], cancelled: ['Cancelled','var(--text-muted)'], invalid: ['No Longer Valid','#ef4444'] };
-        const [label, color] = map[status] || [status, 'var(--text-muted)'];
-        return `<span style="font-size:11px;font-weight:800;color:${color};border:1px solid ${color};border-radius:6px;padding:2px 8px;">${label}</span>`;
-    };
-
-    const tradeRow = (t) => {
-        const isRecipient = t.toUid === myUid;
-        const otherName = isRecipient ? (t.fromName || 'A user') : (t.toName || 'A user');
-        const youGive = isRecipient ? t.requestCards : t.offerCards;
-        const youGet = isRecipient ? t.offerCards : t.requestCards;
-        const youGiveAmber = isRecipient ? (t.requestAmber||0) : (t.offerAmber||0);
-        const youGetAmber = isRecipient ? (t.offerAmber||0) : (t.requestAmber||0);
-        return `<div onclick="window._tcgOpenTradeReview('${t.id}')" style="cursor:pointer;display:flex;align-items:center;gap:16px;padding:12px 16px;border:1px solid var(--border-color);border-radius:12px;background:var(--bg-gray);flex-wrap:wrap;">
-            <div style="min-width:140px;font-weight:800;font-size:13px;">${otherName}</div>
-            <div style="display:flex;align-items:center;gap:8px;">
-                <span style="font-size:11px;color:var(--text-muted);font-weight:700;">You give</span>
-                <div style="display:flex;gap:4px;">${miniCards(youGive)}</div>
-                ${youGiveAmber ? `<span style="font-size:12px;font-weight:800;color:#f59e0b;">🟡 ${youGiveAmber.toLocaleString()}</span>` : ''}
-            </div>
-            <span class="material-symbols-outlined" style="font-size:18px;color:var(--text-muted);">swap_horiz</span>
-            <div style="display:flex;align-items:center;gap:8px;">
-                <span style="font-size:11px;color:var(--text-muted);font-weight:700;">You get</span>
-                <div style="display:flex;gap:4px;">${miniCards(youGet)}</div>
-                ${youGetAmber ? `<span style="font-size:12px;font-weight:800;color:#f59e0b;">🟡 ${youGetAmber.toLocaleString()}</span>` : ''}
-            </div>
-            <div style="margin-left:auto;">${statusBadge(t.status)}</div>
-        </div>`;
-    };
-
-    const section = (title, list, emptyMsg) => `
-        <div style="margin-bottom:28px;">
-            <div style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">${title}</div>
-            ${list.length ? `<div style="display:flex;flex-direction:column;gap:10px;">${list.map(tradeRow).join('')}</div>` : `<p style="color:var(--text-muted);font-size:13px;margin:0;">${emptyMsg}</p>`}
-        </div>`;
-
-    el.innerHTML = `
-        <div style="margin-bottom:24px;">
-            <button onclick="window._tcgOpenTradeUserSearch()" style="padding:10px 20px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">🔄 Start a Trade</button>
-        </div>
-        ${section('🔔 Incoming Offers', incoming, 'No incoming trade offers.')}
-        ${section('📤 Sent Offers', outgoing, 'You haven\'t sent any trade offers.')}
-        ${section('📜 History', history, 'No past trades yet.')}
-    `;
-    _tcgObserveSSRCards(el);
-};
-
 // ── TCG Bulletin Picker (shared filter/sort/grid for post + offer modals) ────
 const _bpRarityOrder = { ur:0, ssr:1, sr:2, rare:3, common:4 };
 const _bpRarityColor = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' };
@@ -13617,6 +13569,7 @@ function _tcgBulletinFilteredCards(cards, state) {
 function _tcgBulletinPickerGridHTML(mode, cards) {
     const isPost = mode === 'post';
     const selectedIds = isPost ? window._tcgBulletinPostSelectedIds : window._tcgBulletinOfferSelectedIds;
+    const alreadyListed = isPost ? (window._tcgBulletinPostAlreadyListed || new Set()) : new Set();
     const toggleFn = isPost ? '_tcgToggleBulletinPostCard' : '_tcgToggleBulletinOfferCard';
     const selColor = isPost ? 'var(--accent-yellow)' : '#7c3aed';
     const selBg = isPost ? 'rgba(245,158,11,0.12)' : 'rgba(124,58,237,0.1)';
@@ -13626,15 +13579,19 @@ function _tcgBulletinPickerGridHTML(mode, cards) {
     return cards.map(c => {
         const snapId = _tcgStoreSnap(c);
         const selected = selectedIds?.has(c.id);
+        const listed = alreadyListed.has(c.id);
         const rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[c.rarity] || c.rarity;
         const serial = c.serial != null ? `#${c.serial}` : ((c.monthlyUr||c.tradedMonthlyUr) ? 'Wheel UR' : (c.founder ? '1 of 1' : ''));
-        return `<div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;">
-            <div onclick="window.${toggleFn}(this,'${c.id}')" data-card-id="${c.id}" style="cursor:pointer;padding:4px;border-radius:10px;border:2px solid ${selected?selColor:'transparent'};background:${selected?selBg:'transparent'};">
+        return `<div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;${listed?'opacity:0.5;':''}">
+            <div ${listed ? '' : `onclick="window.${toggleFn}(this,'${c.id}')"`} data-card-id="${c.id}" style="cursor:${listed?'default':'pointer'};padding:4px;border-radius:10px;border:2px solid ${selected?selColor:'transparent'};background:${selected?selBg:'transparent'};">
                 <div style="width:110px;height:154px;overflow:hidden;border-radius:4px;pointer-events:none;">
                     <div style="transform:scale(0.5);transform-origin:top left;width:220px;height:308px;">${_tcgBuildCardFace(c)}</div>
                 </div>
             </div>
-            <button onclick="event.stopPropagation();window._tcgViewCardSnapshot(${snapId})" title="View card" style="position:absolute;top:6px;right:0px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;">⤢</button>
+            ${listed
+                ? `<div style="position:absolute;top:6px;left:4px;right:0;background:rgba(0,0,0,0.65);color:#fff;font-size:9px;font-weight:800;text-align:center;padding:2px 4px;border-radius:4px;pointer-events:none;">Already Listed</div>`
+                : `<button onclick="event.stopPropagation();window._tcgViewCardSnapshot(${snapId})" title="View card" style="position:absolute;top:6px;right:0px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;">⤢</button>`
+            }
             <div style="text-align:center;width:110px;">
                 <div style="font-size:10px;font-weight:800;color:${_bpRarityColor[c.rarity]||'var(--text-muted)'};">${rl}</div>
                 <div style="font-size:10px;color:var(--text-dark);font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${c.name||''}</div>
@@ -14563,85 +14520,117 @@ window._auctionPlaceBid = async function(btn, itemId, minBid) {
     } finally { _auctionBidInProgress = false; }
 };
 
-// ── TCG Trade Bulletin ───────────────────────────────────────────────────────
+// ── TCG Trading Tab (unified trades + bulletin) ───────────────────────────────
 
-window._tcgSwitchTradingSubtab = function(tab) {
-    ['trades', 'bulletin'].forEach(t => {
-        const content = document.getElementById(`trading-subtab-${t}`);
-        const btn = document.getElementById(`trading-subtab-${t}-btn`);
-        if (content) content.style.display = t === tab ? '' : 'none';
-        if (btn) {
-            btn.style.color = t === tab ? 'var(--accent-yellow)' : 'var(--text-muted)';
-            btn.style.borderBottom = t === tab ? '2px solid var(--accent-yellow)' : '2px solid transparent';
-        }
-    });
-    if (tab === 'bulletin') window._tcgRenderBulletinBoard();
-    else window._tcgRenderMyTrades();
-};
-
-window._tcgRenderBulletinBoard = async function() {
-    const el = document.getElementById('tcg-bulletin-container');
+window._tcgRenderTradingTab = async function() {
+    const el = document.getElementById('tcg-trading-container');
     if (!el) return;
     if (!auth.currentUser) {
-        el.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px 0;">Sign in to view the Trade Bulletin.</p>';
+        el.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px 0;">Sign in to view trades.</p>';
         return;
     }
-    // Process any accepted bulletin offers where we're the offeror before rendering
     window._tcgProcessAcceptedBulletinOffers();
     const myUid = auth.currentUser.uid;
-    el.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-            <div style="font-size:15px;font-weight:800;color:var(--text-dark);">📌 Trade Bulletin</div>
-            <button onclick="window._tcgOpenPostBulletinModal()" style="padding:10px 20px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">+ Post a Listing</button>
-        </div>
-        <div id="bulletin-my-offers-section"></div>
-        <div id="bulletin-listings-list"><div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div></div>`;
 
-    // Load my offers and all listings in parallel
+    el.innerHTML = `
+        <div style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+            <button onclick="window._tcgOpenTradeUserSearch()" style="padding:10px 20px;border-radius:10px;border:none;background:var(--bg-gray);color:var(--text-dark);font-weight:800;font-size:13px;cursor:pointer;border:1px solid var(--border-color);">🔄 Start a Trade</button>
+            <button onclick="window._tcgOpenPostBulletinModal()" style="padding:10px 20px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">📌 Post a Listing</button>
+        </div>
+        <div id="trading-my-listings"></div>
+        <div id="trading-my-bulletin-offers"></div>
+        <div id="trading-incoming"></div>
+        <div id="trading-sent"></div>
+        <div id="trading-board-section">
+            <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">📌 Bulletin Board</div>
+            <div id="bulletin-listings-list"><div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div></div>
+        </div>
+        <div id="trading-history"></div>`;
+
+    const _rc = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' };
+    const _rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
+
+    const miniCardEl = (c, label) => {
+        const snapId = _tcgStoreSnap(c);
+        const rc = _rc[c.rarity] || 'var(--text-muted)';
+        const rl = _rl[c.rarity] || c.rarity;
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+            ${label ? `<div style="font-size:9px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${label}</div>` : ''}
+            <div onclick="window._tcgViewCardSnapshot(${snapId})" title="${c.name||''}" style="cursor:pointer;width:44px;height:62px;overflow:hidden;border-radius:4px;flex-shrink:0;"><div style="transform:scale(0.2);transform-origin:top left;pointer-events:none;">${_tcgBuildCardFace(c)}</div></div>
+            <div style="font-size:9px;font-weight:700;color:${rc};text-align:center;">${rl}</div>
+            <div style="font-size:9px;color:var(--text-dark);text-align:center;max-width:44px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${c.name||''}</div>
+        </div>`;
+    };
+
+    const sectionHeader = (title) =>
+        `<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">${title}</div>`;
+
     try {
-        const [snap, myOffersSnap] = await Promise.all([
+        const [bulletinSnap, myOffersSnap, myListingsSnap, tradesSnap] = await Promise.all([
             getDocs(query(collection(db, 'bulletin_listings'), orderBy('createdAt', 'desc'), limit(60))),
-            getDocs(query(collection(db, 'bulletin_offers'), where('fromUid', '==', myUid)))
+            getDocs(query(collection(db, 'bulletin_offers'), where('fromUid', '==', myUid))),
+            getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid))),
+            getDocs(query(collection(db, 'trades'), where('participants', 'array-contains', myUid))),
         ]);
 
-        // Render my offers section
-        const myOffers = [];
-        myOffersSnap.forEach(d => myOffers.push({ id: d.id, ...d.data() }));
-        const myOffersEl = document.getElementById('bulletin-my-offers-section');
-        if (myOffersEl && myOffers.length) {
-            // Fetch listing docs in parallel so we can show what each offer is for
-            const uniqueListingIds = [...new Set(myOffers.map(o => o.listingId).filter(Boolean))];
+        // ── My Active Listings ──────────────────────────────────────────────
+        const myActiveListings = myListingsSnap.docs
+            .filter(d => d.data().status === 'active')
+            .map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => (b.createdAt?.toMillis?.()??0) - (a.createdAt?.toMillis?.()??0));
+        const myListingsEl = document.getElementById('trading-my-listings');
+        if (myListingsEl && myActiveListings.length) {
+            myListingsEl.innerHTML = `
+                <div style="margin-bottom:24px;">
+                    ${sectionHeader(`My Listings (${myActiveListings.length})`)}
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        ${myActiveListings.map(listing => {
+                            const first = listing.cards?.[0];
+                            if (!first) return '';
+                            const snapId = _tcgStoreSnap(first);
+                            const offerCount = listing.pendingOfferCount || 0;
+                            const offerBadge = offerCount > 0
+                                ? `<span style="background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:800;margin-left:4px;">${offerCount}</span>` : '';
+                            return `<div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                                <div onclick="window._tcgViewCardSnapshot(${snapId})" style="cursor:pointer;width:44px;height:62px;overflow:hidden;border-radius:4px;flex-shrink:0;">
+                                    <div style="transform:scale(0.2);transform-origin:top left;pointer-events:none;">${_tcgBuildCardFace(first)}</div>
+                                </div>
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-size:13px;font-weight:800;color:var(--text-dark);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${first.name||''}</div>
+                                    <div style="font-size:11px;color:${_rc[first.rarity]||'var(--text-muted)'};">${_rl[first.rarity]||first.rarity} · ${first.anime||''}</div>
+                                    ${listing.note ? `<div style="font-size:11px;color:var(--text-muted);">Looking for: ${listing.note}</div>` : ''}
+                                </div>
+                                <button onclick="window._tcgOpenBulletinOffersView('${listing.id}')" style="padding:7px 14px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:11px;cursor:pointer;white-space:nowrap;">View Offers${offerBadge}</button>
+                                <button onclick="window._tcgWithdrawBulletinListing(this,'${listing.id}')" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;font-size:11px;cursor:pointer;">Withdraw</button>
+                            </div>`;
+                        }).filter(Boolean).join('')}
+                    </div>
+                </div>`;
+            _tcgObserveSSRCards(myListingsEl);
+        }
+
+        // ── My Bulletin Offers ──────────────────────────────────────────────
+        const myOffers = myOffersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const pendingOffers = myOffers.filter(o => o.status === 'pending');
+        const myOffersEl = document.getElementById('trading-my-bulletin-offers');
+        if (myOffersEl && pendingOffers.length) {
+            const uniqueListingIds = [...new Set(pendingOffers.map(o => o.listingId).filter(Boolean))];
             const listingDocResults = await Promise.all(uniqueListingIds.map(id => getDoc(doc(db, 'bulletin_listings', id)).catch(() => null)));
             const listingMap = {};
             listingDocResults.forEach((d, i) => { if (d?.exists()) listingMap[uniqueListingIds[i]] = d.data(); });
 
-            const _moRC = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)' };
             const statusColor = { pending:'#f59e0b', accepted:'#4CAF50', declined:'#ef4444', withdrawn:'var(--text-muted)' };
             myOffersEl.innerHTML = `
                 <div style="margin-bottom:24px;">
-                    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">My Offers (${myOffers.length})</div>
+                    ${sectionHeader(`My Bulletin Offers (${pendingOffers.length} pending)`)}
                     <div style="display:flex;flex-direction:column;gap:8px;">
-                        ${myOffers.sort((a,b)=>(b.createdAt?.toMillis?.()??0)-(a.createdAt?.toMillis?.()??0)).map(o => {
+                        ${pendingOffers.sort((a,b)=>(b.createdAt?.toMillis?.()??0)-(a.createdAt?.toMillis?.()??0)).map(o => {
                             const sc = statusColor[o.status] || 'var(--text-muted)';
                             const listing = listingMap[o.listingId];
                             const listingCard = listing?.cards?.[0];
-
-                            const miniCard = (c, label) => {
-                                const snapId = _tcgStoreSnap(c);
-                                const rc = _moRC[c.rarity] || 'var(--text-muted)';
-                                const rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' }[c.rarity] || c.rarity;
-                                return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-                                    ${label ? `<div style="font-size:9px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${label}</div>` : ''}
-                                    <div onclick="window._tcgViewCardSnapshot(${snapId})" title="${c.name||''}" style="cursor:pointer;width:44px;height:62px;overflow:hidden;border-radius:4px;flex-shrink:0;"><div style="transform:scale(0.2);transform-origin:top left;pointer-events:none;">${_tcgBuildCardFace(c)}</div></div>
-                                    <div style="font-size:9px;font-weight:700;color:${rc};text-align:center;">${rl}</div>
-                                    <div style="font-size:9px;color:var(--text-dark);text-align:center;max-width:44px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${c.name||''}</div>
-                                </div>`;
-                            };
-
-                            const offerCardEls = (o.offerCards||[]).map(c => miniCard(c, '')).join('');
+                            const offerCardEls = (o.offerCards||[]).slice(0,4).map(c => miniCardEl(c, '')).join('');
                             const extraOffer = (o.offerCards||[]).length > 4 ? `<span style="font-size:11px;color:var(--text-muted);align-self:center;">+${o.offerCards.length-4}</span>` : '';
-                            const forCardEl = listingCard ? miniCard(listingCard, 'For') : (listing ? `<span style="font-size:11px;color:var(--text-muted);">Listing closed</span>` : `<span style="font-size:11px;color:var(--text-muted);">Listing removed</span>`);
-
+                            const forCardEl = listingCard ? miniCardEl(listingCard, 'For') : `<span style="font-size:11px;color:var(--text-muted);">Listing closed</span>`;
                             return `<div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;border:1px solid var(--border-color);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                                 <div style="display:flex;gap:5px;align-items:flex-end;flex-shrink:0;">
                                     ${offerCardEls || '<span style="font-size:12px;color:var(--text-muted);">Amber only</span>'}
@@ -14654,7 +14643,7 @@ window._tcgRenderBulletinBoard = async function() {
                                     <div style="font-size:11px;color:var(--text-muted);">${formatTimeAgo(o.createdAt)}</div>
                                 </div>
                                 <span style="font-size:11px;font-weight:700;color:${sc};border:1px solid ${sc};border-radius:6px;padding:2px 8px;flex-shrink:0;align-self:center;">${o.status.charAt(0).toUpperCase()+o.status.slice(1)}</span>
-                                ${o.status==='pending'?`<button onclick="window._tcgWithdrawBulletinOffer(this,'${o.id}')" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;font-size:11px;cursor:pointer;flex-shrink:0;">Withdraw</button>`:''}
+                                <button onclick="window._tcgWithdrawBulletinOffer(this,'${o.id}')" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;font-size:11px;cursor:pointer;flex-shrink:0;">Withdraw</button>
                             </div>`;
                         }).join('')}
                     </div>
@@ -14662,49 +14651,109 @@ window._tcgRenderBulletinBoard = async function() {
             _tcgObserveSSRCards(myOffersEl);
         }
 
-        const listings = [];
-        snap.forEach(d => {
-            const data = d.data();
-            if (data.status === 'active') listings.push({ id: d.id, ...data });
-        });
+        // ── Direct Trade Requests ───────────────────────────────────────────
+        let trades = tradesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        trades.sort((a,b) => (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0));
+        const directPending = trades.filter(t => t.status === 'pending' && t.source !== 'bulletin');
+        const incoming = directPending.filter(t => t.toUid === myUid);
+        const outgoing = directPending.filter(t => t.fromUid === myUid);
 
+        const statusBadge = (status) => {
+            const map = { pending:['Pending','#f59e0b'], accepted:['Accepted','#3b82f6'], completed:['Completed','#4CAF50'], declined:['Declined','#ef4444'], cancelled:['Cancelled','var(--text-muted)'], invalid:['No Longer Valid','#ef4444'] };
+            const [label, color] = map[status] || [status, 'var(--text-muted)'];
+            return `<span style="font-size:11px;font-weight:800;color:${color};border:1px solid ${color};border-radius:6px;padding:2px 8px;">${label}</span>`;
+        };
+        const miniCards4 = (cards) => (cards||[]).slice(0,4).map(c => {
+            const snapId = _tcgStoreSnap(c);
+            return `<div onclick="window._tcgViewCardSnapshot(${snapId})" title="${c.name||''}" style="cursor:pointer;width:44px;height:62px;overflow:hidden;border-radius:4px;"><div style="transform:scale(0.2);transform-origin:top left;pointer-events:none;">${_tcgBuildCardFace(c)}</div></div>`;
+        }).join('') + ((cards||[]).length > 4 ? `<div style="font-size:11px;color:var(--text-muted);align-self:center;">+${cards.length-4}</div>` : '');
+        const tradeRow = (t) => {
+            const isRecipient = t.toUid === myUid;
+            const otherName = isRecipient ? (t.fromName||'A user') : (t.toName||'A user');
+            const youGive = isRecipient ? t.requestCards : t.offerCards;
+            const youGet = isRecipient ? t.offerCards : t.requestCards;
+            const youGiveAmber = isRecipient ? (t.requestAmber||0) : (t.offerAmber||0);
+            const youGetAmber = isRecipient ? (t.offerAmber||0) : (t.requestAmber||0);
+            return `<div onclick="window._tcgOpenTradeReview('${t.id}')" style="cursor:pointer;display:flex;align-items:center;gap:16px;padding:12px 16px;border:1px solid var(--border-color);border-radius:12px;background:var(--bg-gray);flex-wrap:wrap;">
+                <div style="min-width:120px;font-weight:800;font-size:13px;">${otherName}</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:11px;color:var(--text-muted);font-weight:700;">You give</span>
+                    <div style="display:flex;gap:4px;">${miniCards4(youGive)}</div>
+                    ${youGiveAmber ? `<span style="font-size:12px;font-weight:800;color:#f59e0b;">🟡 ${youGiveAmber.toLocaleString()}</span>` : ''}
+                </div>
+                <span class="material-symbols-outlined" style="font-size:18px;color:var(--text-muted);">swap_horiz</span>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:11px;color:var(--text-muted);font-weight:700;">You get</span>
+                    <div style="display:flex;gap:4px;">${miniCards4(youGet)}</div>
+                    ${youGetAmber ? `<span style="font-size:12px;font-weight:800;color:#f59e0b;">🟡 ${youGetAmber.toLocaleString()}</span>` : ''}
+                </div>
+                <div style="margin-left:auto;">${statusBadge(t.status)}</div>
+            </div>`;
+        };
+
+        const incomingEl = document.getElementById('trading-incoming');
+        if (incomingEl && incoming.length) {
+            incomingEl.innerHTML = `<div style="margin-bottom:24px;">${sectionHeader(`🔔 Incoming Trade Requests (${incoming.length})`)}
+                <div style="display:flex;flex-direction:column;gap:10px;">${incoming.map(tradeRow).join('')}</div></div>`;
+            _tcgObserveSSRCards(incomingEl);
+        }
+        const sentEl = document.getElementById('trading-sent');
+        if (sentEl && outgoing.length) {
+            sentEl.innerHTML = `<div style="margin-bottom:24px;">${sectionHeader(`📤 Sent Trade Requests (${outgoing.length})`)}
+                <div style="display:flex;flex-direction:column;gap:10px;">${outgoing.map(tradeRow).join('')}</div></div>`;
+            _tcgObserveSSRCards(sentEl);
+        }
+
+        // ── Public Bulletin Board ───────────────────────────────────────────
+        const listings = bulletinSnap.docs
+            .filter(d => d.data().status === 'active')
+            .map(d => ({ id: d.id, ...d.data() }));
         window._tcgBulletinAllListings = listings;
         window._tcgBulletinMyUid = myUid;
         if (!window._tcgBulletinBoardState) window._tcgBulletinBoardState = { filter: 'all', sort: 'newest', search: '' };
 
         const listEl = document.getElementById('bulletin-listings-list');
-        if (!listEl) return;
-
-        // Rarity counts for filter pills
-        const counts = { ur:0, ssr:0, sr:0, rare:0, common:0 };
-        listings.forEach(l => { const r = l.cards?.[0]?.rarity; if (r && r in counts) counts[r]++; });
-
-        const state = window._tcgBulletinBoardState;
-        listEl.innerHTML = `
-            <input type="text" value="${(state.search||'').replace(/"/g,'&quot;')}" placeholder="Search by character or anime…"
-                oninput="window._tcgBulletinBoardSearch(this.value)"
-                style="width:100%;padding:7px 12px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;margin-bottom:10px;">
-            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:14px;">
-                <div style="display:flex;gap:5px;flex-wrap:wrap;">
-                    ${['all','ur','ssr','sr','rare','common'].map(f => {
-                        const labels = { all:`All (${listings.length})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
-                        const active = f === state.filter;
-                        return `<button onclick="window._tcgBulletinBoardFilter('${f}')" style="padding:4px 10px;border-radius:14px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
-                    }).join('')}
+        if (listEl) {
+            const counts = { ur:0, ssr:0, sr:0, rare:0, common:0 };
+            listings.forEach(l => { const r = l.cards?.[0]?.rarity; if (r && r in counts) counts[r]++; });
+            const state = window._tcgBulletinBoardState;
+            listEl.innerHTML = `
+                <input type="text" value="${(state.search||'').replace(/"/g,'&quot;')}" placeholder="Search by character or anime…"
+                    oninput="window._tcgBulletinBoardSearch(this.value)"
+                    style="width:100%;padding:7px 12px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;margin-bottom:10px;">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                    <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                        ${['all','ur','ssr','sr','rare','common'].map(f => {
+                            const labels = { all:`All (${listings.length})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
+                            const active = f === state.filter;
+                            return `<button onclick="window._tcgBulletinBoardFilter('${f}')" style="padding:4px 10px;border-radius:14px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
+                        }).join('')}
+                    </div>
+                    <select onchange="window._tcgBulletinBoardSort(this.value)" style="padding:4px 8px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;">
+                        <option value="newest" ${state.sort==='newest'?'selected':''}>Newest first</option>
+                        <option value="oldest" ${state.sort==='oldest'?'selected':''}>Oldest first</option>
+                        <option value="rarity" ${state.sort==='rarity'?'selected':''}>Rarity</option>
+                        <option value="name-az" ${state.sort==='name-az'?'selected':''}>Name A–Z</option>
+                    </select>
                 </div>
-                <select onchange="window._tcgBulletinBoardSort(this.value)" style="padding:4px 8px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;">
-                    <option value="newest" ${state.sort==='newest'?'selected':''}>Newest first</option>
-                    <option value="oldest" ${state.sort==='oldest'?'selected':''}>Oldest first</option>
-                    <option value="rarity" ${state.sort==='rarity'?'selected':''}>Rarity</option>
-                    <option value="name-az" ${state.sort==='name-az'?'selected':''}>Name A–Z</option>
-                </select>
-            </div>
-            <div id="bulletin-listings-grid"></div>`;
+                <div id="bulletin-listings-grid"></div>`;
+            window._tcgRefreshBulletinGrid();
+        }
 
-        window._tcgRefreshBulletinGrid();
+        // ── Trade History ───────────────────────────────────────────────────
+        const history = trades.filter(t => t.status !== 'pending').slice(0, 50);
+        const historyEl = document.getElementById('trading-history');
+        if (historyEl && history.length) {
+            historyEl.innerHTML = `<div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border-color);">
+                ${sectionHeader(`📜 Trade History (${history.length})`)}
+                <div style="display:flex;flex-direction:column;gap:10px;">${history.map(tradeRow).join('')}</div>
+            </div>`;
+            _tcgObserveSSRCards(historyEl);
+        }
+
     } catch(e) {
         const listEl = document.getElementById('bulletin-listings-list');
-        if (listEl) listEl.innerHTML = '<p style="color:var(--text-muted);text-align:center;">Failed to load listings.</p>';
+        if (listEl) listEl.innerHTML = '<p style="color:var(--text-muted);text-align:center;">Failed to load.</p>';
     }
 };
 
@@ -14843,7 +14892,16 @@ window._tcgOpenPostBulletinModal = async function() {
     window._tcgBulletinPostPickerState = { filter: 'all', sort: 'rarity', search: '' };
 
     try {
-        const cards = await _tcgLoadCollection(myUid);
+        const [cards, activeListingsSnap] = await Promise.all([
+            _tcgLoadCollection(myUid),
+            getDocs(query(collection(db, 'bulletin_listings'), where('uid', '==', myUid))),
+        ]);
+        const alreadyListedIds = new Set(
+            activeListingsSnap.docs
+                .filter(d => d.data().status === 'active')
+                .flatMap(d => d.data().cardIds || [])
+        );
+        window._tcgBulletinPostAlreadyListed = alreadyListedIds;
         window._tcgBulletinPostAllCards = cards;
         const collEl = document.getElementById('bulletin-post-collection');
         if (!collEl) return;
@@ -14876,7 +14934,8 @@ window._tcgToggleBulletinPostCard = function(el, cardId) {
 window._tcgSubmitBulletinListing = async function(btn) {
     if (window._tcgBulletinPostInProgress) return;
     if (!auth.currentUser) return;
-    const selectedIds = [...(window._tcgBulletinPostSelectedIds || [])];
+    const alreadyListed = window._tcgBulletinPostAlreadyListed || new Set();
+    const selectedIds = [...(window._tcgBulletinPostSelectedIds || [])].filter(id => !alreadyListed.has(id));
     if (!selectedIds.length) { alert('Select at least one card to post.'); return; }
 
     btn.disabled = true; btn.textContent = 'Posting…';
@@ -14931,7 +14990,7 @@ window._tcgSubmitBulletinListing = async function(btn) {
         }));
 
         document.getElementById('tcg-bulletin-post-modal')?.remove();
-        window._tcgRenderBulletinBoard();
+        window._tcgRenderTradingTab();
     } catch(e) {
         alert('Failed to post listing: ' + e.message);
         btn.disabled = false; btn.textContent = 'Post Listing';
@@ -14949,7 +15008,7 @@ window._tcgWithdrawBulletinOffer = async function(btn, offerId) {
         const listingId = oSnap.data().listingId;
         await updateDoc(doc(db, 'bulletin_offers', offerId), { status: 'withdrawn' });
         try { await updateDoc(doc(db, 'bulletin_listings', listingId), { pendingOfferCount: increment(-1) }); } catch(e) {}
-        window._tcgRenderBulletinBoard();
+        window._tcgRenderTradingTab();
     } catch(e) {
         alert('Failed to withdraw offer.');
         btn.disabled = false; btn.textContent = 'Withdraw';
@@ -14969,7 +15028,7 @@ window._tcgWithdrawBulletinListing = async function(btn, listingId) {
             pendingDocs.forEach(d => batch.update(d.ref, { status: 'declined' }));
             await batch.commit();
         }
-        window._tcgRenderBulletinBoard();
+        window._tcgRenderTradingTab();
     } catch(e) {
         alert('Failed to withdraw listing.');
         btn.disabled = false; btn.textContent = 'Withdraw';
@@ -15400,7 +15459,7 @@ window._tcgAcceptBulletinOffer = async function(btn, listingId, offerId) {
 
         document.getElementById('tcg-bulletin-offers-modal')?.remove();
         alert('Offer accepted! Your cards have been transferred. The other user will receive their cards when they next open the TCG page.');
-        window._tcgRenderBulletinBoard();
+        window._tcgRenderTradingTab();
     } catch(e) {
         alert('Failed to accept offer: ' + e.message);
         btn.disabled = false; btn.textContent = 'Accept';
@@ -15592,6 +15651,51 @@ window._repairBulletinFull = async function(offerId) {
     if (!confirm('Fix both sides: deliver listing cards to the offeror AND remove the offered cards from their collection?')) return;
     await window._repairBulletinDeliver(offerId);
     await window._repairBulletinRemoveOffered(offerId);
+};
+
+window._tcgAdminDeduplicateListings = async function(fix) {
+    if (!window.isAdmin) return;
+    const resultEl = document.getElementById('dedup-bulletin-result');
+    if (resultEl) resultEl.textContent = 'Scanning…';
+    try {
+        const snap = await getDocs(query(collection(db, 'bulletin_listings')));
+        const active = snap.docs.filter(d => d.data().status === 'active');
+
+        // Group active listings by the first cardId
+        const byCard = {};
+        active.forEach(d => {
+            const cardId = (d.data().cardIds || [])[0];
+            if (!cardId) return;
+            if (!byCard[cardId]) byCard[cardId] = [];
+            byCard[cardId].push(d);
+        });
+
+        // Find groups with more than one listing
+        const dupeGroups = Object.entries(byCard).filter(([, docs]) => docs.length > 1);
+        if (!dupeGroups.length) {
+            if (resultEl) resultEl.innerHTML = '<span style="color:#4CAF50;">✓ No duplicates found.</span>';
+            return;
+        }
+
+        const toWithdraw = [];
+        dupeGroups.forEach(([cardId, docs]) => {
+            // Keep the newest, withdraw the rest
+            docs.sort((a, b) => (b.data().createdAt?.toMillis?.()??0) - (a.data().createdAt?.toMillis?.()??0));
+            docs.slice(1).forEach(d => toWithdraw.push({ id: d.id, cardId, uid: d.data().uid, name: d.data().cards?.[0]?.name || cardId }));
+        });
+
+        if (!fix) {
+            if (resultEl) resultEl.innerHTML = `Found <strong>${toWithdraw.length}</strong> duplicate listing(s) across ${dupeGroups.length} card(s):<br>${toWithdraw.map(x => `• ${x.name} (${x.id})`).join('<br>')}`;
+            return;
+        }
+
+        const batch = writeBatch(db);
+        toWithdraw.forEach(x => batch.update(doc(db, 'bulletin_listings', x.id), { status: 'withdrawn' }));
+        await batch.commit();
+        if (resultEl) resultEl.innerHTML = `<span style="color:#4CAF50;">✓ Withdrew ${toWithdraw.length} duplicate listing(s).</span>`;
+    } catch(e) {
+        if (resultEl) resultEl.textContent = 'Error: ' + e.message;
+    }
 };
 
 window._tcgDeclineBulletinOffer = async function(btn, offerId, listingId) {
@@ -23445,12 +23549,12 @@ const DUNGEON_DIFFICULTY_CONFIG = {
 };
 
 const DUNGEON_GATES = {
-    e: { id:'e', name:'E-Rank Gate', icon:'🟢', durationMs: 1*3600e3, partySize:1, difficulty:1,  rewardMin:20,  rewardMax:50,   failReward:5 },
-    d: { id:'d', name:'D-Rank Gate', icon:'🔵', durationMs: 1*3600e3, partySize:1, difficulty:3,  rewardMin:50,  rewardMax:75,   failReward:15 },
-    c: { id:'c', name:'C-Rank Gate', icon:'🟣', durationMs: 1*3600e3, partySize:2, difficulty:6,  rewardMin:75,  rewardMax:100,  failReward:20 },
-    b: { id:'b', name:'B-Rank Gate', icon:'🟠', durationMs: 1*3600e3, partySize:2, difficulty:12, rewardMin:300, rewardMax:400,  failReward:75 },
-    a: { id:'a', name:'A-Rank Gate', icon:'🔴', durationMs: 1*3600e3, partySize:3, difficulty:18, rewardMin:500, rewardMax:600,  failReward:125 },
-    s: { id:'s', name:'S-Rank Gate', icon:'⚫', durationMs: 1*3600e3, partySize:5, difficulty:33, rewardMin:800, rewardMax:1200, failReward:200 },
+    e: { id:'e', name:'E-Rank Gate', icon:'🟢', durationMs: 1*3600e3, partySize:1, difficulty:2,  rewardMin:20,  rewardMax:50,   failReward:5 },
+    d: { id:'d', name:'D-Rank Gate', icon:'🔵', durationMs: 1*3600e3, partySize:1, difficulty:6,  rewardMin:50,  rewardMax:75,   failReward:15 },
+    c: { id:'c', name:'C-Rank Gate', icon:'🟣', durationMs: 1*3600e3, partySize:2, difficulty:18, rewardMin:75,  rewardMax:100,  failReward:20 },
+    b: { id:'b', name:'B-Rank Gate', icon:'🟠', durationMs: 1*3600e3, partySize:3, difficulty:40, rewardMin:300, rewardMax:400,  failReward:75 },
+    a: { id:'a', name:'A-Rank Gate', icon:'🔴', durationMs: 1*3600e3, partySize:4, difficulty:55, rewardMin:500, rewardMax:600,  failReward:125 },
+    s: { id:'s', name:'S-Rank Gate', icon:'⚫', durationMs: 1*3600e3, partySize:5, difficulty:70, rewardMin:800, rewardMax:1200, failReward:200 },
 };
 
 // Daily 5-gate pool: every player gets the same pool, seeded by the
@@ -23501,11 +23605,12 @@ function _dungeonGeneratePool(dateKey) {
 
 // Card "Power" — rarity baseline plus a bonus for low serial numbers
 // (single-digit serials, Founder/Monthly URs all count as the strongest).
-const DUNGEON_RARITY_POWER = { common:1, rare:2, sr:4, ssr:8, ur:16 };
+const DUNGEON_RARITY_POWER = { common:1, rare:5, sr:9, ssr:13, ur:17 };
 
 function _dungeonCardPower(card) {
+    if (card.monthlyUr || card.tradedMonthlyUr) return 13; // Wheel URs are SSR-equivalent in power
     let power = DUNGEON_RARITY_POWER[card.rarity] || 1;
-    if (card.founder || (card.monthlyUr||card.tradedMonthlyUr)) power += 3;
+    if (card.founder) power += 3;
     else if (card.serial != null) {
         if (card.serial < 10) power += 3;
         else if (card.serial < 100) power += 2;
