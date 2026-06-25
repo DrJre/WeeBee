@@ -414,7 +414,7 @@ async function _awardAmberToUser(uid, amount, reason) {
 // a second claim on another device.
 function _awardAmberDaily(key, amount) {
     if (!auth.currentUser) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const storageKey = `weebee_amber_${key}_${today}`;
     if (localStorage.getItem(storageKey)) return;
     localStorage.setItem(storageKey, '1');
@@ -438,7 +438,7 @@ async function _awardFirstReviewBonus() {
 // Award 1 amber for an interaction (like/comment given) — max 10/day combined
 function _awardAmberInteraction() {
     if (!auth.currentUser) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const key = `weebee_amber_interactions_${today}`;
     const count = parseInt(localStorage.getItem(key) || '0');
     if (count >= 10) return;
@@ -530,7 +530,7 @@ window.initUserAchievements = async function() {
 async function _awardLoginBonus() {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     const storageKey = `weebee_amber_login_${today}`;
     if (localStorage.getItem(storageKey)) return;
     try {
@@ -539,7 +539,7 @@ async function _awardLoginBonus() {
         const lastDate = p.lastLoginDate || null;
         if (lastDate === today) { localStorage.setItem(storageKey, '1'); return; }
         const streak = p.loginStreak || 0;
-        const yesterday = new Date(Date.now() - 864e5).toISOString().split('T')[0];
+        const yesterday = bwGetYesterday();
         const newStreak = lastDate === yesterday ? streak + 1 : 1;
         const bonus = 100 + Math.min((newStreak - 1) * 5, 100);
         await setDoc(doc(db, 'profiles', uid), { loginStreak: newStreak, lastLoginDate: today }, { merge: true });
@@ -764,7 +764,7 @@ window._saveGameState = function(key, value) {
 // Called on login — pulls today's cloud progress into localStorage for all games
 window._syncGameProgressFromCloud = async function() {
     if (!auth.currentUser) return;
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const today = bwGetDate();
     const keys = [
         `wb_bwop_${today}`, `wb_bwnrt_${today}`, `wb_bwblc_${today}`, `wb_bwdb_${today}`,
         `weebee_trivia_${today}`,
@@ -22144,8 +22144,8 @@ window.bwDbUpdateLeaderboard = async function(guessCount) {
     const uid = auth.currentUser.uid;
     const ref = doc(db, 'bw_db_leaderboard', uid);
     const snap = await getDoc(ref);
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+    const today = bwGetDate();
+    const yesterday = bwGetYesterday();
     let streak, totalWins;
     if (snap.exists()) {
         const d = snap.data();
@@ -22187,7 +22187,7 @@ window.bwDbPostToFeed = async function(btn) {
     if (!auth.currentUser) return window.openAuthModal();
     const { answer, guesses, solved } = window.bwDbState;
     if (!solved) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     if (btn.dataset.updateId) {
         const caption = document.getElementById('bwdb-feed-caption')?.value.trim() || '';
         btn.disabled = true; btn.innerText = 'Saving...';
@@ -22239,7 +22239,7 @@ window.showBwDbLeaderboardTab = async function(tab) {
     alltimeBtn.style.background = tab==='alltime' ? 'var(--accent-yellow)' : 'var(--bg-gray-darker)';
     alltimeBtn.style.color = tab==='alltime' ? '#111' : 'var(--text-dark)';
     content.innerHTML = '<div class="loading">Loading...</div>';
-    const today = new Date().toISOString().split('T')[0];
+    const today = bwGetDate();
     try {
         if (tab === 'today') {
             const snap = await getDocs(query(collection(db,'bw_db_games'), where('date','==',today), where('solved','==',true)));
