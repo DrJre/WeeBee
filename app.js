@@ -6717,10 +6717,23 @@ window._tcgRenderCards = function(cards) {
 
 // Hand-curated SR art — sourced manually and stored in Firebase Storage (tcg-art/)
 const TCG_SR_CARDS = [
-    { name: 'Rangiku Matsumoto', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FRangiku.jpg?alt=media&token=7950d22d-9255-42c5-ad3e-dccb31a322c2' },
-    { name: 'Ichigo', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FIchigo.jpg?alt=media&token=4237e9e4-90e9-4949-b2ad-a4331cf287de' },
+    { name: 'Byakuya Kuchiki', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FByakuya%20Kuchiki.jpg?alt=media&token=a718a9d9-6304-45fe-8123-63ddab5a66ac' },
+    { name: 'Grimmjow', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FGrimmjow.jpg?alt=media&token=1608c635-853b-4d58-a9aa-2b804a2363f9' },
+    { name: 'Ichigo Kurosaki', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FIchigo%20Kurosaki.jpg?alt=media&token=26e5f62d-3e0e-4658-96c0-0f9679816019' },
+    { name: 'Kenpachi Zaraki', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FKenpachi%20Zaraki.jpg?alt=media&token=c53cc130-d53a-4d14-81df-51a8c70455a1' },
+    { name: 'Kisuke Urahara', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FKisuke%20Urahara.jpg?alt=media&token=ea636647-5a36-4ef4-97e1-ddf8a337756c' },
+    { name: 'Nelliel', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FNelliel.jpg?alt=media&token=288de78e-a2a9-470d-ba40-3dbb6dc5335a' },
     { name: 'Orihime', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOrihime.jpg?alt=media&token=0134562c-1dc4-4db7-8166-221806097f02' },
-    { name: 'Yoruichi', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FYoruichi.jpg?alt=media&token=1f6180a1-ef53-4d25-9324-12057675c07a' },
+    { name: 'Rangiku Matsumoto', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FRangiku%20Matsumoto.jpg?alt=media&token=e242ec64-13c9-4cc3-ad81-2ac1cb1c8813' },
+    { name: 'Renji Abarai', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FRenji%20Abarai.jpg?alt=media&token=a79bbdb6-0ccb-4660-be64-0ca2848e8a82' },
+    { name: 'Rukia Kuchiki', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FRukia%20Kichiki.jpg?alt=media&token=3d7a6d34-adfe-487e-be80-f5ede65f891c' },
+    { name: 'Shunsui Kyoraku', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FShunsui%20Kyoraku.jpg?alt=media&token=bda5809f-f943-481f-8e5f-02d86b18cbf0' },
+    { name: 'Sosuke Aizen', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FSosuke%20Aizen.jpg?alt=media&token=ea63230c-8825-4594-92af-8646747ce5a6' },
+    { name: 'Tier Halibel', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FTier%20Halibel.jpg?alt=media&token=bc1b50fb-fa02-403d-848a-f4f00c7be960' },
+    { name: 'Toshiro Hitsugaya', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FToshiro%20Hitsugaya.jpg?alt=media&token=a4e031be-a858-458e-8228-6766827bbd91' },
+    { name: 'Uryu Ishida', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FUryu%20Ishida.jpg?alt=media&token=361b5299-2e9f-455d-ac7e-44f2aac5fc54' },
+    { name: 'Yasutora Sado (Chad)', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FYasutora%20Sado%20(Chad).jpg?alt=media&token=8021cf3e-4d6c-4e7a-9342-d6cfe71d93ab' },
+    { name: 'Yoruichi Shihoin', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FYoruichi%20Shihoin.jpg?alt=media&token=af78f1e9-c3d6-4bad-bf01-5ff8d7f54552' },
     { name: 'Monkey D. Luffy', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_luffy.avif?alt=media&token=7d379fbf-5984-4a41-b62c-4068d06f43cd' },
     { name: 'Nami', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_nami.avif?alt=media&token=a7d7912f-e758-4285-879a-5729dd64abe7' },
     { name: 'Robin', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_robin.avif?alt=media&token=b987319c-c47e-4137-99c4-af9a3a826dd0' },
@@ -8290,6 +8303,54 @@ window._tcgUpdatePoolArt = async function({ name, anime, rarities: rarityMap }) 
     window._tcgSRPool = null; window._tcgSSRPool = null; window._tcgURPool = null;
     console.table(results);
     console.log('Done. Pool cache cleared.');
+};
+
+// Admin: rename a card in the Firestore pool (finds by oldName + rarity, updates name + image).
+// Usage: await window._tcgRenamePoolCard({ oldName, newName, rarity, image })
+window._tcgRenamePoolCard = async function({ oldName, newName, rarity, image }) {
+    if (!window.isAdmin) return console.warn('Admin only.');
+    const snap = await getDocs(query(collection(db, 'characters'),
+        where('rarityTier', '==', rarity), where('name', '==', oldName)));
+    if (snap.empty) { console.warn(`No "${rarity}" card found named "${oldName}"`); return; }
+    for (const d of snap.docs) {
+        const updates = { name: newName, imageBroken: false };
+        if (image) updates.image = image;
+        await updateDoc(d.ref, updates);
+        console.log(`Renamed "${oldName}" → "${newName}" (${d.id})`);
+    }
+    window._tcgRarePool = null; window._tcgCommonPool = null;
+    window._tcgSRPool = null; window._tcgSSRPool = null; window._tcgURPool = null;
+    console.log('Pool cache cleared.');
+};
+
+// Admin: delete duplicate pool cards — keeps the first doc found, deletes the rest.
+// Usage: await window._tcgDeleteDuplicatePoolCards(name, rarity)
+window._tcgDeleteDuplicatePoolCards = async function(name, rarity) {
+    if (!window.isAdmin) return console.warn('Admin only.');
+    const snap = await getDocs(query(collection(db, 'characters'),
+        where('rarityTier', '==', rarity), where('name', '==', name)));
+    console.log(`Found ${snap.size} "${name}" (${rarity}) doc(s)`);
+    if (snap.size <= 1) { console.log('No duplicates — nothing to delete.'); return; }
+    for (const d of snap.docs.slice(1)) {
+        await deleteDoc(d.ref);
+        console.log(`Deleted duplicate: ${d.id}`);
+    }
+    window._tcgRarePool = null; window._tcgCommonPool = null;
+    window._tcgSRPool = null; window._tcgSSRPool = null; window._tcgURPool = null;
+    console.log('Done. Pool cache cleared.');
+};
+
+// Admin: update the art on cards users already own in their collections.
+// Usage: await window._tcgUpdateOwnedCardArt('Ichigo', 'https://...')
+window._tcgUpdateOwnedCardArt = async function(name, newImage) {
+    if (!window.isAdmin) return console.warn('Admin only.');
+    const snap = await getDocs(query(collectionGroup(db, 'cards'), where('name', '==', name)));
+    if (snap.empty) { console.log(`No owned cards found named "${name}"`); return; }
+    console.log(`Found ${snap.size} owned card(s) named "${name}" — updating art…`);
+    const b = writeBatch(db);
+    snap.docs.forEach(d => b.update(d.ref, { image: newImage }));
+    await b.commit();
+    console.log(`Done — updated ${snap.size} card(s).`);
 };
 
 window._tcgFindCard = async function(nameQuery, rarities) {
