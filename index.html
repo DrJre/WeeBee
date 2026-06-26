@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=97">
+    <link rel="stylesheet" href="styles.css?v=98">
 </head>
 <body>
     <div class="app-container">
@@ -74,7 +74,7 @@
             <div class="topbar-right">
                 <div class="search-bar">
                     <span class="material-symbols-outlined">search</span>
-                    <input type="text" id="main-search-input" placeholder="Search anime..." onkeydown="if(event.key === 'Enter' && this.value.trim() !== '') { searchAnime(this.value.trim()); this.value = ''; }">
+                    <input type="text" id="main-search-input" placeholder="Search anime..." autocomplete="off" onkeydown="if(event.key === 'Enter' && this.value.trim() !== '') { searchAnime(this.value.trim()); this.value = ''; }">
                 </div>
                 <button class="search-icon-btn" onclick="toggleMobileSearch()" aria-label="Search">
                     <span class="material-symbols-outlined">search</span>
@@ -91,7 +91,7 @@
         <div class="mobile-search-bar" id="mobile-search-bar">
             <div class="mobile-search-inner">
                 <span class="material-symbols-outlined">search</span>
-                <input type="text" id="mobile-search-input" placeholder="Search anime..."
+                <input type="text" id="mobile-search-input" placeholder="Search anime..." autocomplete="off"
                        onkeydown="if(event.key==='Enter'&&this.value.trim()!==''){searchAnime(this.value.trim());this.value='';closeMobileSearch();}">
                 <button class="search-close-btn" onclick="closeMobileSearch()">
                     <span class="material-symbols-outlined">close</span>
@@ -1072,6 +1072,30 @@
                                     <div id="auction-repair-status" style="font-size:12px; color:var(--text-muted); margin-top:6px;"></div>
                                 </div>
                                 <button onclick="window._auctionAdminRepair()" style="padding:9px 18px; border-radius:8px; border:none; background:#ef4444; color:#fff; font-weight:800; font-size:13px; cursor:pointer; flex-shrink:0;">Run Repair</button>
+                            </div>
+
+                            <!-- Repair Won-But-Undelivered Auctions -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                                <div style="flex:1; min-width:200px;">
+                                    <div style="font-size:14px; font-weight:800; margin-bottom:2px;">📬 Repair Undelivered Won Auctions</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Finds 'won' listings where the winner never received their card and queues delivery — winners get their card automatically next time they open the TCG.</div>
+                                    <div id="auction-won-repair-status" style="font-size:12px; color:var(--text-muted); margin-top:6px;"></div>
+                                </div>
+                                <button onclick="window._auctionRepairWonDeliveries()" style="padding:9px 18px; border-radius:8px; border:none; background:#f59e0b; color:#222; font-weight:800; font-size:13px; cursor:pointer; flex-shrink:0;">Run Repair</button>
+                            </div>
+
+                            <!-- Fix Profile Display Name -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:4px;">✏️ Fix Profile Display Name</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Override the Firestore displayName for any user — useful when it got reset to "WeeBee User" by a past bug.</div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+                                    <input id="fix-name-uid" type="text" placeholder="User UID" style="flex:1;min-width:200px;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;">
+                                    <input id="fix-name-value" type="text" placeholder="New display name" style="flex:1;min-width:160px;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;">
+                                    <button onclick="window._adminFixDisplayName()" style="padding:9px 18px;border-radius:8px;border:none;background:#f59e0b;color:#222;font-weight:800;font-size:13px;cursor:pointer;flex-shrink:0;">Fix Name</button>
+                                    <button onclick="window._adminReadDisplayName()" style="padding:9px 18px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-weight:800;font-size:13px;cursor:pointer;flex-shrink:0;">Read Current</button>
+                                </div>
+                                <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Your UID: <code id="admin-own-uid" style="font-family:monospace;user-select:all;"></code></div>
+                                <div id="fix-name-status" style="font-size:12px;color:var(--text-muted);"></div>
                             </div>
 
                             <!-- Force-Deliver Won Auction (undelivered card) -->
@@ -2674,6 +2698,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=443"></script>
+    <script type="module" src="app.js?v=444"></script>
 </body>
 </html>
