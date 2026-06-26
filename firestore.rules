@@ -49,6 +49,11 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.uid);
     }
 
+    match /admins/{uid} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
     match /bracket_templates/{doc} {
       allow read: if true;
       allow create: if isAuth();
@@ -380,7 +385,7 @@ service cloud.firestore {
           get(/databases/$(database)/documents/wheel_state/$(uid)).data.pendingUrClaim == true
         )
       );
-      allow update: if isOwner(uid);
+      allow update: if isOwner(uid) || isAdmin();
       allow delete: if isOwner(uid) || isAdmin();
     }
 
@@ -485,8 +490,8 @@ service cloud.firestore {
     // ── Username reservations (lowercase, normalized display names) ──────────
     match /usernames/{name} {
       allow read: if true;
-      // Claiming a name: the doc must point to the requester's own uid.
-      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+      // Claiming or reclaiming a name: the doc must point to the requester's own uid.
+      allow create, update: if isAuth() && request.resource.data.uid == request.auth.uid;
       // Releasing your old name (on rename): only the owner can delete.
       // resource is null if no reservation doc exists for the old name
       // (common for accounts created before this system existed) — allow
@@ -506,6 +511,14 @@ service cloud.firestore {
       allow create: if isAuth() && request.auth.uid == request.resource.data.uid;
       allow update: if isAdmin() || isAuth();
       allow delete: if isAdmin();
+    }
+
+    // Pending auction card deliveries — written by whoever runs settlement
+    // (may not be the winner), read and deleted only by the winner themselves.
+    match /auction_deliveries/{listingId} {
+      allow read, delete: if isAdmin() || (isAuth() && request.auth.uid == resource.data.winnerUid);
+      allow create: if isAuth();
+      allow update: if isAdmin();
     }
 
     match /bulletin_listings/{listingId} {
