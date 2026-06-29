@@ -1,0 +1,10 @@
+{
+  "name": "weebee-scripts",
+  "version": "1.0.0",
+  "description": "One-time admin scripts for WeeBee",
+  "main": "scrape-filler.js",
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "firebase-admin": "^12.0.0"
+  }
+}

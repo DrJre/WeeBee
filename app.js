@@ -19463,7 +19463,7 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false, defaultTab
             <div class="tags" style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;">${anime.genres?.map(g => g.name).join(', ')}</div>
             <div class="detail-tabs">
                 <button class="detail-tab active" onclick="switchDetailTab(event, 'tab-overview')">Overview</button>
-                <button class="detail-tab" onclick="switchDetailTab(event, 'tab-episodes')">Episodes</button>
+                <button class="detail-tab" onclick="switchDetailTab(event, 'tab-episodes')">Episodes / Filler Guide</button>
                 <button class="detail-tab" onclick="switchDetailTab(event, 'tab-reviews')">Reviews</button>
                 <button class="detail-tab" onclick="switchDetailTab(event, 'tab-seasons')">Seasons & Films</button>
             </div>
@@ -19655,6 +19655,91 @@ window.loadAnimeRelations = async function(mal_id) {
     }
 };
 
+// ── Filler Guide helpers ──────────────────────────────────────────────────────
+
+// Maps our internal type key → display label + colors
+const FILLER_TYPE_META = {
+    manga_canon:  { label: 'Manga Canon',        border: '#22c55e', bg: 'rgba(34,197,94,0.08)',   tag: '#22c55e' },
+    anime_canon:  { label: 'Anime Canon',         border: '#3b82f6', bg: 'rgba(59,130,246,0.08)',  tag: '#3b82f6' },
+    canon:        { label: 'Canon',               border: '#22c55e', bg: 'rgba(34,197,94,0.08)',   tag: '#22c55e' },
+    mixed:        { label: 'Mixed Canon/Filler',  border: '#f59e0b', bg: 'rgba(245,158,11,0.08)',  tag: '#f59e0b' },
+    filler:       { label: 'Filler',              border: '#ef4444', bg: 'rgba(239,68,68,0.08)',   tag: '#ef4444' },
+    recap:        { label: 'Recap',               border: '#8b5cf6', bg: 'rgba(139,92,246,0.08)',  tag: '#8b5cf6' },
+};
+
+// Converts a flat list of episode numbers into a compact range string: "1-3, 5, 7-10"
+function _fillerNums2Ranges(nums) {
+    if (!nums.length) return '';
+    const sorted = [...new Set(nums)].sort((a, b) => a - b);
+    const ranges = [];
+    let start = sorted[0], end = sorted[0];
+    for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i] === end + 1) { end = sorted[i]; }
+        else { ranges.push(start === end ? `${start}` : `${start}-${end}`); start = end = sorted[i]; }
+    }
+    ranges.push(start === end ? `${start}` : `${start}-${end}`);
+    return ranges.join(', ');
+}
+
+// Normalizes an anime title for fuzzy matching against filler_guide titleNorms
+function _fillerNormTitle(t) {
+    return (t || '')
+        .toLowerCase()
+        .replace(/[:\-–—!?.,'"()[\]]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+// Looks up filler data from our Firestore filler_guide collection.
+// Tries each normalized title variant; returns null if not found.
+async function _fillerLookup(anime) {
+    const candidates = [
+        anime.title,
+        anime.title_english,
+        anime.title_japanese,
+    ].filter(Boolean).map(_fillerNormTitle).filter((v, i, a) => v && a.indexOf(v) === i);
+
+    for (const norm of candidates) {
+        try {
+            const snap = await getDocs(
+                query(collection(db, 'filler_guide'), where('titleNorms', 'array-contains', norm), limit(1))
+            );
+            if (!snap.empty) return snap.docs[0].data();
+        } catch(e) {}
+    }
+    return null;
+}
+
+// Renders the filler summary block (ranges per type) at the top
+function _fillerRenderSummary(fillerMap) {
+    // Group episode numbers by type
+    const byType = {};
+    for (const [epNum, type] of Object.entries(fillerMap)) {
+        if (!byType[type]) byType[type] = [];
+        byType[type].push(parseInt(epNum));
+    }
+
+    // Render order: canon types first, then mixed, then filler, then recap
+    const order = ['manga_canon', 'anime_canon', 'canon', 'mixed', 'filler', 'recap'];
+    const rows = order
+        .filter(t => byType[t]?.length)
+        .map(t => {
+            const meta = FILLER_TYPE_META[t];
+            const ranges = _fillerNums2Ranges(byType[t]);
+            return `<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+                <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;color:white;background:${meta.tag};white-space:nowrap;flex-shrink:0;">${meta.label}</span>
+                <span style="font-size:13px;color:var(--text-dark);line-height:1.5;">${ranges}</span>
+            </div>`;
+        }).join('');
+
+    if (!rows) return '';
+    return `<div style="background:var(--bg-gray);border-radius:10px;padding:14px 16px;margin-bottom:18px;">
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Episode Guide</div>
+        ${rows}
+        <div style="font-size:11px;color:var(--text-muted);margin-top:10px;">Source: <a href="https://www.animefillerlist.com" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline;">AnimeFillerList.com</a></div>
+    </div>`;
+}
+
 // --- Episode Scoring ---
 async function fetchDetailEpisodes(mal_id, page = 1) {
     const container = document.getElementById('detail-eps-container');
@@ -19662,6 +19747,7 @@ async function fetchDetailEpisodes(mal_id, page = 1) {
     if (page === 1) {
         container.innerHTML = '<div class="loading">Loading Episodes...</div>';
         window.currentEpStats = {};
+        window._fillerMap = null; // {epNum: type} from our DB, null = not loaded yet
         try {
             const epSnap = await getDocs(query(collection(db, 'episode_reviews'), where('mal_id', '==', mal_id)));
             const uid = auth.currentUser?.uid;
@@ -19673,7 +19759,34 @@ async function fetchDetailEpisodes(mal_id, page = 1) {
                 if (uid && data.uid === uid) { window.currentEpStats[n].userScore = data.score; window.currentEpStats[n].userComment = data.comment || ''; }
             });
         } catch(e) { console.error('Episode scores fetch error:', e); }
+
+        // Look up filler data in parallel with the Jikan fetch below
+        const animeData = window.currentAnime;
+        if (animeData) {
+            _fillerLookup(animeData).then(doc => {
+                if (doc?.episodes?.length) {
+                    window._fillerMap = {};
+                    doc.episodes.forEach(ep => { window._fillerMap[ep.n] = ep.type; });
+                    // Re-render the guide header + episode borders if already rendered
+                    const summaryEl = document.getElementById('ep-filler-summary');
+                    if (summaryEl) summaryEl.outerHTML = _fillerRenderSummary(window._fillerMap);
+                    // Refresh border colors on already-rendered rows
+                    document.querySelectorAll('.episode-row[data-ep]').forEach(row => {
+                        const n = parseInt(row.dataset.ep);
+                        const type = window._fillerMap[n];
+                        if (type) {
+                            const meta = FILLER_TYPE_META[type];
+                            row.style.borderLeftColor = meta.border;
+                            row.style.background = meta.bg;
+                            const tag = row.querySelector('.ep-filler-tag');
+                            if (tag) { tag.textContent = meta.label; tag.style.color = meta.tag; tag.style.display = ''; }
+                        }
+                    });
+                }
+            }).catch(() => {});
+        }
     }
+
     try {
         const json = await window.jikanFetch(`https://api.jikan.moe/v4/anime/${mal_id}/episodes?page=${page}`, `eps_${mal_id}_p${page}`, JIKAN_CAROUSEL_TTL_MS);
         const episodes = json.data || [];
@@ -19684,16 +19797,26 @@ async function fetchDetailEpisodes(mal_id, page = 1) {
             container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:30px 0;">No episode data available for this anime yet.</p>';
             return;
         }
+
         const renderRows = (eps) => eps.map(ep => {
             const stats = window.currentEpStats[ep.mal_id] || {};
             const avg = stats.count > 0 ? (stats.total / stats.count).toFixed(1) : null;
             const userScore = stats.userScore;
-            const flair = [ep.filler ? 'Filler' : '', ep.recap ? 'Recap' : ''].filter(Boolean).join(' · ');
-            return `<div class="episode-row" id="ep-row-${ep.mal_id}">
+
+            // Filler type: prefer our DB, fall back to Jikan booleans
+            let type = window._fillerMap?.[ep.mal_id];
+            if (!type && ep.filler)  type = 'filler';
+            if (!type && ep.recap)   type = 'recap';
+            const meta = type ? FILLER_TYPE_META[type] : null;
+
+            const borderStyle = meta ? `border-left:3px solid ${meta.border};background:${meta.bg};` : '';
+            const tagHtml = `<span class="ep-filler-tag" style="font-size:11px;font-weight:600;color:${meta?.tag || 'transparent'};display:${meta ? 'inline' : 'none'};">${meta?.label || ''}</span>`;
+
+            return `<div class="episode-row" id="ep-row-${ep.mal_id}" data-ep="${ep.mal_id}" style="${borderStyle}">
                 <div class="ep-num">${ep.mal_id}</div>
                 <div class="ep-info">
                     <strong class="ep-title" title="${(ep.title || '').replace(/"/g, '&quot;')}">${ep.title || `Episode ${ep.mal_id}`}</strong>
-                    <span class="ep-meta">${ep.aired ? new Date(ep.aired).toLocaleDateString() : 'TBA'}${flair ? ` · <em>${flair}</em>` : ''}</span>
+                    <span class="ep-meta">${ep.aired ? new Date(ep.aired).toLocaleDateString() : 'TBA'} ${tagHtml}</span>
                 </div>
                 <div class="ep-score-area">
                     ${avg ? `<span class="ep-avg">WeeBee ${avg}</span>` : ''}
@@ -19703,15 +19826,23 @@ async function fetchDetailEpisodes(mal_id, page = 1) {
             </div>
             <div id="ep-discuss-${ep.mal_id}" style="display:none;"></div>`;
         }).join('');
-        if (page === 1) { container.innerHTML = `<div class="episode-list">${renderRows(episodes)}</div>`; }
-        else { const list = container.querySelector('.episode-list'); if (list) list.insertAdjacentHTML('beforeend', renderRows(episodes)); }
+
+        if (page === 1) {
+            const summaryHtml = window._fillerMap ? _fillerRenderSummary(window._fillerMap)
+                : `<div id="ep-filler-summary"></div>`; // placeholder replaced when filler loads
+            container.innerHTML = summaryHtml + `<div class="episode-list">${renderRows(episodes)}</div>`;
+        } else {
+            const list = container.querySelector('.episode-list');
+            if (list) list.insertAdjacentHTML('beforeend', renderRows(episodes));
+        }
+
         const oldBtn = container.querySelector('.ep-load-more');
         if (oldBtn) oldBtn.remove();
         if (hasNext) {
             const btn = document.createElement('button');
             btn.className = 'action-btn ep-load-more';
             btn.style.cssText = 'width:100%;justify-content:center;margin-top:15px;background:transparent;color:var(--text-dark);border:1px solid var(--border-color);';
-            btn.textContent = `Load More Episodes`;
+            btn.textContent = 'Load More Episodes';
             btn.onclick = () => { btn.disabled = true; btn.textContent = 'Loading...'; fetchDetailEpisodes(mal_id, page + 1); };
             container.appendChild(btn);
         }
@@ -23650,6 +23781,15 @@ function _obBaseTitle(t) {
         .trim();
 }
 
+// Normalize for answer comparison: base title → lowercase → punctuation stripped
+function _obNorm(t) {
+    return _obBaseTitle(t)
+        .toLowerCase()
+        .replace(/[:\-–—!?.,'"()[\]]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 let _obSearchTimer = null;
 let _obSearchController = null;
 
@@ -23710,9 +23850,10 @@ window._obSubmitGuess = function() {
     const guess = input.value.trim();
     if (!guess) return;
 
-    const normGuess = _obBaseTitle(guess).toLowerCase();
-    const normAnswer = _obBaseTitle(st.song.anime).toLowerCase();
-    const correct = normGuess.includes(normAnswer) || normAnswer.includes(normGuess);
+    const normGuess = _obNorm(guess);
+    const normAnswer = _obNorm(st.song.anime);
+    // Require at least 3 chars; answer must start with what the user typed, or user typed the full answer
+    const correct = normGuess.length >= 3 && (normAnswer.startsWith(normGuess) || normGuess.startsWith(normAnswer));
     st.guesses.push(guess);
 
     if (correct) {

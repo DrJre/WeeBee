@@ -327,6 +327,12 @@ service cloud.firestore {
       allow write: if isAuth();
     }
 
+    // ── Filler guide (scraped from animefillerlist.com, written by admin script) ─
+    match /filler_guide/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ── Cache & character DB ──────────────────────────────────────────────────
     match /anime_cache/{doc} {
       allow read: if true;
