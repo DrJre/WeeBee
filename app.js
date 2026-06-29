@@ -3297,18 +3297,18 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             badgesHTML = `<div class="review-badges-row" style="display:flex; gap: 15px; margin-top: 20px; flex-wrap: nowrap; overflow-x: auto; align-items: flex-end; padding-right: 195px; position: relative; z-index: 2; padding-bottom: 4px;">
                 <div style="display:flex; flex-direction:column; align-items:center; width: 75px;">
                     <span style="font-size: 10px; font-weight: 800; color: var(--text-dark); text-transform: uppercase; margin-bottom: 8px; height: 24px; display: flex; align-items: flex-end;">Overall</span>
-                    ${window.scoreBadgeHTML(overallScore, 76, 'filter:drop-shadow(0 3px 8px rgba(0,0,0,0.2));border-radius:4px;outline:3px solid rgba(255,255,255,0.3);')}
+                    ${window.scoreBadgeHTML(overallScore, 88, 'filter:drop-shadow(0 3px 8px rgba(0,0,0,0.2));')}
                 </div>
-                <div style="width: 1px; height: 55px; background: var(--border-color); margin: 0 10px; align-self: flex-end; margin-bottom: 5px;"></div>`;
+                <div style="width: 1px; height: 65px; background: var(--border-color); margin: 0 10px; align-self: flex-end; margin-bottom: 5px;"></div>`;
             rev.categories.filter(cat => cat.score).forEach(cat => {
-                badgesHTML += `<div style="display:flex; flex-direction:column; align-items:center; width: 75px;"><span style="font-size: 10px; font-weight: 600; margin-bottom: 8px; text-align: center; height: 24px; display: flex; align-items: flex-end;">${cat.label}</span>${window.scoreBadgeHTML(cat.score, 55)}</div>`;
+                badgesHTML += `<div style="display:flex; flex-direction:column; align-items:center; width: 75px;"><span style="font-size: 10px; font-weight: 600; margin-bottom: 8px; text-align: center; height: 24px; display: flex; align-items: flex-end;">${cat.label}</span>${window.scoreBadgeHTML(cat.score, 65)}</div>`;
             });
             badgesHTML += `</div>`;
 
             fullHTML = `${rev.text ? `<div style="padding-right:195px;position:relative;z-index:2;margin-top:12px;"><p class="review-text" style="font-size:14px;color:var(--text-dark);margin:0;">${rev.text}</p></div>` : ''}
             <div class="full-review-content" style="display:none; margin-top: 25px; padding-right: 170px; position: relative; z-index: 2;">`;
             rev.categories.filter(cat => cat.score).forEach(cat => {
-                fullHTML += `<div style="background: var(--bg-white); padding: 12px; border-radius: 10px; border: 1px solid #E0E0E0; margin-bottom: 10px;"><div style="display: flex; justify-content: space-between; align-items: center;"><strong>${cat.label}</strong>${window.scoreBadgeHTML(cat.score, 32)}</div>${cat.text ? `<p style="font-size: 13px; margin-top: 8px; border-top: 1px solid #F0F0F0; padding-top: 8px;">${cat.text}</p>` : ''}</div>`;
+                fullHTML += `<div style="background: var(--bg-white); padding: 12px; border-radius: 10px; border: 1px solid #E0E0E0; margin-bottom: 10px;"><div style="display: flex; justify-content: space-between; align-items: center;"><strong>${cat.label}</strong>${window.scoreBadgeHTML(cat.score, 40)}</div>${cat.text ? `<p style="font-size: 13px; margin-top: 8px; border-top: 1px solid #F0F0F0; padding-top: 8px;">${cat.text}</p>` : ''}</div>`;
             });
             fullHTML += `</div>`;
         } else {
@@ -3316,7 +3316,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                 <div class="review-badges-row" style="display:flex; padding-right: 170px; margin-top: 15px; position: relative; z-index: 2;">
                     <div style="display:flex; flex-direction:column; align-items:center; width: 75px;">
                         <span style="font-size: 10px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px;">Overall</span>
-                        ${window.scoreBadgeHTML(overallScore, 64, 'filter:drop-shadow(0 2px 4px rgba(0,0,0,0.1));')}
+                        ${window.scoreBadgeHTML(overallScore, 76, 'filter:drop-shadow(0 2px 4px rgba(0,0,0,0.1));')}
                     </div>
                 </div>`;
             fullHTML = `
@@ -6456,7 +6456,7 @@ window.switchTcgTab = function(event, tabId) {
     if (tabId === 'tcg-tab-auction') window._auctionRender();
     if (tabId === 'tcg-tab-dungeon') window.loadDungeonTab();
     else window._dungeonStopRefresh?.();
-    if (tabId === 'tcg-tab-admin') { window._tcgRenderFounderPreview(); window._tcgLoadSaleConfigUI(); }
+    if (tabId === 'tcg-tab-admin') { window._tcgRenderFounderPreview(); window._tcgLoadSaleConfigUI(); window._tcgRenderPrismaticPreview(); }
 };
 
 // Renders a preview of the currently-selected Founder gift card so admins
@@ -6467,6 +6467,18 @@ window._tcgRenderFounderPreview = function() {
     const select = document.getElementById('founder-gift-select');
     const card = TCG_FOUNDER_CARDS.find(c => c.id === select?.value) || TCG_FOUNDER_CARDS[0];
     el.innerHTML = `<div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>`;
+    _tcgObserveSSRCards(el);
+};
+
+window._tcgRenderPrismaticPreview = function() {
+    const el = document.getElementById('prismatic-preview-cards');
+    if (!el) return;
+    const examples = [
+        { name: 'Kyojuro Rengoku', anime: 'Demon Slayer',      rarity: 'pr', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FKyojuro%20Rengoku.jpg?alt=media&token=aa39e0c3-2b53-4686-8af2-64d50c1ec6c7', serial: 7,  edition: 1 },
+        { name: 'Levi Ackerman',   anime: 'Attack on Titan',   rarity: 'pr', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSSR%2FLevi%20Ackerman.jpg?alt=media&token=0287298f-32de-4e5f-82b7-93f8446da4c0',  serial: 23, edition: 1 },
+        { name: 'Gojo',            anime: 'Jujutsu Kaisen',    rarity: 'pr', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJJK%2FSSR%2FGojo.webp?alt=media&token=7de91a3a-bd9d-4248-85e0-c37ab78c3067',                              serial: 1,  edition: 1 },
+    ];
+    el.innerHTML = examples.map(c => `<div class="tcg-card-scale-wrap" style="flex-shrink:0;"><div class="tcg-card-scale">${_tcgBuildCardFace(c)}</div></div>`).join('');
     _tcgObserveSSRCards(el);
 };
 
@@ -11335,18 +11347,23 @@ window._tcgStackCardClick = function(i) {
 
 function _tcgBuildCardFace(card) {
     const rarity = card.rarity || 'common';
-    const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common' }[rarity] || 'Common';
+    const isPrismatic = rarity === 'pr';
+    const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'PR' }[rarity] || 'Common';
     const art = card.image ? `<img src="${card.image}" alt="${card.name}">` : '';
-    const gem = (rarity === 'sr' || rarity === 'ssr' || rarity === 'ur') ? `<span class="wb-rarity-gem"><span>⬡</span></span>` : `<span class="wb-rarity-gem">⬡</span>`;
+    const gem = (rarity === 'sr' || rarity === 'ssr' || rarity === 'ur') ? `<span class="wb-rarity-gem"><span>⬡</span></span>` : (rarity === 'pr' ? `<span class="wb-rarity-gem wb-rarity-gem--star">★</span>` : `<span class="wb-rarity-gem">⬡</span>`);
     const maxV = RARITY_MAX_VERSIONS[rarity] || 5000;
-    const serialLine = card.founder
+    const serialInner = card.founder
         ? `<div class="wb-founder-label">Founder</div>`
         : ((card.monthlyUr||card.tradedMonthlyUr)
             ? `<div class="wb-card-stamp">${card.stampText}</div>`
             : (card.serial != null
-                ? `<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:0.5px;margin-top:4px;">${card.serial} / ${maxV}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>`
+                ? `<span class="wb-card-serial">${card.serial} / ${maxV}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</span>`
                 : ''));
-    return `<div class="wb-card rarity-${rarity}">
+    const serialRow = isPrismatic && card.serial != null
+        ? `<div style="display:flex;align-items:center;gap:7px;margin-top:4px;">${serialInner}<span class="wb-prismatic-stamp">✦ Prismatic 2026</span></div>`
+        : `<div style="margin-top:4px;">${serialInner}</div>`;
+    const prismaticClass = isPrismatic ? ' wb-card--prismatic' : '';
+    return `<div class="wb-card rarity-${rarity}${prismaticClass}">
         <div class="wb-card-inner">
             <div class="wb-card-header">
                 <span class="wb-mark">WEEBEE</span>
@@ -11357,7 +11374,7 @@ function _tcgBuildCardFace(card) {
                 <div class="wb-card-name">${card.name}</div>
                 <div class="wb-card-series">${card.anime}</div>
                 <div class="wb-card-rarity-label">${label}</div>
-                ${serialLine}
+                ${serialRow}
             </div>
         </div>
     </div>`;
@@ -11379,7 +11396,7 @@ const _ssrAnimObserver = new IntersectionObserver((entries) => {
 }, { rootMargin: '150px' });
 
 function _tcgObserveSSRCards(root = document) {
-    const cards = root.matches?.('.wb-card.rarity-ssr, .wb-card.rarity-ur') ? [root] : root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur') || [];
+    const cards = root.matches?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr') ? [root] : root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr') || [];
     cards.forEach(el => {
         if (el.dataset.ssrObserved || el.closest('[data-hover-anim-only]')) return;
         el.dataset.ssrObserved = '1';
@@ -11391,7 +11408,7 @@ function _tcgObserveSSRCards(root = document) {
 // GIFs play normally (they're low overhead compared to CSS repaints). The parent grid must have
 // data-hover-anim-only="1" so _tcgObserveSSRCards skips adding these cards to the IntersectionObserver.
 function _tcgObserveSSRCardsHoverOnly(root) {
-    const cards = root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur') || [];
+    const cards = root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr') || [];
     cards.forEach(card => {
         if (card.dataset.hoverOnly) return;
         card.dataset.hoverOnly = '1';
@@ -11781,10 +11798,10 @@ window._tcgViewCardSnapshot = async function(snapId) {
 
 // ── TCG Collection System ─────────────────────────────────────────────────────
 
-const RARITY_MAX_VERSIONS = { common: 5000, rare: 2500, sr: 500, ssr: 250, ur: 50 };
+const RARITY_MAX_VERSIONS = { common: 5000, rare: 2500, sr: 500, ssr: 250, ur: 50, pr: 100 };
 
 // Flat amber refund for breaking down a card you no longer want
-const TCG_DISMANTLE_RATES = { common: 5, rare: 20, sr: 100, ssr: 400, ur: 1500 };
+const TCG_DISMANTLE_RATES = { common: 5, rare: 20, sr: 100, ssr: 400, ur: 1500, pr: 750 };
 
 // Dismantles an owned card for a flat amber payout based on rarity
 window._tcgDismantling = false;

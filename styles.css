@@ -1796,6 +1796,261 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 [data-hover-anim-only] .wb-card.rarity-ssr .wb-card-rarity-label { animation-play-state: paused !important; }
 [data-hover-anim-only] .wb-card.rarity-ssr:hover .wb-card-rarity-label { animation-play-state: running !important; }
 
+/* ── 2026 Prismatic Limited Set ──────────────────────────────────────────────
+   Add class wb-card--prismatic alongside any rarity class.
+   The spinning conic-gradient ::before becomes the border (visible through
+   the 7px padding gap). All animations pause when off-screen via tcg-anim-in-view.
+   ─────────────────────────────────────────────────────────────────────────── */
+.wb-card--prismatic {
+    background: #07070f !important;
+    padding: 7px;
+    animation: prismatic-outer-glow 6s ease-in-out infinite !important;
+    animation-play-state: paused !important;
+}
+.wb-card--prismatic.tcg-anim-in-view {
+    animation-play-state: running !important;
+}
+@keyframes prismatic-outer-glow {
+    0%   { box-shadow: 0 12px 48px rgba(0,0,0,0.75), 0 0 28px rgba(255,0,120,0.45),  0 0 70px rgba(80,0,220,0.2); }
+    17%  { box-shadow: 0 12px 48px rgba(0,0,0,0.75), 0 0 28px rgba(255,120,0,0.45),  0 0 70px rgba(200,0,0,0.2); }
+    33%  { box-shadow: 0 12px 48px rgba(0,0,0,0.75), 0 0 28px rgba(180,255,0,0.35),  0 0 70px rgba(0,180,0,0.2); }
+    50%  { box-shadow: 0 12px 48px rgba(0,0,0,0.75), 0 0 28px rgba(0,255,180,0.40),  0 0 70px rgba(0,180,200,0.2); }
+    67%  { box-shadow: 0 12px 48px rgba(0,0,0,0.75), 0 0 28px rgba(0,120,255,0.50),  0 0 70px rgba(80,0,255,0.2); }
+    83%  { box-shadow: 0 12px 48px rgba(0,0,0,0.75), 0 0 28px rgba(180,0,255,0.45),  0 0 70px rgba(255,0,180,0.2); }
+    100% { box-shadow: 0 12px 48px rgba(0,0,0,0.75), 0 0 28px rgba(255,0,120,0.45),  0 0 70px rgba(80,0,220,0.2); }
+}
+
+/* Spinning washed-out holographic conic gradient — white stops between hues give a foil/CD look */
+.wb-card--prismatic::before {
+    content: '';
+    position: absolute;
+    inset: -100%;
+    background: conic-gradient(
+        from 0deg,
+        #ff9aaa,
+        rgba(255,255,255,0.85),
+        #ffcc88,
+        rgba(255,255,255,0.85),
+        #fff099,
+        rgba(255,255,255,0.85),
+        #99ffcc,
+        rgba(255,255,255,0.85),
+        #88ddff,
+        rgba(255,255,255,0.85),
+        #bb99ff,
+        rgba(255,255,255,0.85),
+        #ff99dd,
+        rgba(255,255,255,0.85),
+        #ff9aaa
+    );
+    animation: prismatic-border-spin 6s linear infinite;
+    animation-play-state: paused;
+    z-index: 0;
+    pointer-events: none;
+}
+.wb-card--prismatic.tcg-anim-in-view::before {
+    animation-play-state: running;
+}
+@keyframes prismatic-border-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* PR card art fills the full inner (same as SR/SSR/UR) */
+.rarity-pr .wb-card-art { position: absolute; inset: 0; }
+.rarity-pr .wb-card-art::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(4,4,16,0.90) 0%, transparent 45%);
+    z-index: 1;
+}
+.rarity-pr .wb-card-header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    background: linear-gradient(180deg, rgba(4,4,16,0.60) 0%, transparent 100%);
+    z-index: 3;
+}
+.rarity-pr .wb-card-footer {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: transparent;
+    z-index: 3;
+}
+
+/* Inner card — deep dark crystal */
+.wb-card--prismatic .wb-card-inner {
+    background: linear-gradient(150deg, #0b0b1c 0%, #070710 100%) !important;
+    position: relative;
+    z-index: 1;
+}
+
+/* Washed-but-bright scrolling name text */
+.wb-card--prismatic .wb-card-name {
+    background: linear-gradient(90deg,
+        #ff9999 0%, #ffcc77 18%, #ffee88 35%,
+        #88ffcc 50%, #88ccff 65%, #cc88ff 80%,
+        #ff88cc 92%, #ff9999 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent !important;
+    filter: drop-shadow(0 0 4px rgba(200,180,255,0.6));
+    animation: prismatic-text-scroll 4s linear infinite;
+    animation-play-state: paused;
+}
+.wb-card--prismatic.tcg-anim-in-view .wb-card-name {
+    animation-play-state: running;
+}
+@keyframes prismatic-text-scroll {
+    to { background-position: 200% center; }
+}
+
+/* Series text, serial number, and WEEBEE mark — plain white */
+.wb-card--prismatic .wb-card-series { color: rgba(255, 255, 255, 0.75) !important; }
+.wb-card--prismatic .wb-card-serial  { color: rgba(255, 255, 255, 0.70) !important; }
+.wb-card--prismatic .wb-mark         { color: rgba(255, 255, 255, 0.95) !important; }
+
+/* Inline serial number span */
+.wb-card-serial {
+    font-size: 9px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.45);
+    letter-spacing: 0.5px;
+}
+
+/* Star gem override — same footprint as UR gem (22×22), no base gem chrome */
+.wb-rarity-gem--star {
+    clip-path: none !important;
+    transform: none !important;
+    width: 22px !important;
+    height: 22px !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+    font-size: 15px !important;
+    line-height: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative !important;
+}
+/* Rainbow primary star — hue-rotates at same 6s as the border spin */
+.wb-card--prismatic .wb-rarity-gem--star {
+    background: linear-gradient(90deg, #ff6060, #ffcc00, #66ff88, #00ccff, #cc88ff, #ff6060) !important;
+    background-size: 200% auto !important;
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+    color: transparent !important;
+    animation: prismatic-gem-cycle 6s linear infinite !important;
+    animation-play-state: paused !important;
+    z-index: 1 !important;
+    font-size: 15px !important;
+}
+@keyframes prismatic-gem-cycle {
+    from { filter: hue-rotate(0deg)   drop-shadow(0 0 4px rgba(200,120,255,0.9)); }
+    to   { filter: hue-rotate(360deg) drop-shadow(0 0 4px rgba(200,120,255,0.9)); }
+}
+/* Washed rainbow background star */
+.wb-card--prismatic .wb-rarity-gem--star::before {
+    content: '★';
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+    display: block !important;
+    background: linear-gradient(90deg, #ffbbbb, #ffddaa, #ffffcc, #bbffdd, #bbddff, #ddbbff, #ffbbdd, #ffbbbb) !important;
+    background-size: 200% auto !important;
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+    color: transparent !important;
+    animation: prismatic-text-scroll 6s linear infinite !important;
+    animation-play-state: paused !important;
+    z-index: 0 !important;
+}
+.wb-card--prismatic .wb-rarity-gem--star::after { display: none !important; }
+.wb-card--prismatic.tcg-anim-in-view .wb-rarity-gem--star,
+.wb-card--prismatic.tcg-anim-in-view .wb-rarity-gem--star::before { animation-play-state: running !important; }
+
+/* Rarity label — hue-rotates at same 6s as the border spin */
+.wb-card--prismatic .wb-card-rarity-label {
+    background: linear-gradient(90deg, #ff6060, #ffcc00, #66ff88, #00ccff, #cc88ff) !important;
+    background-size: 300% 100% !important;
+    color: white !important;
+    border: none !important;
+    animation: prismatic-label-cycle 6s linear infinite !important;
+    animation-play-state: paused !important;
+}
+@keyframes prismatic-label-cycle {
+    from { filter: hue-rotate(0deg); }
+    to   { filter: hue-rotate(360deg); }
+}
+.wb-card--prismatic.tcg-anim-in-view .wb-card-rarity-label { animation-play-state: running !important; }
+
+/* Rainbow prismatic light sweep across the art */
+.wb-card--prismatic .wb-card-art::before {
+    content: '';
+    position: absolute;
+    inset: -20% -80%;
+    background: linear-gradient(
+        108deg,
+        transparent         15%,
+        rgba(255, 60, 60,  0.20) 24%,
+        rgba(255,200,  0,  0.20) 32%,
+        rgba( 80,255,100,  0.18) 40%,
+        rgba(  0,210,255,  0.20) 48%,
+        rgba(100, 60,255,  0.20) 56%,
+        rgba(255,  0,200,  0.18) 64%,
+        transparent         73%
+    );
+    animation: prismatic-art-sweep 5s ease-in-out infinite 1s;
+    animation-play-state: paused;
+    mix-blend-mode: screen;
+    z-index: 2;
+    pointer-events: none;
+}
+.wb-card--prismatic.tcg-anim-in-view .wb-card-art::before { animation-play-state: running; }
+@keyframes prismatic-art-sweep {
+    0%, 100% { transform: translateX(-90%) rotate(4deg); opacity: 0; }
+    25%       { opacity: 1; }
+    75%       { opacity: 1; }
+    90%       { transform: translateX(90%) rotate(4deg); opacity: 0; }
+}
+
+/* Art image hue-rotate — slowly shifts the photo's own colors through the spectrum */
+.wb-card--prismatic .wb-card-art img {
+    animation: prismatic-hue-shift 8s ease-in-out infinite;
+    animation-play-state: paused;
+}
+.wb-card--prismatic.tcg-anim-in-view .wb-card-art img { animation-play-state: running; }
+@keyframes prismatic-hue-shift {
+    0%   { filter: hue-rotate(0deg)    saturate(1.25) brightness(1.05); }
+    50%  { filter: hue-rotate(-75deg) saturate(1.25) brightness(1.05); }
+    100% { filter: hue-rotate(0deg)    saturate(1.25) brightness(1.05); }
+}
+
+/* "✦ Prismatic 2026" set stamp — sits inline to the right of the serial number */
+.wb-prismatic-stamp {
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    display: inline-block;
+    white-space: nowrap;
+    background: linear-gradient(90deg, #ff9999, #ffcc77, #ffee88, #88ffcc, #88ccff, #cc88ff, #ff88cc, #ff9999);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 3px rgba(200,180,255,0.5));
+    animation: prismatic-text-scroll 4s linear infinite;
+    animation-play-state: paused;
+}
+.wb-card--prismatic.tcg-anim-in-view .wb-prismatic-stamp { animation-play-state: running; }
+
 /* UR flip card back in pack opening */
 .tcg-pack-card-ur {
     background: linear-gradient(135deg, #ffa030, #d43020, #a00030, #5c0040);
