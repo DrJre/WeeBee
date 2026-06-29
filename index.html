@@ -74,7 +74,7 @@
             <div class="topbar-right">
                 <div class="search-bar">
                     <span class="material-symbols-outlined">search</span>
-                    <input type="text" id="main-search-input" placeholder="Search anime..." autocomplete="off" onkeydown="if(event.key === 'Enter' && this.value.trim() !== '') { searchAnime(this.value.trim()); this.value = ''; }">
+                    <input type="search" id="main-search-input" placeholder="Search anime..." autocomplete="off" onkeydown="if(event.key === 'Enter' && this.value.trim() !== '') { searchAnime(this.value.trim()); this.value = ''; }">
                 </div>
                 <button class="search-icon-btn" onclick="toggleMobileSearch()" aria-label="Search">
                     <span class="material-symbols-outlined">search</span>
@@ -91,7 +91,7 @@
         <div class="mobile-search-bar" id="mobile-search-bar">
             <div class="mobile-search-inner">
                 <span class="material-symbols-outlined">search</span>
-                <input type="text" id="mobile-search-input" placeholder="Search anime..." autocomplete="off"
+                <input type="search" id="mobile-search-input" placeholder="Search anime..." autocomplete="off"
                        onkeydown="if(event.key==='Enter'&&this.value.trim()!==''){searchAnime(this.value.trim());this.value='';closeMobileSearch();}">
                 <button class="search-close-btn" onclick="closeMobileSearch()">
                     <span class="material-symbols-outlined">close</span>
@@ -2698,6 +2698,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=444"></script>
+    <script type="module" src="app.js?v=455"></script>
 </body>
 </html>

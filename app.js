@@ -50,6 +50,23 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const storage = getStorage(app);
 const functions = getFunctions(app);
+
+async function _callFn(name, data) {
+    const token = await auth.currentUser?.getIdToken();
+    const res = await fetch(`https://us-central1-weebee-fbbd8.cloudfunctions.net/${name}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ data }),
+    });
+    const json = await res.json();
+    if (json.error) {
+        const e = new Error(json.error.message || json.error.status || 'Unknown error');
+        e.details = json.error.message;
+        e.code = 'functions/' + (json.error.status || 'internal').toLowerCase().replace(/_/g, '-');
+        throw e;
+    }
+    return json.result ?? json;
+}
 const analytics = getAnalytics(app);
 const googleProvider = new GoogleAuthProvider();
 
@@ -1788,14 +1805,14 @@ window.previewInDepthReview = function() {
     const catBadges = scored.map(c => `
         <div style="display:flex;flex-direction:column;align-items:center;width:75px;">
             <span style="font-size:10px;font-weight:600;margin-bottom:8px;text-align:center;height:24px;display:flex;align-items:flex-end;">${c.label}</span>
-            <div class="rating-badge ${window.getScoreTier(c.score)}" style="width:64px;height:64px;font-size:17px;">${c.score}</div>
+            ${window.scoreBadgeHTML(c.score, 64)}
         </div>`).join('');
 
     const catDetails = scored.map(c => `
         <div style="background:var(--bg-gray);padding:12px;border-radius:10px;margin-bottom:10px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${c.text ? '8px' : '0'};">
                 <strong>${c.label}</strong>
-                <div class="rating-badge ${window.getScoreTier(c.score)}" style="width:38px;height:38px;font-size:11px;">${c.score}</div>
+                ${window.scoreBadgeHTML(c.score, 38)}
             </div>
             ${c.text ? `<p style="font-size:13px;color:var(--text-muted);margin:0;">${c.text}</p>` : ''}
         </div>`).join('');
@@ -1807,7 +1824,7 @@ window.previewInDepthReview = function() {
             <div style="width:1px;height:45px;background:#E0E0E0;margin:0 10px;margin-bottom:5px;"></div>
             <div style="display:flex;flex-direction:column;align-items:center;width:75px;">
                 <span style="font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;height:24px;display:flex;align-items:flex-end;">Overall</span>
-                <div class="rating-badge ${window.getScoreTier(overallScore)}" style="width:64px;height:64px;font-size:17px;">${overallScore}</div>
+                ${window.scoreBadgeHTML(overallScore, 64)}
             </div>
         </div>
         ${catDetails}
@@ -2072,6 +2089,17 @@ window.getScoreTier = function(score) {
     const s = parseFloat(score);
     if(s === 10) return 'tier-royal'; if(s >= 9.0) return 'tier-platinum'; if(s >= 8.0) return 'tier-gold';
     if(s >= 7.0) return 'tier-silver'; if(s >= 6.0) return 'tier-bronze'; if(s >= 5.0) return 'tier-iron'; return 'tier-stone';
+};
+
+window.scoreBadgeHTML = function(score, size, extraStyle) {
+    const s = parseFloat(score);
+    const px = size || 64;
+    if (!isNaN(s) && s >= 5 && s <= 10) {
+        const key = Math.round(s * 10) / 10;
+        const filename = key % 1 === 0 ? String(Math.floor(key)) : key.toFixed(1);
+        return `<img src="/assets/${filename}.png" style="width:${px}px;height:${px}px;object-fit:contain;${extraStyle || ''}" alt="${score}" draggable="false">`;
+    }
+    return `<div class="rating-badge ${window.getScoreTier(score)}" style="width:${px}px;height:${px}px;">${score}</div>`;
 };
 
 window.toggleFollow = async function(targetId, type, btnElement) {
@@ -3269,18 +3297,18 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
             badgesHTML = `<div class="review-badges-row" style="display:flex; gap: 15px; margin-top: 20px; flex-wrap: nowrap; overflow-x: auto; align-items: flex-end; padding-right: 195px; position: relative; z-index: 2; padding-bottom: 4px;">
                 <div style="display:flex; flex-direction:column; align-items:center; width: 75px;">
                     <span style="font-size: 10px; font-weight: 800; color: var(--text-dark); text-transform: uppercase; margin-bottom: 8px; height: 24px; display: flex; align-items: flex-end;">Overall</span>
-                    <div class="rating-badge ${overallTier}" style="width: 76px; height: 76px; font-size: 21px; filter: drop-shadow(0 3px 8px rgba(0,0,0,0.2)); outline: 3px solid rgba(255,255,255,0.3);">${overallScore}</div>
+                    ${window.scoreBadgeHTML(overallScore, 76, 'filter:drop-shadow(0 3px 8px rgba(0,0,0,0.2));border-radius:4px;outline:3px solid rgba(255,255,255,0.3);')}
                 </div>
                 <div style="width: 1px; height: 55px; background: var(--border-color); margin: 0 10px; align-self: flex-end; margin-bottom: 5px;"></div>`;
             rev.categories.filter(cat => cat.score).forEach(cat => {
-                badgesHTML += `<div style="display:flex; flex-direction:column; align-items:center; width: 75px;"><span style="font-size: 10px; font-weight: 600; margin-bottom: 8px; text-align: center; height: 24px; display: flex; align-items: flex-end;">${cat.label}</span><div class="rating-badge ${window.getScoreTier(cat.score)}" style="width: 55px; height: 55px; font-size: 18px;">${cat.score}</div></div>`;
+                badgesHTML += `<div style="display:flex; flex-direction:column; align-items:center; width: 75px;"><span style="font-size: 10px; font-weight: 600; margin-bottom: 8px; text-align: center; height: 24px; display: flex; align-items: flex-end;">${cat.label}</span>${window.scoreBadgeHTML(cat.score, 55)}</div>`;
             });
             badgesHTML += `</div>`;
 
             fullHTML = `${rev.text ? `<div style="padding-right:195px;position:relative;z-index:2;margin-top:12px;"><p class="review-text" style="font-size:14px;color:var(--text-dark);margin:0;">${rev.text}</p></div>` : ''}
             <div class="full-review-content" style="display:none; margin-top: 25px; padding-right: 170px; position: relative; z-index: 2;">`;
             rev.categories.filter(cat => cat.score).forEach(cat => {
-                fullHTML += `<div style="background: var(--bg-white); padding: 12px; border-radius: 10px; border: 1px solid #E0E0E0; margin-bottom: 10px;"><div style="display: flex; justify-content: space-between; align-items: center;"><strong>${cat.label}</strong><div class="rating-badge ${window.getScoreTier(cat.score)}" style="width: 32px; height: 32px; font-size: 11px;">${cat.score}</div></div>${cat.text ? `<p style="font-size: 13px; margin-top: 8px; border-top: 1px solid #F0F0F0; padding-top: 8px;">${cat.text}</p>` : ''}</div>`;
+                fullHTML += `<div style="background: var(--bg-white); padding: 12px; border-radius: 10px; border: 1px solid #E0E0E0; margin-bottom: 10px;"><div style="display: flex; justify-content: space-between; align-items: center;"><strong>${cat.label}</strong>${window.scoreBadgeHTML(cat.score, 32)}</div>${cat.text ? `<p style="font-size: 13px; margin-top: 8px; border-top: 1px solid #F0F0F0; padding-top: 8px;">${cat.text}</p>` : ''}</div>`;
             });
             fullHTML += `</div>`;
         } else {
@@ -3288,7 +3316,7 @@ window.generateReviewCardHTML = function(rev, isGlobal = false) {
                 <div class="review-badges-row" style="display:flex; padding-right: 170px; margin-top: 15px; position: relative; z-index: 2;">
                     <div style="display:flex; flex-direction:column; align-items:center; width: 75px;">
                         <span style="font-size: 10px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px;">Overall</span>
-                        <div class="rating-badge ${overallTier}" style="width: 64px; height: 64px; font-size: 17px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));">${overallScore}</div>
+                        ${window.scoreBadgeHTML(overallScore, 64, 'filter:drop-shadow(0 2px 4px rgba(0,0,0,0.1));')}
                     </div>
                 </div>`;
             fullHTML = `
@@ -7835,6 +7863,7 @@ const TCG_PACKS = [
         cost: 150,
         salePrice: 100,
         gradient: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FStandard%20Pack.png?alt=media&token=8db206cf-8f57-4c64-b3cf-d2b8316d7364',
         description: '5 cards · 1 guaranteed Rare+',
         odds: 'Common 90% · Rare 9.5% · SR 0.4% · SSR 0.1%\nGuaranteed slot: Rare 95% · SR 4.6% · SSR 0.4%\n+0.1% chance per pack for a bonus UR card',
         guaranteedSR: false,
@@ -7845,8 +7874,9 @@ const TCG_PACKS = [
         cost: 1000,
         salePrice: 750,
         gradient: 'linear-gradient(135deg,#b45309,#f59e0b)',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
         description: '5 cards · 1 guaranteed SR+',
-        odds: 'Common 75% · Rare 21% · SR 3% · SSR 1%\nGuaranteed slot: SR 95% · SSR 5%\n+0.5% chance per pack for a bonus UR card',
+        odds: 'Common 75% · Rare 21% · SR 3.5% · SSR 0.5%\nGuaranteed slot: SR 96.5% · SSR 3.5%\n+0.3% chance per pack for a bonus UR card',
         guaranteedSR: true,
     }
 ];
@@ -10808,7 +10838,7 @@ function _tcgRollPackCards(pack, customOdds) {
     } else {
         // Guaranteed slot
         if (pack.guaranteedSR) {
-            cards.push(_tcgPickCard(Math.random() < 0.05 ? 'ssr' : 'sr'));
+            cards.push(_tcgPickCard(Math.random() < 0.035 ? 'ssr' : 'sr'));
         } else {
             const r = Math.random();
             if      (r < 0.004) cards.push(_tcgPickCard('ssr'));  // 0.4%
@@ -10820,7 +10850,7 @@ function _tcgRollPackCards(pack, customOdds) {
             const r = Math.random();
             let rarity;
             if (pack.guaranteedSR) {
-                if      (r < 0.01)   rarity = 'ssr';
+                if      (r < 0.005)  rarity = 'ssr';
                 else if (r < 0.04)   rarity = 'sr';
                 else if (r < 0.25)   rarity = 'rare';
                 else                 rarity = 'common';
@@ -10834,7 +10864,7 @@ function _tcgRollPackCards(pack, customOdds) {
         }
         // UR is an extremely rare bonus pull, replacing one random slot.
         // Premium: 0.5%, Standard: 0.1%.
-        const urChance = pack.guaranteedSR ? 0.005 : 0.001;
+        const urChance = pack.guaranteedSR ? 0.003 : 0.001;
         if (Math.random() < urChance) {
             cards[Math.floor(Math.random() * cards.length)] = _tcgPickCard('ur');
         }
@@ -10865,10 +10895,10 @@ window._tcgRenderStore = async function() {
             : `🟡 ${pack.cost.toLocaleString()}`);
         return `
         <div class="wb-card-wrap tcg-pack-card">
-            <div class="wb-card" style="background:${pack.gradient};display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;text-align:center;${isComingSoon ? 'opacity:0.55;' : ''}">
-                <div style="font-size:54px;margin-bottom:10px;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.4));">${isComingSoon ? '🔒' : '🃏'}</div>
-                <div style="font-size:17px;font-weight:800;color:white;">${pack.name}</div>
-                <div style="font-size:12px;color:rgba(255,255,255,0.75);margin-top:6px;">${pack.description}</div>
+            <img src="${pack.image}" style="height:300px;object-fit:contain;filter:drop-shadow(0 8px 32px rgba(0,0,0,0.5));display:block;" draggable="false">
+            <div style="text-align:center;margin-top:12px;">
+                <div style="font-size:15px;font-weight:800;color:var(--text-primary);">${pack.name}</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">${pack.description}</div>
             </div>
             <div style="font-size:11px;color:var(--text-muted);line-height:1.6;white-space:pre-line;text-align:center;min-height:48px;">${pack.odds || ''}</div>
             <div style="font-size:16px;font-weight:800;color:#f59e0b;min-height:22px;">${priceHtml}</div>
@@ -10880,7 +10910,7 @@ window._tcgRenderStore = async function() {
         </div>`;
     };
 
-    const comingSoonPack = { name: 'Mystery Pack', description: 'A new pack type is on the way', odds: '' };
+    const comingSoonPack = { name: '2026 Prismatic Pack', description: 'Coming soon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2F2026%20Prismatic%20Pack.png?alt=media&token=0fd87cb6-3811-443b-a75c-e87c2513366f', gradient: 'linear-gradient(135deg,#6366f1,#a855f7,#ec4899)', odds: '' };
 
     el.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
@@ -11120,6 +11150,72 @@ function _tcgShowGodPackIntro(onDone) {
     setTimeout(dismiss, 3800);
 }
 
+function _tcgShowPackSliceIntro(pack, onDone) {
+    const overlay = document.createElement('div');
+    overlay.id = 'tcg-pack-slice-intro';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.96);z-index:10001;overflow:hidden;';
+
+    // Pack is 300×400px centered. Gap at 17% = 68px from pack top.
+    // Pack top-left: 50vw-150px, 50vh-200px. Gap y: 50vh-132px.
+    // Card backs (88×123px) start with bottom edge at gap: top = 50vh-132px-123px = 50vh-255px
+    // In overlay-absolute terms: calc(50% - 255px) from top, calc(50% - 44px) from left.
+    const cardFanX = [-108, -54, 0, 54, 108];
+    const cardFanY = [-195, -215, -225, -215, -195];
+    const cardFanR = [-14, -6, 0, 6, 14];
+
+    const cardBackImg = 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FCard%20Back.png?alt=media&token=a9d2788e-cf42-4403-b757-26b1aa9ad7da';
+    const cardBacksHtml = cardFanX.map((_, i) => `
+        <div class="psi-card" style="position:absolute;left:calc(50% - 44px);top:calc(50% - 255px);width:88px;height:123px;border-radius:7px;overflow:hidden;opacity:0;transform:translateX(0) translateY(0) rotate(0deg);z-index:10003;box-shadow:0 8px 24px rgba(0,0,0,0.7);pointer-events:none;will-change:transform,opacity;">
+            <img src="${cardBackImg}" style="width:100%;height:100%;object-fit:cover;" draggable="false">
+        </div>`).join('');
+
+    overlay.innerHTML = `
+        ${cardBacksHtml}
+        <div id="psi-wrap" style="position:absolute;left:calc(50% - 150px);top:calc(50% - 200px);width:300px;height:400px;transform:scale(0) rotate(-4deg);transition:transform 0.45s cubic-bezier(0.22,1,0.36,1);z-index:10002;">
+            <img id="psi-top" src="${pack.image}" draggable="false"
+                style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;clip-path:inset(0 0 83% 0);transform-origin:center top;transition:transform 0.45s cubic-bezier(0.4,0,0.2,1);pointer-events:none;">
+            <img id="psi-bot" src="${pack.image}" draggable="false"
+                style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;clip-path:inset(17% 0 0 0);transform-origin:center bottom;transition:transform 0.45s cubic-bezier(0.4,0,0.2,1);pointer-events:none;">
+            <div id="psi-slash" style="position:absolute;top:17%;left:-110%;width:110%;height:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.6),#fff,rgba(255,255,255,0.6),transparent);filter:blur(0.5px);box-shadow:0 0 8px 2px rgba(200,180,255,0.9),0 0 20px 4px rgba(160,130,255,0.5);transition:left 0.45s cubic-bezier(0.4,0,0.6,1);pointer-events:none;"></div>
+        </div>`;
+
+    document.body.appendChild(overlay);
+
+    const wrap    = overlay.querySelector('#psi-wrap');
+    const slash   = overlay.querySelector('#psi-slash');
+    const top     = overlay.querySelector('#psi-top');
+    const bot     = overlay.querySelector('#psi-bot');
+    const cardEls = overlay.querySelectorAll('.psi-card');
+
+    // Phase 1: pack scales in
+    requestAnimationFrame(() => requestAnimationFrame(() => { wrap.style.transform = 'scale(1) rotate(0deg)'; }));
+
+    // Phase 2: slash sweeps
+    setTimeout(() => { slash.style.left = '110%'; }, 520);
+
+    // Phase 3: pack splits — stays on screen
+    setTimeout(() => {
+        top.style.transform = 'translateY(-56px) rotate(-10deg)';
+        bot.style.transform = 'translateY(20px) rotate(2deg)';
+    }, 980);
+
+    // Phase 4: cards shoot up from the gap one by one
+    cardEls.forEach((el, i) => {
+        setTimeout(() => {
+            el.style.transition = 'transform 0.52s cubic-bezier(0.22,1,0.36,1), opacity 0.28s ease';
+            el.style.opacity = '1';
+            el.style.transform = `translateX(${cardFanX[i]}px) translateY(${cardFanY[i]}px) rotate(${cardFanR[i]}deg)`;
+        }, 1380 + i * 150);
+    });
+
+    // Phase 5: fade overlay → fire card reveal
+    setTimeout(() => {
+        overlay.style.transition = 'opacity 0.22s ease';
+        overlay.style.opacity = '0';
+        setTimeout(() => { overlay.remove(); onDone(); }, 230);
+    }, 2550);
+}
+
 window._tcgShowPackOpening = function(pack, cards, isGodPack = false) {
     document.getElementById('tcg-pack-modal')?.remove();
     const build = () => {
@@ -11170,8 +11266,8 @@ window._tcgShowPackOpening = function(pack, cards, isGodPack = false) {
                 back.style.cssText = 'background:linear-gradient(155deg,#78350f,#92400e,#b45309,#f59e0b,#92400e,#78350f);border:2px solid #ffd700;display:flex;align-items:center;justify-content:center;box-shadow:0 0 24px rgba(251,191,36,0.35);';
                 back.innerHTML = `<div style="text-align:center;pointer-events:none;"><div style="font-size:30px;">⚜️</div><div style="font-size:9px;font-weight:900;letter-spacing:2px;color:#ffd700;margin-top:10px;font-family:Georgia,serif;text-shadow:0 0 8px rgba(251,191,36,0.8);">GOD PACK</div></div>`;
             } else {
-                back.style.cssText = 'background:linear-gradient(155deg,#1e1b4b,#312e81,#1e1b4b);border:2px solid #4338ca;display:flex;align-items:center;justify-content:center;';
-                back.innerHTML = `<div style="text-align:center;pointer-events:none;"><div style="font-size:32px;">🐝</div><div style="font-size:10px;font-weight:800;letter-spacing:2px;color:#6366f1;margin-top:8px;">WEEBEE</div></div>`;
+                back.style.cssText = 'overflow:hidden;';
+                back.innerHTML = `<img src="https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FCard%20Back.png?alt=media&token=a9d2788e-cf42-4403-b757-26b1aa9ad7da" style="width:100%;height:100%;object-fit:cover;" draggable="false">`;
             }
 
             const front = document.createElement('div');
@@ -11188,7 +11284,7 @@ window._tcgShowPackOpening = function(pack, cards, isGodPack = false) {
     };
 
     if (isGodPack) _tcgShowGodPackIntro(build);
-    else build();
+    else _tcgShowPackSliceIntro(pack, build);
 };
 
 // Repositions cards in the mobile pack-opening stack: the current card sits on top
@@ -13740,11 +13836,11 @@ window._tcgAcceptTrade = async function(tradeId) {
             alert('Trading is blocked between these accounts due to suspected shared account activity. Contact an admin if you believe this is an error.');
             return;
         }
-        await httpsCallable(functions, 'settleTrade')({ tradeId });
+        await _callFn('settleTrade', { tradeId });
         document.getElementById('tcg-trade-review-modal')?.remove();
         alert('Trade accepted! Your cards have been updated.');
         window._tcgRenderTradingTab();
-    } catch(e) { alert('Failed to accept trade: ' + (e.message || 'Unknown error')); }
+    } catch(e) { alert('Failed to accept trade: ' + (e.details || e.message || 'Unknown error')); }
     finally { window._tcgAcceptInProgress = false; }
 };
 
@@ -14001,9 +14097,8 @@ async function _auctionProcessExpired() {
             return ct && (ct.toDate ? ct.toDate() : new Date(ct)) <= now;
         });
         if (!expired.length) return;
-        const settle = httpsCallable(functions, 'settleAuction');
         for (const d of expired) {
-            try { await settle({ listingId: d.id }); }
+            try { await _callFn('settleAuction', { listingId: d.id }); }
             catch(e) { console.warn('settleAuction', d.id, e.message); }
         }
     } catch(e) { console.warn('_auctionProcessExpired', e); }
@@ -15729,7 +15824,7 @@ window._tcgAcceptBulletinOffer = async function(btn, listingId, offerId) {
             alert('Trading is blocked between these accounts due to suspected shared account activity. Contact an admin if you believe this is an error.');
             return;
         }
-        await httpsCallable(functions, 'settleBulletinOffer')({ listingId, offerId });
+        await _callFn('settleBulletinOffer', { listingId, offerId });
         document.getElementById('tcg-bulletin-offers-modal')?.remove();
         alert('Offer accepted! Cards have been transferred to both parties.');
         window._tcgRenderTradingTab();
@@ -18734,7 +18829,7 @@ window.fetchDiscoverPage = async function() {
                         <h4>${podium[1].title}</h4>
                         <div style="display:flex;gap:5px;align-items:flex-end;justify-content:center;">
                             <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-                                <div class="rating-badge tier-silver" style="width:44px;height:44px;font-size:12px;">${podium[1].avgScore}</div>
+                                ${window.scoreBadgeHTML(podium[1].avgScore, 44)}
                                 <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">WeeBee</span>
                             </div>
                             ${malScoreMap[podium[1].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div class="rating-badge blue" style="width:30px;height:30px;font-size:10px;">${malScoreMap[podium[1].mal_id]}</div><span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
@@ -18753,7 +18848,7 @@ window.fetchDiscoverPage = async function() {
                         <h4>${podium[0].title}</h4>
                         <div style="display:flex;gap:5px;align-items:flex-end;justify-content:center;">
                             <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-                                <div class="rating-badge tier-royal" style="width:56px;height:56px;font-size:15px;">${podium[0].avgScore}</div>
+                                ${window.scoreBadgeHTML(podium[0].avgScore, 56)}
                                 <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">WeeBee</span>
                             </div>
                             ${malScoreMap[podium[0].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div class="rating-badge blue" style="width:36px;height:36px;font-size:12px;">${malScoreMap[podium[0].mal_id]}</div><span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
@@ -18774,7 +18869,7 @@ window.fetchDiscoverPage = async function() {
                         <h4>${podium[2].title}</h4>
                         <div style="display:flex;gap:5px;align-items:flex-end;justify-content:center;">
                             <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-                                <div class="rating-badge tier-bronze" style="width:44px;height:44px;font-size:12px;">${podium[2].avgScore}</div>
+                                ${window.scoreBadgeHTML(podium[2].avgScore, 44)}
                                 <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">WeeBee</span>
                             </div>
                             ${malScoreMap[podium[2].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div class="rating-badge blue" style="width:30px;height:30px;font-size:10px;">${malScoreMap[podium[2].mal_id]}</div><span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
@@ -18808,7 +18903,7 @@ window.fetchDiscoverPage = async function() {
                             </div>
                             <div class="top10-scores">
                                 <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
-                                    <div class="rating-badge ${window.getScoreTier(anime.avgScore)} top10-wb-badge" style="width:50px;height:50px;font-size:13px;">${anime.avgScore}</div>
+                                    ${window.scoreBadgeHTML(anime.avgScore, 50)}
                                     <span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">WeeBee</span>
                                 </div>
                                 ${malScoreMap[anime.mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="rating-badge blue top10-mal-badge" style="width:48px;height:48px;font-size:13px;">${malScoreMap[anime.mal_id]}</div><span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">MAL</span></div>` : ''}
@@ -18864,7 +18959,7 @@ window.fetchDiscoverPage = async function() {
                                 <h2 class="spotlight-title">${s.title}</h2>
                                 <p class="spotlight-meta" id="spotlight-meta-text">Loading details...</p>
                                 <div class="spotlight-footer">
-                                    <div class="rating-badge tier-royal" style="width:58px;height:58px;font-size:16px;">${s.avgScore}</div>
+                                    ${window.scoreBadgeHTML(s.avgScore, 58)}
                                     <button class="action-btn spotlight-btn" onclick="event.stopPropagation(); loadAnimeDetails(${s.mal_id})">View Anime</button>
                                 </div>
                             </div>
@@ -19079,7 +19174,7 @@ window.searchAnime = async function(queryStr) {
                                 <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">MAL</span>
                             </div>
                             <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
-                                <div class="rating-badge ${bwTier || 'blue'}" style="width:40px; height:40px; font-size:14px; ${bwScore ? '' : 'opacity:0.35;'}">${bwScore || '—'}</div>
+                                ${bwScore ? window.scoreBadgeHTML(bwScore, 40) : `<div class="rating-badge blue" style="width:40px;height:40px;font-size:14px;opacity:0.35;">—</div>`}
                                 <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">WeeBee</span>
                             </div>
                             <button onclick="event.stopPropagation(); selectAnimeForList(${anime.mal_id}, '${safeTitle}', '${img}', ${eps})"
