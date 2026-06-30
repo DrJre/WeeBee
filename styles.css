@@ -1799,7 +1799,10 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 /* ── 2026 Prismatic Limited Set ──────────────────────────────────────────────
    Add class wb-card--prismatic alongside any rarity class.
    The spinning conic-gradient ::before becomes the border (visible through
-   the 7px padding gap). All animations pause when off-screen via tcg-anim-in-view.
+   the 7px padding gap). Most animations pause when off-screen via
+   tcg-anim-in-view. The art light-sweep is the exception — it's hover +
+   mouse-reactive only (via --mx/--my, same as SSR/UR) since a per-card
+   animation loop on the art layer was the main lag source in big grids.
    ─────────────────────────────────────────────────────────────────────────── */
 .wb-card--prismatic {
     background: #07070f !important;
@@ -1875,6 +1878,9 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     bottom: 0; left: 0; right: 0;
     background: transparent;
     z-index: 3;
+}
+.wb-card--prismatic .wb-card-footer {
+    padding-bottom: 26px;
 }
 
 /* Inner card — deep dark crystal */
@@ -1975,68 +1981,62 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 .wb-card--prismatic.tcg-anim-in-view .wb-rarity-gem--star,
 .wb-card--prismatic.tcg-anim-in-view .wb-rarity-gem--star::before { animation-play-state: running !important; }
 
-/* Rarity label — hue-rotates at same 6s as the border spin */
+/* Rarity label — soft pastel rainbow scrolls across the badge */
 .wb-card--prismatic .wb-card-rarity-label {
-    background: linear-gradient(90deg, #ff6060, #ffcc00, #66ff88, #00ccff, #cc88ff) !important;
+    background: linear-gradient(90deg, #ffb3b3, #fff0a0, #b3ffcc, #b3e6ff, #e6b3ff, #ffb3b3) !important;
     background-size: 300% 100% !important;
-    color: white !important;
+    color: rgba(30,20,50,0.85) !important;
     border: none !important;
     animation: prismatic-label-cycle 6s linear infinite !important;
     animation-play-state: paused !important;
 }
 @keyframes prismatic-label-cycle {
-    from { filter: hue-rotate(0deg); }
-    to   { filter: hue-rotate(360deg); }
+    from { background-position: 0% 50%; }
+    to   { background-position: 100% 50%; }
 }
 .wb-card--prismatic.tcg-anim-in-view .wb-card-rarity-label { animation-play-state: running !important; }
 
-/* Rainbow prismatic light sweep across the art */
+/* Rainbow prismatic light sweep across the art — mouse-reactive only, same
+   --mx/--my pattern as the SSR/UR holographic shimmer. No animation loop, so
+   it costs nothing while the cursor isn't on the card. */
 .wb-card--prismatic .wb-card-art::before {
     content: '';
     position: absolute;
-    inset: -20% -80%;
+    inset: 0;
     background: linear-gradient(
-        108deg,
-        transparent         15%,
-        rgba(255, 60, 60,  0.20) 24%,
-        rgba(255,200,  0,  0.20) 32%,
-        rgba( 80,255,100,  0.18) 40%,
-        rgba(  0,210,255,  0.20) 48%,
-        rgba(100, 60,255,  0.20) 56%,
-        rgba(255,  0,200,  0.18) 64%,
-        transparent         73%
+        calc(var(--mx, 0.5) * 200deg + 30deg),
+        transparent 10%,
+        rgba(255, 60, 60,  0.22) 24%,
+        rgba(255,200,  0,  0.22) 32%,
+        rgba( 80,255,100,  0.20) 40%,
+        rgba(  0,210,255,  0.22) 48%,
+        rgba(100, 60,255,  0.22) 56%,
+        rgba(255,  0,200,  0.20) 64%,
+        transparent 88%
+    ),
+    radial-gradient(
+        ellipse at calc(var(--mx, 0.5) * 100%) calc(var(--my, 0.5) * 100%),
+        rgba(255,255,255,0.35) 0%,
+        transparent 55%
     );
-    animation: prismatic-art-sweep 5s ease-in-out infinite 1s;
-    animation-play-state: paused;
     mix-blend-mode: screen;
     z-index: 2;
     pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
 }
-.wb-card--prismatic.tcg-anim-in-view .wb-card-art::before { animation-play-state: running; }
-@keyframes prismatic-art-sweep {
-    0%, 100% { transform: translateX(-90%) rotate(4deg); opacity: 0; }
-    25%       { opacity: 1; }
-    75%       { opacity: 1; }
-    90%       { transform: translateX(90%) rotate(4deg); opacity: 0; }
-}
+.wb-card--prismatic:hover .wb-card-art::before { opacity: 1; }
 
-/* Art image hue-rotate — slowly shifts the photo's own colors through the spectrum */
-.wb-card--prismatic .wb-card-art img {
-    animation: prismatic-hue-shift 8s ease-in-out infinite;
-    animation-play-state: paused;
-}
-.wb-card--prismatic.tcg-anim-in-view .wb-card-art img { animation-play-state: running; }
-@keyframes prismatic-hue-shift {
-    0%   { filter: hue-rotate(0deg)    saturate(1.25) brightness(1.05); }
-    50%  { filter: hue-rotate(-75deg) saturate(1.25) brightness(1.05); }
-    100% { filter: hue-rotate(0deg)    saturate(1.25) brightness(1.05); }
-}
 
-/* "✦ Prismatic 2026" set stamp — sits inline to the right of the serial number */
+/* "✦ Prismatic 2026" set stamp — pinned to the card's bottom-left corner */
 .wb-prismatic-stamp {
+    position: absolute;
+    bottom: 9px;
+    left: 12px;
+    z-index: 4;
     font-size: 8px;
     font-weight: 800;
-    letter-spacing: 1.5px;
+    letter-spacing: 1px;
     text-transform: uppercase;
     display: inline-block;
     white-space: nowrap;
@@ -2050,6 +2050,37 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     animation-play-state: paused;
 }
 .wb-card--prismatic.tcg-anim-in-view .wb-prismatic-stamp { animation-play-state: running; }
+
+/* Floating sparkle particles */
+.wb-prismatic-sparkles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 3;
+    border-radius: inherit;
+}
+.wb-sparkle {
+    position: absolute;
+    opacity: 0;
+    animation: sparkle-float 4s ease-in-out infinite;
+    animation-play-state: paused;
+}
+.wb-card--prismatic.tcg-anim-in-view .wb-sparkle { animation-play-state: running; }
+@keyframes sparkle-float {
+    0%   { transform: translateY(0)     scale(0.5); opacity: 0; }
+    20%  { opacity: 1; }
+    80%  { opacity: 0.6; }
+    100% { transform: translateY(-100px) scale(1.1); opacity: 0; }
+}
+.wb-sparkle:nth-child(1) { left:12%; bottom:22%; font-size: 9px; color:#ffffff; animation-delay:0s;    animation-duration:3.8s; }
+.wb-sparkle:nth-child(2) { left:40%; bottom:35%; font-size:11px; color:#ffb3e6; animation-delay:0.9s;  animation-duration:4.2s; }
+.wb-sparkle:nth-child(3) { left:68%; bottom:18%; font-size: 8px; color:#b3e6ff; animation-delay:1.7s;  animation-duration:3.6s; }
+.wb-sparkle:nth-child(4) { left:22%; bottom:55%; font-size:10px; color:#e6b3ff; animation-delay:2.4s;  animation-duration:4.0s; }
+.wb-sparkle:nth-child(5) { left:78%; bottom:42%; font-size: 9px; color:#ffffff; animation-delay:0.5s;  animation-duration:4.5s; }
+.wb-sparkle:nth-child(6) { left:55%; bottom:62%; font-size: 8px; color:#ffe680; animation-delay:1.3s;  animation-duration:3.9s; }
+.wb-sparkle:nth-child(7) { left:33%; bottom:10%; font-size:10px; color:#b3e6ff; animation-delay:2.0s;  animation-duration:4.3s; }
+.wb-sparkle:nth-child(8) { left:62%; bottom:75%; font-size: 9px; color:#ffb3e6; animation-delay:3.1s;  animation-duration:3.7s; }
 
 /* UR flip card back in pack opening */
 .tcg-pack-card-ur {
