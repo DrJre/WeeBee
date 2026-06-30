@@ -2094,7 +2094,7 @@ window.getScoreTier = function(score) {
 window.scoreBadgeHTML = function(score, size, extraStyle) {
     const s = parseFloat(score);
     const px = size || 64;
-    if (!isNaN(s) && s >= 5 && s <= 10) {
+    if (!isNaN(s) && s >= 1 && s < 10) {
         const key = Math.round(s * 10) / 10;
         const filename = key % 1 === 0 ? String(Math.floor(key)) : key.toFixed(1);
         return `<img src="/assets/${filename}.png" style="width:${px}px;height:${px}px;object-fit:contain;${extraStyle || ''}" alt="${score}" draggable="false">`;
@@ -5027,10 +5027,38 @@ window._refreshHomeFeedItem = function(id) {
     if (html) el.innerHTML = html;
 };
 
+const GAME_POST_TYPES = ['bw', 'melobee', 'trivia'];
+
+// Re-derives window._activityItems (the filtered, sorted list actually rendered)
+// from window._activityItemsAll (everything fetched) without hitting Firestore again.
+function _applyActivityFilter() {
+    const all = window._activityItemsAll || [];
+    const hideGames = localStorage.getItem('hideGamePosts') === '1';
+    const filtered = hideGames ? all.filter(i => !GAME_POST_TYPES.includes(i._type)) : all;
+    const byTime = (a, b) => b._ts - a._ts;
+    window._activityItems = [
+        ...filtered.filter(i => i._social).sort(byTime),
+        ...filtered.filter(i => !i._social).sort(byTime)
+    ];
+}
+
+window._toggleHideGamePosts = function() {
+    const checked = document.getElementById('hide-game-posts-toggle')?.checked;
+    localStorage.setItem('hideGamePosts', checked ? '1' : '0');
+    if (!window._activityItemsAll) return;
+    _applyActivityFilter();
+    window._activityIndex = 0;
+    const feed = document.getElementById('home-activity-feed');
+    if (feed) feed.innerHTML = '';
+    renderActivityBatch();
+};
+
 window.fetchHomeActivityFeed = async function() {
     const feed = document.getElementById('home-activity-feed');
     const sentinel = document.getElementById('home-activity-sentinel');
     if (!feed) return;
+    const toggle = document.getElementById('hide-game-posts-toggle');
+    if (toggle) toggle.checked = localStorage.getItem('hideGamePosts') === '1';
     feed.innerHTML = '<div class="loading">Loading your feed...</div>';
     if (sentinel) sentinel.style.display = 'none';
     window._activityItems = [];
@@ -5114,11 +5142,8 @@ window.fetchHomeActivityFeed = async function() {
 
         await window.prefetchRankCache([...new Set(items.map(i => i.uid).filter(Boolean))]);
 
-        const byTime = (a, b) => b._ts - a._ts;
-        window._activityItems = [
-            ...items.filter(i => i._social).sort(byTime),
-            ...items.filter(i => !i._social).sort(byTime)
-        ];
+        window._activityItemsAll = items;
+        _applyActivityFilter();
         feed.innerHTML = '';
         renderActivityBatch();
     } catch(e) {
@@ -6452,6 +6477,7 @@ window.switchTcgTab = function(event, tabId) {
         });
     }
     if (tabId === 'tcg-tab-collection') window._tcgRenderMyCollection();
+    if (tabId === 'tcg-tab-inventory') window._tcgRenderInventory();
     if (tabId === 'tcg-tab-trading') window._tcgRenderTradingTab();
     if (tabId === 'tcg-tab-auction') window._auctionRender();
     if (tabId === 'tcg-tab-dungeon') window.loadDungeonTab();
@@ -7865,6 +7891,44 @@ window._tcgAdminGiftFounderCard = async function(uid, name) {
     } catch(e) { alert('Failed: ' + e.message); }
 };
 
+// Admin: search users by display name to gift pack(s) into their Inventory.
+// Goes through the adminGiftPack Cloud Function — contents are rolled and frozen
+// server-side, exactly like a real purchase, so a gifted pack is just as tamper-proof.
+window._tcgAdminSearchUsersForPackGift = async function() {
+    if (!window.isAdmin) return;
+    const term = (document.getElementById('pack-gift-search')?.value || '').trim().toLowerCase();
+    const el = document.getElementById('pack-gift-results');
+    if (!el) return;
+    if (!term) { el.innerHTML = ''; return; }
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Searching…</p>';
+    try {
+        const snap = await getDocs(query(collection(db, 'profiles'), limit(300)));
+        const matches = [];
+        snap.forEach(d => {
+            const p = d.data();
+            if ((p.displayName || '').toLowerCase().includes(term)) matches.push({ uid: d.id, name: p.displayName || 'Unknown' });
+        });
+        if (!matches.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No users found.</p>'; return; }
+        el.innerHTML = matches.slice(0, 10).map(u => `
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border-color); flex-wrap:wrap;">
+                <span style="font-size:13px; flex:1; min-width:120px;">${u.name}</span>
+                <button onclick="window._tcgAdminGiftPackToUser('${u.uid}','${u.name.replace(/'/g, "\\'")}')" style="padding:7px 16px; border-radius:6px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:12px; cursor:pointer;">Gift Pack(s)</button>
+            </div>`).join('');
+    } catch(e) { el.innerHTML = `<p style="color:red;font-size:13px;">${e.message}</p>`; }
+};
+
+window._tcgAdminGiftPackToUser = async function(uid, name) {
+    if (!window.isAdmin) return;
+    const packId = document.getElementById('pack-gift-select')?.value || 'standard';
+    const quantity = parseInt(document.getElementById('pack-gift-qty')?.value, 10) || 1;
+    const pack = TCG_PACKS.find(p => p.id === packId);
+    if (!confirm(`Gift ${quantity}× ${pack?.name || packId} to ${name}? They'll land unopened in their Inventory.`)) return;
+    try {
+        await _callFn('adminGiftPack', { targetUid: uid, packId, quantity });
+        alert(`Gifted ${quantity}× ${pack?.name || packId} to ${name}.`);
+    } catch(e) { alert('Failed: ' + (e.details || e.message)); }
+};
+
 // ── TCG Pack Store ────────────────────────────────────────────────────────────
 
 // Flash sale: packs return to their old prices. Admin-controlled — stays on
@@ -8002,27 +8066,43 @@ const WHEEL_BASELINE_NON_UR = 33;
 // many months have passed since the epoch below, cycling once the list ends.
 const WHEEL_MONTHLY_UR_BACKLOG = [
     { name: 'Rock Lee', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FRock%20Lee.gif?alt=media&token=bb34d915-5b99-4f94-8d2c-9348ca1b2442' },
+    { name: 'Yamato', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FYamato%20Monthly%20UR.gif?alt=media&token=106c15ba-d550-4721-bbb4-b6b88b5204eb' },
 ];
 const WHEEL_UR_BACKLOG_EPOCH = { year: 2026, month: 6 }; // June 2026 = backlog[0]
 
-function _wheelGetMonthlyUrCard(d = new Date()) {
+// All wheel day/month boundaries resolve in America/New_York so every user's
+// daily reset and monthly UR switchover lands at the same midnight EST/EDT,
+// regardless of their own local timezone.
+function _wheelEstNow() {
+    return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+}
+
+function _wheelGetMonthlyUrCard(d = _wheelEstNow()) {
     const monthsSince = (d.getFullYear() - WHEEL_UR_BACKLOG_EPOCH.year) * 12 + (d.getMonth() + 1 - WHEEL_UR_BACKLOG_EPOCH.month);
     const len = WHEEL_MONTHLY_UR_BACKLOG.length;
     const idx = ((monthsSince % len) + len) % len;
     return WHEEL_MONTHLY_UR_BACKLOG[idx];
 }
 
+// Admin preview label — which calendar month a backlog index first goes live (epoch + idx months).
+function _wheelBacklogMonthLabel(idx) {
+    const totalMonths = WHEEL_UR_BACKLOG_EPOCH.year * 12 + (WHEEL_UR_BACKLOG_EPOCH.month - 1) + idx;
+    const y = Math.floor(totalMonths / 12);
+    const m = totalMonths % 12;
+    return new Date(y, m, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+}
+
 const WHEEL_ICONS = { monthly_ur: '🌟', extra_spin: '🔄', nothing: '💨', amber: '🟡' };
 // Vibrant rainbow palette cycled across amber/pack slices for a more colorful wheel
 const WHEEL_RAINBOW_PALETTE = ['#f43f5e', '#f59e0b', '#facc15', '#84cc16', '#22c55e', '#14b8a6', '#0ea5e9', '#6366f1', '#a855f7', '#ec4899'];
 
-function _wheelMonthKey(d = new Date()) {
+function _wheelMonthKey(d = _wheelEstNow()) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
-function _wheelTodayKey(d = new Date()) {
+function _wheelTodayKey(d = _wheelEstNow()) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-function _wheelDaysInMonth(d = new Date()) {
+function _wheelDaysInMonth(d = _wheelEstNow()) {
     return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 }
 
@@ -8124,7 +8204,7 @@ async function _wheelLoadState(uid) {
     const snap = await getDoc(ref);
     let data = snap.exists() ? snap.data() : null;
     if (!data || data.month !== monthKey) {
-        const now = new Date();
+        const now = _wheelEstNow();
         data = {
             month: monthKey,
             sections: _wheelGenerateSections(_wheelDaysInMonth(now) + 4),
@@ -8282,9 +8362,23 @@ function _wheelRender(el, config, state) {
                 </div>
                 <div id="wheel-ur-gift-results" style="margin-top:8px;"></div>
             </div>
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color);">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">📅 Monthly UR Backlog Preview</div>
+                <div style="display:flex;gap:14px;flex-wrap:wrap;">
+                    ${WHEEL_MONTHLY_UR_BACKLOG.map((c, idx) => {
+                        const isActive = c === ur;
+                        const label = _wheelBacklogMonthLabel(idx);
+                        const previewCard = { name: c.name, anime: c.anime, image: c.image, rarity: 'ur' };
+                        return `<div style="text-align:center;">
+                            <div style="font-size:11px;font-weight:800;margin-bottom:6px;color:${isActive ? '#f59e0b' : 'var(--text-muted)'};">${label}${isActive ? ' (Active)' : ''}</div>
+                            <div class="tcg-card-scale-wrap" style="margin:0 auto;width:140px;"><div class="tcg-card-scale">${_tcgBuildCardFace(previewCard)}</div></div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>
         </div>` : '';
 
-    const now = new Date();
+    const now = _wheelEstNow();
     const urStampText = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
     const urCard = { name: ur.name, anime: ur.anime, image: ur.image, rarity: 'ur', monthlyUr: true, stampText: urStampText };
 
@@ -8309,6 +8403,10 @@ function _wheelRender(el, config, state) {
                     <div class="banner-hero-title" style="font-size:42px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🎡 Prize Wheel 🎡</div>
                     <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-top:10px;">Spin once a day — every section is yours once, all month long</div>
                     ${ur.image ? `<div style="margin-top:14px;font-size:12px;color:#f59e0b;font-weight:700;">🌟 This month's grand prize: ${ur.name} (${ur.anime})</div>` : ''}
+                    <div style="display:inline-flex;align-items:center;gap:6px;margin-top:14px;padding:7px 16px;border-radius:20px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35);">
+                        <span style="font-size:16px;">🔥</span>
+                        <span style="font-size:13px;font-weight:800;color:#f59e0b;">${state.streak || 0} Day Spin Streak</span>
+                    </div>
                 </div>
             </div>
 
@@ -8375,7 +8473,7 @@ window._wheelAdminGrantUR = async function() {
     if (!window.isAdmin || !auth.currentUser) return;
     const uid = auth.currentUser.uid;
     const ur = _wheelGetMonthlyUrCard();
-    const now = new Date();
+    const now = _wheelEstNow();
     const stampText = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
     try {
         await addDoc(collection(db, 'card_collections', uid, 'cards'), {
@@ -8415,7 +8513,7 @@ window._wheelAdminSearchUsersForUR = async function(prefix) {
 window._wheelAdminGiftURToUser = async function(uid, name) {
     if (!window.isAdmin) return;
     const ur = _wheelGetMonthlyUrCard();
-    const now = new Date();
+    const now = _wheelEstNow();
     const stampText = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
     if (!confirm(`Gift "${ur.name}" (${stampText} UR) to ${name}?`)) return;
     try {
@@ -9359,7 +9457,7 @@ window._wheelSpin = async function(testUrSpin = false) {
         if (urIdx === undefined) return alert('UR section is no longer available this month (already claimed or used).');
         pickIdx = urIdx;
     } else {
-        const _now = new Date();
+        const _now = _wheelEstNow();
         const _daysInMonth = _wheelDaysInMonth(_now);
         const _isLastDay = _now.getDate() === _daysInMonth;
         const _isDailySpinNow = state.lastSpinDate !== today;
@@ -9381,7 +9479,7 @@ window._wheelSpin = async function(testUrSpin = false) {
     const totalSpins = (state.totalSpins || 0) + 1;
     let streak = state.streak || 0;
     if (isDailySpin) {
-        const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+        const yesterday = new Date(_wheelEstNow().getTime() - 86400000);
         streak = (state.streakDate === _wheelTodayKey(yesterday)) ? streak + 1 : 1;
     }
 
@@ -9491,7 +9589,7 @@ async function _wheelGrantReward(uid, section) {
         }
         case 'monthly_ur': {
             const ur = _wheelGetMonthlyUrCard();
-            const now = new Date();
+            const now = _wheelEstNow();
             const stampText = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
             try {
                 // Firestore rule requires pendingUrClaim == true before the card write —
@@ -11022,13 +11120,20 @@ window._tcgRenderStore = async function() {
     const prismaticEndAt = _tcgPrismaticEventEndAt(prismaticConfig);
     const prismaticActive = !!prismaticEndAt && prismaticEndAt > new Date();
 
+    window._tcgPackQty = window._tcgPackQty || {};
     const packCard = (pack, isComingSoon = false, topHtml = '', grayscale = false) => {
         const onSale = !isComingSoon && saleActive && pack.salePrice != null;
-        const effectiveCost = onSale ? pack.salePrice : pack.cost;
-        const canAfford = !isComingSoon && amber >= effectiveCost;
+        const unitCost = onSale ? pack.salePrice : pack.cost;
+        const qty = isComingSoon ? 1 : (window._tcgPackQty[pack.id] || 1);
+        const totalCost = unitCost * qty;
+        const canAfford = !isComingSoon && amber >= totalCost;
         const priceHtml = onSale
-            ? `<span style="text-decoration:line-through;text-decoration-color:#ef4444;color:var(--text-muted);font-weight:700;margin-right:8px;">🟡 ${pack.cost.toLocaleString()}</span><span style="color:#f59e0b;">🟡 ${pack.salePrice.toLocaleString()}</span>`
-            : `🟡 ${pack.cost.toLocaleString()}`;
+            ? `<span style="text-decoration:line-through;text-decoration-color:#ef4444;color:var(--text-muted);font-weight:700;margin-right:8px;">🟡 ${(pack.cost * qty).toLocaleString()}</span><span style="color:#f59e0b;">🟡 ${totalCost.toLocaleString()}</span>`
+            : `🟡 ${totalCost.toLocaleString()}`;
+        const qtyPills = !isComingSoon ? `
+            <div style="display:flex;gap:6px;justify-content:center;margin:8px 0;">
+                ${[1, 5, 10].map(n => `<button onclick="window._tcgSetPackQty('${pack.id}',${n})" style="padding:5px 14px;border-radius:20px;border:1px solid ${qty === n ? 'var(--accent-yellow)' : 'var(--border-color)'};background:${qty === n ? 'rgba(245,158,11,0.12)' : 'transparent'};color:${qty === n ? '#f59e0b' : 'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${n}×</button>`).join('')}
+            </div>` : '';
         return `
         <div class="wb-card-wrap tcg-pack-card">
             ${topHtml}
@@ -11038,21 +11143,35 @@ window._tcgRenderStore = async function() {
                 <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">${pack.description}</div>
             </div>
             <div style="font-size:11px;color:var(--text-muted);line-height:1.6;white-space:pre-line;text-align:center;min-height:48px;">${pack.odds || ''}</div>
+            ${qtyPills}
             <div style="font-size:16px;font-weight:800;color:#f59e0b;min-height:22px;">${priceHtml}</div>
-            <button ${isComingSoon ? 'disabled' : `onclick="window._tcgBuyPack('${pack.id}')"`}
+            <button ${isComingSoon ? 'disabled' : `onclick="window._tcgBuyPacks('${pack.id}',${qty})"`}
                 style="width:100%;padding:10px;border-radius:8px;border:none;background:${isComingSoon ? 'var(--bg-gray)' : pack.gradient};color:${isComingSoon ? 'var(--text-muted)' : 'white'};font-weight:700;font-size:13px;cursor:${isComingSoon ? 'not-allowed' : 'pointer'};opacity:${isComingSoon ? '0.6' : (canAfford ? '1' : '0.5')};">
-                ${isComingSoon ? (pack.comingSoonLabel || 'Coming Soon') : 'Buy Pack'}
+                ${isComingSoon ? (pack.comingSoonLabel || 'Coming Soon') : (qty > 1 ? `Buy ${qty} Packs` : 'Buy Pack')}
             </button>
-            ${!isComingSoon && !canAfford ? `<div style="font-size:11px;color:var(--text-muted);">🟡 ${(effectiveCost - amber).toLocaleString()} more needed</div>` : ''}
+            ${!isComingSoon && !canAfford ? `<div style="font-size:11px;color:var(--text-muted);">🟡 ${(totalCost - amber).toLocaleString()} more needed</div>` : ''}
         </div>`;
     };
 
+    // Before the event ever runs, tease the specific Prismatic pack art with a date.
+    // Once that event has run and ended, fall back to a generic placeholder since
+    // there's no specific next event scheduled yet.
     const futureEventPack = { ...TCG_PACKS.find(p => p.prismatic), description: 'Coming July 3rd', odds: '', comingSoonLabel: 'Coming July 3rd' };
+    const genericComingSoonPack = {
+        name: 'Mystery Event Pack',
+        description: 'A new limited-time pack is on the way',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FComing%20Soon%20Pack.png?alt=media&token=3bb755b3-a7f9-494d-852c-a0105bebd308',
+        odds: '',
+        comingSoonLabel: 'Coming Soon',
+    };
+    const eventEverRan = !!prismaticConfig.startAt;
 
     let thirdSlotHtml;
     if (prismaticActive) {
         const countdownHtml = `<div style="background:linear-gradient(135deg,#6366f1,#a855f7,#ec4899);color:white;border-radius:10px;padding:8px 12px;margin-bottom:10px;text-align:center;font-weight:800;font-size:12px;letter-spacing:0.3px;">✦ Event ends in <span id="prismatic-countdown-timer">…</span></div>`;
         thirdSlotHtml = packCard(TCG_PACKS.find(p => p.prismatic), false, countdownHtml);
+    } else if (eventEverRan) {
+        thirdSlotHtml = packCard(genericComingSoonPack, true, '', false);
     } else {
         thirdSlotHtml = packCard(futureEventPack, true, '', false);
     }
@@ -11086,6 +11205,102 @@ window._tcgRenderStore = async function() {
         tick();
         window._prismaticCountdownInterval = setInterval(tick, 1000);
     }
+};
+
+window._tcgSetPackQty = function(packId, qty) {
+    window._tcgPackQty = window._tcgPackQty || {};
+    window._tcgPackQty[packId] = qty;
+    window._tcgRenderStore();
+};
+
+// ── Inventory tab — unopened packs (and future item types) ─────────────────────
+// Items are read directly (allowed for the owner), but every write — including
+// "opening" one — goes through the openInventoryItems Cloud Function. The client
+// never decides what's inside a pack; it only ever displays what's already there.
+window._tcgInventoryGroups = [];
+window._tcgRenderInventory = async function() {
+    const el = document.getElementById('tcg-inventory');
+    if (!el) return;
+    if (!auth.currentUser) {
+        el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">Sign in to see your inventory.</div>`;
+        return;
+    }
+    el.innerHTML = `<div class="loading">Loading inventory...</div>`;
+
+    let items = [];
+    try {
+        const snap = await getDocs(collection(db, 'inventory', auth.currentUser.uid, 'items'));
+        snap.forEach(d => items.push({ id: d.id, ...d.data() }));
+    } catch(e) {
+        el.innerHTML = `<p style="color:#ef4444;font-size:13px;text-align:center;">Failed to load inventory: ${e.message}</p>`;
+        return;
+    }
+
+    const badge = document.getElementById('tcg-inventory-badge');
+    if (badge) badge.style.display = items.length ? 'block' : 'none';
+
+    if (!items.length) {
+        el.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--text-muted);">
+            <div style="font-size:44px;margin-bottom:10px;">🎒</div>
+            <div style="font-size:15px;font-weight:700;">Your inventory is empty</div>
+            <div style="font-size:13px;margin-top:4px;">Packs you buy or get gifted land here unopened, ready to open whenever you want.</div>
+        </div>`;
+        return;
+    }
+
+    // Group by bulkBatchId — items with no batchId are their own lone group.
+    const groups = {};
+    items.forEach(it => {
+        const key = it.bulkBatchId || it.id;
+        (groups[key] = groups[key] || []).push(it);
+    });
+    const groupList = Object.values(groups).sort((a, b) => {
+        const at = a[0].grantedAt?.toMillis ? a[0].grantedAt.toMillis() : 0;
+        const bt = b[0].grantedAt?.toMillis ? b[0].grantedAt.toMillis() : 0;
+        return bt - at;
+    });
+    window._tcgInventoryGroups = groupList;
+
+    el.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+            <h3 style="margin:0;">Inventory</h3>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            ${groupList.map((group, gi) => {
+                const first = group[0];
+                const n = group.length;
+                const sourceLabel = first.source === 'gift' ? '🎁 Gift' : '🛒 Purchase';
+                return `
+                <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:var(--bg-gray);border-radius:14px;padding:14px 18px;">
+                    <img src="${first.packImage}" style="width:64px;height:64px;object-fit:contain;flex-shrink:0;" draggable="false">
+                    <div style="flex:1;min-width:160px;">
+                        <div style="font-size:14px;font-weight:800;">${first.packName}</div>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${sourceLabel} · ${n} unopened</div>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button onclick="window._tcgInventoryOpenOne(${gi})" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-weight:700;font-size:12px;cursor:pointer;">Open ${n > 1 ? 'This Pack' : 'Pack'}</button>
+                        ${n > 1 ? `<button onclick="window._tcgInventoryOpenAll(${gi})" style="padding:8px 16px;border-radius:8px;border:none;background:rgba(255,255,255,0.1);color:var(--text-dark);font-weight:700;font-size:12px;cursor:pointer;">Open All ${n}</button>` : ''}
+                    </div>
+                </div>`;
+            }).join('')}
+        </div>`;
+};
+
+// Opens one item from a group; the remaining siblings (if any) become the pending
+// bulk batch so the single-pack reveal offers "Open Another?" / "Open Remaining N".
+window._tcgInventoryOpenOne = function(groupIndex) {
+    const group = window._tcgInventoryGroups[groupIndex];
+    if (!group?.length) return;
+    const [first, ...rest] = group;
+    window._tcgCurrentBulkItemIds = rest.map(it => it.id);
+    window._tcgOpenInventoryItem(first.id);
+};
+
+window._tcgInventoryOpenAll = function(groupIndex) {
+    const group = window._tcgInventoryGroups[groupIndex];
+    if (!group?.length) return;
+    window._tcgCurrentBulkItemIds = [];
+    window._tcgShowBulkRevealAnimation(group.map(it => it.id));
 };
 
 window._tcgRenderShowcaseCarousel = async function() {
@@ -11186,82 +11401,215 @@ window._tcgShowPackLoading = function(pack) {
     document.body.appendChild(modal);
 };
 
-window._tcgBuyPack = async function(packId) {
+// Buys 1/5/10 packs — rolling now happens server-side (purchasePacks Cloud Function),
+// frozen into inventory items the instant they're granted. This function only ever
+// reveals what the server already decided; it never picks cards itself.
+window._tcgBuyPacks = async function(packId, quantity) {
     if (!auth.currentUser) return window.openAuthModal();
     if (window._tcgBuyInProgress) return;
     if (navigator.onLine === false) return alert("You appear to be offline — please check your connection and try again.");
     const pack = TCG_PACKS.find(p => p.id === packId);
     if (!pack) return;
-    if (pack.prismatic && !(await _tcgPrismaticEventActive())) {
-        // Re-check server-side truth even if a stale tab still shows the buy button —
-        // mirrors how _tcgFlashSaleActive() is re-checked per purchase, not trusted from cache.
-        alert('The Prismatic Pack event is not currently running.');
-        window._tcgRenderStore();
-        return;
-    }
-    const uid = auth.currentUser.uid;
-    const cost = (await _tcgFlashSaleActive() && pack.salePrice != null) ? pack.salePrice : pack.cost;
+    const qty = [1, 5, 10].includes(quantity) ? quantity : 1;
 
     window._tcgBuyInProgress = true;
-    _tcgShowPackLoading(pack);
+    _tcgShowPackLoading(qty > 1 ? { name: `${qty}× ${pack.name}` } : pack);
 
-    // Atomic check-and-deduct: read balance and subtract in a single transaction
-    // so two concurrent tabs can't both pass the balance check on the same funds.
+    let result;
     try {
-        await runTransaction(db, async tx => {
-            const pd = await tx.get(doc(db, 'profiles', uid));
-            const amber = pd.exists() ? (pd.data().amber || 0) : 0;
-            if (amber < cost) throw new Error('NOT_ENOUGH_AMBER');
-            tx.update(doc(db, 'profiles', uid), { amber: increment(-cost) });
-        });
-        addDoc(collection(db, 'amber_log'), { uid, amount: -cost, reason: `pack:${packId}`, timestamp: new Date() }).catch(() => {});
+        result = await _callFn('purchasePacks', { packId, quantity: qty });
     } catch(e) {
         document.getElementById('tcg-pack-modal')?.remove();
         window._tcgBuyInProgress = false;
-        if (e.message === 'NOT_ENOUGH_AMBER') return alert('Not enough Amber!');
-        alert('Purchase failed: ' + e.message);
+        if ((e.details || '').includes('Not enough Amber')) return alert('Not enough Amber!');
+        if ((e.details || '').includes('Prismatic Pack event')) { alert(e.details); window._tcgRenderStore(); return; }
+        alert('Purchase failed: ' + (e.details || e.message));
         return;
     }
 
-    // Single attempt only — no retry. If the save times out the first write may
-    // already be in-flight; retrying would double-save cards to the collection.
-    let enrichedCards = null;
-    let godPackTheme = null;
-    try {
-        await _tcgEnsureCardPool();
-        let rolledCards;
-        if (pack.prismatic) {
-            const isPrismaticGodPack = Math.random() < 0.01; // 1-in-100
-            godPackTheme = isPrismaticGodPack ? 'prismatic' : null;
-            rolledCards = isPrismaticGodPack
-                ? [_tcgPickCard('pr'), _tcgPickCard('pr'), _tcgPickCard('pr'), _tcgPickCard('pr'), _tcgPickCard('pr')]
-                : _tcgRollPrismaticPackCards(pack);
-        } else {
-            const isGodPack = pack.guaranteedSR && Math.random() < 0.0001;
-            godPackTheme = isGodPack ? 'gold' : null;
-            rolledCards = isGodPack
-                ? [_tcgPickCard('ur'), _tcgPickCard('ur'), _tcgPickCard('ssr'), _tcgPickCard('ssr'), _tcgPickCard('ssr')]
-                : _tcgRollPackCards(pack);
-        }
-        enrichedCards = await _withTimeout(_tcgSavePackToCollection(uid, rolledCards), 15000, 'Pack save');
-        window._tcgCollectionCache.delete(uid);
-    } catch(e) {
-        console.error('Failed to save pack to collection:', e);
-    }
-
-    if (!enrichedCards) {
-        // Save failed — refund the amber so the player isn't out of pocket.
-        try { await updateDoc(doc(db, 'profiles', uid), { amber: increment(cost) }); } catch(e) { console.error('Pack refund failed:', e); }
-        document.getElementById('tcg-pack-modal')?.remove();
-        window._tcgBuyInProgress = false;
-        alert("Hmm, something went wrong opening that pack. You've been refunded — please try again.");
-        return;
-    }
-
-    _tcgShowPackOpening(pack, enrichedCards, godPackTheme);
-    window._tcgRenderStore();
     window._tcgBuyInProgress = false;
+    window._tcgRenderStore();
+
+    const itemIds = result.itemIds || [];
+    if (itemIds.length <= 1) {
+        window._tcgCurrentBulkItemIds = [];
+        await window._tcgOpenInventoryItem(itemIds[0]);
+    } else {
+        window._tcgShowBulkOpenPrompt(itemIds, pack);
+    }
 };
+
+// Opens exactly one inventory item via the Cloud Function (serial assignment +
+// card_collections write happen server-side) and shows the existing single-pack
+// flip reveal. If window._tcgCurrentBulkItemIds still has entries, the reveal's
+// button row offers "Open Another?" / "Open Remaining N".
+window._tcgOpenInventoryItem = async function(itemId) {
+    if (!itemId) return;
+    document.getElementById('tcg-pack-modal')?.remove();
+    if (!document.getElementById('tcg-pack-modal')) _tcgShowPackLoading({ name: 'Pack' });
+    let result;
+    try {
+        result = await _callFn('openInventoryItems', { itemIds: [itemId] });
+    } catch(e) {
+        document.getElementById('tcg-pack-modal')?.remove();
+        alert('Failed to open pack: ' + (e.details || e.message));
+        return;
+    }
+    const revealed = result.packs?.[0];
+    if (!revealed) {
+        document.getElementById('tcg-pack-modal')?.remove();
+        alert('Something went wrong opening that pack.');
+        return;
+    }
+    window._tcgCollectionCache.delete(auth.currentUser.uid);
+    window._tcgRenderInventory?.();
+    const pack = TCG_PACKS.find(p => p.id === revealed.packId) || { id: revealed.packId, name: revealed.packName, image: revealed.packImage };
+    window._tcgOpeningBatchPackName = revealed.packName;
+    _tcgShowPackOpening(pack, revealed.cards, revealed.godPackTheme);
+};
+
+// Post-purchase prompt for a bulk buy — "Open 1 Pack" / "Open All N Packs" / dismiss to save for later.
+window._tcgShowBulkOpenPrompt = function(itemIds, pack) {
+    document.getElementById('tcg-pack-modal')?.remove();
+    window._tcgCurrentBulkItemIds = itemIds;
+    const modal = document.createElement('div');
+    modal.id = 'tcg-pack-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.93);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;';
+    modal.innerHTML = `
+        <img src="${pack.image}" style="height:200px;object-fit:contain;filter:drop-shadow(0 8px 32px rgba(0,0,0,0.5));margin-bottom:20px;" draggable="false">
+        <div style="font-size:24px;font-weight:900;color:white;margin-bottom:8px;">You got ${itemIds.length}× ${pack.name}!</div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:28px;max-width:400px;">Open them now, or save some for later — unopened packs go to your Inventory.</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+            <button onclick="window._tcgOpenOneFromBulk()" style="padding:12px 26px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:14px;cursor:pointer;">Open 1 Pack</button>
+            <button onclick="window._tcgOpenAllRemaining()" style="padding:12px 26px;border-radius:10px;border:none;background:rgba(255,255,255,0.14);color:white;font-weight:800;font-size:14px;cursor:pointer;">Open All ${itemIds.length} Packs</button>
+            <button onclick="document.getElementById('tcg-pack-modal').remove()" style="padding:12px 26px;border-radius:10px;border:none;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.5);font-weight:700;font-size:14px;cursor:pointer;">Save for Later</button>
+        </div>`;
+    document.body.appendChild(modal);
+};
+
+// Pops one item off the pending bulk batch and opens it via the single-pack flow.
+window._tcgOpenOneFromBulk = async function() {
+    const ids = window._tcgCurrentBulkItemIds || [];
+    if (!ids.length) return;
+    const [first, ...rest] = ids;
+    window._tcgCurrentBulkItemIds = rest;
+    await window._tcgOpenInventoryItem(first);
+};
+
+// Opens every item still pending in the current batch via the bulk grid-flip reveal.
+window._tcgOpenAllRemaining = async function() {
+    const ids = window._tcgCurrentBulkItemIds || [];
+    if (!ids.length) return;
+    window._tcgCurrentBulkItemIds = [];
+    await window._tcgShowBulkRevealAnimation(ids);
+};
+
+function _tcgRarityOrder(r) {
+    return ({ common: 0, rare: 1, sr: 2, ssr: 3, ur: 4, pr: 4 })[r] ?? 0;
+}
+
+// Bulk "open everything" flow — opens all given inventory items in one Cloud Function
+// call, then reveals every card from every pack in a single rarity-sorted grid that
+// flips top-to-bottom (lowest rarity first, biggest pulls land at the bottom).
+window._tcgShowBulkRevealAnimation = async function(itemIds) {
+    if (!itemIds?.length) return;
+    document.getElementById('tcg-pack-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'tcg-pack-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.93);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;';
+    modal.innerHTML = `
+        <div style="text-align:center;">
+            <div style="font-size:46px;margin-bottom:14px;animation:tcg-pulse 1s ease-in-out infinite;">🎁</div>
+            <div style="font-size:18px;font-weight:800;color:white;">Opening ${itemIds.length} packs...</div>
+        </div>`;
+    document.body.appendChild(modal);
+
+    let result;
+    try {
+        result = await _callFn('openInventoryItems', { itemIds });
+    } catch(e) {
+        document.getElementById('tcg-pack-modal')?.remove();
+        alert('Failed to open packs: ' + (e.details || e.message));
+        return;
+    }
+    window._tcgCollectionCache.delete(auth.currentUser.uid);
+    window._tcgRenderInventory?.();
+
+    const packs = result.packs || [];
+    const allCards = packs.flatMap(p => p.cards);
+    window._tcgOpeningCards = allCards;
+    window._tcgOpeningIsGodPack = false;
+    window._tcgOpeningPack = { name: packs[0]?.packName || 'Packs' };
+
+    _tcgRenderBulkGridReveal(allCards);
+};
+
+function _tcgRenderBulkGridReveal(cards) {
+    document.getElementById('tcg-pack-modal')?.remove();
+    const sorted = [...cards].sort((a, b) => _tcgRarityOrder(a.rarity) - _tcgRarityOrder(b.rarity));
+
+    const modal = document.createElement('div');
+    modal.id = 'tcg-pack-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.93);z-index:9999;overflow-y:auto;padding:32px 16px;';
+    modal.innerHTML = `
+        <div style="max-width:1100px;margin:0 auto;text-align:center;">
+            <div style="font-size:26px;font-weight:900;color:white;margin-bottom:6px;">Opening ${sorted.length} Cards...</div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.45);margin-bottom:28px;">Sit back — they'll reveal themselves</div>
+            <div id="tcg-bulk-grid" class="tcg-bulk-reveal-grid"></div>
+            <div id="tcg-bulk-summary" style="display:none;margin-top:28px;"></div>
+        </div>`;
+    document.body.appendChild(modal);
+
+    const grid = document.getElementById('tcg-bulk-grid');
+    sorted.forEach((card, i) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'tcg-flip-card tcg-bulk-flip-card';
+
+        const inner = document.createElement('div');
+        inner.className = 'tcg-flip-inner';
+        inner.id = `tcg-bulk-inner-${i}`;
+
+        const back = document.createElement('div');
+        back.className = 'tcg-flip-back';
+        back.style.cssText = 'overflow:hidden;';
+        back.innerHTML = `<img src="https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FCard%20Back.png?alt=media&token=a9d2788e-cf42-4403-b757-26b1aa9ad7da" style="width:100%;height:100%;object-fit:cover;" draggable="false">`;
+
+        const front = document.createElement('div');
+        front.className = 'tcg-flip-front';
+        front.innerHTML = `<div class="tcg-bulk-card-scale">${_tcgBuildCardFace(card)}</div>`;
+
+        inner.appendChild(back);
+        inner.appendChild(front);
+        wrap.appendChild(inner);
+        grid.appendChild(wrap);
+    });
+    _tcgObserveSSRCards(grid);
+
+    // Staggered top-to-bottom flip — lowest rarity first, biggest pull lands last.
+    sorted.forEach((_, i) => {
+        setTimeout(() => {
+            document.getElementById(`tcg-bulk-inner-${i}`)?.classList.add('flipped');
+            if (i === sorted.length - 1) setTimeout(() => _tcgShowBulkSummary(sorted), 700);
+        }, 220 * i + 400);
+    });
+}
+
+function _tcgShowBulkSummary(cards) {
+    const el = document.getElementById('tcg-bulk-summary');
+    if (!el) return;
+    const counts = {};
+    cards.forEach(c => { counts[c.rarity] = (counts[c.rarity] || 0) + 1; });
+    const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'Event' };
+    const order = ['pr', 'ur', 'ssr', 'sr', 'rare', 'common'];
+    const summaryHTML = order.filter(r => counts[r]).map(r => `<span style="margin:0 10px;font-weight:800;color:white;">${counts[r]}× ${label[r]}</span>`).join('');
+    el.style.display = 'block';
+    el.innerHTML = `
+        <div style="font-size:14px;margin-bottom:16px;">${summaryHTML}</div>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+            <button onclick="window._tcgOpenSharePackModal()" style="padding:10px 26px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-weight:700;font-size:14px;cursor:pointer;">Share What You Got</button>
+            <button onclick="document.getElementById('tcg-pack-modal').remove()" style="padding:10px 26px;border-radius:8px;border:none;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.5);font-weight:700;font-size:14px;cursor:pointer;">Close</button>
+        </div>`;
+}
 
 window._tcgSimulateGodPack = async function() {
     await _tcgEnsureCardPool();
@@ -11461,6 +11809,9 @@ window._tcgShowPackOpening = function(pack, cards, godPackTheme = null) {
             ${isMobile ? `<div id="tcg-pack-stack-counter" style="margin-top:16px;font-size:13px;color:rgba(255,255,255,0.6);font-weight:700;"></div>` : ''}
             <div style="margin-top:32px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
                 <button onclick="window._tcgRevealAll()" style="padding:10px 26px;border-radius:8px;border:none;background:${revealBtnBg};color:${revealBtnColor};font-weight:700;font-size:14px;cursor:pointer;${revealBtnBorder}">Reveal All</button>
+                ${(window._tcgCurrentBulkItemIds || []).length > 0 ? `
+                <button onclick="window._tcgOpenOneFromBulk()" style="padding:10px 26px;border-radius:8px;border:none;background:rgba(255,255,255,0.14);color:white;font-weight:700;font-size:14px;cursor:pointer;">Open Another?</button>
+                <button onclick="window._tcgOpenAllRemaining()" style="padding:10px 26px;border-radius:8px;border:none;background:rgba(255,255,255,0.14);color:white;font-weight:700;font-size:14px;cursor:pointer;">Open Remaining ${(window._tcgCurrentBulkItemIds || []).length}</button>` : ''}
                 <button onclick="window._tcgOpenSharePackModal()" style="padding:10px 26px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-weight:700;font-size:14px;cursor:pointer;">Share What You Got</button>
                 <button onclick="document.getElementById('tcg-pack-modal').remove()" style="padding:10px 26px;border-radius:8px;border:none;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.5);font-weight:700;font-size:14px;cursor:pointer;">Close</button>
             </div>`;
@@ -11933,7 +12284,7 @@ window._tcgLoadVersionsView = async function(el, name, anime, rarity) {
                 </div>
                 <div style="font-size:12px;color:var(--text-muted);margin-top:8px;">${claimedCount} / ${maxSerial} claimed</div>
             </div>
-            <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:14px 6px;">
+            <div class="tcg-versions-grid" style="display:grid;grid-template-columns:repeat(10,1fr);gap:14px 6px;">
                 ${gridHTML}
             </div>
         </div>`;
@@ -19484,6 +19835,13 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
         window._tcgRenderShowcaseCarousel();
         window._tcgRenderSearchRarityFilters();
         window._auctionProcessPendingDeliveries();
+        // Just refreshes the badge dot — the Inventory tab itself re-renders again on click.
+        if (auth.currentUser) {
+            getDocs(collection(db, 'inventory', auth.currentUser.uid, 'items')).then(snap => {
+                const badge = document.getElementById('tcg-inventory-badge');
+                if (badge) badge.style.display = snap.size ? 'block' : 'none';
+            }).catch(() => {});
+        }
     }
     if(targetId === 'news-view') {
         window._renderFullSchedule();

@@ -383,6 +383,9 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     .wheel-prizes-list { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
     .wheel-prizes-list > div { flex-direction: column !important; text-align: center !important; gap: 4px !important; padding: 10px 4px !important; }
     .wheel-prizes-list > div span[style*="margin-left:auto"] { margin-left: 0 !important; }
+
+    /* ── TCG card versions/owners grid — cap at 6 columns so avatars fit on screen ── */
+    .tcg-versions-grid { grid-template-columns: repeat(6, 1fr) !important; }
 }
 
 @media (max-width: 500px) {
@@ -2181,6 +2184,22 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     .tcg-card-scale { transform: scale(0.64); transform-origin: top left; }
     .tcg-card-caption { font-size: 9px !important; }
     .tcg-dismantle-btn { font-size: 9px !important; padding: 3px 6px !important; }
+}
+
+/* ── Bulk pack-opening reveal grid — "Open Remaining N" flow ────── */
+/* Fixed at 5 columns (not auto-fill) so each row lines up with one pack's 5 cards */
+.tcg-bulk-reveal-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    justify-items: center;
+}
+.tcg-bulk-flip-card { width: 170px; height: 238px; perspective: 900px; }
+.tcg-bulk-card-scale { width: 220px; height: 308px; transform: scale(0.773); transform-origin: top left; }
+@media (max-width: 860px) {
+    .tcg-bulk-reveal-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+    .tcg-bulk-flip-card { width: 140px !important; height: 196px !important; }
+    .tcg-bulk-card-scale { transform: scale(0.636) !important; }
 }
 
 .tcg-pack-card-sr {

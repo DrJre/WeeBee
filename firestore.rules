@@ -395,6 +395,17 @@ service cloud.firestore {
       allow delete: if isOwner(uid) || isAdmin();
     }
 
+    // ── TCG Inventory (unopened packs, future item types) ──────────────────
+    // Contents are rolled and frozen server-side by Cloud Functions
+    // (purchasePacks / adminGiftPack) at the moment an item is granted, and
+    // consumed server-side by openInventoryItems. No client write path exists
+    // at all — even admin gifts go through the Cloud Function — so an item's
+    // frozen rolledCards can never be tampered with from the client.
+    match /inventory/{uid}/items/{itemId} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+
     // ── Prize Wheel ────────────────────────────────────────────────────────
     // Admin-managed config: this month's UR card art/name + enabled toggle.
     match /wheel_config/{doc} {

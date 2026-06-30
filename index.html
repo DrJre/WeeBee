@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=118">
+    <link rel="stylesheet" href="styles.css?v=121">
 </head>
 <body>
     <div class="app-container">
@@ -162,8 +162,17 @@
                         </div>
                     </div>
 
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px; margin-bottom:16px;">
-                        <h2 style="margin:0;">Your Feed</h2>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+                        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                            <h2 style="margin:0;">Your Feed</h2>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span style="font-size:12px; font-weight:600; color:var(--text-muted);">Hide Game Posts</span>
+                                <label class="toggle-switch" style="transform:scale(0.75); transform-origin:left center;">
+                                    <input type="checkbox" id="hide-game-posts-toggle" onchange="window._toggleHideGamePosts()">
+                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                </label>
+                            </div>
+                        </div>
                         <button onclick="window.openCreatePost()" style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.35);border-radius:20px;color:rgba(99,102,241,1);font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(99,102,241,0.25)'" onmouseout="this.style.background='rgba(99,102,241,0.15)'">
                             <span class="material-symbols-outlined" style="font-size:16px;">edit_note</span> Create Post
                         </button>
@@ -911,6 +920,10 @@
                         <button class="detail-tab tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-collection')">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">collections_bookmark</span> Collection
                         </button>
+                        <button class="detail-tab tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-inventory')" style="position:relative;">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">inventory_2</span> Inventory
+                            <span id="tcg-inventory-badge" class="wheel-notif-dot" style="top:2px;right:-4px;"></span>
+                        </button>
                         <button class="detail-tab tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-trading')">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">swap_horiz</span> Trading
                         </button>
@@ -980,6 +993,11 @@
                     <!-- COLLECTION TAB -->
                     <div id="tcg-tab-collection" class="tcg-tab-content" style="display:none;">
                         <div id="tcg-collection"></div>
+                    </div>
+
+                    <!-- INVENTORY TAB -->
+                    <div id="tcg-tab-inventory" class="tcg-tab-content" style="display:none;">
+                        <div id="tcg-inventory"></div>
                     </div>
 
                     <!-- TRADING TAB -->
@@ -1427,6 +1445,29 @@
                                     <button onclick="window._tcgAdminSearchUsersForFounder()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
                                 </div>
                                 <div id="founder-gift-results" style="margin-top:10px;"></div>
+                            </div>
+
+                            <!-- Gift Pack(s) to Inventory -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🎒 Gift Pack(s)</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Sends pack(s) to a user's Inventory instead of Amber. Contents are rolled and frozen server-side the moment they're gifted, same as a real purchase.</div>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px;">
+                                    <select id="pack-gift-select" style="padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                        <option value="standard">Standard Pack</option>
+                                        <option value="premium">Premium Pack</option>
+                                        <option value="prismatic">2026 Prismatic Pack</option>
+                                    </select>
+                                    <select id="pack-gift-qty" style="padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                        <option value="1">1×</option>
+                                        <option value="5">5×</option>
+                                        <option value="10">10×</option>
+                                    </select>
+                                </div>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                                    <input type="text" id="pack-gift-search" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsersForPackGift();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                    <button onclick="window._tcgAdminSearchUsersForPackGift()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
+                                </div>
+                                <div id="pack-gift-results" style="margin-top:10px;"></div>
                             </div>
 
                             <!-- Prismatic 2026 Preview -->
@@ -2714,6 +2755,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=470"></script>
+    <script type="module" src="app.js?v=477"></script>
 </body>
 </html>
