@@ -4093,7 +4093,7 @@ window.loadProfileFeed = async function(uid) {
         bwSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'bw', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         triviaSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'trivia', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         mbSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'melobee', _ts: d.data().timestamp?.toMillis?.() || 0 }));
-        gpSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'general_post', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+        gpSnap.forEach(d => { const data = d.data(); items.push({ ...data, id: d.id, _type: data.packCards?.length ? 'pack_pull' : 'general_post', _ts: data.timestamp?.toMillis?.() || 0 }); });
         dungeonSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'dungeon', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         items.sort((a, b) => b._ts - a._ts);
         if (!items.length) {
@@ -4114,7 +4114,7 @@ window.loadProfileFeed = async function(uid) {
                 else if (item._type === 'bracket') html = window._renderBracketFeedCard(item);
                 else if (item._type === 'trivia') html = window.generateTriviaPostCardHTML(item);
                 else if (item._type === 'melobee') html = window.generateMeloBeePostCardHTML(item);
-                else if (item._type === 'general_post') html = window._renderGeneralPostCard(item, curUid);
+                else if (item._type === 'general_post' || item._type === 'pack_pull') html = window._renderGeneralPostCard(item, curUid);
                 else if (item._type === 'dungeon') html = window.generateDungeonPostCardHTML(item);
             } catch(e) { console.error('Profile feed render error:', item._type, e); }
             if (html) container.innerHTML += `<div>${html}</div>`;
@@ -5005,7 +5005,7 @@ function renderActivityBatch() {
             else if (item._type === 'trivia') html = window.generateTriviaPostCardHTML(item);
             else if (item._type === 'melobee') html = window.generateMeloBeePostCardHTML(item);
             else if (item._type === 'dungeon') html = window.generateDungeonPostCardHTML(item);
-            else if (item._type === 'general_post') html = window._renderGeneralPostCard(item, uid);
+            else if (item._type === 'general_post' || item._type === 'pack_pull') html = window._renderGeneralPostCard(item, uid);
             if (html) feed.innerHTML += `<div data-fid="${item.id}">${html}</div>`;
         } catch(e) { console.error('Feed render error:', item._type, e); }
     });
@@ -5027,14 +5027,38 @@ window._refreshHomeFeedItem = function(id) {
     if (html) el.innerHTML = html;
 };
 
-const GAME_POST_TYPES = ['bw', 'melobee', 'trivia'];
+const FEED_FILTER_TYPES = [
+    { type: 'review',       label: 'Reviews',     icon: '📝', group: 'Content' },
+    { type: 'tierlist',     label: 'Tier Lists',  icon: '📊', group: 'Content' },
+    { type: 'hot_take',     label: 'Hot Takes',   icon: '🔥', group: 'Content' },
+    { type: 'poll',         label: 'Polls',       icon: '📋', group: 'Content' },
+    { type: 'bracket',      label: 'Brackets',    icon: '🏆', group: 'Content' },
+    { type: 'general_post', label: 'Posts',       icon: '💬', group: 'Content' },
+    { type: 'pack_pull',    label: 'Pack Pulls',  icon: '🃏', group: 'Content' },
+    { type: 'bw',           label: 'BuzzWord',    icon: '🟣', group: 'Games' },
+    { type: 'melobee',      label: 'MeloBee',     icon: '🎵', group: 'Games' },
+    { type: 'trivia',       label: 'Trivia',      icon: '🧠', group: 'Games' },
+    { type: 'dungeon',      label: 'TCG Dungeon', icon: '⚔️', group: 'Games' },
+];
+
+function _updateFeedFilterBadge() {
+    const hidden = JSON.parse(localStorage.getItem('feedHiddenTypes') || '[]');
+    const badge = document.getElementById('feed-filter-badge');
+    if (!badge) return;
+    if (hidden.length > 0) {
+        badge.textContent = hidden.length;
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
 
 // Re-derives window._activityItems (the filtered, sorted list actually rendered)
 // from window._activityItemsAll (everything fetched) without hitting Firestore again.
 function _applyActivityFilter() {
     const all = window._activityItemsAll || [];
-    const hideGames = localStorage.getItem('hideGamePosts') === '1';
-    const filtered = hideGames ? all.filter(i => !GAME_POST_TYPES.includes(i._type)) : all;
+    const hidden = new Set(JSON.parse(localStorage.getItem('feedHiddenTypes') || '[]'));
+    const filtered = hidden.size ? all.filter(i => !hidden.has(i._type)) : all;
     const byTime = (a, b) => b._ts - a._ts;
     window._activityItems = [
         ...filtered.filter(i => i._social).sort(byTime),
@@ -5042,9 +5066,11 @@ function _applyActivityFilter() {
     ];
 }
 
-window._toggleHideGamePosts = function() {
-    const checked = document.getElementById('hide-game-posts-toggle')?.checked;
-    localStorage.setItem('hideGamePosts', checked ? '1' : '0');
+window._feedFilterToggle = function(type, show) {
+    const hidden = new Set(JSON.parse(localStorage.getItem('feedHiddenTypes') || '[]'));
+    if (show) hidden.delete(type); else hidden.add(type);
+    localStorage.setItem('feedHiddenTypes', JSON.stringify([...hidden]));
+    _updateFeedFilterBadge();
     if (!window._activityItemsAll) return;
     _applyActivityFilter();
     window._activityIndex = 0;
@@ -5053,12 +5079,62 @@ window._toggleHideGamePosts = function() {
     renderActivityBatch();
 };
 
+window._feedFilterSetAll = function(show) {
+    const hidden = show ? [] : FEED_FILTER_TYPES.map(t => t.type);
+    localStorage.setItem('feedHiddenTypes', JSON.stringify(hidden));
+    document.querySelectorAll('input[data-ftype]').forEach(cb => { cb.checked = show; });
+    _updateFeedFilterBadge();
+    if (!window._activityItemsAll) return;
+    _applyActivityFilter();
+    window._activityIndex = 0;
+    const feed = document.getElementById('home-activity-feed');
+    if (feed) feed.innerHTML = '';
+    renderActivityBatch();
+};
+
+window._openFeedFilterModal = function() {
+    document.querySelector('.feed-filter-overlay')?.remove();
+    const hidden = new Set(JSON.parse(localStorage.getItem('feedHiddenTypes') || '[]'));
+    const groups = [...new Set(FEED_FILTER_TYPES.map(t => t.group))];
+    const overlay = document.createElement('div');
+    overlay.className = 'feed-filter-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding-top:80px;';
+    overlay.innerHTML = `
+        <div style="background:var(--card-bg);border-radius:16px;padding:24px;width:min(400px,90vw);border:1px solid var(--border-color);box-shadow:0 8px 32px rgba(0,0,0,0.4);max-height:80vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                <h3 style="margin:0;font-size:18px;font-weight:700;">Feed Filters</h3>
+                <button onclick="document.querySelector('.feed-filter-overlay').remove()" style="background:none;border:none;color:var(--text-muted);font-size:24px;cursor:pointer;line-height:1;padding:4px 8px;">&times;</button>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:20px;">
+                <button onclick="window._feedFilterSetAll(true)" style="flex:1;padding:7px 12px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;color:rgba(99,102,241,1);font-size:13px;font-weight:600;cursor:pointer;">All On</button>
+                <button onclick="window._feedFilterSetAll(false)" style="flex:1;padding:7px 12px;background:rgba(255,255,255,0.05);border:1px solid var(--border-color);border-radius:8px;color:var(--text-muted);font-size:13px;font-weight:600;cursor:pointer;">All Off</button>
+            </div>
+            ${groups.map(group => `
+                <div style="margin-bottom:12px;">
+                    <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;padding-bottom:6px;border-bottom:1px solid var(--border-color);">${group}</div>
+                    ${FEED_FILTER_TYPES.filter(t => t.group === group).map(t => `
+                        <label style="display:flex;align-items:center;gap:10px;padding:10px 4px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);">
+                            <span style="font-size:18px;width:26px;text-align:center;">${t.icon}</span>
+                            <span style="flex:1;font-size:14px;font-weight:500;">${t.label}</span>
+                            <div class="toggle-switch" style="transform:scale(0.85);transform-origin:right center;flex-shrink:0;">
+                                <input type="checkbox" data-ftype="${t.type}" ${!hidden.has(t.type) ? 'checked' : ''} onchange="window._feedFilterToggle('${t.type}',this.checked)">
+                                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                            </div>
+                        </label>
+                    `).join('')}
+                </div>
+            `).join('')}
+        </div>
+    `;
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+};
+
 window.fetchHomeActivityFeed = async function() {
     const feed = document.getElementById('home-activity-feed');
     const sentinel = document.getElementById('home-activity-sentinel');
     if (!feed) return;
-    const toggle = document.getElementById('hide-game-posts-toggle');
-    if (toggle) toggle.checked = localStorage.getItem('hideGamePosts') === '1';
+    _updateFeedFilterBadge();
     feed.innerHTML = '<div class="loading">Loading your feed...</div>';
     if (sentinel) sentinel.style.display = 'none';
     window._activityItems = [];
@@ -5127,7 +5203,7 @@ window.fetchHomeActivityFeed = async function() {
         });
         gpSnap.forEach(d => {
             const data = d.data();
-            items.push({ ...data, id: d.id, _type: 'general_post', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) });
+            items.push({ ...data, id: d.id, _type: data.packCards?.length ? 'pack_pull' : 'general_post', _ts: data.timestamp?.toMillis?.() || 0, _social: socialUids.has(data.uid) });
         });
         const mbHomSnap = await getDocs(query(collection(db,'melobee_posts'), orderBy('timestamp','desc'), limit(30))).catch(()=>({forEach:()=>{}}));
         mbHomSnap.forEach(d => {
@@ -7154,8 +7230,10 @@ window._amberLoadWallet = async function() {
         // Top balances
         const profilesSnap = await getDocs(query(collection(db, 'profiles'), limit(100)));
         const users = [];
+        const uidToName = {};
         profilesSnap.forEach(d => {
             const p = d.data();
+            uidToName[d.id] = p.displayName || 'Unknown';
             if (p.amber) users.push({ uid: d.id, name: p.displayName || 'Unknown', amber: p.amber, streak: p.loginStreak || 0 });
         });
         users.sort((a, b) => b.amber - a.amber);
@@ -7181,11 +7259,19 @@ window._amberLoadWallet = async function() {
                     ${logs.length === 0 ? '<p style="color:var(--text-muted);">No transactions yet.</p>' :
                         logs.map(l => {
                             const ts = l.timestamp?.toDate ? l.timestamp.toDate().toLocaleString() : '';
+                            const name = uidToName[l.uid] || l.uid?.slice(0, 8) || '—';
+                            const amtColor = l.amount >= 0 ? '#f59e0b' : '#ef4444';
+                            const amtStr = (l.amount >= 0 ? '+' : '') + l.amount;
                             return `<div style="padding:6px 0; border-bottom:1px solid var(--border-color); font-size:12px;">
-                                <span style="color:#f59e0b; font-weight:700;">+${l.amount}</span>
-                                <span style="color:var(--text-muted); margin:0 6px;">·</span>
-                                <span>${l.reason}</span>
-                                <span style="color:var(--text-muted); float:right;">${ts}</span>
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <span style="color:${amtColor}; font-weight:700;">${amtStr}</span>
+                                    <span style="color:var(--text-muted);">·</span>
+                                    <span style="font-weight:600;">${name}</span>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; margin-top:2px; color:var(--text-muted);">
+                                    <span>${l.reason}</span>
+                                    <span>${ts}</span>
+                                </div>
                             </div>`;
                         }).join('')}
                 </div>
@@ -8291,7 +8377,14 @@ window.loadWheelTab = async function() {
     }
     el.innerHTML = `<div class="loading">Loading wheel...</div>`;
     const uid = auth.currentUser.uid;
-    const [config, state] = await Promise.all([_wheelLoadConfig(), _wheelLoadState(uid)]);
+    let config, state;
+    try {
+        [config, state] = await Promise.all([_wheelLoadConfig(), _wheelLoadState(uid)]);
+    } catch(e) {
+        console.error('Wheel load failed:', e);
+        el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">Failed to load wheel. Please refresh and try again.</div>`;
+        return;
+    }
     window._wheelState = state;
     window._wheelConfig = config;
     _wheelRender(el, config, state);
@@ -8401,7 +8494,7 @@ function _wheelRender(el, config, state) {
                 <div style="position:relative;z-index:1;">
                     <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
                     <div class="banner-hero-title" style="font-size:42px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🎡 Prize Wheel 🎡</div>
-                    <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-top:10px;">Spin once a day — every section is yours once, all month long</div>
+                    <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-top:10px;">Daily spins, daily prizes. Spin every single day this month and the monthly UR is guaranteed — the more days you miss, the worse your chances become.</div>
                     ${ur.image ? `<div style="margin-top:14px;font-size:12px;color:#f59e0b;font-weight:700;">🌟 This month's grand prize: ${ur.name} (${ur.anime})</div>` : ''}
                     <div style="display:inline-flex;align-items:center;gap:6px;margin-top:14px;padding:7px 16px;border-radius:20px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35);">
                         <span style="font-size:16px;">🔥</span>
@@ -11186,11 +11279,29 @@ window._tcgRenderStore = async function() {
             </div>
         </div>
         ${saleActive ? `<div style="background:linear-gradient(135deg,#dc2626,#f59e0b);color:white;border-radius:10px;padding:10px 16px;margin-bottom:18px;text-align:center;font-weight:800;font-size:14px;letter-spacing:0.5px;">🎉 FLASH SALE — Pack prices rolled back for 72 hours! 🎉</div>` : ''}
-        <div class="tcg-pack-grid" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
-            ${packCard(TCG_PACKS[0])}
-            ${packCard(TCG_PACKS[1])}
-            ${thirdSlotHtml}
+        <div style="position:relative;">
+            <div class="tcg-pack-grid" id="tcg-pack-carousel" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
+                ${packCard(TCG_PACKS[0])}
+                ${packCard(TCG_PACKS[1])}
+                ${thirdSlotHtml}
+            </div>
+            <button class="tcg-carousel-arrow tcg-carousel-prev" onclick="window._tcgCarouselPrev()">‹</button>
+            <button class="tcg-carousel-arrow tcg-carousel-next" onclick="window._tcgCarouselNext()">›</button>
+            <div class="tcg-carousel-dots">
+                <div class="tcg-carousel-dot active" onclick="window._tcgCarouselGo(0)"></div>
+                <div class="tcg-carousel-dot" onclick="window._tcgCarouselGo(1)"></div>
+                <div class="tcg-carousel-dot" onclick="window._tcgCarouselGo(2)"></div>
+            </div>
         </div>`;
+
+    // Wire up carousel dot updates when user swipes
+    const _carousel = document.getElementById('tcg-pack-carousel');
+    if (_carousel) {
+        _carousel.addEventListener('scroll', () => {
+            const idx = Math.round(_carousel.scrollLeft / (_carousel.offsetWidth || 1));
+            document.querySelectorAll('.tcg-carousel-dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+        }, { passive: true });
+    }
 
     if (window._prismaticCountdownInterval) { clearInterval(window._prismaticCountdownInterval); window._prismaticCountdownInterval = null; }
     if (prismaticActive) {
@@ -11205,6 +11316,19 @@ window._tcgRenderStore = async function() {
         tick();
         window._prismaticCountdownInterval = setInterval(tick, 1000);
     }
+};
+
+window._tcgCarouselPrev = function() {
+    const el = document.getElementById('tcg-pack-carousel');
+    if (el) el.scrollBy({ left: -el.offsetWidth, behavior: 'smooth' });
+};
+window._tcgCarouselNext = function() {
+    const el = document.getElementById('tcg-pack-carousel');
+    if (el) el.scrollBy({ left: el.offsetWidth, behavior: 'smooth' });
+};
+window._tcgCarouselGo = function(idx) {
+    const el = document.getElementById('tcg-pack-carousel');
+    if (el) el.scrollTo({ left: idx * el.offsetWidth, behavior: 'smooth' });
 };
 
 window._tcgSetPackQty = function(packId, qty) {
@@ -11433,7 +11557,7 @@ window._tcgBuyPacks = async function(packId, quantity) {
     const itemIds = result.itemIds || [];
     if (itemIds.length <= 1) {
         window._tcgCurrentBulkItemIds = [];
-        await window._tcgOpenInventoryItem(itemIds[0]);
+        window._tcgShowSingleOpenPrompt(itemIds[0], pack);
     } else {
         window._tcgShowBulkOpenPrompt(itemIds, pack);
     }
@@ -11482,6 +11606,24 @@ window._tcgShowBulkOpenPrompt = function(itemIds, pack) {
         <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
             <button onclick="window._tcgOpenOneFromBulk()" style="padding:12px 26px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:14px;cursor:pointer;">Open 1 Pack</button>
             <button onclick="window._tcgOpenAllRemaining()" style="padding:12px 26px;border-radius:10px;border:none;background:rgba(255,255,255,0.14);color:white;font-weight:800;font-size:14px;cursor:pointer;">Open All ${itemIds.length} Packs</button>
+            <button onclick="document.getElementById('tcg-pack-modal').remove()" style="padding:12px 26px;border-radius:10px;border:none;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.5);font-weight:700;font-size:14px;cursor:pointer;">Save for Later</button>
+        </div>`;
+    document.body.appendChild(modal);
+};
+
+// Post-purchase prompt for a single pack buy — "Open Pack" / "Save for Later".
+window._tcgShowSingleOpenPrompt = function(itemId, pack) {
+    document.getElementById('tcg-pack-modal')?.remove();
+    window._tcgCurrentBulkItemIds = [];
+    const modal = document.createElement('div');
+    modal.id = 'tcg-pack-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.93);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;';
+    modal.innerHTML = `
+        <img src="${pack.image}" style="height:200px;object-fit:contain;filter:drop-shadow(0 8px 32px rgba(0,0,0,0.5));margin-bottom:20px;" draggable="false">
+        <div style="font-size:24px;font-weight:900;color:white;margin-bottom:8px;">${pack.name} purchased!</div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:28px;max-width:400px;">Open it now, or save it for later — it'll be waiting in your Inventory.</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+            <button onclick="window._tcgOpenInventoryItem('${itemId}')" style="padding:12px 26px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:14px;cursor:pointer;">Open Pack</button>
             <button onclick="document.getElementById('tcg-pack-modal').remove()" style="padding:12px 26px;border-radius:10px;border:none;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.5);font-weight:700;font-size:14px;cursor:pointer;">Save for Later</button>
         </div>`;
     document.body.appendChild(modal);
@@ -11711,23 +11853,22 @@ function _tcgShowPackSliceIntro(pack, onDone) {
     overlay.id = 'tcg-pack-slice-intro';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.96);z-index:10001;overflow:hidden;';
 
-    // Pack is 300×400px centered. Gap at 17% = 68px from pack top.
-    // Pack top-left: 50vw-150px, 50vh-200px. Gap y: 50vh-132px.
-    // Card backs (88×123px) start with bottom edge at gap: top = 50vh-132px-123px = 50vh-255px
-    // In overlay-absolute terms: calc(50% - 255px) from top, calc(50% - 44px) from left.
+    // Pack is 300×400px, shifted 80px below center so cards have headroom above.
+    // Pack top: 50vh - 120px. Gap at 17% = 68px from pack top → gap y: 50vh - 52px.
+    // Card backs (88×123px) bottom edge at gap: top = 50vh - 52px - 123px = 50vh - 175px.
     const cardFanX = [-108, -54, 0, 54, 108];
-    const cardFanY = [-195, -215, -225, -215, -195];
+    const cardFanY = [-140, -158, -168, -158, -140];  // reduced so cards stay on screen
     const cardFanR = [-14, -6, 0, 6, 14];
 
     const cardBackImg = 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FCard%20Back.png?alt=media&token=a9d2788e-cf42-4403-b757-26b1aa9ad7da';
     const cardBacksHtml = cardFanX.map((_, i) => `
-        <div class="psi-card" style="position:absolute;left:calc(50% - 44px);top:calc(50% - 255px);width:88px;height:123px;border-radius:7px;overflow:hidden;opacity:0;transform:translateX(0) translateY(0) rotate(0deg);z-index:10003;box-shadow:0 8px 24px rgba(0,0,0,0.7);pointer-events:none;will-change:transform,opacity;">
+        <div class="psi-card" style="position:absolute;left:calc(50% - 44px);top:calc(50% - 175px);width:88px;height:123px;border-radius:7px;overflow:hidden;opacity:0;transform:translateX(0) translateY(0) rotate(0deg);z-index:10003;box-shadow:0 8px 24px rgba(0,0,0,0.7);pointer-events:none;will-change:transform,opacity;">
             <img src="${cardBackImg}" style="width:100%;height:100%;object-fit:cover;" draggable="false">
         </div>`).join('');
 
     overlay.innerHTML = `
         ${cardBacksHtml}
-        <div id="psi-wrap" style="position:absolute;left:calc(50% - 150px);top:calc(50% - 200px);width:300px;height:400px;transform:scale(0) rotate(-4deg);transition:transform 0.45s cubic-bezier(0.22,1,0.36,1);z-index:10002;">
+        <div id="psi-wrap" style="position:absolute;left:calc(50% - 150px);top:calc(50% - 120px);width:300px;height:400px;transform:scale(0) rotate(-4deg);transition:transform 0.45s cubic-bezier(0.22,1,0.36,1);z-index:10002;">
             <img id="psi-top" src="${pack.image}" draggable="false"
                 style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;clip-path:inset(0 0 83% 0);transform-origin:center top;transition:transform 0.45s cubic-bezier(0.4,0,0.2,1);pointer-events:none;">
             <img id="psi-bot" src="${pack.image}" draggable="false"
@@ -11756,6 +11897,7 @@ function _tcgShowPackSliceIntro(pack, onDone) {
     }, 980);
 
     // Phase 4: cards shoot up from the gap one by one
+    // Last card finishes animating at ~1980ms + 520ms = ~2500ms
     cardEls.forEach((el, i) => {
         setTimeout(() => {
             el.style.transition = 'transform 0.52s cubic-bezier(0.22,1,0.36,1), opacity 0.28s ease';
@@ -11764,12 +11906,53 @@ function _tcgShowPackSliceIntro(pack, onDone) {
         }, 1380 + i * 150);
     });
 
-    // Phase 5: fade overlay → fire card reveal
+    // Phase 5: cards move into their final formation (200ms after fan settles)
+    // Desktop → spread into the side-by-side row; Mobile → collapse into the stack.
+    // scale(2.5) makes the 88px card backs appear as full 220px cards so the
+    // cross-fade into the modal is visually seamless.
     setTimeout(() => {
-        overlay.style.transition = 'opacity 0.22s ease';
-        overlay.style.opacity = '0';
-        setTimeout(() => { overlay.remove(); onDone(); }, 230);
-    }, 2550);
+        const vw = window.innerWidth;
+        const isMobileAnim = vw <= 768;
+        const n = cardEls.length;
+        const SCALE = 2.5; // 88 × 2.5 = 220px — matches full card width
+
+        if (isMobileAnim) {
+            // Stack formation: converge to center with the same peek offsets
+            // _tcgUpdateStackPositions uses (d*7px, d*9px, d*1.5deg, scale*0.96^d)
+            const ty = 99; // shifts center from 50vh-113.5px → 50vh-14.5px ≈ modal card row
+            cardEls.forEach((el, i) => {
+                // cardEls[4] is on top by DOM order — override z-index so cardEls[0]
+                // becomes the front card, matching the modal's stack direction.
+                el.style.zIndex = String(10003 + (n - 1 - i));
+                el.style.transition = 'transform 0.62s cubic-bezier(0.22,1,0.36,1), opacity 0.3s ease';
+                el.style.transform = `translateX(${i * 7}px) translateY(${ty + i * 9}px) scale(${SCALE * (1 - Math.min(i, 4) * 0.04)}) rotate(${i * 1.5}deg)`;
+            });
+        } else {
+            // Row formation: spread horizontally to match the modal flex row.
+            // Spacing capped so all 5 cards fit any viewport width.
+            const ty = 114; // shifts center from 50vh-113.5px → 50vh+0.5px ≈ modal card row
+            const usable = vw - 48;
+            const spacing = Math.min(236, (usable - 220) / Math.max(n - 1, 1));
+            cardEls.forEach((el, i) => {
+                const tx = (i - (n - 1) / 2) * spacing;
+                el.style.transition = 'transform 0.62s cubic-bezier(0.22,1,0.36,1), opacity 0.3s ease';
+                el.style.transform = `translateX(${tx}px) translateY(${ty}px) scale(${SCALE}) rotate(0deg)`;
+            });
+        }
+    }, 2700);
+
+    // Phase 6: build modal first (it hides behind the overlay), then dissolve overlay.
+    // Prevents the flash: previously the overlay faded to 0 while the modal was still
+    // at opacity:0, briefly exposing the store page. Now the modal is fully opaque
+    // behind the overlay before the overlay starts fading.
+    setTimeout(() => {
+        onDone(); // modal renders immediately at opacity:1 behind the overlay
+        setTimeout(() => {
+            overlay.style.transition = 'opacity 0.45s ease';
+            overlay.style.opacity = '0';
+            setTimeout(() => overlay.remove(), 470);
+        }, 80); // brief delay for modal DOM to settle before dissolve starts
+    }, 3400);
 }
 
 window._tcgShowPackOpening = function(pack, cards, godPackTheme = null) {
@@ -11855,7 +12038,33 @@ window._tcgShowPackOpening = function(pack, cards, godPackTheme = null) {
             row.appendChild(wrap);
         });
 
-        if (isMobile) _tcgUpdateStackPositions();
+        // ── Entrance animation ────────────────────────────────────────────
+        // The intro overlay has already animated the cards into formation
+        // positions (scaled to full card size). The modal cross-fades in on
+        // top — cards just fade from opacity:0 to opacity:1 at their natural
+        // positions so there's no jump between the two layers.
+        const flipCards = row.querySelectorAll('.tcg-flip-card');
+        row.style.pointerEvents = 'none'; // block taps until cards are settled
+
+        // Modal is already opacity:1 — it was built behind the overlay and revealed when
+        // the overlay dissolved. Just stagger the cards in so they match the overlay cards'
+        // final positions seamlessly.
+        let savedOpacities = [];
+        if (isMobile) {
+            _tcgUpdateStackPositions();
+            savedOpacities = [...flipCards].map(el => el.style.opacity);
+        }
+        flipCards.forEach(el => { el.style.transition = 'none'; el.style.opacity = '0'; });
+
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            flipCards.forEach((el, i) => {
+                setTimeout(() => {
+                    el.style.transition = 'opacity 0.35s ease';
+                    el.style.opacity = isMobile ? (savedOpacities[i] ?? '1') : '1';
+                }, i * 50);
+            });
+            setTimeout(() => { row.style.pointerEvents = ''; }, flipCards.length * 50 + 380);
+        }));
     };
 
     if (isGodPack) _tcgShowGodPackIntro(build, godPackTheme);
@@ -12875,7 +13084,7 @@ window._tcgSmartDismantleModal = async function(uid) {
             </div>
 
             <!-- Filters -->
-            <div style="padding:18px 20px;border-bottom:1px solid var(--border-color);flex-shrink:0;display:flex;flex-direction:column;gap:16px;">
+            <div id="sd-filters" style="padding:18px 20px;border-bottom:1px solid var(--border-color);flex-shrink:0;display:flex;flex-direction:column;gap:16px;">
 
                 <!-- Rarities -->
                 <div>
@@ -13298,7 +13507,7 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
                 }).join('')}
                 <button id="tcg-dupes-toggle" onclick="window._tcgShowDupes=!window._tcgShowDupes;window._tcgRefreshCollectionGrid('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${window._tcgShowDupes?'var(--accent-yellow)':'var(--border-color)'};background:${window._tcgShowDupes?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${window._tcgShowDupes?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">🔁 Dupes</button>
             </div>
-            <div style="display:flex;gap:8px;align-items:center;">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 <select onchange="window._tcgSetCardSort(this.value,'${uid}','${filter}')" style="padding:6px 10px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;">
                     <option value="rarity" ${sort==='rarity'?'selected':''}>Sort: Rarity</option>
                     <option value="name-az" ${sort==='name-az'?'selected':''}>Sort: Name (A–Z)</option>
@@ -13880,7 +14089,13 @@ window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
             <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Select cards from your collection to offer, and cards from theirs to request. You can also include Amber on either side.</p>
             <div style="display:flex;flex-wrap:wrap;gap:24px;">
                 <div style="flex:1;min-width:340px;">
-                    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">You Give</div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                        <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">You Give</div>
+                        <div style="display:flex;gap:4px;">
+                            <button id="tcg-give-cards-btn" onclick="window._tcgTradeToggleOfferMode('cards')" style="padding:3px 10px;border-radius:12px;border:1px solid var(--accent-yellow);background:rgba(245,158,11,0.12);color:#f59e0b;font-size:11px;font-weight:700;cursor:pointer;">Cards</button>
+                            <button id="tcg-give-packs-btn" onclick="window._tcgTradeToggleOfferMode('packs')" style="padding:3px 10px;border-radius:12px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;">Packs</button>
+                        </div>
+                    </div>
                     <div id="tcg-trade-mine-wrap"><div style="padding:20px;color:var(--text-muted);">Loading…</div></div>
                     <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">🟡 Amber to give (you have ${myAmber.toLocaleString()})</label>
                     <input type="number" id="tcg-trade-amber-give" min="0" step="1" value="${seedMyAmber}" oninput="window._tcgUpdateTradeSummary()" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
@@ -13899,15 +14114,18 @@ window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
         </div>`;
     document.body.appendChild(modal);
 
-    window._tcgTradePickerState = { myIds: new Set(opts.seedMyIds||[]), theirIds: new Set(opts.seedTheirIds||[]), mineFilter: 'all', mineSort: 'rarity', mineSearch: '', theirsFilter: 'all', theirsSort: 'rarity', theirsSearch: '' };
+    window._tcgTradePickerState = { myIds: new Set(opts.seedMyIds||[]), theirIds: new Set(opts.seedTheirIds||[]), mineFilter: 'all', mineSort: 'rarity', mineSearch: '', theirsFilter: 'all', theirsSort: 'rarity', theirsSearch: '', myOfferMode: 'cards', myPackIds: new Set() };
     window._tcgTradeMyAmber = myAmber;
 
-    let myCards = [], theirCards = [];
+    let myCards = [], theirCards = [], myInventory = [];
     try {
-        [myCards, theirCards] = await Promise.all([_tcgLoadCollection(myUid, true), _tcgLoadCollection(otherUid, true)]);
+        [[myCards, theirCards], myInventory] = await Promise.all([
+            Promise.all([_tcgLoadCollection(myUid, true), _tcgLoadCollection(otherUid, true)]),
+            getDocs(collection(db, 'inventory', myUid, 'items')).then(snap => { const items = []; snap.forEach(d => items.push({ id: d.id, ...d.data() })); return items; }).catch(() => [])
+        ]);
     } catch(e) {}
 
-    window._tcgTradeContext = { myUid, otherUid, myCards, theirCards };
+    window._tcgTradeContext = { myUid, otherUid, myCards, theirCards, myInventory };
     _tcgRenderTradeSide('mine');
     _tcgRenderTradeSide('theirs');
     window._tcgUpdateTradeSummary();
@@ -13920,9 +14138,11 @@ window._tcgUpdateTradeSummary = function() {
     const get = parseInt(document.getElementById('tcg-trade-amber-get')?.value, 10) || 0;
     const summary = document.getElementById('tcg-trade-summary');
     if (summary) {
+        const givePacks = (state.myPackIds || new Set()).size;
         const givePart = give > 0 ? ` + 🟡 ${give.toLocaleString()}` : '';
+        const givePackPart = givePacks > 0 ? ` + ${givePacks} pack(s)` : '';
         const getPart = get > 0 ? ` + 🟡 ${get.toLocaleString()}` : '';
-        summary.textContent = `You give ${state.myIds.size} card(s)${givePart} · You get ${state.theirIds.size} card(s)${getPart}`;
+        summary.textContent = `You give ${state.myIds.size} card(s)${givePackPart}${givePart} · You get ${state.theirIds.size} card(s)${getPart}`;
     }
 };
 
@@ -13963,7 +14183,51 @@ function _tcgTradeGridHTML(side) {
     return cards.length ? (filtered.length ? filtered.map(c => _tcgPickerCardHTML(c, selectedIds.has(c.id))).join('') : `<p style="color:var(--text-muted);">No cards match this search/filter.</p>`) : `<p style="color:var(--text-muted);">${noCardsMsg}</p>`;
 }
 
+window._tcgTradeToggleOfferMode = function(mode) {
+    const state = window._tcgTradePickerState;
+    if (!state) return;
+    state.myOfferMode = mode;
+    const cardsBtn = document.getElementById('tcg-give-cards-btn');
+    const packsBtn = document.getElementById('tcg-give-packs-btn');
+    if (cardsBtn && packsBtn) {
+        const base = 'padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;cursor:pointer;';
+        cardsBtn.style.cssText = base + (mode === 'cards' ? 'border:1px solid var(--accent-yellow);background:rgba(245,158,11,0.12);color:#f59e0b;' : 'border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);');
+        packsBtn.style.cssText = base + (mode === 'packs' ? 'border:1px solid var(--accent-yellow);background:rgba(245,158,11,0.12);color:#f59e0b;' : 'border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);');
+    }
+    _tcgRenderTradeSide('mine');
+    window._tcgUpdateTradeSummary();
+};
+
+window._tcgTradeTogglePack = function(itemId) {
+    const state = window._tcgTradePickerState;
+    if (!state) return;
+    if (state.myPackIds.has(itemId)) state.myPackIds.delete(itemId);
+    else state.myPackIds.add(itemId);
+    _tcgRenderTradeSide('mine');
+    window._tcgUpdateTradeSummary();
+};
+
+function _tcgTradePackGridSideHTML() {
+    const ctx = window._tcgTradeContext;
+    const state = window._tcgTradePickerState;
+    const packs = ctx.myInventory || [];
+    if (!packs.length) return '<div style="padding:20px;color:var(--text-muted);font-size:13px;">No packs in your Inventory.</div>';
+    return `<div style="display:flex;flex-wrap:wrap;gap:10px;max-height:420px;overflow-y:auto;margin-bottom:10px;">${
+        packs.map(item => {
+            const sel = state.myPackIds.has(item.id);
+            return `<div onclick="window._tcgTradeTogglePack('${item.id}')" style="cursor:pointer;border-radius:10px;border:2px solid ${sel ? '#f59e0b' : 'var(--border-color)'};padding:8px;background:${sel ? 'rgba(245,158,11,0.1)' : 'var(--bg-gray)'};display:flex;flex-direction:column;align-items:center;gap:6px;width:90px;">
+                <img src="${item.packImage || ''}" style="height:80px;object-fit:contain;" draggable="false">
+                <div style="font-size:10px;font-weight:700;text-align:center;color:var(--text-dark);line-height:1.3;">${item.packName || 'Pack'}</div>
+                ${sel ? '<div style="font-size:9px;color:#f59e0b;font-weight:800;">✓ Selected</div>' : ''}
+            </div>`;
+        }).join('')
+    }</div>`;
+}
+
 function _tcgTradeSideHTML(side) {
+    if (side === 'mine' && window._tcgTradePickerState?.myOfferMode === 'packs') {
+        return _tcgTradePackGridSideHTML();
+    }
     const ctx = window._tcgTradeContext;
     const state = window._tcgTradePickerState;
     const cards = side === 'mine' ? ctx.myCards : ctx.theirCards;
@@ -14048,10 +14312,12 @@ window._tcgOpenTradeConfirm = function(otherUid, existingTradeId, otherName) {
     const offerAmber = Math.max(0, /* no cap — Math.min(1000, */ parseInt(document.getElementById('tcg-trade-amber-give')?.value, 10) || 0 /* ) */);
     const requestAmber = Math.max(0, /* no cap — Math.min(1000, */ parseInt(document.getElementById('tcg-trade-amber-get')?.value, 10) || 0 /* ) */);
 
-    if (state.myIds.size === 0 && state.theirIds.size === 0 && offerAmber === 0 && requestAmber === 0) { alert('Select at least one card or amount of Amber on either side.'); return; }
+    const myPackIds = state.myPackIds || new Set();
+    if (state.myIds.size === 0 && myPackIds.size === 0 && state.theirIds.size === 0 && offerAmber === 0 && requestAmber === 0) { alert('Select at least one card or amount of Amber on either side.'); return; }
     if (offerAmber > (window._tcgTradeMyAmber || 0)) { alert(`You only have 🟡 ${(window._tcgTradeMyAmber||0).toLocaleString()} Amber.`); return; }
 
     const giveCards = ctx.myCards.filter(c => state.myIds.has(c.id));
+    const givePacks = (ctx.myInventory || []).filter(p => myPackIds.has(p.id));
     const getCards = ctx.theirCards.filter(c => state.theirIds.has(c.id));
 
     document.getElementById('tcg-trade-confirm-modal')?.remove();
@@ -14060,12 +14326,13 @@ window._tcgOpenTradeConfirm = function(otherUid, existingTradeId, otherName) {
     modal.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
 
-    const sideHTML = (title, cards, amber) => `
+    const sideHTML = (title, cards, packs, amber) => `
         <div style="flex:1;min-width:260px;">
             <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">${title}</div>
             ${cards.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">${cards.map(c => _tcgConfirmCardThumbHTML(c)).join('')}</div>` : ''}
+            ${packs.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">${packs.map(p => `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><img src="${p.packImage||''}" style="height:80px;object-fit:contain;"><div style="font-size:10px;font-weight:700;color:var(--text-dark);">${p.packName||'Pack'}</div></div>`).join('')}</div>` : ''}
             ${amber > 0 ? `<div style="font-size:14px;font-weight:800;color:var(--text-dark);">🟡 ${amber.toLocaleString()} Amber</div>` : ''}
-            ${cards.length === 0 && amber === 0 ? `<div style="font-size:13px;color:var(--text-muted);">Nothing</div>` : ''}
+            ${cards.length === 0 && packs.length === 0 && amber === 0 ? `<div style="font-size:13px;color:var(--text-muted);">Nothing</div>` : ''}
         </div>`;
 
     modal.innerHTML = `
@@ -14076,8 +14343,8 @@ window._tcgOpenTradeConfirm = function(otherUid, existingTradeId, otherName) {
             </div>
             <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Double check the details below before sending.</p>
             <div style="display:flex;flex-wrap:wrap;gap:24px;">
-                ${sideHTML('You Give', giveCards, offerAmber)}
-                ${sideHTML('You Get', getCards, requestAmber)}
+                ${sideHTML('You Give', giveCards, givePacks, offerAmber)}
+                ${sideHTML('You Get', getCards, [], requestAmber)}
             </div>
             <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border-color);">
                 <button onclick="document.getElementById('tcg-trade-confirm-modal').remove()" style="padding:10px 22px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-weight:800;font-size:13px;cursor:pointer;">Back</button>
@@ -14140,7 +14407,8 @@ window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, other
     const offerAmber = Math.max(0, /* no cap — Math.min(1000, */ parseInt(document.getElementById('tcg-trade-amber-give')?.value, 10) || 0 /* ) */);
     const requestAmber = Math.max(0, /* no cap — Math.min(1000, */ parseInt(document.getElementById('tcg-trade-amber-get')?.value, 10) || 0 /* ) */);
 
-    if (state.myIds.size === 0 && state.theirIds.size === 0 && offerAmber === 0 && requestAmber === 0) { alert('Select at least one card or amount of Amber on either side.'); return; }
+    const submitMyPackIds = state.myPackIds || new Set();
+    if (state.myIds.size === 0 && submitMyPackIds.size === 0 && state.theirIds.size === 0 && offerAmber === 0 && requestAmber === 0) { alert('Select at least one card or amount of Amber on either side.'); return; }
     if (offerAmber > (window._tcgTradeMyAmber || 0)) { alert(`You only have 🟡 ${(window._tcgTradeMyAmber||0).toLocaleString()} Amber.`); return; }
 
     const myUid = ctx.myUid;
@@ -14148,6 +14416,8 @@ window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, other
     const requestCards = ctx.theirCards.filter(c => state.theirIds.has(c.id)).map(({id, ...rest}) => rest);
     const offerCardIds = [...state.myIds];
     const requestCardIds = [...state.theirIds];
+    const offerPacks = (ctx.myInventory || []).filter(p => submitMyPackIds.has(p.id)).map(({ id, ...rest }) => ({ ...rest, itemId: id }));
+    const offerPackIds = [...submitMyPackIds];
 
     let myName = auth.currentUser.displayName || 'A user', myAvatar = '';
     try {
@@ -14194,6 +14464,7 @@ window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, other
                 fromUid: myUid, fromName: myName, fromAvatar: myAvatar,
                 toUid: otherUid, toName: otherName, toAvatar: '',
                 offerCardIds, requestCardIds, offerCards, requestCards, offerAmber, requestAmber,
+                offerPacks, offerPackIds,
                 status: 'pending', fromCompleted: false, toCompleted: false,
                 history: arrayUnion(prevRound), updatedAt: new Date()
             });
@@ -14208,6 +14479,7 @@ window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, other
                 fromUid: myUid, fromName: myName, fromAvatar: myAvatar,
                 toUid: otherUid, toName: otherName, toAvatar: '',
                 offerCardIds, requestCardIds, offerCards, requestCards, offerAmber, requestAmber,
+                offerPacks, offerPackIds,
                 status: 'pending', fromCompleted: false, toCompleted: false,
                 history: [], createdAt: new Date(), updatedAt: new Date()
             });
@@ -14287,6 +14559,8 @@ window._tcgOpenTradeReview = async function(tradeId) {
         }
     }
 
+    const renderPackRow = (packs) => (packs||[]).length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">${packs.map(p => `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:5px;border-radius:8px;border:1px solid var(--border-color);"><img src="${p.packImage||''}" style="height:70px;object-fit:contain;"><div style="font-size:10px;font-weight:700;color:var(--text-dark);">${p.packName||'Pack'}</div></div>`).join('')}</div>` : '';
+
     body.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
             <div style="font-size:17px;font-weight:800;color:var(--text-dark);">Trade with ${otherName}</div>
@@ -14297,6 +14571,7 @@ window._tcgOpenTradeReview = async function(tradeId) {
             <div style="flex:1;min-width:280px;">
                 <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">${isRecipient ? 'They Give You' : 'You Give'}</div>
                 ${renderCardRow(t.offerCards)}
+                ${renderPackRow(t.offerPacks)}
                 ${t.offerAmber ? `<div style="margin-top:8px;font-size:13px;font-weight:800;color:#f59e0b;">🟡 ${t.offerAmber.toLocaleString()} Amber</div>` : ''}
             </div>
             <div style="flex:1;min-width:280px;">
@@ -25372,9 +25647,15 @@ window._dungeonStartRaid = async function() {
     try {
         await setDoc(doc(db, 'raid_state', uid), state);
 
-        // Send these cards "resting" for the next gate in the pool.
+        // Send these cards "resting" for the next gate in the pool —
+        // but only if the rest period would expire before the pool ends.
+        // At gate 4 (poolIndex=3), fatigue would be 5 which never clears
+        // within the 5-gate pool, locking cards out of the final gate.
+        const restUntil = progress.poolIndex + 2;
         const fatigue = { ...(progress.fatigue || {}) };
-        for (const c of cards) fatigue[c.id] = progress.poolIndex + 2;
+        if (restUntil < 5) {
+            for (const c of cards) fatigue[c.id] = restUntil;
+        }
         window._dungeonProgress = { ...progress, fatigue };
         await _dungeonSaveProgress(uid, window._dungeonProgress);
     } catch(e) { return alert('Failed to start raid: ' + e.message); }

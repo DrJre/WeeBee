@@ -74,6 +74,15 @@ exports.settleTrade = onRequest({ invoker: 'public' }, async (req, res) => {
                 if (!tp.exists || (tp.data().amber || 0) < requestAmber) { userError = [400, 'FAILED_PRECONDITION', 'You no longer have enough Amber for this trade.']; return; }
             }
 
+            // Verify and transfer offered packs (fromUid → toUid)
+            const offerPackIds = t.offerPackIds || [];
+            const offerPacks = t.offerPacks || [];
+            const fromPackRefs = offerPackIds.map(id =>
+                db.collection('inventory').doc(t.fromUid).collection('items').doc(id));
+            const fromPackSnaps = [];
+            for (const r of fromPackRefs) fromPackSnaps.push(await tx.get(r));
+            if (fromPackSnaps.some(s => !s.exists)) { userError = [400, 'FAILED_PRECONDITION', 'The offerer no longer has all their offered packs.']; return; }
+
             fromCardRefs.forEach(ref => tx.delete(ref));
             for (const card of (t.requestCards || [])) {
                 if (!card || typeof card !== 'object') continue;
@@ -88,6 +97,14 @@ exports.settleTrade = onRequest({ invoker: 'public' }, async (req, res) => {
                 const { monthlyUr, id: _id, ...rest } = card;
                 tx.set(db.collection('card_collections').doc(t.toUid).collection('cards').doc(),
                     monthlyUr ? { ...rest, tradedMonthlyUr: true } : rest);
+            }
+
+            // Transfer packs: delete from fromUid, create for toUid
+            fromPackRefs.forEach(ref => tx.delete(ref));
+            for (const pack of offerPacks) {
+                if (!pack || typeof pack !== 'object') continue;
+                const { itemId: _itemId, ...rest } = pack;
+                tx.set(db.collection('inventory').doc(t.toUid).collection('items').doc(), rest);
             }
 
             const net = offerAmber - requestAmber;

@@ -421,10 +421,11 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid);
       // Admin can freely update any wheel_state (for testing tools).
-      // Owner updates: either just toggling pendingUrClaim (UR gate flag),
-      // or a regular spin update where sections/month are unchanged,
-      // usedIndices grows by at most 1, and lastSpinDate never goes back.
+      // Owner updates: month rollover (client resets doc when month changes),
+      // pendingUrClaim toggle (UR gate flag), or regular spin update where
+      // sections/month are unchanged and usedIndices grows by at most 1.
       allow update: if isAdmin() || (isOwner(uid) && (
+        request.resource.data.month != resource.data.month ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingUrClaim']) ||
         (
           request.resource.data.sections == resource.data.sections &&

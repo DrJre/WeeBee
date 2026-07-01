@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=121">
+    <link rel="stylesheet" href="styles.css?v=125">
 </head>
 <body>
     <div class="app-container">
@@ -165,13 +165,11 @@
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
                         <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
                             <h2 style="margin:0;">Your Feed</h2>
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <span style="font-size:12px; font-weight:600; color:var(--text-muted);">Hide Game Posts</span>
-                                <label class="toggle-switch" style="transform:scale(0.75); transform-origin:left center;">
-                                    <input type="checkbox" id="hide-game-posts-toggle" onchange="window._toggleHideGamePosts()">
-                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                                </label>
-                            </div>
+                            <button id="feed-filter-btn" onclick="window._openFeedFilterModal()" style="display:flex;align-items:center;gap:5px;padding:5px 12px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:20px;color:var(--text-color);font-size:13px;font-weight:600;cursor:pointer;position:relative;" title="Filter feed" onmouseover="this.style.background='var(--border-color)'" onmouseout="this.style.background='var(--card-bg)'">
+                                <span class="material-symbols-outlined" style="font-size:16px;">tune</span>
+                                Filter
+                                <span id="feed-filter-badge" style="display:none;position:absolute;top:-6px;right:-6px;background:#f59e0b;color:#000;font-size:10px;font-weight:700;min-width:17px;height:17px;border-radius:9px;align-items:center;justify-content:center;padding:0 3px;"></span>
+                            </button>
                         </div>
                         <button onclick="window.openCreatePost()" style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.35);border-radius:20px;color:rgba(99,102,241,1);font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(99,102,241,0.25)'" onmouseout="this.style.background='rgba(99,102,241,0.15)'">
                             <span class="material-symbols-outlined" style="font-size:16px;">edit_note</span> Create Post
@@ -2755,6 +2753,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=478"></script>
+    <script type="module" src="app.js?v=489"></script>
 </body>
 </html>

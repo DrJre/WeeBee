@@ -384,8 +384,8 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     .wheel-prizes-list > div { flex-direction: column !important; text-align: center !important; gap: 4px !important; padding: 10px 4px !important; }
     .wheel-prizes-list > div span[style*="margin-left:auto"] { margin-left: 0 !important; }
 
-    /* ── TCG card versions/owners grid — cap at 6 columns so avatars fit on screen ── */
-    .tcg-versions-grid { grid-template-columns: repeat(6, 1fr) !important; }
+    /* ── TCG card versions/owners grid — 5 columns on mobile so avatars fit ── */
+    .tcg-versions-grid { grid-template-columns: repeat(5, 1fr) !important; }
 }
 
 @media (max-width: 500px) {
@@ -2163,17 +2163,60 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     opacity: 0;
 }
 
-/* ── TCG pack store — 2-column grid on narrow phones ──────────── */
+/* ── TCG pack store — horizontal swipe carousel on mobile ───────── */
+.tcg-carousel-arrow {
+    display: none;
+    position: absolute;
+    top: 40%;
+    transform: translateY(-50%);
+    background: rgba(0,0,0,0.45);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 2;
+    align-items: center;
+    justify-content: center;
+}
+.tcg-carousel-prev { left: 4px; }
+.tcg-carousel-next { right: 4px; }
+.tcg-carousel-dots { display: none; justify-content: center; gap: 6px; margin-top: 12px; }
+.tcg-carousel-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-color); opacity: 0.5; cursor: pointer; transition: opacity 0.2s, background 0.2s; }
+.tcg-carousel-dot.active { opacity: 1; background: #f59e0b; }
+
 @media (max-width: 860px) {
-    .tcg-pack-grid { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
-    .tcg-pack-card { width: 100% !important; }
-    .tcg-pack-card .wb-card {
-        width: 100% !important; height: auto !important; aspect-ratio: 220 / 240;
-        padding: 12px !important;
+    .tcg-pack-grid {
+        display: flex !important;
+        overflow-x: auto !important;
+        scroll-snap-type: x mandatory !important;
+        -ms-overflow-style: none !important;
+        scrollbar-width: none !important;
+        gap: 0 !important;
+        flex-wrap: nowrap !important;
+        justify-content: flex-start !important;
     }
-    .tcg-pack-card .wb-card > div:first-child { font-size: 38px !important; }
-    .tcg-pack-card .wb-card > div:nth-child(2) { font-size: 14px !important; }
-    .tcg-pack-card .wb-card > div:nth-child(3) { font-size: 11px !important; }
+    .tcg-pack-grid::-webkit-scrollbar { display: none; }
+    .tcg-pack-card {
+        min-width: 100% !important;
+        width: 100% !important;
+        scroll-snap-align: center !important;
+        scroll-snap-stop: always !important;
+        flex-shrink: 0 !important;
+        box-sizing: border-box !important;
+    }
+    .tcg-pack-card img { height: 340px !important; }
+    .tcg-carousel-arrow { display: flex !important; }
+    .tcg-carousel-dots { display: flex !important; }
+}
+
+/* ── Smart Select modal — scrollable filters on small phones ────── */
+@media (max-width: 640px) {
+    #sd-filters { max-height: 45vh; overflow-y: auto !important; }
+    #smart-dismantle-modal > div { max-height: 93vh !important; }
 }
 
 /* ── TCG card grids — 2-column shrunk layout on narrow phones ──── */
