@@ -2094,7 +2094,7 @@ window.getScoreTier = function(score) {
 window.scoreBadgeHTML = function(score, size, extraStyle) {
     const s = parseFloat(score);
     const px = size || 64;
-    if (!isNaN(s) && s >= 1 && s < 10) {
+    if (!isNaN(s) && s >= 1 && s <= 10) {
         const key = Math.round(s * 10) / 10;
         const filename = key % 1 === 0 ? String(Math.floor(key)) : key.toFixed(1);
         return `<img src="/assets/${filename}.png" style="width:${px}px;height:${px}px;object-fit:contain;${extraStyle || ''}" alt="${score}" draggable="false">`;
