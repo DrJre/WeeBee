@@ -2101,6 +2101,17 @@ window.getScoreTier = function(score) {
     if(s >= 7.0) return 'tier-silver'; if(s >= 6.0) return 'tier-bronze'; if(s >= 5.0) return 'tier-iron'; return 'tier-stone';
 };
 
+window.malBadgeHTML = function(score, size, extraStyle) {
+    const s = parseFloat(score);
+    const px = size || 48;
+    if (!isNaN(s) && s >= 6 && s <= 10) {
+        const key = Math.round(s * 10) / 10;
+        const filename = key % 1 === 0 ? String(Math.floor(key)) : key.toFixed(1);
+        return `<img src="/assets/mal badges/${filename}.png" style="width:${px}px;height:${px}px;object-fit:contain;${extraStyle || ''}" alt="${score}" draggable="false">`;
+    }
+    return `<div class="rating-badge blue" style="width:${px}px;height:${px}px;">${score}</div>`;
+};
+
 window.scoreBadgeHTML = function(score, size, extraStyle) {
     const s = parseFloat(score);
     const px = size || 64;
@@ -3272,7 +3283,7 @@ window.submitInlineComment = async function(reviewId, btn) {
 
 window.generateReviewCardHTML = function(rev, isGlobal = false) {
     if(isGlobal) { 
-        return `<div class="review-card"><div class="review-header"><img src="${rev.user.images.jpg.image_url}" class="avatar"><div><strong>${rev.user.username}</strong> <span class="source-badge badge-global">Global</span></div></div><div class="rating-badge blue">${rev.score}</div><p class="review-text" style="-webkit-line-clamp: 3; line-clamp: 3; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;">${rev.review}</p></div>`; 
+        return `<div class="review-card"><div class="review-header"><img src="${rev.user.images.jpg.image_url}" class="avatar"><div><strong>${rev.user.username}</strong> <span class="source-badge badge-global">Global</span></div></div>${window.malBadgeHTML(rev.score, 40)}<p class="review-text" style="-webkit-line-clamp: 3; line-clamp: 3; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;">${rev.review}</p></div>`; 
     }
     
     let innerContent = '';
@@ -19761,7 +19772,7 @@ window.fetchDiscoverPage = async function() {
                                 ${window.scoreBadgeHTML(podium[1].avgScore, 44)}
                                 <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">WeeBee</span>
                             </div>
-                            ${malScoreMap[podium[1].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div class="rating-badge blue" style="width:30px;height:30px;font-size:10px;">${malScoreMap[podium[1].mal_id]}</div><span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
+                            ${malScoreMap[podium[1].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">${window.malBadgeHTML(malScoreMap[podium[1].mal_id], 30)}<span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
                         </div>
                         <div class="podium-step step-2">2</div>
                     </div>`;
@@ -19780,7 +19791,7 @@ window.fetchDiscoverPage = async function() {
                                 ${window.scoreBadgeHTML(podium[0].avgScore, 56)}
                                 <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">WeeBee</span>
                             </div>
-                            ${malScoreMap[podium[0].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div class="rating-badge blue" style="width:36px;height:36px;font-size:12px;">${malScoreMap[podium[0].mal_id]}</div><span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
+                            ${malScoreMap[podium[0].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">${window.malBadgeHTML(malScoreMap[podium[0].mal_id], 36)}<span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
                         </div>
                         <div class="podium-step step-1">1</div>
                     </div>`;
@@ -19801,7 +19812,7 @@ window.fetchDiscoverPage = async function() {
                                 ${window.scoreBadgeHTML(podium[2].avgScore, 44)}
                                 <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">WeeBee</span>
                             </div>
-                            ${malScoreMap[podium[2].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div class="rating-badge blue" style="width:30px;height:30px;font-size:10px;">${malScoreMap[podium[2].mal_id]}</div><span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
+                            ${malScoreMap[podium[2].mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">${window.malBadgeHTML(malScoreMap[podium[2].mal_id], 30)}<span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;">MAL</span></div>` : ''}
                         </div>
                         <div class="podium-step step-3">3</div>
                     </div>`;
@@ -19835,7 +19846,7 @@ window.fetchDiscoverPage = async function() {
                                     ${window.scoreBadgeHTML(anime.avgScore, 50)}
                                     <span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">WeeBee</span>
                                 </div>
-                                ${malScoreMap[anime.mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="rating-badge blue top10-mal-badge" style="width:48px;height:48px;font-size:13px;">${malScoreMap[anime.mal_id]}</div><span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">MAL</span></div>` : ''}
+                                ${malScoreMap[anime.mal_id] ? `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${window.malBadgeHTML(malScoreMap[anime.mal_id], 48)}<span style="font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">MAL</span></div>` : ''}
                             </div>
                         </div>
                     `;
@@ -20099,7 +20110,7 @@ window.searchAnime = async function(queryStr) {
                         </div>
                         <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
                             <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
-                                <div class="rating-badge blue" style="width:40px; height:40px; font-size:14px;">${anime.score || 'N/A'}</div>
+                                ${window.malBadgeHTML(anime.score, 40)}
                                 <span style="font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">MAL</span>
                             </div>
                             <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
