@@ -415,6 +415,16 @@ window._amberSubscribeTopbar = function() {
         // separate getDoc race.
         const nameEl = document.getElementById('topbar-user-name');
         if (nameEl) nameEl.textContent = data.displayName || 'WeeBee User';
+        // Keep rank badge in sync — onSnapshot fires from cache then again from
+        // the server, so this corrects any stale-cache Newcomer flash that
+        // updateTopbarRank() may have rendered before the server responded.
+        const reviewCount = data.reviewCount || 0;
+        if (reviewCount !== window.myReviewCount || !document.getElementById('topbar-rank-badge')?.innerHTML) {
+            window.myReviewCount = reviewCount;
+            window.userRankCache[auth.currentUser.uid] = reviewCount;
+            const rankEl = document.getElementById('topbar-rank-badge');
+            if (rankEl) rankEl.innerHTML = window.getRankBadgeHTML(reviewCount, 16);
+        }
         window._renderHomeWelcomeStrip?.();
     });
 };
@@ -558,6 +568,7 @@ async function _awardLoginBonus() {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
     const today = bwGetDate();
+    const yesterday = bwGetYesterday(); // capture before any await — midnight crossing would give wrong value after
     const storageKey = `weebee_amber_login_${today}`;
     if (localStorage.getItem(storageKey)) return;
     try {
@@ -566,7 +577,6 @@ async function _awardLoginBonus() {
         const lastDate = p.lastLoginDate || null;
         if (lastDate === today) { localStorage.setItem(storageKey, '1'); return; }
         const streak = p.loginStreak || 0;
-        const yesterday = bwGetYesterday();
         const newStreak = lastDate === yesterday ? streak + 1 : 1;
         const bonus = 100 + Math.min((newStreak - 1) * 5, 100);
         await setDoc(doc(db, 'profiles', uid), { loginStreak: newStreak, lastLoginDate: today }, { merge: true });
@@ -7219,6 +7229,11 @@ const TCG_FOUNDER_CARDS = [
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FUR%2FURGOHAN2-ezgif.com-crop.gif?alt=media&token=4c57b457-a91e-4dc8-af24-1eef3f09dca6',
         founder: true,
     },
+    {
+        id: 'hak', name: 'Hak', anime: 'Yona of the Dawn', rarity: 'ur',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FYona%20of%20the%20Dawn%2FUR%2FHak.gif?alt=media&token=722fd585-e981-42d9-a259-6b2ce940d343',
+        founder: true,
+    },
 ];
 
 window._amberLoadWallet = async function() {
@@ -12440,7 +12455,60 @@ window._tcgLoadVersionsView = async function(el, name, anime, rarity) {
             sampleCard = _tcgFullCardPool().find(c => c.name === name && c.anime === anime && c.rarity === rarity) || null;
         }
 
-        // Batch-fetch profiles for all unique owners
+        // Event (PR) cards — no serial limit, no serial numbers; show all collectors in pull order
+        if (rarity === 'pr') {
+            const eventOwners = [];
+            snap.forEach(d => {
+                const data = d.data();
+                if (data.monthlyUr || data.tradedMonthlyUr || data.founder) return;
+                const uid = d.ref.parent.parent.id;
+                eventOwners.push({ uid, pulledAt: data.pulledAt?.toMillis?.() || 0 });
+            });
+            eventOwners.sort((a, b) => a.pulledAt - b.pulledAt);
+
+            const eventUids = [...new Set(eventOwners.map(o => o.uid))];
+            const eventProfileMap = {};
+            await Promise.all(eventUids.map(async uid => {
+                try {
+                    const pd = await getDoc(doc(db, 'profiles', uid));
+                    eventProfileMap[uid] = pd.exists() ? pd.data() : {};
+                } catch(e) { eventProfileMap[uid] = {}; }
+            }));
+
+            const eventGridHTML = eventOwners.map(({ uid }) => {
+                const p = eventProfileMap[uid] || {};
+                const displayName = p.displayName || 'Unknown';
+                const avatar = p.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
+                return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;" onclick="viewUserProfile('${uid}')">
+                    <img src="${avatar}" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid ${rarityColor};" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333'">
+                    <div style="font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px;text-align:center;">${displayName}</div>
+                </div>`;
+            }).join('');
+
+            el.innerHTML = `
+            <div style="padding:24px 16px;max-width:960px;margin:0 auto;">
+                <button onclick="switchView('tcg-view')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:24px;">← TCG Store</button>
+                ${sampleCard ? `
+                <div style="display:flex;justify-content:center;margin-bottom:28px;">
+                    <div style="width:297px;height:416px;display:flex;align-items:flex-start;justify-content:center;">
+                        <div style="transform:scale(1.35);transform-origin:top center;">${_tcgBuildCardFace(sampleCard)}</div>
+                    </div>
+                </div>` : ''}
+                <div style="text-align:center;margin-bottom:24px;">
+                    <div style="font-size:22px;font-weight:900;">${name}</div>
+                    <div style="font-size:13px;color:var(--text-muted);margin-top:2px;">${anime}</div>
+                    <div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:4px 12px;border-radius:20px;border:1px solid ${rarityColor};background:rgba(0,0,0,0.1);">
+                        <span style="font-size:12px;font-weight:800;color:${rarityColor};">${rarityLabel}</span>
+                    </div>
+                    ${eventOwners.length ? `<div style="font-size:12px;color:var(--text-muted);margin-top:8px;">${eventOwners.length} collector${eventOwners.length !== 1 ? 's' : ''}</div>` : '<div style="font-size:12px;color:var(--text-muted);margin-top:8px;">No collectors yet</div>'}
+                </div>
+                ${eventOwners.length ? `<div class="tcg-versions-grid" style="display:grid;grid-template-columns:repeat(10,1fr);gap:14px 6px;">${eventGridHTML}</div>` : ''}
+            </div>`;
+            _tcgObserveSSRCards(el);
+            return;
+        }
+
+        // Batch-fetch profiles for all unique owners (serialized cards)
         const uids = [...new Set(Object.values(ownerMap))];
         const profileMap = {};
         await Promise.all(uids.map(async uid => {
@@ -12583,6 +12651,7 @@ const TCG_DISMANTLE_RATES = { common: 5, rare: 20, sr: 100, ssr: 400, ur: 1500, 
 window._tcgDismantling = false;
 window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
     if (!auth.currentUser || window._tcgDismantling) return;
+    if (rarity === 'pr') { alert(`Event cards cannot be dismantled — they're limited to the event period and won't be re-released.`); return; }
     if (window._tcgFavoriteIds?.has(cardId)) { alert(`"${name}" is favorited. Unfavorite it first to dismantle.`); return; }
     const amount = TCG_DISMANTLE_RATES[rarity] || 0;
     const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'Event' }[rarity] || rarity;
@@ -23403,9 +23472,12 @@ function bwGetDate() {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
-// Returns yesterday's date in America/New_York (for streak comparisons)
+// Returns yesterday's date in America/New_York (for streak comparisons).
+// Uses calendar arithmetic on today's Eastern date string so DST transitions
+// (where a day is 23 or 25 hours) never produce the wrong date.
 function bwGetYesterday() {
-    return new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const [y, m, d] = bwGetDate().split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
 }
 
 // Resolves a saved guesses array back into character objects.
@@ -24930,7 +25002,7 @@ window.goToMeloBeeTab = function() {
 const DUNGEON_DIFFICULTY_CONFIG = {
     easy:   { id:'easy',   label:'Easy',   icon:'🟢', diffMult:0.65, rewardMult:0.8,  desc:'Relaxed gates — great for collecting daily amber with any deck.' },
     medium: { id:'medium', label:'Medium', icon:'🟡', diffMult:1.0,  rewardMult:1.0,  desc:'Standard challenge — the original dungeon experience.' },
-    hard:   { id:'hard',   label:'Hard',   icon:'🔴', diffMult:1.3,  rewardMult:1.5,  desc:'Gates hit harder. Bring your strongest URs and plan your party.' },
+    hard:   { id:'hard',   label:'Hard',   icon:'🔴', diffMult:1.45, rewardMult:1.65, desc:'Gates hit significantly harder. Only the strongest parties survive — but the amber payout is worth it.' },
 };
 
 const DUNGEON_GATES = {
