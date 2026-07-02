@@ -3,11 +3,12 @@ require('dotenv').config();
 const {
   Client, GatewayIntentBits, REST, Routes,
   SlashCommandBuilder, ButtonBuilder, ButtonStyle,
-  ActionRowBuilder, EmbedBuilder, ComponentType,
+  ActionRowBuilder, EmbedBuilder, ComponentType, AttachmentBuilder,
 } = require('discord.js');
 
 const { initializeApp, cert } = require('firebase-admin/app');
-const { getFirestore, Timestamp }  = require('firebase-admin/firestore');
+const { getFirestore, Timestamp } = require('firebase-admin/firestore');
+const { createCanvas, loadImage } = require('canvas');
 
 // ── Firebase ──────────────────────────────────────────────────────────────────
 const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
@@ -22,19 +23,151 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CHANNEL_ID        = process.env.DISCORD_CHANNEL_ID;
-const DROP_INTERVAL_MS  = 5 * 60 * 1000;        // drop every 5 minutes
-const CLAIM_WINDOW_MS   = 15 * 1000;            // 15-second claim window
-const SR_COOLDOWN_MS    = 60 * 60 * 1000;       // 1 hour after winning SR
-const SSR_COOLDOWN_MS   = 3 * 60 * 60 * 1000;  // 3 hours after winning SSR
-const SSR_BLACKOUT_MS   = 44 * 60 * 60 * 1000; // SSR locked for 44h after each drop
-const SSR_ACTIVE_CHANCE = 0.01;                 // 1% per roll once blackout lifts
+const DROP_INTERVAL_MS  = 5 * 60 * 1000;
+const CLAIM_WINDOW_MS   = 15 * 1000;
+const SR_COOLDOWN_MS    = 60 * 60 * 1000;
+const SSR_COOLDOWN_MS   = 3 * 60 * 60 * 1000;
+const SSR_BLACKOUT_MS   = 44 * 60 * 60 * 1000;
+const SSR_ACTIVE_CHANCE = 0.01;
 
 const RARITY_CONFIG = {
-  common: { label: 'Common', emoji: '⬜', color: 0x9e9e9e },
-  rare:   { label: 'Rare',   emoji: '🔵', color: 0x2196f3 },
-  sr:     { label: 'SR',     emoji: '⭐', color: 0xffc107 },
-  ssr:    { label: 'SSR',    emoji: '💜', color: 0x9c27b0 },
+  common: { label: 'Common', emoji: '⬜', color: 0x9e9e9e, hex: '#9e9e9e', glow: 0  },
+  rare:   { label: 'Rare',   emoji: '🔵', color: 0x2196f3, hex: '#2196f3', glow: 8  },
+  sr:     { label: 'SR',     emoji: '⭐', color: 0xffc107, hex: '#ffc107', glow: 16 },
+  ssr:    { label: 'SSR',    emoji: '💜', color: 0x9c27b0, hex: '#9c27b0', glow: 22 },
 };
+
+// ── Card renderer ─────────────────────────────────────────────────────────────
+function roundedRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function fitText(ctx, text, maxWidth) {
+  let t = text;
+  while (ctx.measureText(t).width > maxWidth && t.length > 4) {
+    t = t.slice(0, -4) + '...';
+  }
+  return t;
+}
+
+async function renderCardImage(card, rarity) {
+  const cfg    = RARITY_CONFIG[rarity] || RARITY_CONFIG.common;
+  const W      = 360;
+  const H      = 500;
+  const BORDER = 5;
+  const RADIUS = 14;
+  const ART_H  = 330;
+
+  const canvas = createCanvas(W, H);
+  const ctx    = canvas.getContext('2d');
+
+  // Outer glow for SR/SSR
+  if (cfg.glow > 0) {
+    ctx.shadowColor = cfg.hex;
+    ctx.shadowBlur  = cfg.glow;
+  }
+  ctx.fillStyle = cfg.hex;
+  roundedRect(ctx, 0, 0, W, H, RADIUS);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Clip entire card
+  ctx.save();
+  roundedRect(ctx, 0, 0, W, H, RADIUS);
+  ctx.clip();
+
+  // Dark background
+  ctx.fillStyle = '#111111';
+  ctx.fillRect(0, 0, W, H);
+
+  // Card art — cover-fit inside art area
+  try {
+    const img = await loadImage(card.image);
+    ctx.save();
+    ctx.rect(BORDER, BORDER, W - BORDER * 2, ART_H - BORDER);
+    ctx.clip();
+    const areaW = W - BORDER * 2;
+    const areaH = ART_H - BORDER;
+    const imgR  = img.width / img.height;
+    const areaR = areaW / areaH;
+    let dw, dh, dx, dy;
+    if (imgR > areaR) {
+      dh = areaH; dw = dh * imgR;
+      dx = BORDER + (areaW - dw) / 2; dy = BORDER;
+    } else {
+      dw = areaW; dh = dw / imgR;
+      dx = BORDER; dy = BORDER + (areaH - dh) / 2;
+    }
+    ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.restore();
+  } catch {
+    ctx.fillStyle = cfg.hex + '33';
+    ctx.fillRect(BORDER, BORDER, W - BORDER * 2, ART_H - BORDER);
+  }
+
+  // Name plate gradient
+  const grad = ctx.createLinearGradient(0, ART_H - 40, 0, H);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(0.3, 'rgba(10,10,10,0.97)');
+  grad.addColorStop(1, 'rgba(15,15,15,1)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, ART_H - 40, W, H - ART_H + 40);
+
+  // Rarity color accent line
+  ctx.fillStyle = cfg.hex;
+  ctx.fillRect(0, ART_H, W, 3);
+
+  // Card name
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 22px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(fitText(ctx, card.name, W - 110), 14, ART_H + 34);
+
+  // Anime name
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = '14px sans-serif';
+  ctx.fillText(fitText(ctx, card.anime, W - 28), 14, ART_H + 56);
+
+  // Rarity badge (pill, top-right of name plate)
+  const badgeLabel = cfg.label;
+  ctx.font = 'bold 12px sans-serif';
+  const badgeW = ctx.measureText(badgeLabel).width + 18;
+  const badgeH = 24;
+  const badgeX = W - badgeW - 12;
+  const badgeY = ART_H + 10;
+  ctx.fillStyle = cfg.hex;
+  roundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 6);
+  ctx.fill();
+  ctx.fillStyle = rarity === 'sr' ? '#000000' : '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.fillText(badgeLabel, badgeX + badgeW / 2, badgeY + 16);
+
+  // WeeBee watermark bottom right
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('WeeBee TCG', W - 14, H - 14);
+
+  // Rarity border stroke on top of everything
+  ctx.strokeStyle = cfg.hex;
+  ctx.lineWidth = BORDER;
+  roundedRect(ctx, BORDER / 2, BORDER / 2, W - BORDER, H - BORDER, RADIUS - BORDER / 2);
+  ctx.stroke();
+
+  ctx.restore();
+
+  return canvas.toBuffer('image/png');
+}
 
 // ── Rarity roll ───────────────────────────────────────────────────────────────
 async function rollRarity() {
@@ -46,9 +179,9 @@ async function rollRarity() {
   }
 
   const r = Math.random();
-  if (r < 0.05)  return 'sr';    // 5%
-  if (r < 0.368) return 'rare';  // 31.8%
-  return 'common';               // 63.2%
+  if (r < 0.05)  return 'sr';
+  if (r < 0.368) return 'rare';
+  return 'common';
 }
 
 // ── Card selection ────────────────────────────────────────────────────────────
@@ -59,7 +192,7 @@ async function pickCard(rarity) {
   return { id: doc.id, ...doc.data() };
 }
 
-// ── Serial assignment (atomic counter per card) ───────────────────────────────
+// ── Serial assignment ─────────────────────────────────────────────────────────
 async function getNextSerial(name, anime) {
   const key = `${name}__${anime}`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
   const ref = db.doc(`discord_serials/${key}`);
@@ -71,7 +204,7 @@ async function getNextSerial(name, anime) {
   });
 }
 
-// ── Cooldown + link check ─────────────────────────────────────────────────────
+// ── Eligibility check ─────────────────────────────────────────────────────────
 async function checkEligibility(discordId, rarity) {
   const linkDoc = await db.doc(`discord_links/${discordId}`).get();
   if (!linkDoc.exists) return { eligible: false, reason: 'not_linked' };
@@ -102,14 +235,14 @@ async function dropCard() {
 
     const cfg = RARITY_CONFIG[rarity];
 
+    // Render card image
+    const cardBuffer = await renderCardImage(card, rarity);
+    const attachment = new AttachmentBuilder(cardBuffer, { name: 'card.png' });
+
     const embed = new EmbedBuilder()
       .setTitle(`${cfg.emoji}  Card Drop — ${cfg.label}`)
-      .setDescription(
-        `**${card.name}**\n*${card.anime}*\n\n` +
-        `Click **Claim** to enter the draw!\n` +
-        `Winner picked in 15 seconds.`
-      )
-      .setImage(card.image)
+      .setDescription(`Click **Claim** to enter the draw!\nWinner picked in 15 seconds.`)
+      .setImage('attachment://card.png')
       .setColor(cfg.color)
       .setFooter({ text: 'WeeBee TCG  •  Link your account at weebee-fbbd8.web.app' });
 
@@ -120,10 +253,11 @@ async function dropCard() {
 
     const message = await channel.send({
       embeds: [embed],
+      files: [attachment],
       components: [new ActionRowBuilder().addComponents(claimBtn)],
     });
 
-    const claimants = new Map(); // discordId → username
+    const claimants = new Map();
 
     const collector = message.createMessageComponentCollector({
       componentType: ComponentType.Button,
@@ -142,7 +276,6 @@ async function dropCard() {
     });
 
     collector.on('end', async () => {
-      // Disable button
       await message.edit({
         components: [new ActionRowBuilder().addComponents(
           ButtonBuilder.from(claimBtn).setDisabled(true)
@@ -153,7 +286,6 @@ async function dropCard() {
         return channel.send('No one claimed the card — it vanished! 💨');
       }
 
-      // Filter to eligible claimants
       const eligible = [];
       for (const [discordId] of claimants) {
         const check = await checkEligibility(discordId, rarity);
@@ -170,7 +302,6 @@ async function dropCard() {
       const winner = eligible[Math.floor(Math.random() * eligible.length)];
       const serial = await getNextSerial(card.name, card.anime);
 
-      // Write card to winner's WeeBee collection
       await db.collection('card_collections').doc(winner.uid).collection('cards').add({
         name:       card.name,
         anime:      card.anime,
@@ -181,7 +312,6 @@ async function dropCard() {
         claimedAt:  Timestamp.now(),
       });
 
-      // Update winner cooldowns
       const cooldownUpdate = {};
       if (rarity === 'sr')  cooldownUpdate.lastSRWin  = Timestamp.now();
       if (rarity === 'ssr') cooldownUpdate.lastSSRWin = Timestamp.now();
@@ -189,7 +319,6 @@ async function dropCard() {
         await db.doc(`discord_links/${winner.discordId}`).update(cooldownUpdate);
       }
 
-      // Record SSR drop time for blackout tracking
       if (rarity === 'ssr') {
         await db.doc('discord_bot_state/drops').set(
           { lastSSRDropTime: Timestamp.now() },
@@ -198,9 +327,9 @@ async function dropCard() {
       }
 
       const msg =
-        rarity === 'ssr' ? `🎊 **SSR DROP!** <@${winner.discordId}> claimed **${card.name}** (SSR)! Added to their WeeBee collection.` :
-        rarity === 'sr'  ? `⭐ <@${winner.discordId}> claimed **${card.name}** (SR)! Added to their WeeBee collection.` :
-                           `🎉 <@${winner.discordId}> claimed **${card.name}**! Added to their WeeBee collection.`;
+        rarity === 'ssr' ? `🎊 **SSR DROP!** <@${winner.discordId}> claimed **${card.name}** (SSR · #${String(serial).padStart(3,'0')})! Added to their WeeBee collection.` :
+        rarity === 'sr'  ? `⭐ <@${winner.discordId}> claimed **${card.name}** (SR · #${String(serial).padStart(3,'0')})! Added to their WeeBee collection.` :
+                           `🎉 <@${winner.discordId}> claimed **${card.name}** (#${String(serial).padStart(3,'0')})! Added to their WeeBee collection.`;
 
       await channel.send(msg);
     });
@@ -274,7 +403,6 @@ client.once('ready', async () => {
   });
   console.log('[bot] Slash commands registered');
 
-  // First drop 1 minute after startup, then every 5 minutes
   setTimeout(dropCard, 60 * 1000);
   setInterval(dropCard, DROP_INTERVAL_MS);
 });
