@@ -136,7 +136,7 @@ async function renderCardImage(card, rarity) {
   // Anime name
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.font = '14px sans-serif';
-  ctx.fillText(fitText(ctx, card.anime, W - 28), 14, ART_H + 56);
+  ctx.fillText(fitText(ctx, card.series || card.anime || '', W - 28), 14, ART_H + 56);
 
   // Rarity badge (pill, top-right of name plate)
   const badgeLabel = cfg.label;
@@ -276,62 +276,68 @@ async function dropCard() {
     });
 
     collector.on('end', async () => {
-      await message.edit({
-        components: [new ActionRowBuilder().addComponents(
-          ButtonBuilder.from(claimBtn).setDisabled(true)
-        )],
-      }).catch(() => {});
+      try {
+        await message.edit({
+          components: [new ActionRowBuilder().addComponents(
+            ButtonBuilder.from(claimBtn).setDisabled(true)
+          )],
+        }).catch(() => {});
 
-      if (claimants.size === 0) {
-        return channel.send('No one claimed the card — it vanished! 💨');
+        if (claimants.size === 0) {
+          return channel.send('No one claimed the card — it vanished! 💨');
+        }
+
+        const eligible = [];
+        for (const [discordId] of claimants) {
+          const check = await checkEligibility(discordId, rarity);
+          if (check.eligible) eligible.push({ discordId, uid: check.uid, displayName: check.displayName });
+        }
+
+        if (eligible.length === 0) {
+          return channel.send(
+            'Everyone who entered is on cooldown or hasn\'t linked their WeeBee account — card vanished! 💨\n' +
+            '*Link at weebee-fbbd8.web.app → Edit Profile → Discord*'
+          );
+        }
+
+        const winner  = eligible[Math.floor(Math.random() * eligible.length)];
+        const seriesName = card.series || card.anime || 'Unknown';
+        const serial  = await getNextSerial(card.name, seriesName);
+
+        await db.collection('card_collections').doc(winner.uid).collection('cards').add({
+          name:       card.name,
+          series:     seriesName,
+          image:      card.image,
+          rarityTier: rarity,
+          serial,
+          source:     'discord_drop',
+          claimedAt:  Timestamp.now(),
+        });
+
+        const cooldownUpdate = {};
+        if (rarity === 'sr')  cooldownUpdate.lastSRWin  = Timestamp.now();
+        if (rarity === 'ssr') cooldownUpdate.lastSSRWin = Timestamp.now();
+        if (Object.keys(cooldownUpdate).length > 0) {
+          await db.doc(`discord_links/${winner.discordId}`).update(cooldownUpdate);
+        }
+
+        if (rarity === 'ssr') {
+          await db.doc('discord_bot_state/drops').set(
+            { lastSSRDropTime: Timestamp.now() },
+            { merge: true }
+          );
+        }
+
+        const msg =
+          rarity === 'ssr' ? `🎊 **SSR DROP!** <@${winner.discordId}> claimed **${card.name}** (SSR · #${String(serial).padStart(3,'0')})! Added to their WeeBee collection.` :
+          rarity === 'sr'  ? `⭐ <@${winner.discordId}> claimed **${card.name}** (SR · #${String(serial).padStart(3,'0')})! Added to their WeeBee collection.` :
+                             `🎉 <@${winner.discordId}> claimed **${card.name}** (#${String(serial).padStart(3,'0')})! Added to their WeeBee collection.`;
+
+        await channel.send(msg);
+      } catch (err) {
+        console.error('[drop] End handler error:', err);
+        channel.send('Something went wrong picking a winner. The card vanished! 💨').catch(() => {});
       }
-
-      const eligible = [];
-      for (const [discordId] of claimants) {
-        const check = await checkEligibility(discordId, rarity);
-        if (check.eligible) eligible.push({ discordId, uid: check.uid, displayName: check.displayName });
-      }
-
-      if (eligible.length === 0) {
-        return channel.send(
-          'Everyone who entered is on cooldown or hasn\'t linked their WeeBee account — card vanished! 💨\n' +
-          '*Link at weebee-fbbd8.web.app → Edit Profile → Discord*'
-        );
-      }
-
-      const winner = eligible[Math.floor(Math.random() * eligible.length)];
-      const serial = await getNextSerial(card.name, card.anime);
-
-      await db.collection('card_collections').doc(winner.uid).collection('cards').add({
-        name:       card.name,
-        anime:      card.anime,
-        image:      card.image,
-        rarityTier: rarity,
-        serial,
-        source:     'discord_drop',
-        claimedAt:  Timestamp.now(),
-      });
-
-      const cooldownUpdate = {};
-      if (rarity === 'sr')  cooldownUpdate.lastSRWin  = Timestamp.now();
-      if (rarity === 'ssr') cooldownUpdate.lastSSRWin = Timestamp.now();
-      if (Object.keys(cooldownUpdate).length > 0) {
-        await db.doc(`discord_links/${winner.discordId}`).update(cooldownUpdate);
-      }
-
-      if (rarity === 'ssr') {
-        await db.doc('discord_bot_state/drops').set(
-          { lastSSRDropTime: Timestamp.now() },
-          { merge: true }
-        );
-      }
-
-      const msg =
-        rarity === 'ssr' ? `🎊 **SSR DROP!** <@${winner.discordId}> claimed **${card.name}** (SSR · #${String(serial).padStart(3,'0')})! Added to their WeeBee collection.` :
-        rarity === 'sr'  ? `⭐ <@${winner.discordId}> claimed **${card.name}** (SR · #${String(serial).padStart(3,'0')})! Added to their WeeBee collection.` :
-                           `🎉 <@${winner.discordId}> claimed **${card.name}** (#${String(serial).padStart(3,'0')})! Added to their WeeBee collection.`;
-
-      await channel.send(msg);
     });
   } catch (err) {
     console.error('[drop] Error:', err);
