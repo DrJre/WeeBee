@@ -8,7 +8,7 @@ const {
 
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 
 // ── Firebase ──────────────────────────────────────────────────────────────────
 const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
