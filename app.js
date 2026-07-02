@@ -3645,6 +3645,26 @@ window.openEditProfileModal = async function() {
 
     document.getElementById('edit-profile-modal').style.display = 'flex';
 
+    // Discord link status
+    const discordStatusEl = document.getElementById('discord-link-status');
+    const discordCodeSection = document.getElementById('discord-link-code-section');
+    if (discordStatusEl) {
+        discordCodeSection.style.display = 'none';
+        if (pd.discordLinked && pd.discordUsername) {
+            discordStatusEl.innerHTML = `
+                <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-gray);border-radius:10px;border:1px solid var(--border-color);">
+                    <span class="material-symbols-outlined" style="color:#5865F2;">check_circle</span>
+                    <span style="font-size:13px;font-weight:600;color:var(--text-dark);">Linked as @${pd.discordUsername}</span>
+                    <button onclick="window.unlinkDiscord()" class="action-btn" style="margin-left:auto;background:var(--bg-gray-darker);color:var(--text-muted);padding:4px 10px;font-size:12px;">Unlink</button>
+                </div>`;
+        } else {
+            discordStatusEl.innerHTML = `
+                <button onclick="window.generateDiscordLinkCode()" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);">
+                    <span class="material-symbols-outlined">link</span> Generate Link Code
+                </button>`;
+        }
+    }
+
     // Load badge picker
     const pickerEl = document.getElementById('edit-badge-picker');
     if (pickerEl && auth.currentUser) {
@@ -3673,6 +3693,66 @@ function hexToRgb(hex) {
     const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
     return `${r},${g},${b}`;
 }
+
+window.generateDiscordLinkCode = async function() {
+    if (!auth.currentUser) return;
+    const btn = document.querySelector('[onclick="window.generateDiscordLinkCode()"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Generating...'; }
+    try {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+        const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid));
+        const displayName = pd.exists() ? pd.data().displayName : (auth.currentUser.displayName || 'Unknown');
+        await setDoc(doc(db, 'discord_pending_links', code), {
+            uid: auth.currentUser.uid,
+            displayName,
+            createdAt: serverTimestamp(),
+        });
+        document.getElementById('discord-link-code').textContent = code;
+        document.getElementById('discord-link-code-section').style.display = 'block';
+        // Countdown timer
+        let remaining = 10 * 60;
+        const expiryEl = document.getElementById('discord-code-expiry');
+        const timer = setInterval(() => {
+            remaining--;
+            const m = Math.floor(remaining / 60), s = remaining % 60;
+            if (expiryEl) expiryEl.textContent = `Expires in ${m}:${String(s).padStart(2,'0')}`;
+            if (remaining <= 0) clearInterval(timer);
+        }, 1000);
+    } catch(e) {
+        console.error('generateDiscordLinkCode', e);
+        if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-symbols-outlined">link</span> Generate Link Code'; }
+    }
+};
+
+window.unlinkDiscord = async function() {
+    if (!auth.currentUser) return;
+    if (!confirm('Unlink your Discord account from WeeBee?')) return;
+    try {
+        const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid));
+        const discordId = pd.exists() ? pd.data().discordId : null;
+        await updateDoc(doc(db, 'profiles', auth.currentUser.uid), {
+            discordLinked: deleteField(),
+            discordId: deleteField(),
+            discordUsername: deleteField(),
+        });
+        if (discordId) {
+            await deleteDoc(doc(db, 'discord_links', discordId));
+        }
+        const statusEl = document.getElementById('discord-link-status');
+        if (statusEl) {
+            statusEl.innerHTML = `
+                <button onclick="window.generateDiscordLinkCode()" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);">
+                    <span class="material-symbols-outlined">link</span> Generate Link Code
+                </button>`;
+        }
+        document.getElementById('discord-link-code-section').style.display = 'none';
+    } catch(e) {
+        console.error('unlinkDiscord', e);
+        alert('Could not unlink. Please try again.');
+    }
+};
 
 window.togglePinnedBadge = function(id, el) {
     const pins = window._editPinnedBadges || [];

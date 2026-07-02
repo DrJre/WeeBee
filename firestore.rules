@@ -584,6 +584,26 @@ service cloud.firestore {
       allow update: if isAdmin() || (isAuth() && request.auth.uid in resource.data.participants);
     }
 
+    // ── Discord bot ───────────────────────────────────────────────────────────
+    // Pending link codes — users create their own, bot (Admin SDK) reads/deletes
+    match /discord_pending_links/{code} {
+      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+      allow read, delete: if isAdmin();
+    }
+    // Active discord↔weebee links — users can delete their own link to unlink
+    match /discord_links/{discordId} {
+      allow read: if isAuth() && resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+      allow write: if isAdmin();
+    }
+    // Bot-only state and serial counters
+    match /discord_bot_state/{doc} {
+      allow read, write: if isAdmin();
+    }
+    match /discord_serials/{doc} {
+      allow read, write: if isAdmin();
+    }
+
     // ── TCG card trade locks ────────────────────────────────────────────────
     // When a trade is accepted, the accepting user claims a lock on each card
     // they're about to receive (doc id `{ownerUid}_{cardId}`). This stops the

@@ -764,13 +764,8 @@
                     <div id="games-tab-buzzword" class="games-tab-content">
 
                     <!-- BUZZWORD HERO BANNER -->
-                    <div class="bw-banner-hero" style="border-radius:20px; padding:36px 32px; margin-bottom:20px; text-align:center; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden;">
-                        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%, rgba(139,0,0,0.25) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(0,96,128,0.2) 0%, transparent 60%); pointer-events:none;"></div>
-                        <div style="position:relative; z-index:1;">
-                            <div style="font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:8px;">WeeBee</div>
-                            <div class="banner-hero-title" style="font-size:46px; font-weight:900; color:white; letter-spacing:-1px; line-height:1;">🟨 BuzzWord 🟨</div>
-                            <div style="font-size:15px; color:rgba(255,255,255,0.55); margin-top:10px;">Guess the daily anime characters — new puzzles every day</div>
-                        </div>
+                    <div class="bw-banner-hero" style="border-radius:20px; padding:0; height:200px; margin-bottom:20px; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden;">
+                        <div style="position:absolute;inset:0;background-image:url('https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/banners%2FPage%20Banners%2FBuzzword%20Banner.png?alt=media&token=82a05a43-aa0a-4034-ad62-a816fae51465');background-size:cover;background-position:center;pointer-events:none;"></div>
                     </div>
 
                     <!-- BUZZWORD: ONE PIECE CHARACTERS THUMBNAIL -->
@@ -847,13 +842,8 @@
 
                     <!-- TRIVIA TAB -->
                     <div id="games-tab-trivia" class="games-tab-content" style="display:none;">
-                        <div class="trivia-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:20px;text-align:center;position:relative;overflow:hidden;">
-                            <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(156,39,176,0.35) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(103,58,183,0.25) 0%,transparent 60%);pointer-events:none;"></div>
-                            <div style="position:relative;z-index:1;">
-                                <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
-                                <div class="banner-hero-title" style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🧠 Daily Trivia 🧠</div>
-                                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;">5 questions · New quiz every day · How much do you know?</div>
-                            </div>
+                        <div class="trivia-banner-hero" style="border-radius:20px;padding:0;height:200px;margin-bottom:20px;position:relative;overflow:hidden;">
+                            <div style="position:absolute;inset:0;background-image:url('https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/banners%2FPage%20Banners%2FDaily%20Trivia.png?alt=media&token=cf453ce3-080b-4182-8512-9fcbb8efb186');background-size:cover;background-position:center;pointer-events:none;"></div>
                         </div>
                         <button onclick="window.openTriviaGame()" id="trivia-play-btn" class="action-btn" style="width:100%;justify-content:center;padding:16px;font-size:16px;font-weight:800;background:#9C27B0;color:white;border-radius:12px;margin-bottom:20px;">Play Today's Trivia →</button>
                         <div id="trivia-game-container"></div>
@@ -866,13 +856,8 @@
                     <!-- OPENING BEE TAB (admin test) -->
                     <div id="games-tab-opening" class="games-tab-content" style="display:none;">
                         <!-- Banner -->
-                        <div class="melobee-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:24px;text-align:center;position:relative;overflow:hidden;">
-                            <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(34,197,94,0.35) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(16,185,129,0.25) 0%,transparent 60%);pointer-events:none;"></div>
-                            <div style="position:relative;z-index:1;">
-                                <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
-                                <div class="banner-hero-title" style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">🎵 MeloBee 🎵</div>
-                                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;">Guess the anime by its opening — new puzzle every day</div>
-                            </div>
+                        <div class="melobee-banner-hero" style="border-radius:20px;padding:0;height:200px;margin-bottom:24px;position:relative;overflow:hidden;">
+                            <div style="position:absolute;inset:0;background-image:url('https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/banners%2FPage%20Banners%2FMelobee%20Banner.png?alt=media&token=b524aaee-7b56-41de-b9f5-d1191e337c53');background-size:cover;background-position:center;pointer-events:none;"></div>
                         </div>
                         <div id="ob-game-container"></div>
                         <div id="ob-admin-controls" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid var(--border-color);text-align:center;">
@@ -2282,6 +2267,16 @@
                 <span style="font-size:13px; color:var(--text-muted);">Loading your achievements...</span>
             </div>
 
+            <div class="modal-section-title"><span class="material-symbols-outlined">tag</span> Discord</div>
+            <p class="modal-section-hint">Link your Discord account to claim card drops in the WeeBee server.</p>
+            <div id="discord-link-status" style="margin-bottom:10px;"></div>
+            <div id="discord-link-code-section" style="display:none;margin-top:4px;padding:14px;background:var(--bg-gray);border-radius:10px;border:1px solid var(--border-color);text-align:center;">
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Your link code</div>
+                <div id="discord-link-code" style="font-size:28px;font-weight:900;letter-spacing:6px;font-family:monospace;color:var(--text-dark);"></div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:8px;">Type <code style="background:var(--bg-gray-darker);padding:2px 6px;border-radius:4px;">/link YOUR-CODE</code> in the WeeBee Discord</div>
+                <div id="discord-code-expiry" style="font-size:11px;color:var(--text-muted);margin-top:6px;">Expires in 10 minutes</div>
+            </div>
+
             <div class="modal-actions">
                 <button onclick="window.cancelEditProfile()" class="cancel-btn">Cancel</button>
                 <button onclick="saveEditProfile()" class="submit-btn" id="edit-profile-save-btn">Save</button>
@@ -2754,6 +2749,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=496"></script>
+    <script type="module" src="app.js?v=504"></script>
 </body>
 </html>
