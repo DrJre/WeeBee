@@ -344,6 +344,15 @@ async function dropCard() {
   }
 }
 
+// ── /drop command (admin only) ────────────────────────────────────────────────
+async function handleDrop(interaction) {
+  if (!interaction.memberPermissions.has('Administrator')) {
+    return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+  }
+  await interaction.reply({ content: '🃏 Triggering a card drop...', ephemeral: true });
+  await dropCard();
+}
+
 // ── /link command ─────────────────────────────────────────────────────────────
 async function handleLink(interaction) {
   const code = interaction.options.getString('code').toUpperCase().trim();
@@ -405,6 +414,10 @@ client.once('ready', async () => {
             .setRequired(true)
         )
         .toJSON(),
+      new SlashCommandBuilder()
+        .setName('drop')
+        .setDescription('Force an immediate card drop (admin only)')
+        .toJSON(),
     ],
   });
   console.log('[bot] Slash commands registered');
@@ -414,9 +427,9 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-  if (interaction.isChatInputCommand() && interaction.commandName === 'link') {
-    await handleLink(interaction);
-  }
+  if (!interaction.isChatInputCommand()) return;
+  if (interaction.commandName === 'link') await handleLink(interaction);
+  if (interaction.commandName === 'drop') await handleDrop(interaction);
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
