@@ -202,16 +202,8 @@ async function pickCard(rarity) {
   return { id: doc.id, ...doc.data() };
 }
 
-// ── Serial assignment ─────────────────────────────────────────────────────────
-async function getNextSerial(name, anime) {
-  const key = `${name}__${anime}`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-  const ref = db.doc(`discord_serials/${key}`);
-  return db.runTransaction(async t => {
-    const doc = await t.get(ref);
-    const next = (doc.exists ? doc.data().serial : 0) + 1;
-    t.set(ref, { serial: next });
-    return next;
-  });
+function randomSerial() {
+  return Math.floor(Math.random() * 5000) + 1;
 }
 
 // ── Eligibility check ─────────────────────────────────────────────────────────
@@ -313,7 +305,7 @@ async function dropCard() {
 
         const winner  = eligible[Math.floor(Math.random() * eligible.length)];
         const animeName = card.series || card.anime || 'Unknown';
-        const serial  = await getNextSerial(card.name, animeName);
+        const serial  = randomSerial();
 
         await db.collection('card_collections').doc(winner.uid).collection('cards').add({
           name:    card.name,
