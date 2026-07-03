@@ -119,19 +119,7 @@ async function renderCardImage(card, rarity) {
   ctx.fillStyle = grad;
   ctx.fillRect(0, H * 0.55, W, H * 0.45);
 
-  // Character name
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `bold 22px "${FONT_FAMILY}"`;
-  ctx.textAlign = 'left';
-  ctx.fillText(fitText(ctx, card.name, W - 28), 18, H - 52);
-
-  // Anime / series
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  ctx.font = `13px "${FONT_FAMILY}"`;
-  ctx.fillText(fitText(ctx, card.series || card.anime || '', W - 28), 18, H - 32);
-
-  // Frame overlay — user-supplied transparent PNG per rarity
-  // Place PNGs in discord-bot/frames/frame-common.png etc.
+  // Frame overlay — drawn before text so text sits on top
   try {
     const frame = await loadImage(`${__dirname}/frames/frame-${rarity}.png`);
     ctx.drawImage(frame, 0, 0, W, H);
@@ -144,6 +132,17 @@ async function renderCardImage(card, rarity) {
     ctx.stroke();
     ctx.shadowBlur = 0;
   }
+
+  // Character name — drawn last so it's always on top
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold 22px "${FONT_FAMILY}"`;
+  ctx.textAlign = 'left';
+  ctx.fillText(fitText(ctx, card.name, W - 28), 18, H - 52);
+
+  // Anime / series
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.font = `13px "${FONT_FAMILY}"`;
+  ctx.fillText(fitText(ctx, card.series || card.anime || '', W - 28), 18, H - 32);
 
   ctx.restore();
 
