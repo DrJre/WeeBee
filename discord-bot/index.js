@@ -10,17 +10,32 @@ const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
 
-// Register system fonts — track which family name to use in canvas
 let FONT_FAMILY = 'sans-serif';
-for (const [fontPath, family] of [
-  ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',        'DejaVu Sans'],
-  ['/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',             'DejaVu Sans'],
-  ['/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf', 'Liberation Sans'],
-  ['/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf','Liberation Sans'],
-]) {
-  try { GlobalFonts.registerFromPath(fontPath, family); FONT_FAMILY = family; } catch {}
+
+async function loadFont() {
+  const https = require('https');
+  const urls = [
+    'https://cdn.jsdelivr.net/npm/@fontsource/roboto@5.0.8/files/roboto-latin-700-normal.woff2',
+    'https://cdn.jsdelivr.net/npm/@fontsource/roboto@5.0.8/files/roboto-latin-400-normal.woff2',
+  ];
+  for (const url of urls) {
+    try {
+      const buf = await new Promise((resolve, reject) => {
+        https.get(url, res => {
+          const chunks = [];
+          res.on('data', c => chunks.push(c));
+          res.on('end', () => resolve(Buffer.concat(chunks)));
+          res.on('error', reject);
+        }).on('error', reject);
+      });
+      GlobalFonts.register(buf, 'Roboto');
+      FONT_FAMILY = 'Roboto';
+      console.log('[font] Loaded Roboto from CDN');
+      return;
+    } catch(e) { console.warn('[font] CDN attempt failed:', e.message); }
+  }
+  console.warn('[font] All font sources failed, text may not render');
 }
-console.log('[font] Using font family:', FONT_FAMILY);
 
 // ── Firebase ──────────────────────────────────────────────────────────────────
 const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
@@ -375,9 +390,13 @@ async function handleLink(interaction) {
 // ── Startup ───────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`[bot] Online as ${client.user.tag}`);
+  await loadFont();
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
-  await rest.put(Routes.applicationCommands(client.user.id), {
+  const commandRoute = process.env.DISCORD_GUILD_ID
+    ? Routes.applicationGuildCommands(client.user.id, process.env.DISCORD_GUILD_ID)
+    : Routes.applicationCommands(client.user.id);
+  await rest.put(commandRoute, {
     body: [
       new SlashCommandBuilder()
         .setName('link')
