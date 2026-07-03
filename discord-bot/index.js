@@ -127,6 +127,13 @@ async function renderCardImage(card, rarity) {
   } catch { /* fallback dark bg */ }
   ctx.restore();
 
+  // Subtle top gradient (matches bottom)
+  const topGrad = ctx.createLinearGradient(0, 0, 0, H * 0.35);
+  topGrad.addColorStop(0, 'rgba(0,0,0,0.55)');
+  topGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = topGrad;
+  ctx.fillRect(0, 0, W, H * 0.35);
+
   // Subtle bottom gradient so text is readable over art
   const grad = ctx.createLinearGradient(0, H * 0.55, 0, H);
   grad.addColorStop(0, 'rgba(0,0,0,0)');
@@ -152,12 +159,12 @@ async function renderCardImage(card, rarity) {
   ctx.fillStyle = '#ffffff';
   ctx.font = `bold 22px "${FONT_FAMILY}"`;
   ctx.textAlign = 'left';
-  ctx.fillText(fitText(ctx, card.name, W - 50), 40, H - 85);
+  ctx.fillText(fitText(ctx, card.name, W - 50), 28, H - 78);
 
   // Anime / series
   ctx.fillStyle = 'rgba(255,255,255,0.6)';
   ctx.font = `16px "${FONT_FAMILY}"`;
-  ctx.fillText(fitText(ctx, card.series || card.anime || '', W - 50), 40, H - 62);
+  ctx.fillText(fitText(ctx, card.series || card.anime || '', W - 50), 28, H - 55);
 
   ctx.restore();
 
