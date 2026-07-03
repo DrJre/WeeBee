@@ -74,105 +74,66 @@ async function renderCardImage(card, rarity) {
   const cfg    = RARITY_CONFIG[rarity] || RARITY_CONFIG.common;
   const W      = 360;
   const H      = 500;
-  const BORDER = 5;
   const RADIUS = 14;
-  const ART_H  = 330;
 
   const canvas = createCanvas(W, H);
   const ctx    = canvas.getContext('2d');
 
-  // Outer glow for SR/SSR
-  if (cfg.glow > 0) {
-    ctx.shadowColor = cfg.hex;
-    ctx.shadowBlur  = cfg.glow;
-  }
-  ctx.fillStyle = cfg.hex;
-  roundedRect(ctx, 0, 0, W, H, RADIUS);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-
-  // Clip entire card
+  // Clip entire card to rounded rect
   ctx.save();
   roundedRect(ctx, 0, 0, W, H, RADIUS);
   ctx.clip();
 
-  // Dark background
+  // Dark fallback background
   ctx.fillStyle = '#111111';
   ctx.fillRect(0, 0, W, H);
 
-  // Card art — cover-fit inside art area
+  // Card art — full bleed cover-fit
   try {
-    const img = await loadImage(card.image);
-    ctx.save();
-    ctx.rect(BORDER, BORDER, W - BORDER * 2, ART_H - BORDER);
-    ctx.clip();
-    const areaW = W - BORDER * 2;
-    const areaH = ART_H - BORDER;
-    const imgR  = img.width / img.height;
-    const areaR = areaW / areaH;
+    const img  = await loadImage(card.image);
+    const imgR = img.width / img.height;
+    const areR = W / H;
     let dw, dh, dx, dy;
-    if (imgR > areaR) {
-      dh = areaH; dw = dh * imgR;
-      dx = BORDER + (areaW - dw) / 2; dy = BORDER;
+    if (imgR > areR) {
+      dh = H; dw = dh * imgR; dx = (W - dw) / 2; dy = 0;
     } else {
-      dw = areaW; dh = dw / imgR;
-      dx = BORDER; dy = BORDER + (areaH - dh) / 2;
+      dw = W; dh = dw / imgR; dx = 0; dy = (H - dh) / 2;
     }
     ctx.drawImage(img, dx, dy, dw, dh);
-    ctx.restore();
-  } catch {
-    ctx.fillStyle = cfg.hex + '33';
-    ctx.fillRect(BORDER, BORDER, W - BORDER * 2, ART_H - BORDER);
-  }
+  } catch { /* fallback dark bg */ }
 
-  // Name plate gradient
-  const grad = ctx.createLinearGradient(0, ART_H - 40, 0, H);
+  // Subtle bottom gradient so text is readable over art
+  const grad = ctx.createLinearGradient(0, H * 0.55, 0, H);
   grad.addColorStop(0, 'rgba(0,0,0,0)');
-  grad.addColorStop(0.3, 'rgba(10,10,10,0.97)');
-  grad.addColorStop(1, 'rgba(15,15,15,1)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.78)');
   ctx.fillStyle = grad;
-  ctx.fillRect(0, ART_H - 40, W, H - ART_H + 40);
+  ctx.fillRect(0, H * 0.55, W, H * 0.45);
 
-  // Rarity color accent line
-  ctx.fillStyle = cfg.hex;
-  ctx.fillRect(0, ART_H, W, 3);
-
-  // Card name
+  // Character name
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 22px sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText(fitText(ctx, card.name, W - 110), 14, ART_H + 34);
+  ctx.fillText(fitText(ctx, card.name, W - 28), 18, H - 52);
 
-  // Anime name
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.font = '14px sans-serif';
-  ctx.fillText(fitText(ctx, card.series || card.anime || '', W - 28), 14, ART_H + 56);
+  // Anime / series
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.font = '13px sans-serif';
+  ctx.fillText(fitText(ctx, card.series || card.anime || '', W - 28), 18, H - 32);
 
-  // Rarity badge (pill, top-right of name plate)
-  const badgeLabel = cfg.label;
-  ctx.font = 'bold 12px sans-serif';
-  const badgeW = ctx.measureText(badgeLabel).width + 18;
-  const badgeH = 24;
-  const badgeX = W - badgeW - 12;
-  const badgeY = ART_H + 10;
-  ctx.fillStyle = cfg.hex;
-  roundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 6);
-  ctx.fill();
-  ctx.fillStyle = rarity === 'sr' ? '#000000' : '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.fillText(badgeLabel, badgeX + badgeW / 2, badgeY + 16);
-
-  // WeeBee watermark bottom right
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.font = 'bold 11px sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText('WeeBee TCG', W - 14, H - 14);
-
-  // Rarity border stroke on top of everything
-  ctx.strokeStyle = cfg.hex;
-  ctx.lineWidth = BORDER;
-  roundedRect(ctx, BORDER / 2, BORDER / 2, W - BORDER, H - BORDER, RADIUS - BORDER / 2);
-  ctx.stroke();
+  // Frame overlay — user-supplied transparent PNG per rarity
+  // Place PNGs in discord-bot/frames/frame-common.png etc.
+  try {
+    const frame = await loadImage(`${__dirname}/frames/frame-${rarity}.png`);
+    ctx.drawImage(frame, 0, 0, W, H);
+  } catch {
+    // No frame file yet — simple rarity border fallback
+    if (cfg.glow > 0) { ctx.shadowColor = cfg.hex; ctx.shadowBlur = cfg.glow; }
+    ctx.strokeStyle = cfg.hex;
+    ctx.lineWidth = 4;
+    roundedRect(ctx, 2, 2, W - 4, H - 4, RADIUS - 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
 
   ctx.restore();
 
