@@ -8,7 +8,17 @@ const {
 
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
-const { createCanvas, loadImage } = require('@napi-rs/canvas');
+const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
+
+// Register system fonts if available
+for (const path of [
+  '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+  '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+  '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+  '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+]) {
+  try { GlobalFonts.registerFromPath(path); } catch {}
+}
 
 // ── Firebase ──────────────────────────────────────────────────────────────────
 const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
@@ -234,6 +244,7 @@ async function dropCard() {
     if (!card) return console.warn('[drop] No cards found for rarity:', rarity);
 
     const cfg = RARITY_CONFIG[rarity];
+    const animeName = card.series || card.anime || 'Unknown';
 
     // Render card image
     const cardBuffer = await renderCardImage(card, rarity);
@@ -241,7 +252,7 @@ async function dropCard() {
 
     const embed = new EmbedBuilder()
       .setTitle(`${cfg.emoji}  Card Drop — ${cfg.label}`)
-      .setDescription(`Click **Claim** to enter the draw!\nWinner picked in 15 seconds.`)
+      .setDescription(`**${card.name}**\n*${animeName}*\n\nClick **Claim** to enter the draw!\nWinner picked in 15 seconds.`)
       .setImage('attachment://card.png')
       .setColor(cfg.color)
       .setFooter({ text: 'WeeBee TCG  •  Link your account at weebee-fbbd8.web.app' });
@@ -301,17 +312,18 @@ async function dropCard() {
         }
 
         const winner  = eligible[Math.floor(Math.random() * eligible.length)];
-        const seriesName = card.series || card.anime || 'Unknown';
-        const serial  = await getNextSerial(card.name, seriesName);
+        const animeName = card.series || card.anime || 'Unknown';
+        const serial  = await getNextSerial(card.name, animeName);
 
         await db.collection('card_collections').doc(winner.uid).collection('cards').add({
-          name:       card.name,
-          series:     seriesName,
-          image:      card.image,
-          rarityTier: rarity,
+          name:    card.name,
+          anime:   animeName,
+          rarity,
+          image:   card.image,
           serial,
-          source:     'discord_drop',
-          claimedAt:  Timestamp.now(),
+          edition: null,
+          source:  'discord_drop',
+          pulledAt: Timestamp.now(),
         });
 
         const cooldownUpdate = {};
