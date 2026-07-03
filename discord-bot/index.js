@@ -159,12 +159,12 @@ async function renderCardImage(card, rarity) {
   ctx.fillStyle = '#ffffff';
   ctx.font = `bold 22px "${FONT_FAMILY}"`;
   ctx.textAlign = 'left';
-  ctx.fillText(fitText(ctx, card.name, W - 50), 30, H - 78);
+  ctx.fillText(fitText(ctx, card.name, W - 50), 32, H - 79);
 
   // Anime / series
   ctx.fillStyle = 'rgba(255,255,255,0.6)';
   ctx.font = `16px "${FONT_FAMILY}"`;
-  ctx.fillText(fitText(ctx, card.series || card.anime || '', W - 50), 30, H - 55);
+  ctx.fillText(fitText(ctx, card.series || card.anime || '', W - 50), 32, H - 56);
 
   ctx.restore();
 
