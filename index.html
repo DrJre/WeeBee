@@ -1398,6 +1398,17 @@
                                 <div id="tcg-admin-wheel-ur-results" style="margin-top:8px;"></div>
                             </div>
 
+                            <!-- Grant Founder Badge -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">⭐ Grant Founder Badge</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Manually adds a user to the founders list and grants them the Day One achievement. Use when a bugged account ate a slot.</div>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                                    <input type="text" id="founder-badge-search" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._adminSearchUsersForFounderBadge();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                    <button onclick="window._adminSearchUsersForFounderBadge()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
+                                </div>
+                                <div id="founder-badge-results" style="margin-top:10px;"></div>
+                            </div>
+
                             <!-- Gift Founder Card -->
                             <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
                                 <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🏅 Gift Founder Card</div>
@@ -2749,6 +2760,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=504"></script>
+    <script type="module" src="app.js?v=505"></script>
 </body>
 </html>

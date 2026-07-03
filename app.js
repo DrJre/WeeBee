@@ -8044,6 +8044,51 @@ window._tcgAdminDeductAmber = async function(uid, name) {
     } catch(e) { alert('Failed: ' + e.message); }
 };
 
+// Admin: manually grant the Founder badge + Day One achievement to a user
+window._adminSearchUsersForFounderBadge = async function() {
+    if (!window.isAdmin) return;
+    const term = (document.getElementById('founder-badge-search')?.value || '').trim().toLowerCase();
+    const el = document.getElementById('founder-badge-results');
+    if (!el) return;
+    if (!term) { el.innerHTML = ''; return; }
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Searching…</p>';
+    try {
+        const snap = await getDocs(query(collection(db, 'profiles'), limit(300)));
+        const matches = [];
+        snap.forEach(d => {
+            const p = d.data();
+            if ((p.displayName || '').toLowerCase().includes(term)) matches.push({ uid: d.id, name: p.displayName || 'Unknown' });
+        });
+        if (!matches.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No users found.</p>'; return; }
+        el.innerHTML = matches.slice(0, 10).map(u => `
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border-color); flex-wrap:wrap;">
+                <span style="font-size:13px; flex:1; min-width:120px;">${u.name}</span>
+                <button onclick="window._adminGrantFounderBadge('${u.uid}','${u.name.replace(/'/g, "\\'")}')" style="padding:7px 16px; border-radius:6px; border:none; background:linear-gradient(135deg,#fff7c2,#ffd700 40%,#b8860b 70%,#ffd700); color:#222; font-weight:700; font-size:12px; cursor:pointer;">Grant Founder Badge</button>
+            </div>`).join('');
+    } catch(e) { el.innerHTML = `<p style="color:red;font-size:13px;">${e.message}</p>`; }
+};
+
+window._adminGrantFounderBadge = async function(uid, name) {
+    if (!window.isAdmin) return;
+    if (!confirm(`Grant the Founder badge to ${name}?\n\nThis adds them to meta/founders and grants the Day One achievement.`)) return;
+    try {
+        const foundersRef = doc(db, 'meta', 'founders');
+        const foundersDoc = await getDoc(foundersRef);
+        const uids = foundersDoc.exists() ? (foundersDoc.data().uids || []) : [];
+        if (uids.includes(uid)) { alert(`${name} already has the Founder badge.`); return; }
+        await setDoc(foundersRef, { uids: [...uids, uid] }, { merge: true });
+        // Grant the Day One achievement
+        const achRef = doc(db, 'achievements', uid);
+        const achDoc = await getDoc(achRef);
+        const earned = achDoc.exists() ? (achDoc.data().earned || []) : [];
+        if (!earned.includes('founder')) {
+            await setDoc(achRef, { earned: [...earned, 'founder'] }, { merge: true });
+        }
+        window.founderUids.add(uid);
+        alert(`Founder badge granted to ${name}.`);
+    } catch(e) { alert('Failed: ' + e.message); }
+};
+
 // Admin: search users by display name to gift the 1-of-1 Founder card
 window._tcgAdminSearchUsersForFounder = async function() {
     if (!window.isAdmin) return;
