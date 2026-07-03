@@ -10,15 +10,17 @@ const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
 
-// Register system fonts if available
-for (const path of [
-  '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-  '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-  '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-  '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+// Register system fonts — track which family name to use in canvas
+let FONT_FAMILY = 'sans-serif';
+for (const [fontPath, family] of [
+  ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',        'DejaVu Sans'],
+  ['/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',             'DejaVu Sans'],
+  ['/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf', 'Liberation Sans'],
+  ['/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf','Liberation Sans'],
 ]) {
-  try { GlobalFonts.registerFromPath(path); } catch {}
+  try { GlobalFonts.registerFromPath(fontPath, family); FONT_FAMILY = family; } catch {}
 }
+console.log('[font] Using font family:', FONT_FAMILY);
 
 // ── Firebase ──────────────────────────────────────────────────────────────────
 const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
@@ -88,19 +90,27 @@ async function renderCardImage(card, rarity) {
   ctx.fillStyle = '#111111';
   ctx.fillRect(0, 0, W, H);
 
-  // Card art — full bleed cover-fit
+  // Card art — clipped inside frame border (10px inset)
+  const INSET = 10;
+  const INNER_R = RADIUS - INSET / 2;
+  ctx.save();
+  roundedRect(ctx, INSET, INSET, W - INSET * 2, H - INSET * 2, INNER_R);
+  ctx.clip();
   try {
     const img  = await loadImage(card.image);
+    const artW = W - INSET * 2;
+    const artH = H - INSET * 2;
     const imgR = img.width / img.height;
-    const areR = W / H;
+    const areR = artW / artH;
     let dw, dh, dx, dy;
     if (imgR > areR) {
-      dh = H; dw = dh * imgR; dx = (W - dw) / 2; dy = 0;
+      dh = artH; dw = dh * imgR; dx = INSET + (artW - dw) / 2; dy = INSET;
     } else {
-      dw = W; dh = dw / imgR; dx = 0; dy = (H - dh) / 2;
+      dw = artW; dh = dw / imgR; dx = INSET; dy = INSET + (artH - dh) / 2;
     }
     ctx.drawImage(img, dx, dy, dw, dh);
   } catch { /* fallback dark bg */ }
+  ctx.restore();
 
   // Subtle bottom gradient so text is readable over art
   const grad = ctx.createLinearGradient(0, H * 0.55, 0, H);
@@ -111,13 +121,13 @@ async function renderCardImage(card, rarity) {
 
   // Character name
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 22px sans-serif';
+  ctx.font = `bold 22px "${FONT_FAMILY}"`;
   ctx.textAlign = 'left';
   ctx.fillText(fitText(ctx, card.name, W - 28), 18, H - 52);
 
   // Anime / series
   ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  ctx.font = '13px sans-serif';
+  ctx.font = `13px "${FONT_FAMILY}"`;
   ctx.fillText(fitText(ctx, card.series || card.anime || '', W - 28), 18, H - 32);
 
   // Frame overlay — user-supplied transparent PNG per rarity
