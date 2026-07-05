@@ -163,7 +163,8 @@ async function loadDropRoleConfig() {
   }
 }
 const DROP_INTERVAL_MS  = 5 * 60 * 1000;
-const CLAIM_WINDOW_MS   = 15 * 1000;
+const CLAIM_WINDOW_MS     = 15 * 1000;
+const SSR_CLAIM_WINDOW_MS = 60 * 1000;
 const SR_COOLDOWN_MS    = 60 * 60 * 1000;
 const SSR_COOLDOWN_MS   = 3 * 60 * 60 * 1000;
 const SSR_BLACKOUT_MS   = 44 * 60 * 60 * 1000;
@@ -375,6 +376,8 @@ async function dropCard() {
 
     const cfg = RARITY_CONFIG[rarity];
     const animeName = card.series || card.anime || 'Unknown';
+    const claimWindow = rarity === 'ssr' ? SSR_CLAIM_WINDOW_MS : CLAIM_WINDOW_MS;
+    const claimSeconds = claimWindow / 1000;
 
     // Render card image
     const cardBuffer = await renderCardImage(card, rarity);
@@ -382,7 +385,7 @@ async function dropCard() {
 
     const embed = new EmbedBuilder()
       .setTitle(`${cfg.emoji}  Card Drop — ${cfg.label}`)
-      .setDescription(`**${card.name}**\n*${animeName}*\n\nClick **Claim** to enter the draw!\nWinner picked in 15 seconds.`)
+      .setDescription(`**${card.name}**\n*${animeName}*\n\nClick **Claim** to enter the draw!\nWinner picked in ${claimSeconds} seconds.`)
       .setImage('attachment://card.png')
       .setColor(cfg.color)
       .setFooter({ text: 'WeeBee TCG  •  Link your account at weebee-fbbd8.web.app' });
@@ -406,7 +409,7 @@ async function dropCard() {
 
     const collector = message.createMessageComponentCollector({
       componentType: ComponentType.Button,
-      time: CLAIM_WINDOW_MS,
+      time: claimWindow,
     });
 
     collector.on('collect', async interaction => {
