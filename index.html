@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=125">
+    <link rel="stylesheet" href="styles.css?v=135">
 </head>
 <body>
     <div class="app-container">
@@ -79,6 +79,16 @@
                 <button class="search-icon-btn" onclick="toggleMobileSearch()" aria-label="Search">
                     <span class="material-symbols-outlined">search</span>
                 </button>
+                <div class="discord-bubble-wrap">
+                    <a href="https://discord.gg/E7BgpS4znq" target="_blank" rel="noopener noreferrer" class="discord-nav-btn" aria-label="Join the WeeBee Discord" title="Join the WeeBee Discord" onclick="window._dismissDiscordBubble()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.003.024.015.046.036.06a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+                    </a>
+                    <div class="discord-nav-bubble" id="discord-nav-bubble">
+                        <span>Join the WeeBee Discord!</span>
+                        <button class="discord-bubble-close" onclick="event.stopPropagation();window._dismissDiscordBubble()" aria-label="Dismiss">×</button>
+                    </div>
+                </div>
+                <script>(function(){if(localStorage.getItem('wb_discord_bubble_dismissed'))document.getElementById('discord-nav-bubble').style.display='none';window._dismissDiscordBubble=function(){localStorage.setItem('wb_discord_bubble_dismissed','1');var e=document.getElementById('discord-nav-bubble');if(e)e.style.display='none';};})()</script>
                 <div class="user-profile" id="user-auth-section" style="position: relative;">
                     <div class="loading" style="padding: 0;">Loading...</div>
                 </div>
@@ -122,6 +132,9 @@
             <button id="tcg-nav-btn-mobile" class="nav-btn" data-target="tcg-view" onclick="switchView('tcg-view'); closeMobileMenu()">
                 <span class="material-symbols-outlined">style</span> TCG
             </button>
+            <a href="https://discord.gg/E7BgpS4znq" target="_blank" rel="noopener noreferrer" class="nav-btn" style="text-decoration:none;" onclick="closeMobileMenu()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.003.024.015.046.036.06a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg> Discord
+            </a>
         </div>
 
         <nav class="bottom-nav">
@@ -152,6 +165,9 @@
 
                     <!-- Spring Awards banner — shown when a seasonal vote is upcoming or live, replaces trending carousel -->
                     <div id="home-awards-banner" style="display:none; margin-bottom:24px;"></div>
+
+                    <!-- Prismatic Event Banner -->
+                    <div id="prismatic-event-banner" style="display:none; margin-bottom:24px;"></div>
 
                     <div id="home-trending-section">
                         <h2>Trending Airing Anime</h2>
@@ -765,7 +781,7 @@
 
                     <!-- BUZZWORD HERO BANNER -->
                     <div class="bw-banner-hero" style="border-radius:20px; padding:0; height:200px; margin-bottom:20px; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden;">
-                        <div style="position:absolute;inset:0;background-image:url('https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/banners%2FPage%20Banners%2FBuzzword%20Banner.png?alt=media&token=82a05a43-aa0a-4034-ad62-a816fae51465');background-size:cover;background-position:center;pointer-events:none;"></div>
+                        <div class="bw-hero-bg-img" style="position:absolute;inset:0;background-image:url('https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/banners%2FPage%20Banners%2FBuzzword%20Banner.png?alt=media&token=82a05a43-aa0a-4034-ad62-a816fae51465');background-size:cover;background-position:center;pointer-events:none;"></div>
                     </div>
 
                     <!-- BUZZWORD: ONE PIECE CHARACTERS THUMBNAIL -->
@@ -1413,27 +1429,7 @@
                             <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
                                 <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🏅 Gift Founder Card</div>
                                 <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Gifts a 1-of-1 Founder edition card to a user's collection. Pick the design then search for the recipient.</div>
-                                <select id="founder-gift-select" onchange="window._tcgRenderFounderPreview()" style="padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; margin-bottom:14px;">
-                                    <option value="oguri_cap">Oguri Cap (Uma Musume Pretty Derby, UR)</option>
-                                    <option value="naruto">Naruto Uzumaki (Naruto, UR)</option>
-                                    <option value="choji">Choji Akimichi (Naruto, UR)</option>
-                                    <option value="brook">Brook (One Piece, UR)</option>
-                                    <option value="rengoku">Rengoku (Demon Slayer, UR)</option>
-                                    <option value="shoyo_hinata">Shoyo Hinata (Haikyu, UR)</option>
-                                    <option value="alphonse_elric">Alphonse Elric (Fullmetal Alchemist, UR)</option>
-                                    <option value="makima">Makima (Chainsaw Man, UR)</option>
-                                    <option value="dreaded">Dreaded (WeeBee Original, UR)</option>
-                                    <option value="rock_lee">Rock Lee (Naruto, UR)</option>
-                                    <option value="zoro">Zoro (One Piece, UR)</option>
-                                    <option value="luffy">Luffy (One Piece, UR)</option>
-                                    <option value="no_face">No Face (Spirited Away, UR)</option>
-                                    <option value="sung_jinwoo">Sung Jinwoo (Solo Leveling, UR)</option>
-                                    <option value="astro_boy">Astro Boy (Astro Boy, UR)</option>
-                                    <option value="arthur_boyle">Arthur Boyle (Fire Force, UR)</option>
-                                    <option value="alucard">Alucard (Hellsing Ultimate, UR)</option>
-                                    <option value="gohan">Gohan (Dragon Ball, UR)</option>
-                                    <option value="hak">Hak (Yona of the Dawn, UR)</option>
-                                </select>
+                                <select id="founder-gift-select" onchange="window._tcgRenderFounderPreview()" style="padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; margin-bottom:14px;"></select>
                                 <div id="founder-card-preview" style="margin-bottom:14px;"></div>
                                 <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
                                     <input type="text" id="founder-gift-search" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsersForFounder();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
@@ -1465,11 +1461,6 @@
                                 <div id="pack-gift-results" style="margin-top:10px;"></div>
                             </div>
 
-                            <!-- Prismatic 2026 Preview -->
-                            <div style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border-color);">
-                                <div style="font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:1px; margin-bottom:14px;">✦ Prismatic 2026 — Card Previews</div>
-                                <div id="prismatic-preview-cards" style="display:flex; gap:18px; flex-wrap:wrap;"></div>
-                            </div>
 
                         </div>
 
@@ -2760,6 +2751,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=505"></script>
+    <script type="module" src="app.js?v=531"></script>
 </body>
 </html>

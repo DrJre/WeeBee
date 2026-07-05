@@ -7,8 +7,10 @@ const {
 } = require('discord.js');
 
 const { initializeApp, cert } = require('firebase-admin/app');
-const { getFirestore, Timestamp } = require('firebase-admin/firestore');
+const { getFirestore, Timestamp, FieldValue } = require('firebase-admin/firestore');
 const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
+const express = require('express');
+const Stripe = require('stripe');
 
 let FONT_FAMILY = 'sans-serif';
 
@@ -44,6 +46,97 @@ const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
 
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
+
+// ── Stripe ────────────────────────────────────────────────────────────────────
+const stripe = process.env.STRIPE_SECRET_KEY ? Stripe(process.env.STRIPE_SECRET_KEY) : null;
+
+const AMBER_BUNDLES = [
+  { id: 'amber_1000',  label: '750 Amber',    bonus: 250,   amount: 1000,  price: 99  },
+  { id: 'amber_5750',  label: '5,000 Amber',  bonus: 750,   amount: 5750,  price: 499 },
+  { id: 'amber_12000', label: '10,000 Amber', bonus: 2000,  amount: 12000, price: 999 },
+];
+
+// ── Webhook server (Stripe) ───────────────────────────────────────────────────
+const webhookApp = express();
+
+webhookApp.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('[stripe] Signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    await handleAmberPurchase(event.data.object).catch(e =>
+      console.error('[stripe] handleAmberPurchase error:', e)
+    );
+  }
+
+  res.json({ received: true });
+});
+
+webhookApp.get('/health', (_req, res) => res.json({ ok: true }));
+
+const PORT = process.env.PORT || 3000;
+webhookApp.listen(PORT, () => console.log(`[webhook] Listening on port ${PORT}`));
+
+async function handleAmberPurchase(session) {
+  const sessionId  = session.id;
+  const discordId  = session.client_reference_id;
+  const bundleId   = session.metadata?.bundleId;
+  const bundle     = AMBER_BUNDLES.find(b => b.id === bundleId);
+
+  if (!discordId || !bundle) {
+    console.error('[stripe] Missing discordId or unknown bundle on session:', sessionId);
+    return;
+  }
+
+  const sessionRef = db.doc(`stripe_sessions/${sessionId}`);
+  const linkRef    = db.doc(`discord_links/${discordId}`);
+
+  let uid;
+  try {
+    await db.runTransaction(async tx => {
+      const [sessionSnap, linkSnap] = await Promise.all([tx.get(sessionRef), tx.get(linkRef)]);
+
+      if (sessionSnap.exists) return; // Already processed (Stripe retry)
+
+      if (!linkSnap.exists) throw Object.assign(new Error('no_link'), { discordId });
+
+      uid = linkSnap.data().uid;
+      tx.set(sessionRef, { uid, bundleId, amberGranted: bundle.amount, processedAt: Timestamp.now() });
+      tx.update(db.doc(`profiles/${uid}`), { amber: FieldValue.increment(bundle.amount) });
+    });
+  } catch (err) {
+    if (err.message === 'no_link') {
+      try {
+        const user = await client.users.fetch(discordId);
+        await user.send(
+          `⚠️ Your Amber purchase went through but your Discord isn't linked to WeeBee yet.\n` +
+          `Link it at https://weebee.buzz → Edit Profile → Discord, then DM the server owner with your Stripe receipt.`
+        );
+      } catch {}
+      return;
+    }
+    throw err;
+  }
+
+  // Notify user
+  const amountStr = bundle.amount.toLocaleString();
+  try {
+    const user = await client.users.fetch(discordId);
+    await user.send(`🟡 **+${amountStr} Amber** has been added to your WeeBee account!\nHead to https://weebee.buzz to spend it in the pack store.`);
+  } catch {
+    // DMs disabled — fall back to the drops channel
+    try {
+      const channel = await client.channels.fetch(CHANNEL_ID);
+      await channel.send(`<@${discordId}> 🟡 **+${amountStr} Amber** added to your WeeBee account!`);
+    } catch {}
+  }
+}
 
 // ── Discord ───────────────────────────────────────────────────────────────────
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -194,8 +287,42 @@ async function pickCard(rarity) {
   return { id: doc.id, ...doc.data() };
 }
 
-function randomSerial() {
-  return Math.floor(Math.random() * 5000) + 1;
+const RARITY_MAX_VERSIONS = { common: 5000, rare: 2500, sr: 500, ssr: 250, ur: 50 };
+
+function cardKey(rarity, name, anime) {
+  const slug = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  return `${rarity}_${slug(name)}_${slug(anime)}`;
+}
+
+function shufflePool(max) {
+  const arr = Array.from({ length: max }, (_, i) => i + 1);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+async function assignSerial(rarity, name, anime) {
+  const max = RARITY_MAX_VERSIONS[rarity] || 5000;
+  const key = cardKey(rarity, name, anime);
+  const ref = db.doc(`card_serials/${key}`);
+  return db.runTransaction(async tx => {
+    const snap = await tx.get(ref);
+    if (!snap.exists || !snap.data().versionsRemaining?.length) {
+      const edition = snap.exists ? (snap.data().edition || 1) + 1 : 1;
+      const pool = shufflePool(max);
+      const version = pool.pop();
+      tx.set(ref, { versionsRemaining: pool, edition, maxVersions: max });
+      return { serial: version, edition };
+    }
+    const { edition = 1 } = snap.data();
+    const pool = [...snap.data().versionsRemaining];
+    const idx = Math.floor(Math.random() * pool.length);
+    const version = pool.splice(idx, 1)[0];
+    tx.update(ref, { versionsRemaining: pool });
+    return { serial: version, edition };
+  });
 }
 
 // ── Eligibility check ─────────────────────────────────────────────────────────
@@ -297,7 +424,8 @@ async function dropCard() {
 
         const winner  = eligible[Math.floor(Math.random() * eligible.length)];
         const animeName = card.series || card.anime || 'Unknown';
-        const serial  = randomSerial();
+        const { serial, edition } = await assignSerial(rarity, card.name, animeName);
+        const maxVersions = RARITY_MAX_VERSIONS[rarity] || 5000;
 
         await db.collection('card_collections').doc(winner.uid).collection('cards').add({
           name:    card.name,
@@ -305,7 +433,8 @@ async function dropCard() {
           rarity,
           image:   card.image,
           serial,
-          edition: null,
+          edition,
+          maxVersions,
           source:  'discord_drop',
           pulledAt: Timestamp.now(),
         });
@@ -337,6 +466,84 @@ async function dropCard() {
     });
   } catch (err) {
     console.error('[drop] Error:', err);
+  }
+}
+
+// ── /buy-amber command ────────────────────────────────────────────────────────
+async function handleBuyAmber(interaction) {
+  if (!stripe) {
+    return interaction.reply({ content: '❌ Amber purchases are not available yet.', ephemeral: true });
+  }
+
+  const linkDoc = await db.doc(`discord_links/${interaction.user.id}`).get();
+  if (!linkDoc.exists) {
+    return interaction.reply({
+      content: '❌ Link your WeeBee account first — run `/link` with your code from WeeBee.',
+      ephemeral: true,
+    });
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle('🟡  Buy Amber')
+    .setDescription('Amber is WeeBee\'s TCG currency. Use it to open packs in the store.')
+    .addFields(AMBER_BUNDLES.map(b => ({
+      name: `$${(b.price / 100).toFixed(2)} — ${b.label} + **${b.bonus.toLocaleString()} Bonus** 🎁`,
+      value: `**${b.amount.toLocaleString()} Amber total**`,
+      inline: false,
+    })))
+    .setColor(0xffc107)
+    .setFooter({ text: 'Payments processed securely by Stripe · Link expires in 30 min' });
+
+  const buttons = AMBER_BUNDLES.map(b =>
+    new ButtonBuilder()
+      .setCustomId(`buy_amber_${b.id}`)
+      .setLabel(`${b.label} + ${b.bonus.toLocaleString()} Bonus · $${(b.price / 100).toFixed(2)}`)
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  await interaction.reply({
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(...buttons)],
+    ephemeral: true,
+  });
+}
+
+async function handleBuyAmberButton(interaction, bundleId) {
+  const bundle = AMBER_BUNDLES.find(b => b.id === bundleId);
+  if (!bundle) return interaction.reply({ content: '❌ Unknown bundle.', ephemeral: true });
+
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: `${bundle.label} — WeeBee TCG`,
+            description: 'Amber currency for WeeBee TCG. Added to your linked WeeBee account automatically.',
+          },
+          unit_amount: bundle.price,
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      client_reference_id: interaction.user.id,
+      metadata: { bundleId: bundle.id },
+      success_url: `${process.env.PUBLIC_URL || 'https://weebee.buzz'}?amber_purchased=1`,
+      cancel_url:  process.env.PUBLIC_URL || 'https://weebee.buzz',
+      expires_at:  Math.floor(Date.now() / 1000) + 30 * 60,
+    });
+
+    await interaction.editReply({
+      content:
+        `✅ **Your payment link is ready:**\n${session.url}\n\n` +
+        `*Amber is added to your WeeBee account automatically after payment. Link expires in 30 minutes.*`,
+    });
+  } catch (err) {
+    console.error('[stripe] Failed to create checkout session:', err);
+    await interaction.editReply({ content: '❌ Failed to create payment link. Please try again.' });
   }
 }
 
@@ -418,6 +625,10 @@ client.once('ready', async () => {
         .setName('drop')
         .setDescription('Force an immediate card drop (admin only)')
         .toJSON(),
+      new SlashCommandBuilder()
+        .setName('buy-amber')
+        .setDescription('Purchase Amber to spend in the WeeBee TCG store')
+        .toJSON(),
     ],
   });
   console.log('[bot] Slash commands registered');
@@ -427,9 +638,19 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName === 'link') await handleLink(interaction);
-  if (interaction.commandName === 'drop') await handleDrop(interaction);
+  if (interaction.isChatInputCommand()) {
+    if (interaction.commandName === 'link')       await handleLink(interaction);
+    if (interaction.commandName === 'drop')       await handleDrop(interaction);
+    if (interaction.commandName === 'buy-amber')  await handleBuyAmber(interaction);
+    return;
+  }
+
+  if (interaction.isButton()) {
+    if (interaction.customId.startsWith('buy_amber_')) {
+      const bundleId = interaction.customId.replace('buy_amber_', '');
+      await handleBuyAmberButton(interaction, bundleId);
+    }
+  }
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);

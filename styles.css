@@ -144,6 +144,16 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
 .search-icon-btn:hover { background: var(--bg-gray); }
 .search-icon-btn .material-symbols-outlined { font-size: 22px; }
 
+/* ── Discord nav button (desktop topbar) ── */
+.discord-nav-btn { display: flex; align-items: center; justify-content: center; background: none; border: none; padding: 6px; color: var(--text-dark); cursor: pointer; border-radius: 8px; text-decoration: none; transition: color 0.15s, background 0.15s; }
+.discord-nav-btn:hover { background: var(--bg-gray); color: #5865f2; }
+.discord-bubble-wrap { position: relative; }
+.discord-nav-bubble { position: absolute; top: calc(100% + 10px); right: 0; background: #5865f2; color: #fff; padding: 8px 10px 8px 13px; border-radius: 10px; font-size: 13px; white-space: nowrap; font-weight: 600; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(88,101,242,0.4); z-index: 200; animation: discordBubblePop 0.2s ease; }
+.discord-nav-bubble::before { content: ''; position: absolute; top: -6px; right: 10px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 6px solid #5865f2; }
+.discord-bubble-close { background: none; border: none; color: rgba(255,255,255,0.65); cursor: pointer; font-size: 18px; line-height: 1; padding: 0; flex-shrink: 0; }
+.discord-bubble-close:hover { color: #fff; }
+@keyframes discordBubblePop { from { opacity: 0; transform: translateY(-4px) scale(0.95); } to { opacity: 1; transform: none; } }
+
 /* ── Mobile search dropdown ── */
 .mobile-search-bar { display: none; background: var(--bg-white); border-bottom: 1px solid var(--border-color); padding: 10px 16px; position: sticky; top: 64px; z-index: 98; }
 .mobile-search-bar.open { display: block; }
@@ -208,6 +218,8 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     .hamburger-btn { display: flex; }
     .search-bar { display: none; }
     .search-icon-btn { display: flex; }
+    .discord-nav-btn { display: none; }
+    .discord-bubble-wrap { display: none; }
     .content-views { padding: 20px; }
     .logo { font-size: 20px; margin-right: 0; }
 }
@@ -1944,6 +1956,7 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     align-items: center !important;
     justify-content: center !important;
     position: relative !important;
+    overflow: hidden !important;
 }
 /* Rainbow primary star — hue-rotates at same 6s as the border spin */
 .wb-card--prismatic .wb-rarity-gem--star {
@@ -1955,32 +1968,14 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     animation: prismatic-gem-cycle 6s linear infinite !important;
     animation-play-state: paused !important;
     z-index: 1 !important;
-    font-size: 15px !important;
+    font-size: 18px !important;
 }
 @keyframes prismatic-gem-cycle {
     from { filter: hue-rotate(0deg)   drop-shadow(0 0 4px rgba(200,120,255,0.9)); }
     to   { filter: hue-rotate(360deg) drop-shadow(0 0 4px rgba(200,120,255,0.9)); }
 }
-/* Washed rainbow background star */
-.wb-card--prismatic .wb-rarity-gem--star::before {
-    content: '★';
-    position: absolute !important;
-    top: 50% !important;
-    left: 50% !important;
-    transform: translate(-50%, -50%) !important;
-    font-size: 20px !important;
-    line-height: 1 !important;
-    display: block !important;
-    background: linear-gradient(90deg, #ffbbbb, #ffddaa, #ffffcc, #bbffdd, #bbddff, #ddbbff, #ffbbdd, #ffbbbb) !important;
-    background-size: 200% auto !important;
-    -webkit-background-clip: text !important;
-    background-clip: text !important;
-    color: transparent !important;
-    animation: prismatic-text-scroll 6s linear infinite !important;
-    animation-play-state: paused !important;
-    z-index: 0 !important;
-}
-.wb-card--prismatic .wb-rarity-gem--star::after { display: none !important; }
+.wb-card--prismatic .wb-rarity-gem--star::before { display: none !important; }
+.wb-card--prismatic .wb-rarity-gem--star::after  { display: none !important; }
 .wb-card--prismatic.tcg-anim-in-view .wb-rarity-gem--star,
 .wb-card--prismatic.tcg-anim-in-view .wb-rarity-gem--star::before { animation-play-state: running !important; }
 
@@ -2083,7 +2078,79 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 .wb-sparkle:nth-child(5) { left:78%; bottom:42%; font-size: 9px; color:#ffffff; animation-delay:0.5s;  animation-duration:4.5s; }
 .wb-sparkle:nth-child(6) { left:55%; bottom:62%; font-size: 8px; color:#ffe680; animation-delay:1.3s;  animation-duration:3.9s; }
 .wb-sparkle:nth-child(7) { left:33%; bottom:10%; font-size:10px; color:#b3e6ff; animation-delay:2.0s;  animation-duration:4.3s; }
-.wb-sparkle:nth-child(8) { left:62%; bottom:75%; font-size: 9px; color:#ffb3e6; animation-delay:3.1s;  animation-duration:3.7s; }
+.wb-sparkle:nth-child(8) { left:62%; bottom:55%; font-size: 9px; color:#ffb3e6; animation-delay:3.1s;  animation-duration:3.7s; }
+
+/* ── Prismatic Pack image glow (store) ───────────────────────────────────── */
+.tcg-pack-card.prismatic-pack-glow img {
+    animation: prismatic-pack-img-glow 6s ease-in-out infinite;
+}
+@keyframes prismatic-pack-img-glow {
+    0%   { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(255,0,120,0.7)); }
+    17%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(255,140,0,0.7)); }
+    33%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(100,255,80,0.6)); }
+    50%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(0,200,255,0.7)); }
+    67%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(80,80,255,0.7)); }
+    83%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(200,0,255,0.7)); }
+    100% { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(255,0,120,0.7)); }
+}
+
+/* ── Prismatic Event Banner (home page) ──────────────────────────────────── */
+.prismatic-event-banner {
+    position: relative;
+    overflow: hidden;
+    border-radius: 16px;
+    padding: 5px;
+    animation: prismatic-outer-glow 6s ease-in-out infinite;
+}
+.prismatic-event-banner::before {
+    content: '';
+    position: absolute;
+    inset: -100%;
+    background: conic-gradient(
+        from 0deg,
+        #ff9aaa, rgba(255,255,255,0.7), #ffcc88, rgba(255,255,255,0.7),
+        #99ffcc, rgba(255,255,255,0.7), #88ddff, rgba(255,255,255,0.7),
+        #bb99ff, rgba(255,255,255,0.7), #ff9aaa
+    );
+    animation: prismatic-border-spin 6s linear infinite;
+    z-index: 0;
+    pointer-events: none;
+}
+.prismatic-event-banner-inner {
+    position: relative;
+    z-index: 1;
+    background: #07070f;
+    border-radius: 12px;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    overflow: hidden;
+}
+.prismatic-event-banner-inner .wb-prismatic-sparkles { pointer-events: none; }
+.prismatic-event-banner-inner .wb-sparkle { animation-play-state: running; }
+.prismatic-event-banner-pack {
+    height: 110px;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 20px rgba(168,85,247,0.6));
+    flex-shrink: 0;
+}
+@media (max-width: 640px) {
+    /* Hide flanking pack images on mobile — text fills the full width */
+    .prismatic-event-banner-pack { display: none !important; }
+    .prismatic-event-banner-inner { gap: 0; padding: 20px 18px; justify-content: center; }
+    .prismatic-banner-heading { font-size: 17px !important; }
+
+    /* BuzzWord game card rows — tighten padding and gap to keep Play button on screen */
+    .bw-banner-op,
+    .bw-banner-nrt,
+    .bw-banner-blc,
+    .bw-banner-db { padding: 14px 16px !important; gap: 12px !important; }
+
+    /* BuzzWord hero banner — shrink image to fit full width instead of cropping sides */
+    .bw-hero-bg-img { background-size: 100% auto !important; background-position: center center !important; }
+}
 
 /* UR flip card back in pack opening */
 .tcg-pack-card-ur {
@@ -2101,6 +2168,7 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 }
 .wb-card-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; }
 .wb-card-caption { font-size:11px; color:var(--text-muted); text-align:center; max-width:220px; }
+.tcg-pack-card { width:260px; box-sizing:border-box; }
 
 /* ── TCG Showcase Carousel ────────────────────────────────────── */
 .tcg-carousel-viewport {

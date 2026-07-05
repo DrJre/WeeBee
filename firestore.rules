@@ -217,7 +217,7 @@ service cloud.firestore {
       // but privileged numeric fields (currency, rank counters) can only move
       // by bounded amounts per write. Amber may be spent freely (only capped
       // at 0 — can't go negative) but can only increase by ≤ 2000 per write
-      // (matches the largest single award: UR dismantle = 1500 amber). The
+      // (covers bulk smart-dismantle: up to ~13 URs at 1500 each). The
       // +1 caps on counters prevent bulk-inflating rank stats.
       //
       // Non-owners may increment amber only (positive direction, ≤ 50000 per
@@ -227,7 +227,7 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         isOwner(uid) &&
         request.resource.data.get('amber', 0) >= 0 &&
-        request.resource.data.get('amber', 0) <= resource.data.get('amber', 0) + 2000 &&
+        request.resource.data.get('amber', 0) <= resource.data.get('amber', 0) + 20000 &&
         request.resource.data.get('reviewCount', 0)    <= resource.data.get('reviewCount', 0) + 1 &&
         request.resource.data.get('indepthCount', 0)   <= resource.data.get('indepthCount', 0) + 1 &&
         request.resource.data.get('completedCount', 0) <= resource.data.get('completedCount', 0) + 1 &&
@@ -484,6 +484,12 @@ service cloud.firestore {
 
     // ── TCG Pack Store flash sale toggle ───────────────────────────────────
     match /tcg_sale_config/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── TCG event config (prismatic event start/end) ───────────────────────
+    match /tcg_event_config/{doc} {
       allow read: if true;
       allow write: if isAdmin();
     }

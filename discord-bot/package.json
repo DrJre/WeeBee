@@ -11,6 +11,8 @@
     "discord.js": "^14.16.3",
     "firebase-admin": "^13.4.0",
     "dotenv": "^16.4.7",
-    "@napi-rs/canvas": "^0.1.57"
+    "@napi-rs/canvas": "^0.1.57",
+    "stripe": "^17.7.0",
+    "express": "^4.21.2"
   }
 }
