@@ -8931,7 +8931,7 @@ window._tcgFindCard = async function(nameQuery, rarities) {
 
 // Admin sub-tab switcher
 window.switchAdminSubtab = function(tab) {
-    ['moderation','economy','cards','gifts'].forEach(t => {
+    ['moderation','economy','cards','gifts','feedback'].forEach(t => {
         const el = document.getElementById('admin-subtab-' + t);
         const btn = document.getElementById('admin-subtab-' + t + '-btn');
         if (el) el.style.display = t === tab ? '' : 'none';
@@ -8941,6 +8941,86 @@ window.switchAdminSubtab = function(tab) {
             btn.style.fontWeight = t === tab ? '800' : '600';
         }
     });
+    if (tab === 'feedback') window._adminLoadFeedback();
+};
+
+window._adminLoadFeedback = async function() {
+    if (!window.isAdmin) return;
+    const el = document.getElementById('admin-feedback-list');
+    if (!el) return;
+    el.innerHTML = '<div style="padding:20px;color:var(--text-muted);">Loading…</div>';
+
+    const statusColors  = { pending:'#9ca3af', under_review:'#f59e0b', approved:'#22c55e', declined:'#ef4444' };
+    const statusLabels  = { pending:'⏳ Pending', under_review:'⏳ Under Review', approved:'✅ Approved', declined:'❌ Declined' };
+
+    try {
+        const [sugSnap, bugSnap] = await Promise.all([
+            getDocs(query(collection(db,'feature_suggestions'), orderBy('timestamp','desc'), limit(200))),
+            getDocs(query(collection(db,'bug_reports'),         orderBy('timestamp','desc'), limit(100))),
+        ]);
+        const items = [];
+        sugSnap.forEach(d => items.push({ id:d.id, _type:'suggestion', ...d.data() }));
+        bugSnap.forEach(d => items.push({ id:d.id, _type:'bug',        ...d.data() }));
+        items.sort((a,b) => (b.timestamp?.toMillis?.()??0) - (a.timestamp?.toMillis?.()??0));
+
+        if (!items.length) { el.innerHTML = '<p style="color:var(--text-muted);">No feedback yet.</p>'; return; }
+
+        el.innerHTML = items.map(item => {
+            const ts     = item.timestamp?.toDate?.()?.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) ?? '';
+            const isBug  = item._type === 'bug';
+            const isDisc = item.source === 'discord';
+            const status = item.status || 'pending';
+
+            const sourceBadge = isDisc
+                ? `<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:#5865f2;color:#fff;">🎮 Discord</span>`
+                : `<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:var(--bg-gray-darker);color:var(--text-dark);">🌐 Website</span>`;
+            const typeBadge = isBug
+                ? `<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:rgba(239,68,68,0.15);color:#ef4444;">🐛 Bug</span>`
+                : (item.category === 'discord'
+                    ? `<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:rgba(88,101,242,0.12);color:#818cf8;">🎮 Server</span>`
+                    : `<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:rgba(245,158,11,0.15);color:#f59e0b;">💡 Feature</span>`);
+            const statusBadge = isBug ? '' : `<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:${statusColors[status]}22;color:${statusColors[status]};border:1px solid ${statusColors[status]}44;">${statusLabels[status]}</span>`;
+
+            const titleText = item.title || (isBug ? 'Bug Report' : 'Feature Suggestion');
+            const bodyText  = item.description || item.text || '';
+            const author    = item.discordUsername || item.displayName || 'Anonymous';
+
+            const statusBtns = (!isBug && isDisc) ? `
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+                    ${['pending','under_review','approved','declined'].map(s =>
+                        `<button onclick="window._adminSetSuggestionStatus('${item.id}','${s}',this)" style="padding:4px 10px;border-radius:8px;border:1px solid ${s===status?statusColors[s]:'var(--border-color)'};background:${s===status?statusColors[s]+'22':'transparent'};color:${s===status?statusColors[s]:'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${statusLabels[s]}</button>`
+                    ).join('')}
+                </div>` : (!isBug ? `
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+                    ${['pending','approved','declined'].map(s =>
+                        `<button onclick="window._adminSetSuggestionStatus('${item.id}','${s}',this)" style="padding:4px 10px;border-radius:8px;border:1px solid ${s===status?statusColors[s]:'var(--border-color)'};background:${s===status?statusColors[s]+'22':'transparent'};color:${s===status?statusColors[s]:'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${statusLabels[s]}</button>`
+                    ).join('')}
+                </div>` : '');
+
+            return `<div style="background:var(--bg-gray);border-radius:12px;padding:14px 16px;margin-bottom:10px;border-left:3px solid ${isBug?'#ef4444':statusColors[status]};">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+                    ${sourceBadge}${typeBadge}${statusBadge}
+                    <span style="font-size:11px;color:var(--text-muted);margin-left:auto;">${ts} · ${author}</span>
+                </div>
+                <div style="font-size:13px;font-weight:800;color:var(--text-dark);margin-bottom:4px;">${titleText.replace(/</g,'&lt;')}</div>
+                <div style="font-size:12px;color:var(--text-muted);white-space:pre-wrap;">${bodyText.replace(/</g,'&lt;')}</div>
+                ${statusBtns}
+            </div>`;
+        }).join('');
+    } catch(e) {
+        el.innerHTML = `<p style="color:#ef4444;font-size:13px;">Failed to load: ${e.message}</p>`;
+    }
+};
+
+window._adminSetSuggestionStatus = async function(docId, status, btn) {
+    if (!window.isAdmin) return;
+    try {
+        await updateDoc(doc(db,'feature_suggestions',docId), { status, updatedAt: serverTimestamp() });
+        // Refresh the whole list so all status buttons re-render
+        window._adminLoadFeedback();
+    } catch(e) {
+        alert('Failed: ' + e.message);
+    }
 };
 
 window._adminScanLopsidedTrades = async function() {
@@ -13162,11 +13242,15 @@ window._tcgCardSort = 'rarity';
 window._tcgCardFilter = 'all';
 window._tcgCardSearch = '';
 window._tcgShowDupes = false;
+window._tcgShowMissing = false;
+window._tcgCollMissingGen = 0;
 window._tcgProfileCardSort = 'rarity';
 window._tcgProfileCardSearch = '';
 window._tcgProfileShowDupes = false;
 window._tcgProfileCards = [];
 window._tcgProfilePinnedIds = [];
+window._tcgProfileShowMissing = false;
+window._tcgMissingGen = 0;
 
 function _tcgDupeIds(cards) {
     const counts = {};
@@ -13212,6 +13296,21 @@ window._tcgRefreshCollectionGrid = function(uid, filter) {
         dupesBtn.style.background = dupeActive ? 'rgba(245,158,11,0.12)' : 'var(--bg-gray)';
         dupesBtn.style.color = dupeActive ? '#f59e0b' : 'var(--text-muted)';
     }
+    const collMissingActive = !!window._tcgShowMissing;
+    const collMissingBtn = document.getElementById('tcg-missing-toggle');
+    if (collMissingBtn) {
+        collMissingBtn.style.borderColor = collMissingActive ? '#3b82f6' : 'var(--border-color)';
+        collMissingBtn.style.background  = collMissingActive ? 'rgba(59,130,246,0.12)' : 'var(--bg-gray)';
+        collMissingBtn.style.color       = collMissingActive ? '#3b82f6' : 'var(--text-muted)';
+    }
+    const collCountHeader = document.getElementById('tcg-collection-count-header');
+    if (collMissingActive) {
+        if (collCountHeader) collCountHeader.textContent = '🔍 Loading missing cards…';
+        grid.innerHTML = '<div style="padding:20px;color:var(--text-muted);">Loading…</div>';
+        window._tcgRenderMyMissingCards(uid, filter);
+        return;
+    }
+    if (collCountHeader) collCountHeader.textContent = '';
     const filtered = (filter === 'all' ? [...cards] : cards.filter(c => c.rarity === filter))
         .filter(c => !searchQ || (c.name||'').toLowerCase().includes(searchQ) || (c.anime||'').toLowerCase().includes(searchQ))
         .filter(c => !dupeIdSet || dupeIdSet.has(c.id))
@@ -13246,6 +13345,70 @@ window._tcgRefreshCollectionGrid = function(uid, filter) {
             </div>` : ''}
         </div>`;
     }).join('');
+    _tcgObserveSSRCards(grid);
+};
+
+window._tcgRenderMyMissingCards = async function(uid, filter) {
+    const gen = ++window._tcgCollMissingGen;
+    const grid = document.getElementById('tcg-collection-grid');
+    const countHeader = document.getElementById('tcg-collection-count-header');
+    const searchCountEl = document.getElementById('tcg-collection-search-count');
+    if (!grid) return;
+
+    await _tcgEnsureCardPool();
+    if (gen !== window._tcgCollMissingGen) return;
+
+    const ownedCards = window._tcgCollectionCache?.get(uid) || [];
+    const ownedKeys = new Set(ownedCards.map(c => `${c.name}|||${c.rarity}`));
+    const searchQ = (window._tcgCardSearch || '').toLowerCase().trim();
+
+    const mapPool = (pool, rarity) => (pool || []).map(c => ({
+        name: c.name,
+        anime: _normalizeSeriesName(c.series || c.anime || ''),
+        image: c.image,
+        rarity
+    }));
+    const pools = {
+        ur:     mapPool(window._tcgURPool?.length        ? window._tcgURPool        : TCG_UR_CARDS,  'ur'),
+        pr:     mapPool(window._tcgPrismaticPool?.length  ? window._tcgPrismaticPool : TCG_PR_CARDS,  'pr'),
+        ssr:    mapPool(window._tcgSSRPool?.length        ? window._tcgSSRPool       : TCG_SSR_CARDS, 'ssr'),
+        sr:     mapPool(window._tcgSRPool?.length         ? window._tcgSRPool        : TCG_SR_CARDS,  'sr'),
+        rare:   mapPool(window._tcgRarePool,   'rare'),
+        common: mapPool(window._tcgCommonPool, 'common'),
+    };
+
+    const poolCards = filter === 'all'
+        ? ['ur','pr','ssr','sr','rare','common'].flatMap(r => pools[r])
+        : (pools[filter] || []);
+
+    const missingCards = poolCards.filter(c => !ownedKeys.has(`${c.name}|||${c.rarity}`));
+    const filtered = searchQ
+        ? missingCards.filter(c => c.name.toLowerCase().includes(searchQ) || c.anime.toLowerCase().includes(searchQ))
+        : missingCards;
+
+    const rl = { ur:'UR', pr:'Event', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
+    if (countHeader) countHeader.textContent = filter === 'all'
+        ? `🔍 Missing Cards (${missingCards.length} of ${poolCards.length})`
+        : `🔍 Missing ${rl[filter]||filter} (${missingCards.length} of ${poolCards.length})`;
+    if (searchCountEl) searchCountEl.innerHTML = searchQ
+        ? `${filtered.length} result${filtered.length!==1?'s':''} for "<strong>${searchQ}</strong>"`
+        : '';
+
+    if (!filtered.length) {
+        grid.innerHTML = `<p style="color:var(--text-muted);padding:8px 0;">${
+            missingCards.length === 0
+                ? '✅ You own at least one copy of every card in this category!'
+                : 'No cards match your search.'
+        }</p>`;
+        return;
+    }
+
+    grid.innerHTML = filtered.map(card =>
+        `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;opacity:0.45;filter:grayscale(40%);">
+            <div class="tcg-card-scale-wrap" style="cursor:default;"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>
+            <div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">Not owned</div>
+        </div>`
+    ).join('');
     _tcgObserveSSRCards(grid);
 };
 
@@ -13286,6 +13449,26 @@ window._tcgRefreshProfileCardGrid = function(uid) {
         dupesBtn.style.background = profileDupeActive ? 'rgba(245,158,11,0.12)' : 'var(--bg-gray)';
         dupesBtn.style.color = profileDupeActive ? '#f59e0b' : 'var(--text-muted)';
     }
+    const missingActive = !!window._tcgProfileShowMissing;
+    const missingBtn = document.getElementById('profile-tcg-missing-toggle');
+    if (missingBtn) {
+        missingBtn.style.borderColor = missingActive ? '#3b82f6' : 'var(--border-color)';
+        missingBtn.style.background = missingActive ? 'rgba(59,130,246,0.12)' : 'var(--bg-gray)';
+        missingBtn.style.color = missingActive ? '#3b82f6' : 'var(--text-muted)';
+    }
+    // Keep rarity pill highlights in sync (they're baked into innerHTML at render time)
+    document.querySelectorAll('[data-profile-filter]').forEach(btn => {
+        const active = btn.dataset.profileFilter === profileFilter;
+        btn.style.borderColor = active ? 'var(--accent-yellow)' : 'var(--border-color)';
+        btn.style.background  = active ? 'rgba(245,158,11,0.12)' : 'var(--bg-gray)';
+        btn.style.color       = active ? '#f59e0b' : 'var(--text-muted)';
+    });
+    if (missingActive) {
+        if (headerEl) headerEl.textContent = '🔍 Loading missing cards…';
+        grid.innerHTML = '<div style="padding:20px;color:var(--text-muted);">Loading…</div>';
+        window._tcgRenderMissingCards(uid);
+        return;
+    }
     const sortedCards = [...cards]
         .filter(c => profileFilter === 'all' || c.rarity === profileFilter)
         .filter(c => !profileSearchQ || (c.name||'').toLowerCase().includes(profileSearchQ) || (c.anime||'').toLowerCase().includes(profileSearchQ))
@@ -13324,6 +13507,71 @@ window._tcgRefreshProfileCardGrid = function(uid) {
 function _tcgPulledAtMillis(card) {
     return card.pulledAt && typeof card.pulledAt.toMillis === 'function' ? card.pulledAt.toMillis() : 0;
 }
+
+window._tcgRenderMissingCards = async function(uid) {
+    const gen = ++window._tcgMissingGen;
+    const grid = document.getElementById('profile-tcg-cards-grid');
+    const headerEl = document.getElementById('profile-tcg-card-count-header');
+    const searchCountEl = document.getElementById('profile-tcg-search-count');
+    if (!grid) return;
+
+    await _tcgEnsureCardPool();
+    if (gen !== window._tcgMissingGen) return;
+
+    const filter = window._tcgProfileCardFilter || 'all';
+    const ownedCards = window._tcgProfileCards || [];
+    const ownedKeys = new Set(ownedCards.map(c => `${c.name}|||${c.rarity}`));
+    const searchQ = (window._tcgProfileCardSearch || '').toLowerCase().trim();
+
+    const mapPool = (pool, rarity) => (pool || []).map(c => ({
+        name: c.name,
+        anime: _normalizeSeriesName(c.series || c.anime || ''),
+        image: c.image,
+        rarity
+    }));
+    const pools = {
+        ur:  mapPool(window._tcgURPool?.length     ? window._tcgURPool     : TCG_UR_CARDS,  'ur'),
+        pr:  mapPool(window._tcgPrismaticPool?.length ? window._tcgPrismaticPool : TCG_PR_CARDS, 'pr'),
+        ssr: mapPool(window._tcgSSRPool?.length    ? window._tcgSSRPool    : TCG_SSR_CARDS, 'ssr'),
+        sr:  mapPool(window._tcgSRPool?.length     ? window._tcgSRPool     : TCG_SR_CARDS,  'sr'),
+        rare:   mapPool(window._tcgRarePool,   'rare'),
+        common: mapPool(window._tcgCommonPool, 'common'),
+    };
+
+    const poolCards = filter === 'all'
+        ? ['ur','pr','ssr','sr','rare','common'].flatMap(r => pools[r])
+        : (pools[filter] || []);
+
+    const missingCards = poolCards.filter(c => !ownedKeys.has(`${c.name}|||${c.rarity}`));
+    const filtered = searchQ
+        ? missingCards.filter(c => c.name.toLowerCase().includes(searchQ) || c.anime.toLowerCase().includes(searchQ))
+        : missingCards;
+
+    const rl = { ur:'UR', pr:'Event', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common' };
+    if (headerEl) headerEl.textContent = filter === 'all'
+        ? `🔍 Missing Cards (${missingCards.length} of ${poolCards.length})`
+        : `🔍 Missing ${rl[filter]||filter} (${missingCards.length} of ${poolCards.length})`;
+    if (searchCountEl) searchCountEl.innerHTML = searchQ
+        ? `${filtered.length} result${filtered.length!==1?'s':''} for "<strong>${searchQ}</strong>"`
+        : '';
+
+    if (!filtered.length) {
+        grid.innerHTML = `<p style="color:var(--text-muted);padding:8px 0;">${
+            missingCards.length === 0
+                ? '✅ You own at least one copy of every card in this category!'
+                : 'No cards match your search.'
+        }</p>`;
+        return;
+    }
+
+    grid.innerHTML = filtered.map(card =>
+        `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;opacity:0.45;filter:grayscale(40%);">
+            <div class="tcg-card-scale-wrap" style="cursor:default;"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>
+            <div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">Not owned</div>
+        </div>`
+    ).join('');
+    _tcgObserveSSRCards(grid);
+};
 
 window._tcgToggleMultiSelect = function(uid, filter, profileUid) {
     window._tcgMultiSelect.active = !window._tcgMultiSelect.active;
@@ -13810,6 +14058,7 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
                     return `<button onclick="window._tcgCardSearch='';window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'),'${uid}','${f}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
                 }).join('')}
                 <button id="tcg-dupes-toggle" onclick="window._tcgShowDupes=!window._tcgShowDupes;window._tcgRefreshCollectionGrid('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${window._tcgShowDupes?'var(--accent-yellow)':'var(--border-color)'};background:${window._tcgShowDupes?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${window._tcgShowDupes?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">🔁 Dupes</button>
+                <button id="tcg-missing-toggle" onclick="window._tcgShowMissing=!window._tcgShowMissing;window._tcgRefreshCollectionGrid('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${window._tcgShowMissing?'#3b82f6':'var(--border-color)'};background:${window._tcgShowMissing?'rgba(59,130,246,0.12)':'var(--bg-gray)'};color:${window._tcgShowMissing?'#3b82f6':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">🔍 Missing</button>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 <select onchange="window._tcgSetCardSort(this.value,'${uid}','${filter}')" style="padding:6px 10px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;">
@@ -13835,6 +14084,7 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
             </div>
             <div id="tcg-collection-search-count" style="font-size:12px;color:var(--text-muted);margin-top:6px;margin-left:4px;">${searchQ ? `${filtered.length} result${filtered.length!==1?'s':''} for "<strong>${searchQ}</strong>"` : ''}</div>
         </div>
+        <div id="tcg-collection-count-header" style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;"></div>
         ${ms.active ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;padding:10px 14px;background:var(--bg-gray);border-radius:10px;border:1px solid var(--border-color);">
             <span style="font-size:13px;font-weight:700;">${selCount} selected</span>
             <button onclick="window._tcgBulkPin('${uid}')" ${!selCount?'disabled':''} style="padding:6px 14px;border-radius:8px;border:1px solid ${selCount?'var(--accent-yellow)':'var(--border-color)'};background:${selCount?'rgba(245,158,11,0.12)':'var(--bg-gray-darker)'};color:${selCount?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:${selCount?'pointer':'default'};">☆ Pin Selected</button>
@@ -14251,9 +14501,10 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
             ${['all','ur','pr','ssr','sr','rare','common'].map(f => {
                 const labels = { all:`All (${cards.length})`, pr:`Event (${counts.pr})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
                 const active = f === profileFilter;
-                return `<button onclick="window._tcgSetProfileCardFilter('${f}','${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
+                return `<button data-profile-filter="${f}" onclick="window._tcgSetProfileCardFilter('${f}','${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
             }).join('')}
             <button id="profile-tcg-dupes-toggle" onclick="window._tcgProfileShowDupes=!window._tcgProfileShowDupes;window._tcgRefreshProfileCardGrid('${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${window._tcgProfileShowDupes?'var(--accent-yellow)':'var(--border-color)'};background:${window._tcgProfileShowDupes?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${window._tcgProfileShowDupes?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">🔁 Dupes</button>
+            ${isOwner ? `<button id="profile-tcg-missing-toggle" onclick="window._tcgProfileShowMissing=!window._tcgProfileShowMissing;window._tcgRefreshProfileCardGrid('${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${window._tcgProfileShowMissing?'#3b82f6':'var(--border-color)'};background:${window._tcgProfileShowMissing?'rgba(59,130,246,0.12)':'var(--bg-gray)'};color:${window._tcgProfileShowMissing?'#3b82f6':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">🔍 Missing</button>` : ''}
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
             <div id="profile-tcg-card-count-header" style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">🃏 All Cards (${cards.length})</div>
@@ -14385,7 +14636,7 @@ window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
     const seedMyAmber = opts.seedMyAmber || 0;
     const seedTheirAmber = opts.seedTheirAmber || 0;
     modal.innerHTML = `
-        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:1080px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;">
+        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:1080px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;overscroll-behavior:contain;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                 <div style="font-size:17px;font-weight:800;color:var(--text-dark);">${opts.tradeId ? 'Counter Offer' : 'Propose Trade'} — ${otherName}</div>
                 <button onclick="document.getElementById('tcg-trade-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
@@ -14543,7 +14794,7 @@ function _tcgTradeSideHTML(side) {
     cards.forEach(c => { if (c.rarity in counts) counts[c.rarity]++; });
 
     return `
-        <input type="text" id="tcg-trade-${side}-search" value="${search.replace(/"/g,'&quot;')}" placeholder="Search by character or anime…" oninput="window._tcgSearchTradeSide('${side}',this.value)" style="width:100%;padding:6px 10px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:12px;box-sizing:border-box;margin-bottom:8px;">
+        <input type="text" id="tcg-trade-${side}-search" value="${search.replace(/"/g,'&quot;')}" placeholder="Search by character or anime…" oninput="window._tcgSearchTradeSide('${side}',this.value)" onkeydown="if(event.key==='Enter')event.preventDefault()" style="width:100%;padding:6px 10px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:12px;box-sizing:border-box;margin-bottom:8px;">
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:8px;">
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                 ${['all','ur','pr','ssr','sr','rare','common'].map(f => {
@@ -14562,7 +14813,7 @@ function _tcgTradeSideHTML(side) {
                 <option value="serial-high" ${sort==='serial-high'?'selected':''}>Sort: Serial # (High–Low)</option>
             </select>
         </div>
-        <div data-side="${side}" id="tcg-trade-${side}" style="display:flex;flex-wrap:wrap;gap:10px;max-height:420px;overflow-y:auto;margin-bottom:10px;">
+        <div data-side="${side}" id="tcg-trade-${side}" style="display:flex;flex-wrap:wrap;gap:10px;max-height:420px;overflow-y:auto;overscroll-behavior:contain;margin-bottom:10px;">
             ${_tcgTradeGridHTML(side)}
         </div>`;
 }
@@ -17360,7 +17611,7 @@ window._tcgOpenTradeUserSearch = function() {
                 <div style="font-size:17px;font-weight:800;color:var(--text-dark);">Start a Trade</div>
                 <button onclick="document.getElementById('tcg-trade-search-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
             </div>
-            <input id="tcg-trade-search-input" type="text" placeholder="Search by username…" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border-color);font-size:14px;box-sizing:border-box;margin-bottom:14px;" oninput="window._tcgSearchTradeUsers(this.value)">
+            <input id="tcg-trade-search-input" type="text" placeholder="Search by username…" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border-color);font-size:14px;box-sizing:border-box;margin-bottom:14px;" oninput="window._tcgSearchTradeUsers(this.value)" onkeydown="if(event.key==='Enter')event.preventDefault()">
             <div id="tcg-trade-search-results"></div>
         </div>`;
     document.body.appendChild(modal);

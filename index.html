@@ -1035,6 +1035,7 @@
                             <button id="admin-subtab-economy-btn" onclick="window.switchAdminSubtab('economy')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🟡 Economy</button>
                             <button id="admin-subtab-cards-btn" onclick="window.switchAdminSubtab('cards')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🎴 Card Pool</button>
                             <button id="admin-subtab-gifts-btn" onclick="window.switchAdminSubtab('gifts')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🎁 Gifts</button>
+                            <button id="admin-subtab-feedback-btn" onclick="window.switchAdminSubtab('feedback')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">💡 Feedback</button>
                         </div>
 
                         <!-- ── MODERATION ── -->
@@ -1462,6 +1463,15 @@
                             </div>
 
 
+                        </div>
+
+                        <!-- ── FEEDBACK ── -->
+                        <div id="admin-subtab-feedback" style="display:none;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+                                <div style="font-size:14px;font-weight:800;">💡 User Feedback</div>
+                                <button onclick="window._adminLoadFeedback()" style="padding:7px 16px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray-darker);color:var(--text-dark);font-weight:700;font-size:12px;cursor:pointer;">↻ Refresh</button>
+                            </div>
+                            <div id="admin-feedback-list"><div style="padding:20px;color:var(--text-muted);">Click Refresh to load suggestions and bug reports.</div></div>
                         </div>
 
                     </div>
@@ -2751,6 +2761,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=531"></script>
+    <script type="module" src="app.js?v=534"></script>
 </body>
 </html>

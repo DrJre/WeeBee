@@ -4,6 +4,7 @@ const {
   Client, GatewayIntentBits, REST, Routes,
   SlashCommandBuilder, ButtonBuilder, ButtonStyle,
   ActionRowBuilder, EmbedBuilder, ComponentType, AttachmentBuilder,
+  ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
 
 const { initializeApp, cert } = require('firebase-admin/app');
@@ -547,6 +548,187 @@ async function handleBuyAmberButton(interaction, bundleId) {
   }
 }
 
+// ── /suggest command ─────────────────────────────────────────────────────────
+
+const SUGGEST_STATUS_COLORS = {
+  pending:      0x5865f2,
+  under_review: 0xf59e0b,
+  approved:     0x22c55e,
+  declined:     0xef4444,
+};
+const SUGGEST_STATUS_LABELS = {
+  pending:      '⏳ Pending',
+  under_review: '⏳ Under Review',
+  approved:     '✅ Approved',
+  declined:     '❌ Declined',
+};
+
+function buildSuggestEmbed(data) {
+  const catEmoji = data.category === 'discord' ? '🎮' : '🌐';
+  const catLabel = data.category === 'discord' ? 'Discord Server' : 'Website';
+  const status   = data.status || 'pending';
+  return new EmbedBuilder()
+    .setColor(SUGGEST_STATUS_COLORS[status] || 0x5865f2)
+    .setTitle(`${catEmoji} ${data.title}`)
+    .setDescription(data.description)
+    .addFields(
+      { name: 'Category',     value: catLabel,                       inline: true },
+      { name: 'Status',       value: SUGGEST_STATUS_LABELS[status],  inline: true },
+      { name: 'Submitted by', value: data.discordUsername,           inline: true },
+    )
+    .setFooter({ text: 'Use /suggest to submit your own idea' })
+    .setTimestamp(data.timestamp?.toDate?.() ?? new Date());
+}
+
+function buildSuggestButtons(docId, status) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`suggest_review_${docId}`)
+      .setLabel('Under Review')
+      .setEmoji('⏳')
+      .setStyle(status === 'under_review' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+      .setDisabled(status === 'under_review'),
+    new ButtonBuilder()
+      .setCustomId(`suggest_approve_${docId}`)
+      .setLabel('Approve')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(status === 'approved'),
+    new ButtonBuilder()
+      .setCustomId(`suggest_decline_${docId}`)
+      .setLabel('Decline')
+      .setEmoji('❌')
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(status === 'declined'),
+  );
+}
+
+async function handleSuggest(interaction) {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('suggest_cat_website')
+      .setLabel('🌐 Website Suggestion')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('suggest_cat_discord')
+      .setLabel('🎮 Discord Suggestion')
+      .setStyle(ButtonStyle.Secondary),
+  );
+  await interaction.reply({
+    content: '**What kind of suggestion do you have?**',
+    components: [row],
+    ephemeral: true,
+  });
+}
+
+async function handleSuggestCategory(interaction, category) {
+  const modal = new ModalBuilder()
+    .setCustomId(`suggest_modal_${category}`)
+    .setTitle(category === 'discord' ? '🎮 Discord Suggestion' : '🌐 Website Suggestion');
+
+  const titleInput = new TextInputBuilder()
+    .setCustomId('suggest_title')
+    .setLabel('Title (short summary)')
+    .setStyle(TextInputStyle.Short)
+    .setMaxLength(100)
+    .setRequired(true)
+    .setPlaceholder('e.g. Add a leaderboard for pack openings');
+
+  const descInput = new TextInputBuilder()
+    .setCustomId('suggest_description')
+    .setLabel('Description (details)')
+    .setStyle(TextInputStyle.Paragraph)
+    .setMaxLength(1000)
+    .setRequired(true)
+    .setPlaceholder('Describe your idea clearly. The more detail, the better!');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(titleInput),
+    new ActionRowBuilder().addComponents(descInput),
+  );
+
+  await interaction.showModal(modal);
+}
+
+async function handleSuggestModal(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  const category = interaction.customId.replace('suggest_modal_', '');
+  const title    = interaction.fields.getTextInputValue('suggest_title').trim();
+  const desc     = interaction.fields.getTextInputValue('suggest_description').trim();
+
+  const data = {
+    title,
+    description: desc,
+    category,
+    source:          'discord',
+    status:          'pending',
+    discordUserId:   interaction.user.id,
+    discordUsername: interaction.user.tag || interaction.user.username,
+    discordMessageId:  null,
+    discordChannelId:  null,
+    timestamp: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  };
+
+  let docId;
+  try {
+    const ref = await db.collection('feature_suggestions').add(data);
+    docId = ref.id;
+  } catch(e) {
+    console.error('[suggest] Firestore write failed:', e);
+    return interaction.editReply({ content: '❌ Failed to save your suggestion. Please try again.' });
+  }
+
+  const channelId = process.env.SUGGESTIONS_CHANNEL_ID;
+  if (channelId) {
+    try {
+      const channel = await interaction.client.channels.fetch(channelId);
+      const msg = await channel.send({
+        embeds:     [buildSuggestEmbed(data)],
+        components: [buildSuggestButtons(docId, 'pending')],
+      });
+      await msg.react('👍');
+      await msg.react('👎');
+      await db.collection('feature_suggestions').doc(docId).update({
+        discordMessageId: msg.id,
+        discordChannelId: channelId,
+      });
+    } catch(e) {
+      console.error('[suggest] Failed to post to suggestions channel:', e.message);
+    }
+  }
+
+  await interaction.editReply({ content: '🎉 Your suggestion has been submitted! Thanks for helping improve WeeBee.' });
+}
+
+async function handleSuggestStatus(interaction, newStatus, docId) {
+  if (!interaction.memberPermissions.has('Administrator')) {
+    return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+  }
+  await interaction.deferReply({ ephemeral: true });
+
+  const ref  = db.collection('feature_suggestions').doc(docId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    return interaction.editReply({ content: '❌ Suggestion not found.' });
+  }
+
+  const data = { ...snap.data(), status: newStatus, updatedAt: Timestamp.now() };
+  await ref.update({ status: newStatus, updatedAt: Timestamp.now() });
+
+  try {
+    await interaction.message.edit({
+      embeds:     [buildSuggestEmbed(data)],
+      components: [buildSuggestButtons(docId, newStatus)],
+    });
+  } catch(e) {
+    console.error('[suggest] Failed to edit embed:', e.message);
+  }
+
+  await interaction.editReply({ content: `✅ Status updated to **${SUGGEST_STATUS_LABELS[newStatus]}**.` });
+}
+
 // ── /drop command (admin only) ────────────────────────────────────────────────
 async function handleDrop(interaction) {
   if (!interaction.memberPermissions.has('Administrator')) {
@@ -607,9 +789,20 @@ client.once('ready', async () => {
   await loadFont();
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
-  const commandRoute = process.env.DISCORD_GUILD_ID
+  const usingGuild = !!process.env.DISCORD_GUILD_ID;
+  const commandRoute = usingGuild
     ? Routes.applicationGuildCommands(client.user.id, process.env.DISCORD_GUILD_ID)
     : Routes.applicationCommands(client.user.id);
+
+  // Clear the OTHER scope so stale commands from previous deploys don't duplicate
+  try {
+    const staleRoute = usingGuild
+      ? Routes.applicationCommands(client.user.id)
+      : Routes.applicationGuildCommands(client.user.id, process.env.DISCORD_GUILD_ID);
+    await rest.put(staleRoute, { body: [] });
+    console.log('[bot] Cleared stale commands from opposite scope');
+  } catch(e) { /* guild ID may not be set — that's fine */ }
+
   await rest.put(commandRoute, {
     body: [
       new SlashCommandBuilder()
@@ -629,6 +822,10 @@ client.once('ready', async () => {
         .setName('buy-amber')
         .setDescription('Purchase Amber to spend in the WeeBee TCG store')
         .toJSON(),
+      new SlashCommandBuilder()
+        .setName('suggest')
+        .setDescription('Submit a suggestion for the WeeBee website or Discord server')
+        .toJSON(),
     ],
   });
   console.log('[bot] Slash commands registered');
@@ -642,6 +839,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.commandName === 'link')       await handleLink(interaction);
     if (interaction.commandName === 'drop')       await handleDrop(interaction);
     if (interaction.commandName === 'buy-amber')  await handleBuyAmber(interaction);
+    if (interaction.commandName === 'suggest')    await handleSuggest(interaction);
     return;
   }
 
@@ -650,6 +848,15 @@ client.on('interactionCreate', async interaction => {
       const bundleId = interaction.customId.replace('buy_amber_', '');
       await handleBuyAmberButton(interaction, bundleId);
     }
+    if (interaction.customId === 'suggest_cat_website') await handleSuggestCategory(interaction, 'website');
+    if (interaction.customId === 'suggest_cat_discord')  await handleSuggestCategory(interaction, 'discord');
+    if (interaction.customId.startsWith('suggest_review_'))  await handleSuggestStatus(interaction, 'under_review', interaction.customId.replace('suggest_review_', ''));
+    if (interaction.customId.startsWith('suggest_approve_')) await handleSuggestStatus(interaction, 'approved',     interaction.customId.replace('suggest_approve_', ''));
+    if (interaction.customId.startsWith('suggest_decline_')) await handleSuggestStatus(interaction, 'declined',     interaction.customId.replace('suggest_decline_', ''));
+  }
+
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId.startsWith('suggest_modal_')) await handleSuggestModal(interaction);
   }
 });
 
