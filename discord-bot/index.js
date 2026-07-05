@@ -140,10 +140,29 @@ async function handleAmberPurchase(session) {
 }
 
 // ── Discord ───────────────────────────────────────────────────────────────────
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.GuildMembers,
+  ],
+});
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const CHANNEL_ID        = process.env.DISCORD_CHANNEL_ID;
+const CHANNEL_ID              = process.env.DISCORD_CHANNEL_ID;
+const DROP_ROLE_CHANNEL_ID    = '1521636275403362527';
+
+// ── Drop-role config (loaded from Firestore on startup) ───────────────────────
+let dropRoleConfig = null; // { roleId, messageId, channelId }
+
+async function loadDropRoleConfig() {
+  try {
+    const snap = await db.doc('discord_bot_state/drop_role').get();
+    if (snap.exists) dropRoleConfig = snap.data();
+  } catch(e) {
+    console.error('[drop-role] Failed to load config:', e.message);
+  }
+}
 const DROP_INTERVAL_MS  = 5 * 60 * 1000;
 const CLAIM_WINDOW_MS   = 15 * 1000;
 const SR_COOLDOWN_MS    = 60 * 60 * 1000;
@@ -374,11 +393,15 @@ async function dropCard() {
       .setLabel('✋  Claim')
       .setStyle(ButtonStyle.Primary);
 
-    const message = await channel.send({
+    const dropPayload = {
       embeds: [embed],
       files: [attachment],
       components: [new ActionRowBuilder().addComponents(claimBtn)],
-    });
+    };
+    if (rarity === 'ssr' && dropRoleConfig?.roleId) {
+      dropPayload.content = `<@&${dropRoleConfig.roleId}>`;
+    }
+    const message = await channel.send(dropPayload);
 
     const claimants = new Map();
 
@@ -729,6 +752,58 @@ async function handleSuggestStatus(interaction, newStatus, docId) {
   await interaction.editReply({ content: `✅ Status updated to **${SUGGEST_STATUS_LABELS[newStatus]}**.` });
 }
 
+// ── /setup-drop-role command ──────────────────────────────────────────────────
+async function handleSetupDropRole(interaction) {
+  if (!interaction.memberPermissions.has('Administrator')) {
+    return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+  }
+  await interaction.deferReply({ ephemeral: true });
+
+  const guild = interaction.guild;
+
+  // Create or reuse the BIG DROP role
+  let role = guild.roles.cache.find(r => r.name === 'BIG DROP');
+  if (!role) {
+    role = await guild.roles.create({
+      name: 'BIG DROP',
+      color: 0x9c27b0,
+      mentionable: true,
+      reason: 'WeeBee SSR+ drop notifications',
+    });
+    console.log('[drop-role] Created BIG DROP role:', role.id);
+  }
+
+  const channel = await client.channels.fetch(DROP_ROLE_CHANNEL_ID);
+
+  // Delete previous notification message if one was set
+  if (dropRoleConfig?.messageId) {
+    try {
+      const old = await channel.messages.fetch(dropRoleConfig.messageId);
+      await old.delete();
+    } catch {}
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle('🔔  Big Drop Notifications')
+    .setDescription(
+      'React with 🔔 below to get the **BIG DROP** role and be pinged whenever an **SSR** card drops in the card channel!\n\n' +
+      'Remove your reaction to opt out at any time.'
+    )
+    .setColor(0x9c27b0)
+    .setFooter({ text: 'WeeBee TCG' });
+
+  const msg = await channel.send({ embeds: [embed] });
+  await msg.react('🔔');
+
+  const config = { roleId: role.id, messageId: msg.id, channelId: DROP_ROLE_CHANNEL_ID };
+  await db.doc('discord_bot_state/drop_role').set(config, { merge: true });
+  dropRoleConfig = config;
+
+  await interaction.editReply({
+    content: `✅ Done! **BIG DROP** role is ready (${role.id}) and the opt-in message is posted in <#${DROP_ROLE_CHANNEL_ID}>.`,
+  });
+}
+
 // ── /drop command (admin only) ────────────────────────────────────────────────
 async function handleDrop(interaction) {
   if (!interaction.memberPermissions.has('Administrator')) {
@@ -784,9 +859,43 @@ async function handleLink(interaction) {
 }
 
 // ── Startup ───────────────────────────────────────────────────────────────────
+// ── Reaction-role listeners ───────────────────────────────────────────────────
+client.on('messageReactionAdd', async (reaction, user) => {
+  if (user.bot) return;
+  if (!dropRoleConfig?.messageId) return;
+  if (reaction.message.id !== dropRoleConfig.messageId) return;
+  if (reaction.emoji.name !== '🔔') return;
+  try {
+    const guild  = reaction.message.guild;
+    const member = await guild.members.fetch(user.id);
+    await member.roles.add(dropRoleConfig.roleId);
+  } catch(e) { console.error('[drop-role] Add role failed:', e.message); }
+});
+
+client.on('messageReactionRemove', async (reaction, user) => {
+  if (user.bot) return;
+  if (!dropRoleConfig?.messageId) return;
+  if (reaction.message.id !== dropRoleConfig.messageId) return;
+  if (reaction.emoji.name !== '🔔') return;
+  try {
+    const guild  = reaction.message.guild;
+    const member = await guild.members.fetch(user.id);
+    await member.roles.remove(dropRoleConfig.roleId);
+  } catch(e) { console.error('[drop-role] Remove role failed:', e.message); }
+});
+
 client.once('ready', async () => {
   console.log(`[bot] Online as ${client.user.tag}`);
   await loadFont();
+  await loadDropRoleConfig();
+  // Cache the opt-in message so reaction events fire reliably after restarts
+  if (dropRoleConfig?.messageId && dropRoleConfig?.channelId) {
+    try {
+      const ch = await client.channels.fetch(dropRoleConfig.channelId);
+      await ch.messages.fetch(dropRoleConfig.messageId);
+      console.log('[drop-role] Opt-in message cached');
+    } catch(e) { console.warn('[drop-role] Could not cache opt-in message:', e.message); }
+  }
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
   const usingGuild = !!process.env.DISCORD_GUILD_ID;
@@ -826,6 +935,10 @@ client.once('ready', async () => {
         .setName('suggest')
         .setDescription('Submit a suggestion for the WeeBee website or Discord server')
         .toJSON(),
+      new SlashCommandBuilder()
+        .setName('setup-drop-role')
+        .setDescription('Create the BIG DROP role and post the opt-in message (admin only)')
+        .toJSON(),
     ],
   });
   console.log('[bot] Slash commands registered');
@@ -839,7 +952,8 @@ client.on('interactionCreate', async interaction => {
     if (interaction.commandName === 'link')       await handleLink(interaction);
     if (interaction.commandName === 'drop')       await handleDrop(interaction);
     if (interaction.commandName === 'buy-amber')  await handleBuyAmber(interaction);
-    if (interaction.commandName === 'suggest')    await handleSuggest(interaction);
+    if (interaction.commandName === 'suggest')         await handleSuggest(interaction);
+    if (interaction.commandName === 'setup-drop-role') await handleSetupDropRole(interaction);
     return;
   }
 
