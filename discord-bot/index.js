@@ -144,7 +144,6 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.GuildMembers,
   ],
 });
 
