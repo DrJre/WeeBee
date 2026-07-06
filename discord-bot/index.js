@@ -754,6 +754,56 @@ async function handleSuggestStatus(interaction, newStatus, docId) {
   await interaction.editReply({ content: `✅ Status updated to **${SUGGEST_STATUS_LABELS[newStatus]}**.` });
 }
 
+// ── /announce command (Owner / Admin only) ────────────────────────────────────
+async function handleAnnounce(interaction) {
+  const memberRoles = interaction.member.roles.cache;
+  const hasPermission =
+    interaction.memberPermissions.has('Administrator') ||
+    memberRoles.some(r => r.name === 'Owner' || r.name === 'Admin');
+
+  if (!hasPermission) {
+    return interaction.reply({
+      content: '❌ Only members with the **Owner** or **Admin** role can use this command.',
+      ephemeral: true,
+    });
+  }
+
+  const title         = interaction.options.getString('title');
+  const body          = interaction.options.getString('body');
+  const image         = interaction.options.getAttachment('image');
+  const targetChannel = interaction.options.getChannel('channel');
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const channelId = targetChannel?.id || process.env.ANNOUNCEMENTS_CHANNEL_ID || CHANNEL_ID;
+
+  let channel;
+  try {
+    channel = await client.channels.fetch(channelId);
+  } catch {
+    return interaction.editReply({
+      content: '❌ Could not find the target channel. Set `ANNOUNCEMENTS_CHANNEL_ID` in the bot config or pass a `channel` option.',
+    });
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(body)
+    .setColor(0xffc107)
+    .setTimestamp()
+    .setFooter({ text: 'WeeBee' });
+
+  if (image) embed.setImage(image.url);
+
+  try {
+    await channel.send({ embeds: [embed] });
+    await interaction.editReply({ content: `✅ Announcement posted in <#${channelId}>!` });
+  } catch(e) {
+    console.error('[announce] Failed to send:', e.message);
+    await interaction.editReply({ content: '❌ Failed to post — check that the bot has permission to send messages in that channel.' });
+  }
+}
+
 // ── /setup-drop-role command ──────────────────────────────────────────────────
 async function handleSetupDropRole(interaction) {
   if (!interaction.memberPermissions.has('Administrator')) {
@@ -941,6 +991,32 @@ client.once('ready', async () => {
         .setName('setup-drop-role')
         .setDescription('Create the BIG DROP role and post the opt-in message (admin only)')
         .toJSON(),
+      new SlashCommandBuilder()
+        .setName('announce')
+        .setDescription('Post an announcement embed (Owner / Admin only)')
+        .addStringOption(opt =>
+          opt.setName('title')
+            .setDescription('Announcement title')
+            .setRequired(true)
+            .setMaxLength(256)
+        )
+        .addStringOption(opt =>
+          opt.setName('body')
+            .setDescription('Announcement body text')
+            .setRequired(true)
+            .setMaxLength(2000)
+        )
+        .addAttachmentOption(opt =>
+          opt.setName('image')
+            .setDescription('Optional image to include in the embed')
+            .setRequired(false)
+        )
+        .addChannelOption(opt =>
+          opt.setName('channel')
+            .setDescription('Channel to post in (defaults to ANNOUNCEMENTS_CHANNEL_ID)')
+            .setRequired(false)
+        )
+        .toJSON(),
     ],
   });
   console.log('[bot] Slash commands registered');
@@ -956,6 +1032,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.commandName === 'buy-amber')  await handleBuyAmber(interaction);
     if (interaction.commandName === 'suggest')         await handleSuggest(interaction);
     if (interaction.commandName === 'setup-drop-role') await handleSetupDropRole(interaction);
+    if (interaction.commandName === 'announce')        await handleAnnounce(interaction);
     return;
   }
 
