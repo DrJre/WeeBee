@@ -14629,7 +14629,10 @@ window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
 
     const modal = document.createElement('div');
     modal.id = 'tcg-trade-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    // onclick="void(0)" makes the backdrop interactive on iOS Safari, preventing touch
+    // events from falling through to elements on the profile page below the modal.
+    modal.setAttribute('onclick', 'void(0)');
     // No backdrop-click-to-close — clicking off would wipe the whole trade selection
 
     const safeOtherName = otherName.replace(/'/g, "\\'");
@@ -14668,6 +14671,9 @@ window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
             </div>
         </div>`;
     document.body.appendChild(modal);
+    // Push a history entry so the iOS back-swipe gesture fires popstate
+    // instead of navigating away from the page entirely.
+    history.pushState(null, '', window.location.href);
 
     window._tcgTradePickerState = { myIds: new Set(opts.seedMyIds||[]), theirIds: new Set(opts.seedTheirIds||[]), mineFilter: 'all', mineSort: 'rarity', mineSearch: '', theirsFilter: 'all', theirsSort: 'rarity', theirsSearch: '', myOfferMode: 'cards', myPackIds: new Set() };
     window._tcgTradeMyAmber = myAmber;
@@ -14813,7 +14819,7 @@ function _tcgTradeSideHTML(side) {
                 <option value="serial-high" ${sort==='serial-high'?'selected':''}>Sort: Serial # (High–Low)</option>
             </select>
         </div>
-        <div data-side="${side}" id="tcg-trade-${side}" style="display:flex;flex-wrap:wrap;gap:10px;max-height:420px;overflow-y:auto;overscroll-behavior:contain;margin-bottom:10px;">
+        <div data-side="${side}" data-hover-anim-only id="tcg-trade-${side}" style="display:flex;flex-wrap:wrap;gap:10px;max-height:420px;overflow-y:auto;overscroll-behavior:contain;margin-bottom:10px;">
             ${_tcgTradeGridHTML(side)}
         </div>`;
 }
@@ -20711,6 +20717,10 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
 window.goBack = function() { history.back(); };
 
 window.addEventListener('popstate', (e) => {
+    // iOS Safari's back-swipe gesture fires popstate. If a trade (or other)
+    // modal is open, intercept the navigation and just close the modal.
+    const tradeModal = document.getElementById('tcg-trade-modal');
+    if (tradeModal) { tradeModal.remove(); return; }
     if (!e.state) return;
     const { view, profileUid, animeId } = e.state;
     if (view === 'anime-detail-view' && animeId) {

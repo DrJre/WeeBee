@@ -1811,6 +1811,12 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 [data-hover-anim-only] .wb-card.rarity-ssr .wb-card-rarity-label { animation-play-state: paused !important; }
 [data-hover-anim-only] .wb-card.rarity-ssr:hover .wb-card-rarity-label { animation-play-state: running !important; }
 
+/* In picker/grid contexts, hide the PR ::before — it has inset:-100% which
+   bleeds outside overflow:hidden on iOS Safari (WebKit transform-clip bug).
+   The card still shows its art and rainbow text; only the spinning border
+   pseudo-element is suppressed. */
+[data-hover-anim-only] .wb-card--prismatic::before { display: none !important; }
+
 /* ── 2026 Prismatic Limited Set ──────────────────────────────────────────────
    Add class wb-card--prismatic alongside any rarity class.
    The spinning conic-gradient ::before becomes the border (visible through
