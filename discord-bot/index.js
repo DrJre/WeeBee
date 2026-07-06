@@ -755,6 +755,22 @@ async function handleSuggestStatus(interaction, newStatus, docId) {
 }
 
 // ── /announce command (Owner / Admin only) ────────────────────────────────────
+
+// Stores destination + image URL between slash command and modal submit
+const pendingAnnouncements = new Map();
+
+const ANNOUNCE_DESTINATION_CHANNELS = {
+  announcements: () => process.env.ANNOUNCEMENTS_CHANNEL_ID,
+  events:        () => process.env.EVENTS_CHANNEL_ID,
+  giveaways:     () => process.env.GIVEAWAYS_CHANNEL_ID,
+};
+
+const ANNOUNCE_DESTINATION_LABELS = {
+  announcements: '📢 Announcements',
+  events:        '🎉 Events',
+  giveaways:     '🎁 Giveaways',
+};
+
 async function handleAnnounce(interaction) {
   const memberRoles = interaction.member.roles.cache;
   const hasPermission =
@@ -768,27 +784,61 @@ async function handleAnnounce(interaction) {
     });
   }
 
-  const title         = interaction.options.getString('title');
-  const body          = interaction.options.getString('body');
+  const destination   = interaction.options.getString('destination') || 'announcements';
   const image         = interaction.options.getAttachment('image');
   const targetChannel = interaction.options.getChannel('channel');
+  const channelId     = targetChannel?.id || ANNOUNCE_DESTINATION_CHANNELS[destination]?.() || process.env.ANNOUNCEMENTS_CHANNEL_ID || CHANNEL_ID;
 
+  // Store context so the modal submit can access it
+  pendingAnnouncements.set(interaction.user.id, { channelId, imageUrl: image?.url || null });
+
+  const modal = new ModalBuilder()
+    .setCustomId('announce_modal')
+    .setTitle(`New ${ANNOUNCE_DESTINATION_LABELS[destination] || 'Announcement'}`);
+
+  const titleInput = new TextInputBuilder()
+    .setCustomId('announce_title')
+    .setLabel('Title')
+    .setStyle(TextInputStyle.Short)
+    .setMaxLength(256)
+    .setRequired(true)
+    .setPlaceholder('e.g. New Card Drop Event This Weekend!');
+
+  const bodyInput = new TextInputBuilder()
+    .setCustomId('announce_body')
+    .setLabel('Body')
+    .setStyle(TextInputStyle.Paragraph)
+    .setMaxLength(2000)
+    .setRequired(true)
+    .setPlaceholder('Write your announcement here...');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(titleInput),
+    new ActionRowBuilder().addComponents(bodyInput),
+  );
+
+  await interaction.showModal(modal);
+}
+
+async function handleAnnounceModal(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
-  const destination = interaction.options.getString('destination') || 'announcements';
-  const DESTINATION_CHANNELS = {
-    announcements: process.env.ANNOUNCEMENTS_CHANNEL_ID,
-    events:        process.env.EVENTS_CHANNEL_ID,
-    giveaways:     process.env.GIVEAWAYS_CHANNEL_ID,
-  };
-  const channelId = targetChannel?.id || DESTINATION_CHANNELS[destination] || process.env.ANNOUNCEMENTS_CHANNEL_ID || CHANNEL_ID;
+  const pending = pendingAnnouncements.get(interaction.user.id);
+  pendingAnnouncements.delete(interaction.user.id);
+
+  if (!pending) {
+    return interaction.editReply({ content: '❌ Session expired — run `/announce` again.' });
+  }
+
+  const title = interaction.fields.getTextInputValue('announce_title').trim();
+  const body  = interaction.fields.getTextInputValue('announce_body').trim();
 
   let channel;
   try {
-    channel = await client.channels.fetch(channelId);
+    channel = await client.channels.fetch(pending.channelId);
   } catch {
     return interaction.editReply({
-      content: '❌ Could not find the target channel. Set `ANNOUNCEMENTS_CHANNEL_ID` in the bot config or pass a `channel` option.',
+      content: '❌ Could not find the target channel. Check your `ANNOUNCEMENTS_CHANNEL_ID` / `EVENTS_CHANNEL_ID` / `GIVEAWAYS_CHANNEL_ID` env vars.',
     });
   }
 
@@ -799,11 +849,11 @@ async function handleAnnounce(interaction) {
     .setTimestamp()
     .setFooter({ text: 'WeeBee' });
 
-  if (image) embed.setImage(image.url);
+  if (pending.imageUrl) embed.setImage(pending.imageUrl);
 
   try {
     await channel.send({ embeds: [embed] });
-    await interaction.editReply({ content: `✅ Announcement posted in <#${channelId}>!` });
+    await interaction.editReply({ content: `✅ Announcement posted in <#${pending.channelId}>!` });
   } catch(e) {
     console.error('[announce] Failed to send:', e.message);
     await interaction.editReply({ content: '❌ Failed to post — check that the bot has permission to send messages in that channel.' });
@@ -1001,23 +1051,6 @@ client.once('ready', async () => {
         .setName('announce')
         .setDescription('Post an announcement embed (Owner / Admin only)')
         .addStringOption(opt =>
-          opt.setName('title')
-            .setDescription('Announcement title')
-            .setRequired(true)
-            .setMaxLength(256)
-        )
-        .addStringOption(opt =>
-          opt.setName('body')
-            .setDescription('Announcement body text')
-            .setRequired(true)
-            .setMaxLength(2000)
-        )
-        .addAttachmentOption(opt =>
-          opt.setName('image')
-            .setDescription('Optional image to include in the embed')
-            .setRequired(false)
-        )
-        .addStringOption(opt =>
           opt.setName('destination')
             .setDescription('Which channel to post in (defaults to Announcements)')
             .setRequired(false)
@@ -1026,6 +1059,11 @@ client.once('ready', async () => {
               { name: '🎉 Events',        value: 'events' },
               { name: '🎁 Giveaways',     value: 'giveaways' },
             )
+        )
+        .addAttachmentOption(opt =>
+          opt.setName('image')
+            .setDescription('Optional image to attach to the announcement')
+            .setRequired(false)
         )
         .addChannelOption(opt =>
           opt.setName('channel')
@@ -1066,6 +1104,7 @@ client.on('interactionCreate', async interaction => {
 
   if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('suggest_modal_')) await handleSuggestModal(interaction);
+    if (interaction.customId === 'announce_modal')          await handleAnnounceModal(interaction);
   }
 });
 
