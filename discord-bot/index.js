@@ -775,7 +775,13 @@ async function handleAnnounce(interaction) {
 
   await interaction.deferReply({ ephemeral: true });
 
-  const channelId = targetChannel?.id || process.env.ANNOUNCEMENTS_CHANNEL_ID || CHANNEL_ID;
+  const destination = interaction.options.getString('destination') || 'announcements';
+  const DESTINATION_CHANNELS = {
+    announcements: process.env.ANNOUNCEMENTS_CHANNEL_ID,
+    events:        process.env.EVENTS_CHANNEL_ID,
+    giveaways:     process.env.GIVEAWAYS_CHANNEL_ID,
+  };
+  const channelId = targetChannel?.id || DESTINATION_CHANNELS[destination] || process.env.ANNOUNCEMENTS_CHANNEL_ID || CHANNEL_ID;
 
   let channel;
   try {
@@ -1011,9 +1017,19 @@ client.once('ready', async () => {
             .setDescription('Optional image to include in the embed')
             .setRequired(false)
         )
+        .addStringOption(opt =>
+          opt.setName('destination')
+            .setDescription('Which channel to post in (defaults to Announcements)')
+            .setRequired(false)
+            .addChoices(
+              { name: '📢 Announcements', value: 'announcements' },
+              { name: '🎉 Events',        value: 'events' },
+              { name: '🎁 Giveaways',     value: 'giveaways' },
+            )
+        )
         .addChannelOption(opt =>
           opt.setName('channel')
-            .setDescription('Channel to post in (defaults to ANNOUNCEMENTS_CHANNEL_ID)')
+            .setDescription('Override: post to a specific channel instead of a preset destination')
             .setRequired(false)
         )
         .toJSON(),
