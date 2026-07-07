@@ -352,18 +352,19 @@ service cloud.firestore {
     match /bug_reports/{doc} {
       allow read: if isAuth();
       allow create: if isAuth();
-      allow update, delete: if isOwner(resource.data.uid);
+      allow update, delete: if isOwner(resource.data.uid) || isAdmin();
     }
 
     match /feature_suggestions/{doc} {
       allow read: if true;
       allow create: if isAuth();
-      allow update, delete: if isOwner(resource.data.uid);
+      allow update, delete: if isOwner(resource.data.uid) || isAdmin();
     }
 
     match /direct_suggestions/{doc} {
       allow read: if isAuth();
       allow create: if isAuth();
+      allow update, delete: if isAdmin();
     }
 
     // ── Amber currency log ───────────────────────────────────────────────────

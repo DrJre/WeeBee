@@ -26,5 +26,11 @@ service firebase.storage {
       allow write: if false;
     }
 
+    // MAL score badge images — public read only
+    match /mal-badges/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
   }
 }

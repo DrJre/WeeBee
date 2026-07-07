@@ -1308,6 +1308,18 @@
                                 <div id="tcg-crossdupe-results"></div>
                             </div>
 
+                            <!-- Event Card Serial Cleanup -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:8px;">
+                                    <div style="flex:1; min-width:200px;">
+                                        <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🧹 Event Card Serial Cleanup</div>
+                                        <div style="font-size:12px; color:var(--text-muted);">Nulls out serial/edition on all PR / event cards that were accidentally assigned version numbers.</div>
+                                        <span id="tcg-event-cleanup-status" style="font-size:12px; color:var(--text-muted);"></span>
+                                    </div>
+                                    <button onclick="window._tcgCleanEventCardSerials()" style="padding:10px 20px; border-radius:8px; border:1px solid #f59e0b; background:transparent; color:#f59e0b; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Run Cleanup</button>
+                                </div>
+                            </div>
+
                             <!-- Pack Odds Simulator -->
                             <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
                                 <div style="font-size:14px; font-weight:800; margin-bottom:10px;">🎲 Pack Odds Simulator</div>
@@ -2761,6 +2773,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=540"></script>
+    <script type="module" src="app.js?v=544"></script>
 </body>
 </html>
