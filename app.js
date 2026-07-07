@@ -14613,6 +14613,35 @@ window._tcgTogglePickerCard = function(el, cardId) {
     window._tcgUpdateTradeSummary();
 };
 
+// ── Trade modal scroll-lock helpers ──────────────────────────────────────────
+// iOS Safari ignores overscroll-behavior:contain (< iOS 16) and lets the page
+// behind a fixed modal scroll or trigger pull-to-refresh. Locking the body
+// with position:fixed prevents this on all versions.
+function _tcgLockBodyScroll() {
+    if (window._tcgBodyScrollLocked) return;
+    window._tcgBodyScrollLocked = true;
+    window._tcgBodyScrollY = window.scrollY;
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${window._tcgBodyScrollY}px`;
+    document.body.style.width = '100%';
+}
+function _tcgUnlockBodyScroll() {
+    if (!window._tcgBodyScrollLocked) return;
+    window._tcgBodyScrollLocked = false;
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    window.scrollTo(0, window._tcgBodyScrollY || 0);
+    window._tcgBodyScrollY = 0;
+}
+window._tcgCloseTradeModal = function() {
+    document.getElementById('tcg-trade-modal')?.remove();
+    document.getElementById('tcg-trade-confirm-modal')?.remove();
+    _tcgUnlockBodyScroll();
+};
+
 // Modal — propose (or counter) a trade with another user
 window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
     if (!auth.currentUser || (auth.currentUser.uid === otherUid && !window.isAdmin)) return;
@@ -14627,11 +14656,11 @@ window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
     let myAmber = 0;
     try { const md = await getDoc(doc(db,'profiles',myUid)); myAmber = md.exists() ? (md.data().amber || 0) : 0; } catch(e) {}
 
+    const isMobile = window.innerWidth < 640;
     const modal = document.createElement('div');
     modal.id = 'tcg-trade-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
-    // onclick="void(0)" makes the backdrop interactive on iOS Safari, preventing touch
-    // events from falling through to elements on the profile page below the modal.
+    modal.style.cssText = `position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:${isMobile?'flex-end':'center'};justify-content:center;${isMobile?'':'padding:20px;'}box-sizing:border-box;`;
+    // onclick="void(0)" prevents touch-through to page elements on iOS Safari
     modal.setAttribute('onclick', 'void(0)');
     // No backdrop-click-to-close — clicking off would wipe the whole trade selection
 
@@ -14639,14 +14668,14 @@ window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
     const seedMyAmber = opts.seedMyAmber || 0;
     const seedTheirAmber = opts.seedTheirAmber || 0;
     modal.innerHTML = `
-        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:1080px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;overscroll-behavior:contain;">
+        <div style="background:var(--bg-white);border-radius:${isMobile?'18px 18px 0 0':'18px'};width:100%;max-width:1080px;padding:${isMobile?'16px':'24px'};box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:${isMobile?'95dvh':'90vh'};overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                 <div style="font-size:17px;font-weight:800;color:var(--text-dark);">${opts.tradeId ? 'Counter Offer' : 'Propose Trade'} — ${otherName}</div>
-                <button onclick="document.getElementById('tcg-trade-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
+                <button onclick="window._tcgCloseTradeModal()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
             </div>
             <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Select cards from your collection to offer, and cards from theirs to request. You can also include Amber on either side.</p>
-            <div style="display:flex;flex-wrap:wrap;gap:24px;">
-                <div style="flex:1;min-width:340px;">
+            <div style="display:flex;flex-wrap:wrap;gap:${isMobile?'16px':'24px'};">
+                <div style="flex:1;min-width:${isMobile?'0':'340px'};">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
                         <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">You Give</div>
                         <div style="display:flex;gap:4px;">
@@ -14656,13 +14685,13 @@ window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
                     </div>
                     <div id="tcg-trade-mine-wrap"><div style="padding:20px;color:var(--text-muted);">Loading…</div></div>
                     <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">🟡 Amber to give (you have ${myAmber.toLocaleString()})</label>
-                    <input type="number" id="tcg-trade-amber-give" min="0" step="1" value="${seedMyAmber}" oninput="window._tcgUpdateTradeSummary()" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
+                    <input type="number" id="tcg-trade-amber-give" min="0" step="1" value="${seedMyAmber}" oninput="window._tcgUpdateTradeSummary()" onkeydown="if(event.key==='Enter')event.preventDefault()" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
                 </div>
-                <div style="flex:1;min-width:340px;">
+                <div style="flex:1;min-width:${isMobile?'0':'340px'};">
                     <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">You Get</div>
                     <div id="tcg-trade-theirs-wrap"><div style="padding:20px;color:var(--text-muted);">Loading…</div></div>
                     <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">🟡 Amber to request</label>
-                    <input type="number" id="tcg-trade-amber-get" min="0" step="1" value="${seedTheirAmber}" oninput="window._tcgUpdateTradeSummary()" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
+                    <input type="number" id="tcg-trade-amber-get" min="0" step="1" value="${seedTheirAmber}" oninput="window._tcgUpdateTradeSummary()" onkeydown="if(event.key==='Enter')event.preventDefault()" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;">
                 </div>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding-top:14px;border-top:1px solid var(--border-color);flex-wrap:wrap;gap:10px;">
@@ -14671,6 +14700,7 @@ window._tcgOpenTradeProposal = async function(otherUid, opts = {}) {
             </div>
         </div>`;
     document.body.appendChild(modal);
+    _tcgLockBodyScroll();
     // Push a history entry so the iOS back-swipe gesture fires popstate
     // instead of navigating away from the page entirely.
     history.pushState(null, '', window.location.href);
@@ -14819,7 +14849,7 @@ function _tcgTradeSideHTML(side) {
                 <option value="serial-high" ${sort==='serial-high'?'selected':''}>Sort: Serial # (High–Low)</option>
             </select>
         </div>
-        <div data-side="${side}" data-hover-anim-only id="tcg-trade-${side}" style="display:flex;flex-wrap:wrap;gap:10px;max-height:420px;overflow-y:auto;overscroll-behavior:contain;margin-bottom:10px;">
+        <div data-side="${side}" data-hover-anim-only id="tcg-trade-${side}" style="display:flex;flex-wrap:wrap;gap:10px;${window.innerWidth>=640?'max-height:420px;overflow-y:auto;':''}overscroll-behavior:contain;-webkit-overflow-scrolling:touch;margin-bottom:10px;">
             ${_tcgTradeGridHTML(side)}
         </div>`;
 }
@@ -14884,7 +14914,8 @@ window._tcgOpenTradeConfirm = function(otherUid, existingTradeId, otherName) {
     document.getElementById('tcg-trade-confirm-modal')?.remove();
     const modal = document.createElement('div');
     modal.id = 'tcg-trade-confirm-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    const _cmMobile = window.innerWidth < 640;
+    modal.style.cssText = `position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);display:flex;align-items:${_cmMobile?'flex-end':'center'};justify-content:center;${_cmMobile?'':'padding:20px;'}box-sizing:border-box;`;
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
 
     const sideHTML = (title, cards, packs, amber) => `
@@ -14897,7 +14928,7 @@ window._tcgOpenTradeConfirm = function(otherUid, existingTradeId, otherName) {
         </div>`;
 
     modal.innerHTML = `
-        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:700px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;">
+        <div style="background:var(--bg-white);border-radius:${_cmMobile?'18px 18px 0 0':'18px'};width:100%;max-width:700px;padding:${_cmMobile?'16px':'24px'};box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:${_cmMobile?'95dvh':'90vh'};overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                 <div style="font-size:17px;font-weight:800;color:var(--text-dark);">Confirm Trade — ${otherName}</div>
                 <button onclick="document.getElementById('tcg-trade-confirm-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
@@ -15050,8 +15081,7 @@ window._tcgSubmitTradeProposal = async function(otherUid, existingTradeId, other
                 message: 'sent you a trade offer', timestamp: new Date(), read: false
             });
         }
-        document.getElementById('tcg-trade-confirm-modal')?.remove();
-        document.getElementById('tcg-trade-modal')?.remove();
+        window._tcgCloseTradeModal();
         alert('Trade offer sent!');
     } catch(e) {
         alert('Failed to send trade offer: ' + e.message);
@@ -20720,7 +20750,7 @@ window.addEventListener('popstate', (e) => {
     // iOS Safari's back-swipe gesture fires popstate. If a trade (or other)
     // modal is open, intercept the navigation and just close the modal.
     const tradeModal = document.getElementById('tcg-trade-modal');
-    if (tradeModal) { tradeModal.remove(); return; }
+    if (tradeModal) { window._tcgCloseTradeModal(); return; }
     if (!e.state) return;
     const { view, profileUid, animeId } = e.state;
     if (view === 'anime-detail-view' && animeId) {

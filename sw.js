@@ -11,7 +11,7 @@ const SHELL_URLS = [
     '/',
     '/index.html',
     '/styles.css?v=136',
-    '/app.js?v=536',
+    '/app.js?v=537',
     '/characters.js',
     '/manifest.json',
     '/favicon.svg',
