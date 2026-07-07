@@ -5632,11 +5632,32 @@ window.renderSeasonalVoting = function() {
             homeTrending.style.display = 'none';
             homeBanner.style.display = 'block';
             const nominees = vote.candidates || [];
-            const thumbs = nominees.slice(0, 10).map(c =>
-                `<img src="${c.image}" onclick="loadAnimeDetails(${c.mal_id})" title="${c.title}"
-                    style="width:64px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0;border:2px solid rgba(255,255,255,0.15);transition:transform 0.15s;"
-                    onmouseover="this.style.transform='scale(1.06)'" onmouseout="this.style.transform='scale(1)'">`
-            ).join('');
+            let thumbs;
+            if (isClosed) {
+                const top3 = [...nominees]
+                    .sort((a, b) => (vote.voteCounts?.[b.mal_id] || 0) - (vote.voteCounts?.[a.mal_id] || 0))
+                    .slice(0, 3);
+                const medalStyles = [
+                    { label:'🥇', w:88, h:124, border:'3px solid #FFD700', shadow:'0 0 14px rgba(255,215,0,0.55)' },
+                    { label:'🥈', w:68, h:96,  border:'2px solid #C0C0C0', shadow:'0 0 8px rgba(192,192,192,0.35)' },
+                    { label:'🥉', w:68, h:96,  border:'2px solid #CD7F32', shadow:'0 0 8px rgba(205,127,50,0.35)' },
+                ];
+                thumbs = top3.map((c, i) => {
+                    const m = medalStyles[i];
+                    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+                        <span style="font-size:${i===0?'22px':'18px'}">${m.label}</span>
+                        <img src="${c.image}" onclick="loadAnimeDetails(${c.mal_id})" title="${c.title}"
+                            style="width:${m.w}px;height:${m.h}px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0;border:${m.border};box-shadow:${m.shadow};transition:transform 0.15s;"
+                            onmouseover="this.style.transform='scale(1.06)'" onmouseout="this.style.transform='scale(1)'">
+                    </div>`;
+                }).join('');
+            } else {
+                thumbs = nominees.slice(0, 10).map(c =>
+                    `<img src="${c.image}" onclick="loadAnimeDetails(${c.mal_id})" title="${c.title}"
+                        style="width:64px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0;border:2px solid rgba(255,255,255,0.15);transition:transform 0.15s;"
+                        onmouseover="this.style.transform='scale(1.06)'" onmouseout="this.style.transform='scale(1)'">`
+                ).join('');
+            }
             const statusBadge = isUpcoming
                 ? `<span style="background:rgba(255,152,0,0.18);color:#FF9800;border:1px solid rgba(255,152,0,0.4);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:800;letter-spacing:1px;">VOTE OPENS SOON</span>`
                 : isLive
@@ -5733,21 +5754,27 @@ window.renderSeasonalVoting = function() {
             ? [...vote.candidates].sort((a, b) => (vote.voteCounts?.[b.mal_id] || 0) - (vote.voteCounts?.[a.mal_id] || 0))
             : vote.candidates;
 
-        content.innerHTML = `<div class="seasonal-vote-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;">` +
-            sortedCandidates.map(c => {
+        const displayCandidates = isClosed ? sortedCandidates.slice(0, 3) : sortedCandidates;
+        const gridCols = isClosed ? 'repeat(3,1fr)' : 'repeat(5,1fr)';
+        content.innerHTML = `<div class="seasonal-vote-grid" style="display:grid;grid-template-columns:${gridCols};gap:14px;">` +
+            displayCandidates.map((c, displayIdx) => {
                 const votes = vote.voteCounts?.[c.mal_id] || 0;
                 const pct = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
                 const isMyVote = String(c.mal_id) === String(window.mySeasonalVote);
                 const winnerIdx = winnerIds.indexOf(String(c.mal_id));
                 const isWinner = winnerIdx !== -1;
                 const placeLabel = isClosed && isWinner ? vote.winners[winnerIdx].label : '';
-                return `<div style="border-radius:12px;overflow:hidden;background:var(--bg-gray);position:relative;border:2px solid ${isMyVote ? 'var(--accent-yellow)' : isWinner ? placeColors[winnerIdx] : 'transparent'};cursor:pointer;" onclick="loadAnimeDetails(${c.mal_id})">
-                    ${isWinner ? `<div style="position:absolute;top:6px;left:6px;z-index:2;"><span class="material-symbols-outlined" style="font-size:20px;color:${placeColors[winnerIdx]};text-shadow:0 1px 3px rgba(0,0,0,0.5);">${placeIcons[winnerIdx]}</span></div>` : ''}
+                const isFirstPlace = isClosed && displayIdx === 0;
+                const imgHeight = isFirstPlace ? '280px' : '220px';
+                const cardBorder = isMyVote ? 'var(--accent-yellow)' : isWinner ? placeColors[winnerIdx] : 'transparent';
+                const cardGlow = isFirstPlace ? `,box-shadow:0 0 20px rgba(255,215,0,0.35)` : '';
+                return `<div style="border-radius:12px;overflow:hidden;background:var(--bg-gray);position:relative;border:2px solid ${cardBorder};cursor:pointer${cardGlow};" onclick="loadAnimeDetails(${c.mal_id})">
+                    ${isWinner ? `<div style="position:absolute;top:6px;left:6px;z-index:2;"><span class="material-symbols-outlined" style="font-size:${isFirstPlace?'26px':'20px'};color:${placeColors[winnerIdx]};text-shadow:0 1px 3px rgba(0,0,0,0.5);">${placeIcons[winnerIdx]}</span></div>` : ''}
                     ${isUpcoming ? `<div style="position:absolute;top:6px;right:6px;z-index:2;background:rgba(255,152,0,0.9);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:800;color:#fff;letter-spacing:0.5px;">NOMINEE</div>` : ''}
                     ${isMyVote ? `<div style="position:absolute;top:6px;right:6px;z-index:2;background:var(--accent-yellow);border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;"><span class="material-symbols-outlined" style="font-size:14px;color:#333;">check</span></div>` : ''}
-                    <img src="${c.image}" style="width:100%;height:220px;object-fit:cover;display:block;">
+                    <img src="${c.image}" style="width:100%;height:${imgHeight};object-fit:cover;display:block;">
                     <div style="padding:8px;">
-                        <div style="font-size:12px;font-weight:700;line-height:1.3;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.title}">${c.title}</div>
+                        <div style="font-size:${isFirstPlace?'13px':'12px'};font-weight:700;line-height:1.3;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.title}">${c.title}</div>
                         ${hasVoted ? `<div style="background:var(--bg-gray-darker);border-radius:4px;height:6px;margin-bottom:4px;overflow:hidden;"><div style="background:${isMyVote ? 'var(--accent-yellow)' : isWinner ? placeColors[winnerIdx] : 'var(--text-muted)'};height:100%;width:${pct}%;transition:width 0.4s;"></div></div><div style="font-size:11px;color:var(--text-muted);">${pct}% · ${votes} vote${votes !== 1 ? 's' : ''}</div>` : ''}
                         ${isUpcoming ? `<div style="font-size:11px;color:rgba(255,152,0,0.85);font-weight:700;margin-top:4px;">Voting opens soon</div>` : ''}
                         ${!hasVoted && !isUpcoming ? `<button onclick="event.stopPropagation();submitSeasonalVote(${c.mal_id})" class="action-btn" style="width:100%;justify-content:center;padding:6px;font-size:12px;margin-top:4px;">Vote</button>` : ''}
