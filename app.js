@@ -5653,20 +5653,24 @@ window.renderSeasonalVoting = function() {
                 const top3 = [...nominees]
                     .sort((a, b) => (vote.voteCounts?.[b.mal_id] || 0) - (vote.voteCounts?.[a.mal_id] || 0))
                     .slice(0, 3);
-                const medalStyles = [
-                    { label:'🥇', w:88, h:124, border:'3px solid #FFD700', shadow:'0 0 14px rgba(255,215,0,0.55)' },
-                    { label:'🥈', w:68, h:96,  border:'2px solid #C0C0C0', shadow:'0 0 8px rgba(192,192,192,0.35)' },
-                    { label:'🥉', w:68, h:96,  border:'2px solid #CD7F32', shadow:'0 0 8px rgba(205,127,50,0.35)' },
+                // Podium order: 2nd left, 1st center (taller), 3rd right
+                const podiumOrder = [top3[1], top3[0], top3[2]].filter(Boolean);
+                const podiumCfg = [
+                    { medal:'🥈', w:64, h:90,  border:'2px solid #C0C0C0', glow:'0 0 10px rgba(192,192,192,0.3)', mSize:'17px' },
+                    { medal:'🥇', w:82, h:116, border:'3px solid #FFD700', glow:'0 0 18px rgba(255,215,0,0.5)',   mSize:'24px' },
+                    { medal:'🥉', w:64, h:90,  border:'2px solid #CD7F32', glow:'0 0 10px rgba(205,127,50,0.3)', mSize:'17px' },
                 ];
-                thumbs = top3.map((c, i) => {
-                    const m = medalStyles[i];
-                    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
-                        <span style="font-size:${i===0?'22px':'18px'}">${m.label}</span>
-                        <img src="${c.image}" onclick="loadAnimeDetails(${c.mal_id})" title="${c.title}"
-                            style="width:${m.w}px;height:${m.h}px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0;border:${m.border};box-shadow:${m.shadow};transition:transform 0.15s;"
-                            onmouseover="this.style.transform='scale(1.06)'" onmouseout="this.style.transform='scale(1)'">
-                    </div>`;
-                }).join('');
+                thumbs = `<div style="display:flex;align-items:flex-end;gap:12px;">` +
+                    podiumOrder.map((c, pi) => {
+                        const cfg = podiumCfg[pi];
+                        return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;" onclick="loadAnimeDetails(${c.mal_id})">
+                            <span style="font-size:${cfg.mSize};">${cfg.medal}</span>
+                            <img src="${c.image}" title="${c.title}"
+                                style="width:${cfg.w}px;height:${cfg.h}px;object-fit:cover;border-radius:8px;border:${cfg.border};box-shadow:${cfg.glow};transition:transform 0.15s;"
+                                onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                            <div style="color:rgba(255,255,255,0.85);font-size:10px;font-weight:700;width:${cfg.w}px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;margin-top:2px;">${c.title}</div>
+                        </div>`;
+                    }).join('') + `</div>`;
             } else {
                 thumbs = nominees.slice(0, 10).map(c =>
                     `<img src="${c.image}" onclick="loadAnimeDetails(${c.mal_id})" title="${c.title}"
@@ -5689,7 +5693,7 @@ window.renderSeasonalVoting = function() {
                     <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2220%22 cy=%2220%22 r=%2240%22 fill=%22rgba(255,152,0,0.06)%22/><circle cx=%2280%22 cy=%2270%22 r=%2250%22 fill=%22rgba(99,102,241,0.07)%22/></svg>');pointer-events:none;"></div>
                     <div style="position:relative;z-index:1;display:flex;flex-direction:column;gap:10px;">
                         <div>${statusBadge}</div>
-                        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;">
                             <div>
                                 <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,200,80,0.7);margin-bottom:6px;">WeeBee Awards</div>
                                 <div style="font-size:26px;font-weight:900;color:#fff;line-height:1.15;margin-bottom:4px;">Anime of the Season</div>
