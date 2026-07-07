@@ -5351,17 +5351,33 @@ window.getPreviousSeason = function() {
 
 window.loadActiveSeasonalVote = async function() {
     try {
+        // First try an open vote
         const snap = await getDocs(query(collection(db, "seasonal_votes"), where("closed", "==", false)));
-        if (snap.empty) { window.activeSeasonalVote = null; return; }
-        const d = snap.docs[0];
-        window.activeSeasonalVote = { id: d.id, ...d.data() };
-        // Check if expired — auto-close
-        const endDate = window.activeSeasonalVote.endDate?.toDate ? window.activeSeasonalVote.endDate.toDate() : new Date(window.activeSeasonalVote.endDate);
-        if (new Date() > endDate) { await window.closeSeasonalVote(d.id); return; }
-        // Check if current user already voted
-        if (auth.currentUser) {
-            const recDoc = await getDoc(doc(db, "seasonal_vote_records", `${d.id}_${auth.currentUser.uid}`));
-            window.mySeasonalVote = recDoc.exists() ? recDoc.data().mal_id : null;
+        let d = null;
+        if (!snap.empty) {
+            d = snap.docs[0];
+            window.activeSeasonalVote = { id: d.id, ...d.data() };
+            // Check if expired — auto-close
+            const endDate = window.activeSeasonalVote.endDate?.toDate ? window.activeSeasonalVote.endDate.toDate() : new Date(window.activeSeasonalVote.endDate);
+            if (new Date() > endDate) { await window.closeSeasonalVote(d.id); return; }
+            // Check if current user already voted
+            if (auth.currentUser) {
+                const recDoc = await getDoc(doc(db, "seasonal_vote_records", `${d.id}_${auth.currentUser.uid}`));
+                window.mySeasonalVote = recDoc.exists() ? recDoc.data().mal_id : null;
+            }
+        } else {
+            // No open vote — fall back to most recent closed vote so results stay visible
+            const allSnap = await getDocs(collection(db, "seasonal_votes"));
+            if (!allSnap.empty) {
+                const sorted = allSnap.docs.sort((a, b) => {
+                    const toMs = v => v?.toDate ? v.toDate().getTime() : new Date(v || 0).getTime();
+                    return toMs(b.data().endDate) - toMs(a.data().endDate);
+                });
+                d = sorted[0];
+                window.activeSeasonalVote = { id: d.id, ...d.data() };
+            } else {
+                window.activeSeasonalVote = null;
+            }
         }
     } catch(e) { console.error('loadActiveSeasonalVote', e); }
 };
