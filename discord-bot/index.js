@@ -756,6 +756,8 @@ async function handleSuggestStatus(interaction, newStatus, docId) {
 
 // ── /bug command ─────────────────────────────────────────────────────────────
 
+const BUG_FIX_AMBER = 100;
+
 const BUG_STATUS_COLORS = {
   pending: 0x5865f2,
   testing: 0xf59e0b,
@@ -769,7 +771,7 @@ const BUG_STATUS_LABELS = {
 
 function buildBugEmbed(data) {
   const status = data.status || 'pending';
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(BUG_STATUS_COLORS[status] || 0x5865f2)
     .setTitle(`🐛 ${data.title}`)
     .setDescription(data.description)
@@ -779,22 +781,33 @@ function buildBugEmbed(data) {
     )
     .setFooter({ text: 'Use /bug to report an issue' })
     .setTimestamp(data.timestamp?.toDate?.() ?? new Date());
+  if (data.amberAwarded) {
+    embed.addFields({ name: 'Reward', value: `🟡 ${data.amberAwarded} Amber awarded`, inline: true });
+  }
+  return embed;
 }
 
 function buildBugButtons(docId, status) {
+  const isFixed = status === 'fixed';
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`bug_testing_${docId}`)
       .setLabel('Testing')
       .setEmoji('🔧')
       .setStyle(status === 'testing' ? ButtonStyle.Primary : ButtonStyle.Secondary)
-      .setDisabled(status === 'testing'),
+      .setDisabled(status === 'testing' || isFixed),
     new ButtonBuilder()
       .setCustomId(`bug_fixed_${docId}`)
       .setLabel('Fixed')
       .setEmoji('✅')
       .setStyle(ButtonStyle.Success)
-      .setDisabled(status === 'fixed'),
+      .setDisabled(isFixed),
+    new ButtonBuilder()
+      .setCustomId(`bug_delete_${docId}`)
+      .setLabel('Delete')
+      .setEmoji('🗑️')
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(isFixed),
   );
 }
 
@@ -887,8 +900,37 @@ async function handleBugStatus(interaction, newStatus, docId) {
     return interaction.editReply({ content: '❌ Bug report not found.' });
   }
 
-  const data = { ...snap.data(), status: newStatus, updatedAt: Timestamp.now() };
-  await ref.update({ status: newStatus, updatedAt: Timestamp.now() });
+  const docUpdate = { status: newStatus, updatedAt: Timestamp.now() };
+  let amberAwarded = null;
+  let replyContent = `✅ Status updated to **${BUG_STATUS_LABELS[newStatus]}**.`;
+
+  if (newStatus === 'fixed') {
+    const reporterDiscordId = snap.data().discordUserId;
+    if (reporterDiscordId) {
+      try {
+        const linkSnap = await db.doc(`discord_links/${reporterDiscordId}`).get();
+        if (linkSnap.exists) {
+          const { uid } = linkSnap.data();
+          await db.doc(`profiles/${uid}`).update({ amber: FieldValue.increment(BUG_FIX_AMBER) });
+          docUpdate.amberAwarded = BUG_FIX_AMBER;
+          amberAwarded = BUG_FIX_AMBER;
+          replyContent += ` 🟡 **${BUG_FIX_AMBER} Amber** awarded to the reporter.`;
+          try {
+            const user = await client.users.fetch(reporterDiscordId);
+            await user.send(`✅ A bug you reported on WeeBee has been marked as fixed! Thanks for helping improve the site — you've been awarded 🟡 **${BUG_FIX_AMBER} Amber**.`);
+          } catch { /* DMs disabled — skip */ }
+        } else {
+          replyContent += ` ⚠️ Reporter hasn't linked their WeeBee account — no Amber awarded.`;
+        }
+      } catch(e) {
+        console.error('[bug] Failed to award amber:', e.message);
+        replyContent += ` ⚠️ Failed to award Amber: ${e.message}`;
+      }
+    }
+  }
+
+  await ref.update(docUpdate);
+  const data = { ...snap.data(), ...docUpdate, amberAwarded: amberAwarded ?? snap.data().amberAwarded ?? null };
 
   try {
     await interaction.message.edit({
@@ -899,7 +941,28 @@ async function handleBugStatus(interaction, newStatus, docId) {
     console.error('[bug] Failed to edit embed:', e.message);
   }
 
-  await interaction.editReply({ content: `✅ Status updated to **${BUG_STATUS_LABELS[newStatus]}**.` });
+  await interaction.editReply({ content: replyContent });
+}
+
+async function handleBugDelete(interaction, docId) {
+  if (!interaction.memberPermissions.has('Administrator')) {
+    return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+  }
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    await db.collection('bug_reports').doc(docId).delete();
+  } catch(e) {
+    return interaction.editReply({ content: `❌ Failed to delete: ${e.message}` });
+  }
+
+  try {
+    await interaction.message.delete();
+  } catch(e) {
+    console.error('[bug] Failed to delete message:', e.message);
+  }
+
+  await interaction.editReply({ content: '🗑️ Bug report deleted.' });
 }
 
 // ── /announce command (Owner / Admin only) ────────────────────────────────────
@@ -1255,6 +1318,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('suggest_decline_')) await handleSuggestStatus(interaction, 'declined',     interaction.customId.replace('suggest_decline_', ''));
     if (interaction.customId.startsWith('bug_testing_'))     await handleBugStatus(interaction, 'testing', interaction.customId.replace('bug_testing_', ''));
     if (interaction.customId.startsWith('bug_fixed_'))       await handleBugStatus(interaction, 'fixed',   interaction.customId.replace('bug_fixed_', ''));
+    if (interaction.customId.startsWith('bug_delete_'))      await handleBugDelete(interaction,            interaction.customId.replace('bug_delete_', ''));
   }
 
   if (interaction.isModalSubmit()) {
