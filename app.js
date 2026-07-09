@@ -8180,6 +8180,8 @@ async function _tcgLoadPrismaticEventConfig(force = false) {
 }
 function _tcgPrismaticEventEndAt(config) {
     if (!config?.startAt) return null;
+    // endAt override (set by _tcgExtendPrismaticEvent) takes precedence over startAt + 7 days
+    if (config.endAt) return config.endAt.toDate ? config.endAt.toDate() : new Date(config.endAt);
     const start = config.startAt.toDate ? config.startAt.toDate() : new Date(config.startAt);
     return new Date(start.getTime() + TCG_PRISMATIC_EVENT_DAYS * 24 * 60 * 60 * 1000);
 }
@@ -8193,9 +8195,11 @@ window._tcgLoadPrismaticEventUI = async function() {
     const config = await _tcgLoadPrismaticEventConfig(true);
     const status = document.getElementById('tcg-prismatic-event-status');
     const btn = document.getElementById('tcg-prismatic-event-start-btn');
+    const extendBtn = document.getElementById('tcg-prismatic-event-extend-btn');
     const endAt = _tcgPrismaticEventEndAt(config);
     const active = endAt && endAt > new Date();
     if (btn) { btn.disabled = !!active; btn.textContent = active ? 'Event Running' : 'Start Prismatic Event'; }
+    if (extendBtn) extendBtn.style.display = active ? 'inline-flex' : 'none';
     if (status) status.textContent = active
         ? `Live — ends ${endAt.toLocaleString()}`
         : (config.startAt ? `Last event ended ${endAt ? endAt.toLocaleString() : ''}` : 'Not started yet.');
@@ -8205,12 +8209,27 @@ window._tcgStartPrismaticEvent = async function() {
     if (await _tcgPrismaticEventActive()) return;
     if (!confirm('Start the Prismatic Pack event now? It will run for 7 days.')) return;
     try {
-        await setDoc(doc(db, 'tcg_event_config', 'prismatic'), { startAt: serverTimestamp() }, { merge: true });
+        await setDoc(doc(db, 'tcg_event_config', 'prismatic'), { startAt: serverTimestamp(), endAt: null }, { merge: true });
         window._tcgPrismaticEventConfig = null;
         await _tcgLoadPrismaticEventUI();
         window._tcgRenderStore();
         window._renderPrismaticEventBanner();
     } catch(e) { alert('Failed to start event: ' + e.message); }
+};
+window._tcgExtendPrismaticEvent = async function(hours = 24) {
+    if (!window.isAdmin) return;
+    const config = await _tcgLoadPrismaticEventConfig(true);
+    if (!config?.startAt) return alert('No active event to extend.');
+    if (!confirm(`Extend the Prismatic event by ${hours} hour${hours !== 1 ? 's' : ''}?`)) return;
+    try {
+        const currentEnd = _tcgPrismaticEventEndAt(config);
+        const newEnd = new Date(currentEnd.getTime() + hours * 60 * 60 * 1000);
+        await setDoc(doc(db, 'tcg_event_config', 'prismatic'), { endAt: newEnd.toISOString() }, { merge: true });
+        window._tcgPrismaticEventConfig = null;
+        await _tcgLoadPrismaticEventUI();
+        window._tcgRenderStore();
+        window._renderPrismaticEventBanner();
+    } catch(e) { alert('Failed to extend event: ' + e.message); }
 };
 
 window._renderPrismaticEventBanner = async function() {
