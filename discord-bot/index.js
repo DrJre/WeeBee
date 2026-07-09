@@ -754,6 +754,154 @@ async function handleSuggestStatus(interaction, newStatus, docId) {
   await interaction.editReply({ content: `✅ Status updated to **${SUGGEST_STATUS_LABELS[newStatus]}**.` });
 }
 
+// ── /bug command ─────────────────────────────────────────────────────────────
+
+const BUG_STATUS_COLORS = {
+  pending: 0x5865f2,
+  testing: 0xf59e0b,
+  fixed:   0x22c55e,
+};
+const BUG_STATUS_LABELS = {
+  pending: '⏳ Pending',
+  testing: '🔧 Testing',
+  fixed:   '✅ Fixed',
+};
+
+function buildBugEmbed(data) {
+  const status = data.status || 'pending';
+  return new EmbedBuilder()
+    .setColor(BUG_STATUS_COLORS[status] || 0x5865f2)
+    .setTitle(`🐛 ${data.title}`)
+    .setDescription(data.description)
+    .addFields(
+      { name: 'Status',       value: BUG_STATUS_LABELS[status], inline: true },
+      { name: 'Reported by',  value: data.discordUsername,       inline: true },
+    )
+    .setFooter({ text: 'Use /bug to report an issue' })
+    .setTimestamp(data.timestamp?.toDate?.() ?? new Date());
+}
+
+function buildBugButtons(docId, status) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`bug_testing_${docId}`)
+      .setLabel('Testing')
+      .setEmoji('🔧')
+      .setStyle(status === 'testing' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+      .setDisabled(status === 'testing'),
+    new ButtonBuilder()
+      .setCustomId(`bug_fixed_${docId}`)
+      .setLabel('Fixed')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(status === 'fixed'),
+  );
+}
+
+async function handleBug(interaction) {
+  const modal = new ModalBuilder()
+    .setCustomId('bug_modal')
+    .setTitle('🐛 Report a Bug');
+
+  const titleInput = new TextInputBuilder()
+    .setCustomId('bug_title')
+    .setLabel('Title (short summary)')
+    .setStyle(TextInputStyle.Short)
+    .setMaxLength(100)
+    .setRequired(true)
+    .setPlaceholder('e.g. Card images not loading on profile page');
+
+  const descInput = new TextInputBuilder()
+    .setCustomId('bug_description')
+    .setLabel('Description (steps to reproduce)')
+    .setStyle(TextInputStyle.Paragraph)
+    .setMaxLength(1000)
+    .setRequired(true)
+    .setPlaceholder('1. Go to...\n2. Click...\n3. Expected: ...\n4. Actual: ...');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(titleInput),
+    new ActionRowBuilder().addComponents(descInput),
+  );
+
+  await interaction.showModal(modal);
+}
+
+async function handleBugModal(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  const title = interaction.fields.getTextInputValue('bug_title').trim();
+  const desc  = interaction.fields.getTextInputValue('bug_description').trim();
+
+  const data = {
+    title,
+    description:     desc,
+    source:          'discord',
+    status:          'pending',
+    discordUserId:   interaction.user.id,
+    discordUsername: interaction.user.tag || interaction.user.username,
+    discordMessageId: null,
+    discordChannelId: null,
+    timestamp: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  };
+
+  let docId;
+  try {
+    const ref = await db.collection('bug_reports').add(data);
+    docId = ref.id;
+  } catch(e) {
+    console.error('[bug] Firestore write failed:', e);
+    return interaction.editReply({ content: '❌ Failed to save your bug report. Please try again.' });
+  }
+
+  const channelId = process.env.BUGS_CHANNEL_ID;
+  if (channelId) {
+    try {
+      const channel = await interaction.client.channels.fetch(channelId);
+      const msg = await channel.send({
+        embeds:     [buildBugEmbed(data)],
+        components: [buildBugButtons(docId, 'pending')],
+      });
+      await db.collection('bug_reports').doc(docId).update({
+        discordMessageId: msg.id,
+        discordChannelId: channelId,
+      });
+    } catch(e) {
+      console.error('[bug] Failed to post to bugs channel:', e.message);
+    }
+  }
+
+  await interaction.editReply({ content: '🐛 Bug report submitted! Thanks for helping us improve WeeBee.' });
+}
+
+async function handleBugStatus(interaction, newStatus, docId) {
+  if (!interaction.memberPermissions.has('Administrator')) {
+    return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+  }
+  await interaction.deferReply({ ephemeral: true });
+
+  const ref  = db.collection('bug_reports').doc(docId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    return interaction.editReply({ content: '❌ Bug report not found.' });
+  }
+
+  const data = { ...snap.data(), status: newStatus, updatedAt: Timestamp.now() };
+  await ref.update({ status: newStatus, updatedAt: Timestamp.now() });
+
+  try {
+    await interaction.message.edit({
+      embeds:     [buildBugEmbed(data)],
+      components: [buildBugButtons(docId, newStatus)],
+    });
+  } catch(e) {
+    console.error('[bug] Failed to edit embed:', e.message);
+  }
+
+  await interaction.editReply({ content: `✅ Status updated to **${BUG_STATUS_LABELS[newStatus]}**.` });
+}
+
 // ── /announce command (Owner / Admin only) ────────────────────────────────────
 
 // Stores destination + image URL between slash command and modal submit
@@ -1044,6 +1192,10 @@ client.once('ready', async () => {
         .setDescription('Submit a suggestion for the WeeBee website or Discord server')
         .toJSON(),
       new SlashCommandBuilder()
+        .setName('bug')
+        .setDescription('Report a bug you found on WeeBee or in the Discord bot')
+        .toJSON(),
+      new SlashCommandBuilder()
         .setName('setup-drop-role')
         .setDescription('Create the BIG DROP role and post the opt-in message (admin only)')
         .toJSON(),
@@ -1085,6 +1237,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.commandName === 'drop')       await handleDrop(interaction);
     if (interaction.commandName === 'buy-amber')  await handleBuyAmber(interaction);
     if (interaction.commandName === 'suggest')         await handleSuggest(interaction);
+    if (interaction.commandName === 'bug')             await handleBug(interaction);
     if (interaction.commandName === 'setup-drop-role') await handleSetupDropRole(interaction);
     if (interaction.commandName === 'announce')        await handleAnnounce(interaction);
     return;
@@ -1100,10 +1253,13 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('suggest_review_'))  await handleSuggestStatus(interaction, 'under_review', interaction.customId.replace('suggest_review_', ''));
     if (interaction.customId.startsWith('suggest_approve_')) await handleSuggestStatus(interaction, 'approved',     interaction.customId.replace('suggest_approve_', ''));
     if (interaction.customId.startsWith('suggest_decline_')) await handleSuggestStatus(interaction, 'declined',     interaction.customId.replace('suggest_decline_', ''));
+    if (interaction.customId.startsWith('bug_testing_'))     await handleBugStatus(interaction, 'testing', interaction.customId.replace('bug_testing_', ''));
+    if (interaction.customId.startsWith('bug_fixed_'))       await handleBugStatus(interaction, 'fixed',   interaction.customId.replace('bug_fixed_', ''));
   }
 
   if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('suggest_modal_')) await handleSuggestModal(interaction);
+    if (interaction.customId === 'bug_modal')               await handleBugModal(interaction);
     if (interaction.customId === 'announce_modal')          await handleAnnounceModal(interaction);
   }
 });

@@ -5643,79 +5643,8 @@ window.renderSeasonalVoting = function() {
     const isLive = vote && !vote.state && !vote.closed;
     const isClosed = vote && vote.closed;
 
-    // ── Home page: swap trending carousel for awards banner ──────────────────
-    const homeBanner = document.getElementById('home-awards-banner');
-    const homeTrending = document.getElementById('home-trending-section');
-    if (homeBanner && homeTrending) {
-        if (vote && (isUpcoming || isLive || isClosed)) {
-            homeTrending.style.display = 'none';
-            homeBanner.style.display = 'block';
-            const nominees = vote.candidates || [];
-            let thumbs;
-            if (isClosed) {
-                const top3 = [...nominees]
-                    .sort((a, b) => (vote.voteCounts?.[b.mal_id] || 0) - (vote.voteCounts?.[a.mal_id] || 0))
-                    .slice(0, 3);
-                // Podium order: 2nd left, 1st center (taller), 3rd right
-                const podiumOrder = [top3[1], top3[0], top3[2]].filter(Boolean);
-                const podiumCfg = [
-                    { medal:'🥈', w:64, h:90,  border:'2px solid #C0C0C0', glow:'0 0 10px rgba(192,192,192,0.3)', mSize:'17px' },
-                    { medal:'🥇', w:82, h:116, border:'3px solid #FFD700', glow:'0 0 18px rgba(255,215,0,0.5)',   mSize:'24px' },
-                    { medal:'🥉', w:64, h:90,  border:'2px solid #CD7F32', glow:'0 0 10px rgba(205,127,50,0.3)', mSize:'17px' },
-                ];
-                thumbs = `<div style="display:flex;align-items:flex-end;gap:12px;">` +
-                    podiumOrder.map((c, pi) => {
-                        const cfg = podiumCfg[pi];
-                        return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;" onclick="loadAnimeDetails(${c.mal_id})">
-                            <span style="font-size:${cfg.mSize};">${cfg.medal}</span>
-                            <img src="${c.image}" title="${c.title}"
-                                style="width:${cfg.w}px;height:${cfg.h}px;object-fit:cover;border-radius:8px;border:${cfg.border};box-shadow:${cfg.glow};transition:transform 0.15s;"
-                                onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-                            <div style="color:rgba(255,255,255,0.85);font-size:10px;font-weight:700;width:${cfg.w}px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;margin-top:2px;">${c.title}</div>
-                        </div>`;
-                    }).join('') + `</div>`;
-            } else {
-                thumbs = nominees.slice(0, 10).map(c =>
-                    `<img src="${c.image}" onclick="loadAnimeDetails(${c.mal_id})" title="${c.title}"
-                        style="width:64px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0;border:2px solid rgba(255,255,255,0.15);transition:transform 0.15s;"
-                        onmouseover="this.style.transform='scale(1.06)'" onmouseout="this.style.transform='scale(1)'">`
-                ).join('');
-            }
-            const statusBadge = isUpcoming
-                ? `<span style="background:rgba(255,152,0,0.18);color:#FF9800;border:1px solid rgba(255,152,0,0.4);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:800;letter-spacing:1px;">VOTE OPENS SOON</span>`
-                : isLive
-                ? `<span style="background:rgba(76,175,80,0.18);color:#4CAF50;border:1px solid rgba(76,175,80,0.4);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:800;letter-spacing:1px;">🗳️ VOTING OPEN</span>`
-                : `<span style="background:rgba(150,150,150,0.18);color:var(--text-muted);border:1px solid var(--border-color);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:800;letter-spacing:1px;">VOTING CLOSED</span>`;
-            const ctaBtn = isLive
-                ? `<button onclick="switchView('discover-view')" style="margin-top:14px;padding:9px 22px;border-radius:20px;border:2px solid rgba(255,255,255,0.6);background:rgba(255,255,255,0.12);color:#fff;font-weight:800;font-size:13px;cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.22)'" onmouseout="this.style.background='rgba(255,255,255,0.12)'">Cast Your Vote →</button>`
-                : isUpcoming
-                ? `<button onclick="switchView('discover-view')" style="margin-top:14px;padding:9px 22px;border-radius:20px;border:2px solid rgba(255,255,255,0.5);background:transparent;color:rgba(255,255,255,0.75);font-weight:700;font-size:13px;cursor:pointer;">View Nominees →</button>`
-                : '';
-            homeBanner.innerHTML = `
-                <div style="border-radius:16px;overflow:hidden;background:linear-gradient(135deg,#1a0533 0%,#2d1b69 40%,#0d3b2e 100%);padding:24px 28px;position:relative;">
-                    <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2220%22 cy=%2220%22 r=%2240%22 fill=%22rgba(255,152,0,0.06)%22/><circle cx=%2280%22 cy=%2270%22 r=%2250%22 fill=%22rgba(99,102,241,0.07)%22/></svg>');pointer-events:none;"></div>
-                    <div style="position:relative;z-index:1;display:flex;flex-direction:column;gap:10px;">
-                        <div>${statusBadge}</div>
-                        <div style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;">
-                            <div>
-                                <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,200,80,0.7);margin-bottom:6px;">WeeBee Awards</div>
-                                <div style="font-size:26px;font-weight:900;color:#fff;line-height:1.15;margin-bottom:4px;">Anime of the Season</div>
-                                <div style="font-size:16px;font-weight:700;color:rgba(255,255,255,0.6);">${vote.season || 'Spring 2026'}</div>
-                                ${ctaBtn}
-                            </div>
-                            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;max-width:700px;">${thumbs}</div>
-                        </div>
-                    </div>
-                </div>`;
-        } else {
-            homeTrending.style.display = '';
-            homeBanner.style.display = 'none';
-        }
-    }
-
-    // ── Discover + News sections ─────────────────────────────────────────────
+    // ── News section only (home banner + discover section removed) ───────────
     const containers = [
-        { sectionId: 'discover-seasonal-section', contentId: 'discover-seasonal-content', titleId: 'discover-seasonal-title', subId: 'discover-seasonal-sub', adminId: 'discover-seasonal-admin' },
         { sectionId: 'news-seasonal-section', contentId: 'news-seasonal-content', titleId: 'news-seasonal-title', subId: 'news-seasonal-sub', adminId: null }
     ];
     containers.forEach(({ sectionId, contentId, titleId, subId, adminId }) => {
@@ -20619,7 +20548,7 @@ window.searchAnime = async function(queryStr) {
     top10Container.innerHTML = '<div class="loading">Searching Anime Database...</div>';
     
     // Hide default discovery sections
-    ['discover-seasonal-section','discover-spotlight-section','discover-reviewers-section','discover-similar-users-section','discover-friends-section',
+    ['discover-spotlight-section','discover-reviewers-section','discover-similar-users-section','discover-friends-section',
      'discover-trending-section','discover-upcoming-section','discover-action-section',
      'discover-romance-section','discover-comedy-section','discover-horror-section',
      'discover-scifi-section','discover-fantasy-section','discover-sol-section',
@@ -20813,7 +20742,7 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     if(targetId === 'discover-view' && !isSearch) {
         document.querySelector('#discover-view h2').innerText = "WeeBee's Top 10 All Time";
         document.querySelector('#discover-view p').innerText = "Ranked purely by WeeBee community scores";
-        ['discover-seasonal-section','discover-spotlight-section','discover-reviewers-section','discover-similar-users-section','discover-friends-section',
+        ['discover-spotlight-section','discover-reviewers-section','discover-similar-users-section','discover-friends-section',
          'discover-trending-section','discover-upcoming-section','discover-action-section',
          'discover-romance-section','discover-comedy-section','discover-horror-section',
          'discover-scifi-section','discover-fantasy-section','discover-sol-section',
@@ -25835,6 +25764,19 @@ async function _dungeonSaveProgress(uid, progress) {
     try { await setDoc(doc(db, 'dungeon_progress', uid), progress); } catch(e) {}
 }
 
+async function _dungeonLoadItems(uid) {
+    try {
+        const snap = await getDoc(doc(db, 'player_items', uid));
+        return snap.exists() ? snap.data() : {};
+    } catch(e) { return {}; }
+}
+
+async function _dungeonAwardPotion(uid) {
+    try {
+        await setDoc(doc(db, 'player_items', uid), { revivePotion: increment(1) }, { merge: true });
+    } catch(e) { console.error('[dungeon] Failed to award potion:', e); }
+}
+
 // Rolls progress over to a fresh day's pool, keeping lifetime stats
 // (totalRaids/streak/lastRaidDate) intact — only the pool, fatigue,
 // and per-gate results reset.
@@ -25862,10 +25804,11 @@ window.loadDungeonTab = async function() {
     }
     el.innerHTML = `<div class="loading">Loading TCG Dungeon...</div>`;
     const uid = auth.currentUser.uid;
-    const state = await _dungeonLoadState(uid);
+    const [state, progressRaw, items] = await Promise.all([_dungeonLoadState(uid), _dungeonLoadProgress(uid), _dungeonLoadItems(uid)]);
     window._dungeonState = state;
+    window._dungeonItems = items || {};
     const todayKey = _dungeonTodayKey();
-    let progress = await _dungeonLoadProgress(uid);
+    let progress = progressRaw;
     if (!progress) {
         progress = { date: todayKey, poolIndex: 0, results: [] };
         if (!state) await _dungeonSaveProgress(uid, progress);
@@ -26030,15 +25973,27 @@ function _dungeonRenderGateSelect(el) {
         </div>`;
     }).join('');
 
+    const potionCount = window._dungeonItems?.revivePotion || 0;
+    const justEarned = window._dungeonJustEarnedPotion;
+    if (justEarned) window._dungeonJustEarnedPotion = false;
+
     let mainHTML;
     if (poolIndex >= 5) {
         const totalAmber = progress.results.slice(0, 5).reduce((s, r) => s + r.reward, 0);
         const wins = progress.results.slice(0, 5).filter(r => r.success).length;
+        const cleanSweep = wins === 5;
         mainHTML = `
             <div style="background:var(--bg-gray);border-radius:14px;padding:28px 20px;text-align:center;">
                 <div style="font-size:20px;font-weight:800;margin-bottom:8px;">🏁 Today's Gates Cleared!</div>
                 <div style="font-size:14px;color:var(--text-muted);margin-bottom:6px;">${wins}/5 gates won · 🟡 ${totalAmber} Amber earned today</div>
-                <div style="font-size:12px;color:var(--text-muted);margin-bottom:18px;">New gates unlock in ${_dungeonFormatRemaining(_dungeonMsUntilReset())}</div>
+                ${cleanSweep && justEarned ? `<div style="margin:10px auto 6px;display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:12px;background:rgba(168,85,247,0.15);border:2px solid rgba(168,85,247,0.5);">
+                    <span style="font-size:20px;">🧪</span>
+                    <div style="text-align:left;">
+                        <div style="font-size:13px;font-weight:900;color:#a855f7;">Clean Sweep! +1 Revive Potion</div>
+                        <div style="font-size:11px;color:var(--text-muted);">Use it after a gate failure to re-roll your odds.</div>
+                    </div>
+                </div>` : ''}
+                <div style="font-size:12px;color:var(--text-muted);margin:12px 0 18px;">New gates unlock in ${_dungeonFormatRemaining(_dungeonMsUntilReset())}</div>
                 ${progress.summaryShared
                     ? `<div style="color:var(--text-muted);font-size:13px;">✅ Shared today's run!</div>`
                     : `<button class="action-btn" style="font-weight:800;" onclick="window._dungeonShareSummary()">📤 Post Today's Run</button>`}
@@ -26073,11 +26028,15 @@ function _dungeonRenderGateSelect(el) {
         ${_dungeonLifetimeSummaryHTML(progress)}
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
             <div style="display:flex;gap:8px;flex-wrap:wrap;">${poolStripHTML}</div>
-            <div style="display:inline-flex;align-items:center;gap:8px;">
+            <div style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;border:1px solid ${diffColors[diffCfg.id]};background:rgba(0,0,0,0.18);">
                     <span style="font-size:13px;">${diffCfg.icon}</span>
                     <span style="font-size:12px;font-weight:800;color:${diffColors[diffCfg.id]};">${diffCfg.label}</span>
                 </div>
+                ${potionCount > 0 ? `<div title="Revive Potions — use after a gate failure to re-roll" style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1px solid rgba(168,85,247,0.5);background:rgba(168,85,247,0.1);">
+                    <span style="font-size:13px;">🧪</span>
+                    <span style="font-size:12px;font-weight:800;color:#a855f7;">×${potionCount}</span>
+                </div>` : ''}
                 ${poolIndex === 0 && !progress.results?.length ? `<button onclick="window._dungeonChangeDifficulty()" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;">← Change</button>` : ''}
             </div>
         </div>
@@ -26448,12 +26407,24 @@ function _dungeonRenderActive(el, state) {
         <div style="text-align:center;margin-bottom:16px;">
             <button onclick="window._dungeonStopRaid()" class="cancel-btn" style="font-size:12px;opacity:0.6;">🛑 Cancel Raid (Admin)</button>
         </div>` : ''}
-        ${ready ? `
+        ${ready ? (() => {
+            const _potionCount = window._dungeonItems?.revivePotion || 0;
+            const _canUsePotion = !state.success && !state.revivedAt && _potionCount > 0 && !state.testMode;
+            const _potionHTML = _canUsePotion ? `
+                <div style="margin-top:14px;padding:14px 16px;background:rgba(168,85,247,0.1);border:2px solid rgba(168,85,247,0.4);border-radius:12px;text-align:left;">
+                    <div style="font-size:13px;font-weight:900;color:#a855f7;margin-bottom:4px;">🧪 Use a Revive Potion?</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Re-roll this gate with the same odds for another shot at victory. You have <strong>${_potionCount}</strong> potion${_potionCount !== 1 ? 's' : ''}.</div>
+                    <button id="dungeon-potion-btn" onclick="this.disabled=true;this.textContent='Using…';window._dungeonUseRevivePotion()" style="padding:8px 20px;border-radius:8px;background:#a855f7;border:none;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">Use Revive Potion</button>
+                </div>` : '';
+            const _revivedNote = state.revivedAt ? `<div style="margin-top:8px;font-size:11px;color:rgba(168,85,247,0.8);font-weight:700;">🧪 Revive Potion used this gate</div>` : '';
+            return `
         <div style="background:var(--bg-gray);border-radius:14px;padding:20px;text-align:center;margin-bottom:16px;">
             <div style="font-size:18px;font-weight:800;margin-bottom:6px;">${state.success ? '🎉 Success!' : '💀 Failed'}</div>
             <div style="font-size:14px;color:var(--text-muted);margin-bottom:14px;">${state.success ? `Your party cleared the gate and found loot!` : `Your party survived, but came up empty-handed.`}</div>
             <div style="font-size:24px;font-weight:900;color:#FFD700;margin-bottom:16px;">🟡 ${state.reward} Amber</div>
-            <button class="action-btn" id="dungeon-claim-btn" style="padding:12px 32px;font-weight:800;" onclick="this.disabled=true;this.textContent='Claiming…';window._dungeonClaim()">Claim Reward</button>
+            ${_potionHTML}
+            ${_revivedNote}
+            <button class="action-btn" id="dungeon-claim-btn" style="padding:12px 32px;font-weight:800;margin-top:${_canUsePotion||state.revivedAt?'14px':'0'};" onclick="this.disabled=true;this.textContent='Claiming…';window._dungeonClaim()">Claim Reward</button>
         </div>
         ${_dungeonBonusCardsHTML(state)}
         ${_dungeonStatsHTML(state)}
@@ -26461,7 +26432,8 @@ function _dungeonRenderActive(el, state) {
             ${state.shared
                 ? `<div style="color:var(--text-muted);font-size:13px;">✅ Shared to your feed!</div>`
                 : `<button class="action-btn" style="font-weight:800;" onclick="window._dungeonShareResult()">📤 Share Result</button>`}
-        </div>` : ''}
+        </div>`;
+        })() : ''}
     `;
 
     if (!ready) {
@@ -26643,7 +26615,13 @@ window._dungeonClaim = async function() {
             if (streak >= 100) dungeonAch.push('dungeon_streak_100');
             if (state.gateId === 's' && state.success) dungeonAch.push('dungeon_s_clear');
             if (state.bonusCards?.length) dungeonAch.push('dungeon_recruit');
-            if (progress.results.length === 5 && progress.results.every(r => r.success)) dungeonAch.push('dungeon_perfect_day');
+            const isCleanSweep = progress.results.length === 5 && progress.results.every(r => r.success);
+            if (isCleanSweep) {
+                dungeonAch.push('dungeon_perfect_day');
+                await _dungeonAwardPotion(uid);
+                window._dungeonItems = { ...(window._dungeonItems || {}), revivePotion: (window._dungeonItems?.revivePotion || 0) + 1 };
+                window._dungeonJustEarnedPotion = true;
+            }
         }
 
         await _dungeonSaveProgress(uid, progress);
@@ -26657,6 +26635,46 @@ window._dungeonClaim = async function() {
     window._dungeonClaiming = false;
     window._dungeonState = null;
     window.loadDungeonTab();
+};
+
+window._dungeonUseRevivePotion = async function() {
+    if (window._dungeonRerolling) return;
+    const state = window._dungeonState;
+    if (!state || !auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const gate = DUNGEON_GATES[state.gateId];
+    const diffCfg = DUNGEON_DIFFICULTY_CONFIG[window._dungeonProgress?.difficulty || 'medium'];
+
+    window._dungeonRerolling = true;
+    try {
+        const newSuccess = Math.random() * 100 < state.successChance;
+        const newReward = newSuccess
+            ? Math.round((gate.rewardMin + Math.random() * (gate.rewardMax - gate.rewardMin)) * diffCfg.rewardMult)
+            : Math.round(gate.failReward * diffCfg.rewardMult);
+
+        const itemsRef = doc(db, 'player_items', uid);
+        const raidRef = doc(db, 'raid_state', uid);
+        await runTransaction(db, async tx => {
+            const itemSnap = await tx.get(itemsRef);
+            const count = itemSnap.exists() ? (itemSnap.data().revivePotion || 0) : 0;
+            if (count <= 0) throw new Error('no_potions');
+            tx.set(itemsRef, { revivePotion: count - 1 }, { merge: true });
+            tx.update(raidRef, { success: newSuccess, reward: newReward, revivedAt: Date.now() });
+        });
+
+        state.success = newSuccess;
+        state.reward = newReward;
+        state.revivedAt = Date.now();
+        window._dungeonState = state;
+        window._dungeonItems = { ...(window._dungeonItems || {}), revivePotion: Math.max(0, (window._dungeonItems?.revivePotion || 1) - 1) };
+    } catch(e) {
+        window._dungeonRerolling = false;
+        if (e.message === 'no_potions') alert('No Revive Potions remaining!');
+        else alert('Failed to use potion: ' + e.message);
+        return;
+    }
+    window._dungeonRerolling = false;
+    _dungeonRenderActive(document.getElementById('dungeon-tab-content'), state);
 };
 
 // Shares a condensed view of all 5 of today's gate results in one post.
