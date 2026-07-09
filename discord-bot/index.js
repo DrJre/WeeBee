@@ -756,7 +756,7 @@ async function handleSuggestStatus(interaction, newStatus, docId) {
 
 // ── /bug command ─────────────────────────────────────────────────────────────
 
-const BUG_FIX_AMBER = 100;
+const BUG_FIX_AMBER = 250;
 
 const BUG_STATUS_COLORS = {
   pending: 0x5865f2,
