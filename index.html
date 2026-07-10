@@ -916,6 +916,10 @@
                         <button class="detail-tab tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-dungeon')">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">fort</span> Dungeon
                         </button>
+                        <button class="detail-tab tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-pvp')" style="position:relative;">
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">swords</span> PVP
+                            <span id="tcg-pvp-badge" class="wheel-notif-dot" style="top:2px;right:-4px;display:none;"></span>
+                        </button>
                         <button id="tcg-tab-admin-btn" class="detail-tab tcg-tab-btn" onclick="window.switchTcgTab(event,'tcg-tab-admin')" style="display:none;">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">admin_panel_settings</span> Admin
                         </button>
@@ -996,6 +1000,11 @@
                     <!-- DUNGEON TAB -->
                     <div id="tcg-tab-dungeon" class="tcg-tab-content" style="display:none;">
                         <div id="dungeon-tab-content"><div class="loading">Loading TCG Dungeon...</div></div>
+                    </div>
+
+                    <!-- PVP TAB -->
+                    <div id="tcg-tab-pvp" class="tcg-tab-content" style="display:none;">
+                        <div id="pvp-tab-content"><div class="loading">Loading PVP...</div></div>
                     </div>
 
                     <!-- ADMIN TAB -->
@@ -2758,6 +2767,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=547"></script>
+    <script type="module" src="app.js?v=558"></script>
 </body>
 </html>

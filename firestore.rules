@@ -483,6 +483,31 @@ service cloud.firestore {
       allow write: if isOwner(uid);
     }
 
+    // ── TCG PVP ───────────────────────────────────────────────────────────────
+    // Challenges — created by challenger, read/updated by either participant.
+    match /pvp_challenges/{challengeId} {
+      allow read: if isAdmin() || (isAuth() && (
+        request.auth.uid == resource.data.challengerId ||
+        request.auth.uid == resource.data.defenderId
+      ));
+      allow create: if isAuth() && request.resource.data.challengerId == request.auth.uid;
+      allow update: if isAdmin() || (isAuth() && (
+        request.auth.uid == resource.data.challengerId ||
+        request.auth.uid == resource.data.defenderId
+      ));
+      allow delete: if isAdmin() || (isAuth() && (
+        request.auth.uid == resource.data.challengerId ||
+        request.auth.uid == resource.data.defenderId
+      ));
+    }
+
+    // Career stats — public read (leaderboard); any auth user can write because
+    // the defender resolves battles and must update both players' stat docs.
+    match /pvp_stats/{uid} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+
     // ── TCG Pack Store flash sale toggle ───────────────────────────────────
     match /tcg_sale_config/{doc} {
       allow read: if true;

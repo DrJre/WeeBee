@@ -1,4 +1,4 @@
-﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+﻿﻿﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getFirestore, collection, collectionGroup, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch, waitForPendingWrites, deleteField } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
@@ -309,6 +309,16 @@ const ACHIEVEMENTS = [
     { id: 'dungeon_s_clear',     name: 'S-Rank Slayer',     desc: 'Successfully cleared an S-Rank gate',                icon: 'workspace_premium',     cat: 'Community', subcat: 'TCG Dungeon', color: '#8e44ad' },
     { id: 'dungeon_perfect_day', name: 'Flawless Run',      desc: "Won all 5 gates in a single day's pool",             icon: 'verified',              cat: 'Community', subcat: 'TCG Dungeon', color: '#a855f7' },
     { id: 'dungeon_streak_100',  name: 'Dungeon Master',    desc: 'Completed a raid 100 days in a row',                 icon: 'diamond',               cat: 'Community', subcat: 'TCG Dungeon', color: '#FFD700' },
+    // Community: TCG PVP
+    { id: 'pvp_first',          name: 'First Blood',        desc: 'Won your first TCG PVP battle',                      icon: 'swords',                cat: 'Community', subcat: 'TCG PVP',     color: '#6366f1', amber: 250 },
+    { id: 'pvp_wins_10',        name: 'Duelist',            desc: 'Won 10 TCG PVP battles',                             icon: 'military_tech',         cat: 'Community', subcat: 'TCG PVP',     color: '#6366f1', amber: 500 },
+    { id: 'pvp_wins_25',        name: 'Battle-Hardened',    desc: 'Won 25 TCG PVP battles',                             icon: 'emoji_events',          cat: 'Community', subcat: 'TCG PVP',     color: '#6366f1', amber: 750 },
+    { id: 'pvp_wins_50',        name: 'Champion',           desc: 'Won 50 TCG PVP battles',                             icon: 'workspace_premium',     cat: 'Community', subcat: 'TCG PVP',     color: '#a855f7', amber: 1000 },
+    { id: 'pvp_wins_100',       name: 'Grand Champion',     desc: 'Won 100 TCG PVP battles',                            icon: 'diamond',               cat: 'Community', subcat: 'TCG PVP',     color: '#FFD700', amber: 2000 },
+    { id: 'pvp_streak_5',       name: 'Win Streak',         desc: 'Won 5 PVP battles in a row',                         icon: 'local_fire_department', cat: 'Community', subcat: 'TCG PVP',     color: '#6366f1', amber: 500 },
+    { id: 'pvp_streak_10',      name: 'Unstoppable',        desc: 'Won 10 PVP battles in a row',                        icon: 'bolt',                  cat: 'Community', subcat: 'TCG PVP',     color: '#a855f7', amber: 1000 },
+    { id: 'pvp_card_winner',    name: 'Card Shark',         desc: 'Won your first card wager battle',                   icon: 'style',                 cat: 'Community', subcat: 'TCG PVP',     color: '#6366f1', amber: 300 },
+    { id: 'pvp_card_haul',      name: 'High Roller',        desc: 'Won 10+ cards in a single card wager battle',        icon: 'auto_awesome',          cat: 'Community', subcat: 'TCG PVP',     color: '#a855f7', amber: 750 },
 ];
 
 // Returns the set of all achievement ids the user has unlocked (existing + newly awarded this call).
@@ -1375,6 +1385,10 @@ window.fetchNotifications = function() {
                 onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-trading');window._tcgOpenBulletinOffersView('${n.listingId}')"`;
             } else if (n.type === 'bulletin_offer_accepted') {
                 onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-trading')"`;
+            } else if (n.type === 'pvp_challenge' && n.challengeId) {
+                onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-pvp');window.loadPvpTab();window._pvpAcceptFlow('${n.challengeId}')"`;
+            } else if (n.type === 'pvp_result' && n.challengeId) {
+                onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-pvp');window._pvpReplayBattle('${n.challengeId}')"`;
             } else if (n.type === 'follow' || n.type === 'friend_accept' || n.type === 'friend_request') {
                 onClickAction = `onclick="viewUserProfile('${n.senderUid}')"`;
             } else if (n.type === 'system') {
@@ -4297,6 +4311,7 @@ window.fetchUserProfile = async function(targetUid = null) {
                <button onclick="openDMConversation('${uidToFetch}','${pName.replace(/'/g,"\\'")}','${pAvatar}')" class="action-btn" style="padding:8px; min-width:unset; background:var(--bg-gray-darker); color:var(--text-dark);" title="Message"><span class="material-symbols-outlined">chat_bubble</span></button>
                <button id="profile-notify-btn" onclick="toggleReviewNotify('${uidToFetch}', this)" class="action-btn" title="${notifyOn ? 'Review notifications on' : 'Review notifications off'}" style="padding:8px; min-width:unset; background:var(--bg-gray-darker); color:var(--text-dark); display:${isFollowing ? 'inline-flex' : 'none'};"><span class="material-symbols-outlined" style="font-size:20px;">${notifyOn && isFollowing ? 'notifications_active' : 'notifications_off'}</span></button>
                <span id="profile-friend-btns">${friendBtnInner}</span>
+               <button onclick="window._pvpChallengeFromProfile('${uidToFetch}','${pName.replace(/'/g,"\\'")}','${pAvatar}')" class="action-btn" style="padding:8px 12px; background:linear-gradient(135deg,#6366f1,#a855f7); color:#fff;" title="Challenge to TCG Battle"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">swords</span> Challenge</button>
                <button onclick="toggleFollow('${uidToFetch}', 'user', this)" class="action-btn" style="${isFollowing ? 'background:var(--bg-gray-darker);color:var(--text-dark);' : ''}"><span class="material-symbols-outlined">${isFollowing ? 'check' : 'person_add'}</span> ${isFollowing ? 'Following' : 'Follow User'}</button>
            </div>`;
 
@@ -6639,6 +6654,7 @@ window.switchTcgTab = function(event, tabId) {
     if (tabId === 'tcg-tab-auction') window._auctionRender();
     if (tabId === 'tcg-tab-dungeon') window.loadDungeonTab();
     else window._dungeonStopRefresh?.();
+    if (tabId === 'tcg-tab-pvp') window.loadPvpTab();
     if (tabId === 'tcg-tab-admin') { window._tcgRenderFounderPreview(); window._tcgLoadSaleConfigUI(); window._tcgLoadPrismaticEventUI(); }
 };
 
@@ -25635,10 +25651,10 @@ function _dungeonCardPower(card) {
 
 // +1 power for every card in the party that shares an anime with at least
 // one other card — rewards building thematic parties.
-function _dungeonComboBonus(cards) {
+function _dungeonComboBonus(cards, bonusPerCard = 1) {
     const animeCounts = {};
     cards.forEach(c => { const a = c.anime || ''; if (a) animeCounts[a] = (animeCounts[a] || 0) + 1; });
-    return cards.reduce((sum, c) => sum + ((animeCounts[c.anime || ''] || 0) > 1 ? 1 : 0), 0);
+    return cards.reduce((sum, c) => sum + ((animeCounts[c.anime || ''] || 0) > 1 ? bonusPerCard : 0), 0);
 }
 
 function _dungeonSuccessChance(partyPower, difficulty, diffMult = 1) {
@@ -25731,15 +25747,18 @@ function _dungeonFormatRemaining(ms) {
 // Small chance for the party to recruit 1-2 bonus cards on top of the amber
 // reward. Rolled at raid start; saved to the collection when claimed.
 // Hard mode A/S-rank gates add SR to the loot table (15% SR, 20% Rare, 65% Common).
-async function _dungeonGenerateBonusCards(gate, difficulty) {
-    if (Math.random() > 0.3) return [];
+async function _dungeonGenerateBonusCards(gate, difficulty, options = {}) {
+    const { forceSummon = false, forceSR = false } = options;
+    if (!forceSummon && Math.random() > 0.3) return [];
     await _tcgEnsureCardPool();
     const count = Math.random() < 0.7 ? 1 : 2;
     const isHardHighTier = difficulty === 'hard' && (gate?.id === 'a' || gate?.id === 's');
     const cards = [];
     for (let i = 0; i < count; i++) {
         let rarity;
-        if (isHardHighTier) {
+        if (forceSR && i === 0) {
+            rarity = 'sr';
+        } else if (isHardHighTier) {
             const roll = Math.random();
             rarity = roll < 0.15 ? 'sr' : roll < 0.35 ? 'rare' : 'common';
         } else {
@@ -25794,6 +25813,18 @@ async function _dungeonAwardPotion(uid) {
     try {
         await setDoc(doc(db, 'player_items', uid), { revivePotion: increment(1) }, { merge: true });
     } catch(e) { console.error('[dungeon] Failed to award potion:', e); }
+}
+
+async function _dungeonAwardItem(uid, key) {
+    try {
+        await setDoc(doc(db, 'player_items', uid), { [key]: increment(1) }, { merge: true });
+    } catch(e) { console.error('[dungeon] Failed to award item:', e); }
+}
+
+function _dungeonRollItemDrop(gateId) {
+    const table = DUNGEON_ITEM_DROPS[gateId];
+    if (!table || Math.random() > table.rate) return null;
+    return table.pool[Math.floor(Math.random() * table.pool.length)];
 }
 
 // Rolls progress over to a fresh day's pool, keeping lifetime stats
@@ -25958,6 +25989,25 @@ function _dungeonRenderDifficultyPicker(el) {
     `;
 }
 
+function _dungeonItemInventoryHTML(items) {
+    const allKeys = ['revivePotion', ...Object.keys(DUNGEON_ITEMS_DEF)];
+    const badges = allKeys.map(key => {
+        const count = items?.[key] || 0;
+        if (!count) return '';
+        const def = DUNGEON_ITEMS_DEF[key] || { label: 'Revival Fluid', emoji: '🧪' };
+        return `<div title="${def.label}" style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1px solid rgba(168,85,247,0.4);background:rgba(168,85,247,0.08);">
+            <span style="font-size:13px;">${def.emoji}</span>
+            <span style="font-size:11px;font-weight:800;color:#a855f7;">${def.label}</span>
+            <span style="font-size:12px;font-weight:900;color:var(--text-dark);">×${count}</span>
+        </div>`;
+    }).join('');
+    if (!badges) return '';
+    return `<div style="background:var(--bg-gray);border-radius:12px;padding:12px 16px;margin-bottom:12px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">🎒 Your Items</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">${badges}</div>
+    </div>`;
+}
+
 function _dungeonRenderGateSelect(el) {
     const testMode = window.isAdmin && localStorage.getItem('weebee_dungeon_testmode') === '1';
     const progress = window._dungeonProgress || { date: _dungeonTodayKey(), poolIndex: 0, results: [] };
@@ -25995,6 +26045,8 @@ function _dungeonRenderGateSelect(el) {
     const potionCount = window._dungeonItems?.revivePotion || 0;
     const justEarned = window._dungeonJustEarnedPotion;
     if (justEarned) window._dungeonJustEarnedPotion = false;
+    const justEarnedItem = window._dungeonJustEarnedItem;
+    if (justEarnedItem) window._dungeonJustEarnedItem = null;
 
     let mainHTML;
     if (poolIndex >= 5) {
@@ -26008,7 +26060,7 @@ function _dungeonRenderGateSelect(el) {
                 ${cleanSweep && justEarned ? `<div style="margin:10px auto 6px;display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:12px;background:rgba(168,85,247,0.15);border:2px solid rgba(168,85,247,0.5);">
                     <span style="font-size:20px;">🧪</span>
                     <div style="text-align:left;">
-                        <div style="font-size:13px;font-weight:900;color:#a855f7;">Clean Sweep! +1 Revive Potion</div>
+                        <div style="font-size:13px;font-weight:900;color:#a855f7;">Clean Sweep! +1 Revival Fluid</div>
                         <div style="font-size:11px;color:var(--text-muted);">Use it after a gate failure to re-roll your odds.</div>
                     </div>
                 </div>` : ''}
@@ -26052,13 +26104,18 @@ function _dungeonRenderGateSelect(el) {
                     <span style="font-size:13px;">${diffCfg.icon}</span>
                     <span style="font-size:12px;font-weight:800;color:${diffColors[diffCfg.id]};">${diffCfg.label}</span>
                 </div>
-                ${potionCount > 0 ? `<div title="Revive Potions — use after a gate failure to re-roll" style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1px solid rgba(168,85,247,0.5);background:rgba(168,85,247,0.1);">
-                    <span style="font-size:13px;">🧪</span>
-                    <span style="font-size:12px;font-weight:800;color:#a855f7;">×${potionCount}</span>
-                </div>` : ''}
                 ${poolIndex === 0 && !progress.results?.length ? `<button onclick="window._dungeonChangeDifficulty()" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;">← Change</button>` : ''}
             </div>
         </div>
+        ${justEarnedItem ? (() => { const _d = DUNGEON_ITEMS_DEF[justEarnedItem] || {}; return `
+        <div style="margin-bottom:12px;padding:12px 16px;background:rgba(168,85,247,0.1);border:2px solid rgba(168,85,247,0.4);border-radius:12px;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:22px;">${_d.emoji||'🎁'}</span>
+            <div>
+                <div style="font-size:13px;font-weight:900;color:#a855f7;">Item Drop! +1 ${_d.label||justEarnedItem}</div>
+                <div style="font-size:11px;color:var(--text-muted);">${_d.desc||''}</div>
+            </div>
+        </div>`; })() : ''}
+        ${_dungeonItemInventoryHTML(window._dungeonItems)}
         <div id="dungeon-gate-list">${mainHTML}</div>
         <div id="dungeon-party-select" style="display:none;"></div>
         ${window.isAdmin ? `
@@ -26146,8 +26203,8 @@ window._dungeonOpenPartySelect = async function(gateId) {
     const uid = auth.currentUser.uid;
     // Founder UR cards are excluded for now — there are no other URs in the
     // game yet, so they'd be the only UR-power option available.
-    const cards = (await _tcgLoadCollection(uid)).filter(c => !c.founder);
-    window._dungeonPickState = { gateId, selected: new Set(), cards, sort: 'power-desc' };
+    const cards = (await _tcgLoadCollection(uid)).filter(c => !c.founder && c.rarity !== 'common');
+    window._dungeonPickState = { gateId, selected: new Set(), cards, sort: 'power-desc', activeItems: new Set() };
     _dungeonRenderPartySelect(panel);
 };
 
@@ -26165,10 +26222,39 @@ function _dungeonIsFatigued(cardId) {
 
 const DUNGEON_RARITY_ORDER = { ur:6, pr:5, ssr:4, sr:3, rare:2, common:1 };
 
+const DUNGEON_ITEMS_DEF = {
+    energyDrink:  { label: 'Energy Drink',  emoji: '⚡', desc: 'Removes the resting period for your party cards after this raid.' },
+    powerScroll:  { label: 'Power Scroll',  emoji: '📜', desc: '+2 Power to every card in your party for this raid.' },
+    srCompass:    { label: 'SR Compass',    emoji: '🧭', desc: 'Guarantees an SR card if your party recruits a companion this raid.' },
+    summonScroll: { label: 'Summon Scroll', emoji: '📯', desc: 'Guarantees your party recruits at least one companion card this raid.' },
+    synergySeal:  { label: 'Synergy Seal',  emoji: '🔮', desc: 'Doubles combo bonus — shared-anime cards give +2 Power each instead of +1.' },
+    goldenIdol:   { label: 'Golden Idol',   emoji: '🏺', desc: 'Increases your amber reward by 50% on a successful raid.' },
+    warpStone:    { label: 'Warp Stone',    emoji: '💎', desc: 'Cuts the raid timer in half.' },
+    crazySlots:   { label: 'Crazy Slots',   emoji: '🎰', desc: 'Randomizes amber reward from 0 to 9,999.' },
+};
+
+// Drop tables by gate tier — only drops on success
+const DUNGEON_ITEM_DROPS = {
+    e: { rate: 0.12, pool: ['energyDrink', 'energyDrink', 'powerScroll', 'summonScroll'] },
+    d: { rate: 0.15, pool: ['energyDrink', 'powerScroll', 'summonScroll', 'warpStone'] },
+    c: { rate: 0.18, pool: ['powerScroll', 'summonScroll', 'srCompass', 'warpStone', 'goldenIdol'] },
+    b: { rate: 0.20, pool: ['srCompass', 'summonScroll', 'synergySeal', 'goldenIdol', 'warpStone', 'crazySlots'] },
+    a: { rate: 0.22, pool: ['srCompass', 'synergySeal', 'goldenIdol', 'warpStone', 'crazySlots'] },
+    s: { rate: 0.25, pool: ['srCompass', 'synergySeal', 'goldenIdol', 'warpStone', 'crazySlots', 'crazySlots'] },
+};
+
 window._dungeonSetSort = function(sort) {
     const ps = window._dungeonPickState;
     if (!ps) return;
     ps.sort = sort;
+    _dungeonRenderPartySelect(document.getElementById('dungeon-party-select'));
+};
+
+window._dungeonToggleItem = function(key) {
+    const ps = window._dungeonPickState;
+    if (!ps) return;
+    if (ps.activeItems.has(key)) ps.activeItems.delete(key);
+    else ps.activeItems.add(key);
     _dungeonRenderPartySelect(document.getElementById('dungeon-party-select'));
 };
 
@@ -26186,12 +26272,14 @@ function _dungeonSortCards(cards, sort) {
 }
 
 function _dungeonRenderPartySelect(panel) {
-    const { gateId, selected, cards, sort } = window._dungeonPickState;
+    const { gateId, selected, cards, sort, activeItems } = window._dungeonPickState;
     const gate = DUNGEON_GATES[gateId];
     const selectedCards = [...selected].map(id => cards.find(c => c.id === id)).filter(Boolean);
     const basePartyPower = selectedCards.reduce((sum, c) => sum + _dungeonCardPower(c), 0);
-    const combo = _dungeonComboBonus(selectedCards);
-    const partyPower = basePartyPower + combo;
+    const comboBonusPerCard = activeItems.has('synergySeal') ? 2 : 1;
+    const combo = _dungeonComboBonus(selectedCards, comboBonusPerCard);
+    const powerScrollBonus = activeItems.has('powerScroll') ? 2 * selectedCards.length : 0;
+    const partyPower = basePartyPower + combo + powerScrollBonus;
     const diffCfg = DUNGEON_DIFFICULTY_CONFIG[window._dungeonProgress?.difficulty || 'medium'];
     const chance = _dungeonSuccessChance(partyPower, gate.difficulty, diffCfg.diffMult);
     const canStart = selected.size === gate.partySize;
@@ -26208,11 +26296,11 @@ function _dungeonRenderPartySelect(panel) {
         const fatigued = _dungeonIsFatigued(c.id);
         const inCombo = isSel && (selectedAnimeCounts[c.anime || ''] || 0) > 1;
         return `
-        <div onclick="${fatigued?'':`window._dungeonTogglePick('${c.id}')`}" style="cursor:${fatigued?'not-allowed':'pointer'};border-radius:10px;overflow:hidden;border:3px solid ${inCombo?'#a855f7':isSel?'var(--accent-yellow)':'transparent'};position:relative;background:var(--bg-gray);${fatigued?'opacity:0.45;':''}">
-            <img src="${c.image||''}" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;${fatigued?'filter:grayscale(0.6);':''}" loading="lazy">
+        <div onclick="${fatigued?'':`window._dungeonTogglePick('${c.id}')`}" style="cursor:${fatigued?'not-allowed':'pointer'};border-radius:10px;overflow:hidden;border:3px solid ${inCombo?'#a855f7':isSel?'var(--accent-yellow)':'transparent'};position:relative;background:var(--bg-gray);aspect-ratio:2/3;${fatigued?'opacity:0.45;':''}">
+            <img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;${fatigued?'filter:grayscale(0.6);':''}" loading="eager">
             <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);color:#fff;font-size:10px;padding:4px 6px;text-align:center;">
                 <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
-                <div style="color:${inCombo?'#d8a4ff':'#FFD700'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${rarityLabels[c.rarity]||c.rarity} · ⚡${_dungeonCardPower(c)}${inCombo?' +1':''}</div>
+                <div style="color:${inCombo?'#d8a4ff':'#FFD700'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${rarityLabels[c.rarity]||c.rarity} · ⚡${_dungeonCardPower(c)}${inCombo?' +'+comboBonusPerCard:''}</div>
             </div>
             ${fatigued ? `<div style="position:absolute;top:0;left:0;right:0;background:rgba(0,0,0,0.7);color:#FFD700;font-size:10px;font-weight:800;text-align:center;padding:4px 0;">😴 Resting</div>` : ''}
             ${inCombo ? `<div style="position:absolute;top:4px;left:4px;background:#a855f7;color:#fff;font-size:9px;font-weight:900;padding:2px 5px;border-radius:4px;">COMBO</div>` : ''}
@@ -26227,13 +26315,38 @@ function _dungeonRenderPartySelect(panel) {
             <button class="action-btn" style="font-weight:800;${canStart?'':'opacity:0.5;cursor:not-allowed;'}" ${canStart?`onclick="window._dungeonStartRaid()"`:''}>Begin Raid →</button>
         </div>
         <div style="background:var(--bg-gray);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-            <div style="font-size:13px;">Selected: <strong>${selected.size}/${gate.partySize}</strong> · Party Power: <strong>${partyPower}</strong>${combo > 0 ? ` <span style="color:#a855f7;font-weight:800;">(+${combo} Combo!)</span>` : ''}</div>
+            <div style="font-size:13px;">Selected: <strong>${selected.size}/${gate.partySize}</strong> · Party Power: <strong>${partyPower}</strong>${combo > 0 ? ` <span style="color:#a855f7;font-weight:800;">(+${combo} Combo${activeItems.has('synergySeal')?' ×2':''}!)</span>` : ''}${powerScrollBonus > 0 ? ` <span style="color:#f59e0b;font-weight:800;">(+${powerScrollBonus} Scroll)</span>` : ''}</div>
             <div style="font-size:13px;">Success Chance: <strong style="color:${chance>=70?'#4caf50':chance>=40?'#FFD700':'#f44336'};">${chance}%</strong></div>
         </div>
         <div style="font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:6px;">😴 Cards sent on a raid need to rest for the next gate before they can be used again.</div>
         <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-bottom:10px;line-height:1.5;max-width:560px;margin-left:auto;margin-right:auto;">
             Each card's <strong>Power</strong> is based on its rarity (Common → UR) plus a bonus for low serial numbers. Your party's total Power is weighed against the gate's difficulty to determine your Success Chance — higher rank gates (D → S) hit harder, need bigger parties, and pay out more. Every gate after the first is hidden until you reach it, so spread your strongest cards out and don't blow your whole roster on Gate 1. Cards rest for one gate after a raid, so plan ahead for what might be coming.
         </div>
+        ${(() => {
+            const _allItemKeys = ['revivePotion', ...Object.keys(DUNGEON_ITEMS_DEF)];
+            const _ownedItems = _allItemKeys.filter(k => (window._dungeonItems?.[k] || 0) > 0);
+            if (!_ownedItems.length) return '';
+            const chips = _ownedItems.map(key => {
+                const def = DUNGEON_ITEMS_DEF[key] || { label: 'Revival Fluid', emoji: '🧪', desc: 'Re-roll a failed gate.' };
+                const count = window._dungeonItems?.[key] || 0;
+                const isActive = activeItems.has(key);
+                // Revival Fluid can't be used pre-raid
+                if (key === 'revivePotion') return `<div title="${def.desc}" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:20px;border:1px solid rgba(168,85,247,0.3);background:rgba(168,85,247,0.06);opacity:0.55;" title="Use after a failed gate, not before a raid">
+                    <span style="font-size:14px;">🧪</span>
+                    <span style="font-size:12px;font-weight:700;color:var(--text-muted);">Revival Fluid ×${count}</span>
+                    <span style="font-size:10px;color:var(--text-muted);">(use post-raid)</span>
+                </div>`;
+                return `<button onclick="window._dungeonToggleItem('${key}')" title="${def.desc}" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;border:2px solid ${isActive?'#a855f7':'rgba(168,85,247,0.3)'};background:${isActive?'rgba(168,85,247,0.2)':'rgba(168,85,247,0.06)'};cursor:pointer;transition:all 0.15s;">
+                    <span style="font-size:14px;">${def.emoji}</span>
+                    <span style="font-size:12px;font-weight:800;color:${isActive?'#a855f7':'var(--text-muted)'};">${def.label} ×${count}</span>
+                    ${isActive ? '<span style="font-size:10px;font-weight:900;color:#a855f7;">✓ ON</span>' : ''}
+                </button>`;
+            }).join('');
+            return `<div style="background:var(--bg-gray);border-radius:12px;padding:12px 16px;margin-bottom:12px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">🎒 Use Items (optional)</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">${chips}</div>
+            </div>`;
+        })()}
         <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:10px;">
             <label style="font-size:12px;color:var(--text-muted);">Sort by</label>
             <select onchange="window._dungeonSetSort(this.value)" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:12px;">
@@ -26279,19 +26392,40 @@ window._dungeonStartRaid = async function() {
     if (!ps) return;
     const gate = DUNGEON_GATES[ps.gateId];
     const cards = ps.cards.filter(c => ps.selected.has(c.id));
-    const partyPower = cards.reduce((sum,c) => sum + _dungeonCardPower(c), 0) + _dungeonComboBonus(cards);
+    const activeItems = ps.activeItems || new Set();
+
+    // Apply item effects to power calculation
+    const comboBonusPerCard = activeItems.has('synergySeal') ? 2 : 1;
+    const powerScrollBonus = activeItems.has('powerScroll') ? 2 * cards.length : 0;
+    const partyPower = cards.reduce((sum,c) => sum + _dungeonCardPower(c), 0)
+        + _dungeonComboBonus(cards, comboBonusPerCard)
+        + powerScrollBonus;
+
     const progress = window._dungeonProgress || { date: _dungeonTodayKey(), poolIndex: 0, results: [] };
     const diffCfg = DUNGEON_DIFFICULTY_CONFIG[progress.difficulty || 'medium'];
     const chance = _dungeonSuccessChance(partyPower, gate.difficulty, diffCfg.diffMult);
     const success = Math.random()*100 < chance;
-    const reward = success
-        ? Math.round((gate.rewardMin + Math.random()*(gate.rewardMax-gate.rewardMin)) * diffCfg.rewardMult)
-        : Math.round(gate.failReward * diffCfg.rewardMult);
+
+    let reward;
+    if (activeItems.has('crazySlots')) {
+        reward = Math.floor(Math.random() * 10000);
+    } else {
+        reward = success
+            ? Math.round((gate.rewardMin + Math.random()*(gate.rewardMax-gate.rewardMin)) * diffCfg.rewardMult)
+            : Math.round(gate.failReward * diffCfg.rewardMult);
+        if (success && activeItems.has('goldenIdol')) reward = Math.round(reward * 1.5);
+    }
+
     const testMode = window.isAdmin && localStorage.getItem('weebee_dungeon_testmode') === '1';
-    const durationMs = testMode ? 30000 : gate.durationMs;
+    let durationMs = testMode ? 30000 : gate.durationMs;
+    if (activeItems.has('warpStone')) durationMs = Math.max(testMode ? 30000 : 60000, Math.floor(durationMs / 2));
+
     const now = Date.now();
     const party = cards.map(c => ({ id: c.id, name: c.name, image: c.image||'', rarity: c.rarity, serial: c.serial ?? null, founder: !!c.founder, monthlyUr: !!c.monthlyUr, tradedMonthlyUr: !!c.tradedMonthlyUr }));
-    const bonusCards = await _dungeonGenerateBonusCards(gate, progress.difficulty);
+    const bonusCards = await _dungeonGenerateBonusCards(gate, progress.difficulty, {
+        forceSummon: activeItems.has('summonScroll'),
+        forceSR: activeItems.has('srCompass'),
+    });
     const state = {
         gateId: gate.id,
         party,
@@ -26301,18 +26435,30 @@ window._dungeonStartRaid = async function() {
         bonusCards,
         testMode,
         startTime: now, endTime: now + durationMs,
+        activeItemsUsed: activeItems.size ? [...activeItems] : undefined,
     };
     const uid = auth.currentUser.uid;
     try {
         await setDoc(doc(db, 'raid_state', uid), state);
 
+        // Consume used items from Firestore
+        if (activeItems.size > 0) {
+            const decrements = {};
+            for (const key of activeItems) decrements[key] = increment(-1);
+            await setDoc(doc(db, 'player_items', uid), decrements, { merge: true });
+            const updatedItems = { ...(window._dungeonItems || {}) };
+            for (const key of activeItems) updatedItems[key] = Math.max(0, (updatedItems[key] || 0) - 1);
+            window._dungeonItems = updatedItems;
+        }
+
         // Send these cards "resting" for the next gate in the pool —
         // but only if the rest period would expire before the pool ends.
         // At gate 4 (poolIndex=3), fatigue would be 5 which never clears
         // within the 5-gate pool, locking cards out of the final gate.
+        // Energy Drink skips fatigue entirely for this raid's party.
         const restUntil = progress.poolIndex + 2;
         const fatigue = { ...(progress.fatigue || {}) };
-        if (restUntil < 5) {
+        if (!activeItems.has('energyDrink') && restUntil < 5) {
             for (const c of cards) fatigue[c.id] = restUntil;
         }
         window._dungeonProgress = { ...progress, fatigue };
@@ -26431,11 +26577,11 @@ function _dungeonRenderActive(el, state) {
             const _canUsePotion = !state.success && !state.revivedAt && _potionCount > 0 && !state.testMode;
             const _potionHTML = _canUsePotion ? `
                 <div style="margin-top:14px;padding:14px 16px;background:rgba(168,85,247,0.1);border:2px solid rgba(168,85,247,0.4);border-radius:12px;text-align:left;">
-                    <div style="font-size:13px;font-weight:900;color:#a855f7;margin-bottom:4px;">🧪 Use a Revive Potion?</div>
-                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Re-roll this gate with the same odds for another shot at victory. You have <strong>${_potionCount}</strong> potion${_potionCount !== 1 ? 's' : ''}.</div>
-                    <button id="dungeon-potion-btn" onclick="this.disabled=true;this.textContent='Using…';window._dungeonUseRevivePotion()" style="padding:8px 20px;border-radius:8px;background:#a855f7;border:none;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">Use Revive Potion</button>
+                    <div style="font-size:13px;font-weight:900;color:#a855f7;margin-bottom:4px;">🧪 Use Revival Fluid?</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Re-roll this gate with the same odds for another shot at victory. You have <strong>${_potionCount}</strong> left.</div>
+                    <button id="dungeon-potion-btn" onclick="this.disabled=true;this.textContent='Using…';window._dungeonUseRevivePotion()" style="padding:8px 20px;border-radius:8px;background:#a855f7;border:none;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">Use Revival Fluid</button>
                 </div>` : '';
-            const _revivedNote = state.revivedAt ? `<div style="margin-top:8px;font-size:11px;color:rgba(168,85,247,0.8);font-weight:700;">🧪 Revive Potion used this gate</div>` : '';
+            const _revivedNote = state.revivedAt ? `<div style="margin-top:8px;font-size:11px;color:rgba(168,85,247,0.8);font-weight:700;">🧪 Revival Fluid used this gate</div>` : '';
             return `
         <div style="background:var(--bg-gray);border-radius:14px;padding:20px;text-align:center;margin-bottom:16px;">
             <div style="font-size:18px;font-weight:800;margin-bottom:6px;">${state.success ? '🎉 Success!' : '💀 Failed'}</div>
@@ -26580,6 +26726,14 @@ window._dungeonClaim = async function() {
                 await _tcgSavePackToCollection(uid, state.bonusCards);
                 window._tcgCollectionCache.delete(uid);
             }
+            if (state.success) {
+                const droppedItem = _dungeonRollItemDrop(state.gateId);
+                if (droppedItem) {
+                    await _dungeonAwardItem(uid, droppedItem);
+                    window._dungeonItems = { ...(window._dungeonItems || {}), [droppedItem]: (window._dungeonItems?.[droppedItem] || 0) + 1 };
+                    window._dungeonJustEarnedItem = droppedItem;
+                }
+            }
         }
         // raid_state already deleted inside the transaction above
 
@@ -26688,7 +26842,7 @@ window._dungeonUseRevivePotion = async function() {
         window._dungeonItems = { ...(window._dungeonItems || {}), revivePotion: Math.max(0, (window._dungeonItems?.revivePotion || 1) - 1) };
     } catch(e) {
         window._dungeonRerolling = false;
-        if (e.message === 'no_potions') alert('No Revive Potions remaining!');
+        if (e.message === 'no_potions') alert('No Revival Fluid remaining!');
         else alert('Failed to use potion: ' + e.message);
         return;
     }
@@ -26951,6 +27105,1061 @@ window.loadDungeonFeed = async function() {
         await window.prefetchRankCache?.([...new Set(posts.map(p => p.uid))]);
         feed.innerHTML = posts.map(p => window.generateDungeonPostCardHTML(p)).join('');
     } catch(e) { console.error('loadDungeonFeed', e); feed.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:24px;">Failed to load raid results.</p>'; }
+};
+
+// ─────────────────────────────────────────────
+// Shared rarity → border color lookup used by PVP pickers and dungeon feed
+const rarityBorderColor = r => ({ ur:'#ff3c00', ssr:'#00d4ff', sr:'#a78bfa', rare:'#f59e0b', common:'#9aa1a8', pr:'#e879f9' }[r] || '#9aa1a8');
+
+// TCG PVP
+// ─────────────────────────────────────────────
+
+// For Fun battles award no amber — glory only (amber comes from PVP achievements instead)
+const PVP_CHALLENGE_TTL_MS = 24 * 3600e3;
+
+// ── Helpers ──────────────────────────────────
+
+function _pvpCardPower(card) { return _dungeonCardPower(card); }
+
+function _pvpComboBonus(party) { return _dungeonComboBonus(party); }
+
+// Each card's effective round power = base power + 1 if it shares anime with any other party card
+function _pvpRoundPower(card, party) {
+    const isCombo = party.filter(c => c !== card && (c.anime || '') === (card.anime || '') && card.anime).length > 0;
+    return _pvpCardPower(card) + (isCombo ? 1 : 0);
+}
+
+// Sort party desc by round power so slots are consistent: [0]=strongest, [2]=weakest
+function _pvpSortParty(party) {
+    return [...party].sort((a, b) => _pvpCardPower(b) - _pvpCardPower(a));
+}
+
+async function _pvpLoadStats(uid) {
+    try {
+        const snap = await getDoc(doc(db, 'pvp_stats', uid));
+        return snap.exists() ? snap.data() : null;
+    } catch(e) { return null; }
+}
+
+async function _pvpSaveStats(uid, stats) {
+    try { await setDoc(doc(db, 'pvp_stats', uid), stats, { merge: true }); } catch(e) {}
+}
+
+async function _pvpLoadActiveChallenges(uid) {
+    try {
+        const [asChallenger, asDefender] = await Promise.all([
+            getDocs(query(collection(db, 'pvp_challenges'),
+                where('challengerId', '==', uid),
+                where('status', '==', 'pending'),
+                orderBy('createdAt', 'desc'), limit(10))),
+            getDocs(query(collection(db, 'pvp_challenges'),
+                where('defenderId', '==', uid),
+                where('status', '==', 'pending'),
+                orderBy('createdAt', 'desc'), limit(10))),
+        ]);
+        return [
+            ...asChallenger.docs.map(d => ({ id: d.id, ...d.data(), _role: 'challenger' })),
+            ...asDefender.docs.map(d => ({ id: d.id, ...d.data(), _role: 'defender' })),
+        ].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    } catch(e) { return []; }
+}
+
+async function _pvpLoadRecentBattles(uid) {
+    try {
+        const [asC, asD] = await Promise.all([
+            getDocs(query(collection(db, 'pvp_challenges'),
+                where('challengerId', '==', uid),
+                where('status', '==', 'complete'),
+                orderBy('resolvedAt', 'desc'), limit(5))),
+            getDocs(query(collection(db, 'pvp_challenges'),
+                where('defenderId', '==', uid),
+                where('status', '==', 'complete'),
+                orderBy('resolvedAt', 'desc'), limit(5))),
+        ]);
+        return [
+            ...asC.docs.map(d => ({ id: d.id, ...d.data(), _role: 'challenger' })),
+            ...asD.docs.map(d => ({ id: d.id, ...d.data(), _role: 'defender' })),
+        ].sort((a, b) => (b.resolvedAt?.toMillis?.() || 0) - (a.resolvedAt?.toMillis?.() || 0)).slice(0, 5);
+    } catch(e) { return []; }
+}
+
+async function _pvpLoadLeaderboard() {
+    try {
+        const snap = await getDocs(query(collection(db, 'pvp_stats'), orderBy('wins', 'desc'), limit(10)));
+        return snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+    } catch(e) { return []; }
+}
+
+function _pvpBattleTypeLabel(type) {
+    return type === 'amber' ? '🟡 Amber Wager' : type === 'card' ? '🃏 Card Wager' : '🤝 For Fun';
+}
+
+function _pvpTimeLeft(expiresAt) {
+    const ms = (expiresAt?.toMillis?.() || 0) - Date.now();
+    if (ms <= 0) return 'Expired';
+    const h = Math.floor(ms / 3600e3), m = Math.floor((ms % 3600e3) / 60e3);
+    return h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+}
+
+// ── Main Tab Render ───────────────────────────
+
+window.loadPvpTab = async function() {
+    const el = document.getElementById('pvp-tab-content');
+    if (!el) return;
+    if (!auth.currentUser) {
+        el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">Sign in to access PVP!</div>`;
+        return;
+    }
+    el.innerHTML = `<div class="loading">Loading PVP...</div>`;
+    const uid = auth.currentUser.uid;
+    const [myStats, active, recent, leaderboard] = await Promise.all([
+        _pvpLoadStats(uid),
+        _pvpLoadActiveChallenges(uid),
+        _pvpLoadRecentBattles(uid),
+        _pvpLoadLeaderboard(),
+    ]);
+
+    // Update badge
+    const incomingCount = active.filter(c => c._role === 'defender').length;
+    const badge = document.getElementById('tcg-pvp-badge');
+    if (badge) badge.style.display = incomingCount > 0 ? 'block' : 'none';
+
+    el.innerHTML = `
+        <div class="bw-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:20px;text-align:center;border:1px solid rgba(255,255,255,0.08);position:relative;overflow:hidden;">
+            <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(99,102,241,0.35) 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,rgba(168,85,247,0.3) 0%,transparent 60%);pointer-events:none;"></div>
+            <div style="position:relative;z-index:1;">
+                <div style="font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">WeeBee</div>
+                <div class="banner-hero-title" style="font-size:46px;font-weight:900;color:white;letter-spacing:-1px;line-height:1;">⚔️ TCG PVP ⚔️</div>
+                <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:520px;margin-left:auto;margin-right:auto;">Challenge any player to a card battle. Wager amber, wager cards, or just fight for the glory.</div>
+            </div>
+        </div>
+
+        ${_pvpStatsHTML(myStats)}
+
+        ${active.length ? `
+        <div style="margin-bottom:20px;">
+            <div style="font-weight:800;font-size:15px;margin-bottom:12px;">⚔️ Active Challenges</div>
+            ${active.map(c => _pvpChallengeCardHTML(c, uid)).join('')}
+        </div>` : ''}
+
+        <div style="margin-bottom:20px;">
+            <div style="font-weight:800;font-size:15px;margin-bottom:12px;">🏆 Leaderboard</div>
+            ${_pvpLeaderboardHTML(leaderboard, uid)}
+        </div>
+
+        ${recent.length ? `
+        <div style="margin-bottom:20px;">
+            <div style="font-weight:800;font-size:15px;margin-bottom:12px;">📜 Recent Battles</div>
+            ${recent.map(c => _pvpRecentBattleHTML(c, uid)).join('')}
+        </div>` : ''}
+
+        <div style="text-align:center;margin-top:8px;margin-bottom:24px;">
+            <button class="action-btn" style="padding:14px 32px;font-size:15px;font-weight:800;background:linear-gradient(135deg,#6366f1,#a855f7);" onclick="window._pvpFindOpponent()">⚔️ Challenge a Player</button>
+        </div>
+    `;
+};
+
+// ── Stats Block ───────────────────────────────
+
+function _pvpStatsHTML(s) {
+    if (!s || !s.totalBattles) return `
+        <div style="border-radius:20px;padding:24px 22px;margin-bottom:16px;text-align:center;background:var(--stats-bg);color:rgba(var(--stats-ink),0.5);font-size:13px;margin-bottom:20px;">
+            ⚔️ Win your first battle to start building your PVP record!
+        </div>`;
+    const bigStat = (v, label) => `<div style="text-align:center;">
+        <div style="font-size:32px;font-weight:900;color:rgb(var(--stats-ink));letter-spacing:-1px;line-height:1;">${v}</div>
+        <div style="font-size:12px;font-weight:700;color:rgba(var(--stats-ink),0.55);margin-top:4px;">${label}</div>
+    </div>`;
+    const winRate = s.totalBattles ? Math.round((s.wins / s.totalBattles) * 100) : 0;
+    return `
+    <div style="border-radius:20px;padding:26px 22px;margin-bottom:20px;position:relative;overflow:hidden;background:var(--stats-bg);">
+        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 25% 50%,rgba(99,102,241,0.18) 0%,transparent 55%),radial-gradient(ellipse at 75% 50%,rgba(168,85,247,0.15) 0%,transparent 55%);pointer-events:none;"></div>
+        <div style="position:relative;z-index:1;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(var(--stats-ink),0.35);margin-bottom:16px;text-align:center;">⚔️ PVP Career Stats</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:16px;margin-bottom:${s.mvpCardName ? '16px' : '0'};">
+                ${bigStat(s.totalBattles, 'Battles')}
+                ${bigStat(winRate + '%', 'Win Rate')}
+                ${bigStat(s.wins, 'Wins')}
+                ${bigStat(s.bestStreak || 0, 'Best Streak')}
+                ${bigStat((s.amberWon || 0).toLocaleString(), 'Amber Won')}
+                ${bigStat(s.cardsWon || 0, 'Cards Won')}
+            </div>
+            ${s.mvpCardName ? `<div style="text-align:center;font-size:13px;color:rgba(var(--stats-ink),0.6);">⭐ MVP Card: <strong style="color:rgb(var(--stats-ink));">${s.mvpCardName}</strong></div>` : ''}
+        </div>
+    </div>`;
+}
+
+// ── Leaderboard ───────────────────────────────
+
+function _pvpLeaderboardHTML(rows, myUid) {
+    if (!rows.length) return `<div style="background:var(--bg-gray);border-radius:14px;padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">No battles yet — be the first to fight!</div>`;
+    const medals = ['🥇','🥈','🥉'];
+    return `<div style="background:var(--bg-gray);border-radius:14px;overflow:hidden;">
+        ${rows.map((r, i) => {
+            const isMe = r.uid === myUid;
+            const winRate = r.totalBattles ? Math.round((r.wins / r.totalBattles) * 100) : 0;
+            return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;${i < rows.length-1 ? 'border-bottom:1px solid var(--border-color);' : ''}${isMe ? 'background:rgba(99,102,241,0.08);' : ''}">
+                <div style="font-size:18px;width:28px;text-align:center;">${medals[i] || `#${i+1}`}</div>
+                <img src="${r.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(r.displayName||'?')}&backgroundColor=ffc107&fontColor=333333`}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=?&backgroundColor=ffc107&fontColor=333333'">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.displayName || 'Unknown'}${isMe ? ' <span style="color:#6366f1;font-size:11px;">(you)</span>' : ''}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">${r.wins}W ${(r.losses||0)}L · ${winRate}%</div>
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);text-align:right;">
+                    <div style="font-weight:800;color:var(--accent-yellow);">🟡 ${(r.amberWon||0).toLocaleString()}</div>
+                    <div>${r.cardsWon||0} cards won</div>
+                </div>
+            </div>`;
+        }).join('')}
+    </div>`;
+}
+
+// ── Active Challenge Card ─────────────────────
+
+function _pvpChallengeCardHTML(c, myUid) {
+    const isChallenger = c._role === 'challenger';
+    const opponent = isChallenger ? c.defenderName : c.challengerName;
+    const opponentAvatar = isChallenger ? c.defenderAvatar : c.challengerAvatar;
+    const timeLeft = _pvpTimeLeft(c.expiresAt);
+    const expired = timeLeft === 'Expired';
+    return `<div style="background:var(--bg-gray);border-radius:14px;padding:16px 18px;margin-bottom:10px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <img src="${opponentAvatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(opponent||'?')}&backgroundColor=ffc107&fontColor=333333`}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;">
+        <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:14px;">${isChallenger ? `Challenge sent to ${opponent}` : `${opponent} challenged you!`}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${_pvpBattleTypeLabel(c.battleType)}${c.amberWager ? ` · 🟡 ${c.amberWager}` : ''} · ${expired ? '<span style="color:#f44336;">Expired</span>' : timeLeft}</div>
+            ${c.battleType === 'card' && c.challengerWagerCards?.length ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${isChallenger ? 'You' : opponent} wagered ${c.challengerWagerCards.length} card${c.challengerWagerCards.length>1?'s':''}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+            ${isChallenger
+                ? `<button onclick="window._pvpCancelChallenge('${c.id}')" class="cancel-btn" style="font-size:12px;">Cancel</button>`
+                : expired
+                    ? `<span style="font-size:12px;color:var(--text-muted);">Expired</span>`
+                    : `<button onclick="window._pvpDeclineChallenge('${c.id}')" class="cancel-btn" style="font-size:12px;">Decline</button>
+                       <button onclick="window._pvpAcceptFlow('${c.id}')" class="action-btn" style="font-size:12px;font-weight:800;background:linear-gradient(135deg,#6366f1,#a855f7);">Accept ⚔️</button>`}
+        </div>
+    </div>`;
+}
+
+// ── Recent Battle Row ─────────────────────────
+
+function _pvpRecentBattleHTML(c, myUid) {
+    const iWon = c.result?.winner === (c.challengerId === myUid ? 'challenger' : 'defender');
+    const opponent = c.challengerId === myUid ? c.defenderName : c.challengerName;
+    const myScore = c.challengerId === myUid ? c.result?.challengerScore : c.result?.defenderScore;
+    const theirScore = c.challengerId === myUid ? c.result?.defenderScore : c.result?.challengerScore;
+    return `<div onclick="window._pvpReplayBattle('${c.id}')" style="background:var(--bg-gray);border-radius:14px;padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;gap:14px;cursor:pointer;border-left:4px solid ${iWon?'#4caf50':'#f44336'};">
+        <div style="font-size:22px;">${iWon ? '✅' : '💀'}</div>
+        <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:13px;">${iWon ? 'Victory' : 'Defeat'} vs ${opponent}</div>
+            <div style="font-size:12px;color:var(--text-muted);">${myScore}–${theirScore} · ${_pvpBattleTypeLabel(c.battleType)}</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);">▶ Replay</div>
+    </div>`;
+}
+
+// ── Find Opponent (user search) ───────────────
+
+window._pvpFindOpponent = function() {
+    const modal = document.createElement('div');
+    modal.id = 'pvp-find-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    modal.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:20px;padding:28px 24px;max-width:420px;width:100%;max-height:80vh;display:flex;flex-direction:column;">
+            <div style="font-weight:900;font-size:18px;margin-bottom:16px;">⚔️ Find an Opponent</div>
+            <input id="pvp-opponent-search" type="text" placeholder="Search by username…"
+                oninput="window._pvpSearchUsers(this.value)"
+                style="padding:10px 14px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;margin-bottom:12px;width:100%;box-sizing:border-box;">
+            <div id="pvp-opponent-results" style="flex:1;overflow-y:auto;"></div>
+            <button onclick="document.getElementById('pvp-find-modal').remove()" class="cancel-btn" style="margin-top:14px;width:100%;justify-content:center;">Cancel</button>
+        </div>`;
+    document.body.appendChild(modal);
+    document.getElementById('pvp-opponent-search').focus();
+};
+
+window._pvpSearchUsers = async function(q) {
+    const el = document.getElementById('pvp-opponent-results');
+    if (!el) return;
+    if (!q.trim()) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="loading" style="padding:16px;"></div>`;
+    try {
+        const qLower = q.toLowerCase();
+        const qCapital = qLower.charAt(0).toUpperCase() + qLower.slice(1);
+        const prefixes = qCapital !== qLower ? [qLower, qCapital] : [qLower];
+        const snaps = await Promise.all(prefixes.map(prefix =>
+            getDocs(query(collection(db, 'profiles'),
+                where('displayName', '>=', prefix),
+                where('displayName', '<=', prefix + ''),
+                limit(8)))
+        ));
+        const myUid = auth.currentUser?.uid;
+        const seen = new Set();
+        const results = snaps.flatMap(snap => snap.docs.map(d => ({ uid: d.id, ...d.data() })))
+            .filter(u => u.uid !== myUid && !seen.has(u.uid) && seen.add(u.uid))
+            .slice(0, 8);
+        if (!results.length) { el.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:13px;">No users found</div>`; return; }
+        el.innerHTML = results.map(u => `
+            <div onclick="window._pvpStartChallenge('${u.uid}','${(u.displayName||'').replace(/'/g,"\\'")}','${(u.avatar||'').replace(/'/g,"\\'")}');document.getElementById('pvp-find-modal').remove();"
+                style="display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:10px;cursor:pointer;" onmouseover="this.style.background='var(--bg-gray)'" onmouseout="this.style.background=''">
+                <img src="${u.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(u.displayName||'?')}&backgroundColor=ffc107&fontColor=333333`}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;">
+                <div>
+                    <div style="font-weight:700;font-size:13px;">${u.displayName || 'Unknown'}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">${u.reviewCount || 0} reviews</div>
+                </div>
+            </div>`).join('');
+    } catch(e) { el.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:13px;">Search failed</div>`; }
+};
+
+// ── Challenge Creation (multi-step) ───────────
+
+window._pvpStartChallenge = function(targetUid, targetName, targetAvatar) {
+    window._pvpChallengeDraft = { targetUid, targetName, targetAvatar, battleType: null, amberWager: 0, wagerCards: [], party: [] };
+    _pvpShowStep('type');
+};
+
+window._pvpShowStep = function _pvpShowStep(step) {
+    let existing = document.getElementById('pvp-challenge-modal');
+    if (!existing) {
+        existing = document.createElement('div');
+        existing.id = 'pvp-challenge-modal';
+        existing.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9001;display:flex;align-items:center;justify-content:center;padding:16px;';
+        document.body.appendChild(existing);
+    }
+    const d = window._pvpChallengeDraft;
+
+    if (step === 'type') {
+        existing.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:20px;padding:28px 24px;max-width:420px;width:100%;">
+            <div style="font-weight:900;font-size:18px;margin-bottom:6px;">⚔️ Challenge ${d.targetName}</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">Choose your battle type:</div>
+            ${[
+                ['fun',   '🤝 For Fun',       'No wager — battle for glory and PVP achievements.',         'rgba(99,102,241,0.12)', '#6366f1'],
+                ['amber', '🟡 Amber Wager',   'Both players lock amber. Winner takes the pot.',             'rgba(234,179,8,0.12)',  '#f59e0b'],
+                ['card',  '🃏 Card Wager',     'Put cards on the line. Winner takes everything wagered.', 'rgba(168,85,247,0.12)', '#a855f7'],
+            ].map(([t, label, desc, bg, clr]) => `
+            <button onclick="window._pvpSelectType('${t}')" style="width:100%;text-align:left;padding:14px 16px;border-radius:14px;border:2px solid transparent;background:${bg};margin-bottom:10px;cursor:pointer;transition:border 0.15s;" onmouseover="this.style.borderColor='${clr}'" onmouseout="this.style.borderColor='transparent'">
+                <div style="font-weight:800;font-size:15px;color:${clr};margin-bottom:3px;">${label}</div>
+                <div style="font-size:12px;color:var(--text-muted);">${desc}</div>
+            </button>`).join('')}
+            <button onclick="document.getElementById('pvp-challenge-modal').remove()" class="cancel-btn" style="width:100%;justify-content:center;margin-top:6px;">Cancel</button>
+        </div>`;
+    }
+
+    if (step === 'amber') {
+        existing.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:20px;padding:28px 24px;max-width:380px;width:100%;">
+            <div style="font-weight:900;font-size:18px;margin-bottom:16px;">🟡 Set Amber Wager</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">How much amber will each player wager? Winner takes both.</div>
+            <input id="pvp-amber-input" type="number" min="1" max="99999" placeholder="e.g. 500"
+                style="width:100%;padding:12px 14px;border-radius:10px;border:2px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:18px;font-weight:800;box-sizing:border-box;margin-bottom:16px;text-align:center;"
+                onkeydown="if(event.key==='Enter')window._pvpConfirmAmber()">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+                ${[100,250,500,1000].map(a => `<button onclick="document.getElementById('pvp-amber-input').value=${a}" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);cursor:pointer;font-weight:700;font-size:13px;">${a}</button>`).join('')}
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button onclick="_pvpShowStep('type')" class="cancel-btn" style="flex:1;justify-content:center;">← Back</button>
+                <button onclick="window._pvpConfirmAmber()" class="action-btn" style="flex:1;justify-content:center;font-weight:800;">Next →</button>
+            </div>
+        </div>`;
+    }
+
+    if (step === 'wager-cards') {
+        _pvpShowWagerCardPicker(existing);
+    }
+
+    if (step === 'party') {
+        _pvpShowPartyPicker(existing);
+    }
+}
+
+window._pvpSelectType = function(type) {
+    window._pvpChallengeDraft.battleType = type;
+    if (type === 'amber') _pvpShowStep('amber');
+    else if (type === 'card') _pvpShowStep('wager-cards');
+    else _pvpShowStep('party');
+};
+
+window._pvpConfirmAmber = function() {
+    const val = parseInt(document.getElementById('pvp-amber-input')?.value || '0');
+    if (!val || val < 1) { alert('Enter a valid amber amount.'); return; }
+    window._pvpChallengeDraft.amberWager = val;
+    _pvpShowStep('party');
+};
+
+async function _pvpShowWagerCardPicker(container) {
+    container.innerHTML = `<div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;"><div class="loading">Loading your cards…</div></div>`;
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const allCards = (await _tcgLoadCollection(uid)).filter(c => !c.founder);
+    const d = window._pvpChallengeDraft;
+
+    function render() {
+        const sel = new Set(d.wagerCards.map(c => c.id));
+        const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' };
+        container.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;">
+            <div style="font-weight:900;font-size:17px;margin-bottom:4px;">🃏 Pick Wager Cards</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">Select up to 10 cards to put on the line. Winner takes all wagered cards.</div>
+            <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Selected: <strong style="color:${sel.size>0?'#a855f7':'var(--text-muted)'};">${sel.size}/10</strong></div>
+            <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:135px;gap:8px;margin-bottom:14px;">
+                ${[...allCards].sort((a,b)=>_pvpCardPower(b)-_pvpCardPower(a)).map(c => {
+                    const isSel = sel.has(c.id);
+                    const rc = rarityBorderColor(c.rarity);
+                    const border = isSel ? '#a855f7' : rc;
+                    return `<div onclick="window._pvpToggleWagerCard('${c.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;">
+                        <div style="height:100%;position:relative;">
+                            <img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager">
+                            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;">
+                                <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
+                                <div style="color:${rc};">${rarityLabels[c.rarity]||c.rarity}</div>
+                            </div>
+                            ${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:#a855f7;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button onclick="_pvpShowStep('type')" class="cancel-btn" style="flex:1;justify-content:center;">← Back</button>
+                <button onclick="window._pvpConfirmWagerCards()" class="action-btn" style="flex:1;justify-content:center;font-weight:800;" ${sel.size===0?'disabled style="opacity:0.5;flex:1;justify-content:center;"':''}>Next → (${sel.size} card${sel.size!==1?'s':''})</button>
+            </div>
+        </div>`;
+        window._pvpWagerCardPickerRender = render;
+        window._pvpWagerAllCards = allCards;
+    }
+    window._pvpWagerCardPickerRender = render;
+    window._pvpWagerAllCards = allCards;
+    render();
+}
+
+window._pvpToggleWagerCard = function(cardId) {
+    const d = window._pvpChallengeDraft;
+    const allCards = window._pvpWagerAllCards || [];
+    const idx = d.wagerCards.findIndex(c => c.id === cardId);
+    if (idx >= 0) { d.wagerCards.splice(idx, 1); }
+    else if (d.wagerCards.length < 10) { const card = allCards.find(c => c.id === cardId); if (card) d.wagerCards.push(card); }
+    window._pvpWagerCardPickerRender?.();
+};
+
+window._pvpConfirmWagerCards = function() {
+    if (!window._pvpChallengeDraft.wagerCards.length) { alert('Select at least 1 card to wager.'); return; }
+    _pvpShowStep('party');
+};
+
+async function _pvpShowPartyPicker(container) {
+    container.innerHTML = `<div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;"><div class="loading">Loading your cards…</div></div>`;
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const allCards = (await _tcgLoadCollection(uid)).filter(c => !c.founder);
+    const d = window._pvpChallengeDraft;
+    const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' };
+
+    function render() {
+        const sel = new Set(d.party.map(c => c.id));
+        const selCards = d.party;
+        const combo = _pvpComboBonus(selCards);
+        const totalPower = selCards.reduce((s, c) => s + _pvpCardPower(c), 0) + combo;
+        const canSend = sel.size === 3;
+
+        container.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;">
+            <div style="font-weight:900;font-size:17px;margin-bottom:4px;">⚔️ Pick Your Battle Party</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Choose exactly 3 cards. Cards sorted by power in battle.</div>
+            <div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+                <div style="font-size:13px;">Selected: <strong>${sel.size}/3</strong> · Power: <strong>${totalPower}</strong>${combo>0?` <span style="color:#a855f7;">(+${combo} Combo)</span>`:''}
+                </div>
+            </div>
+            <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:135px;gap:8px;margin-bottom:14px;">
+                ${[...allCards].sort((a,b)=>_pvpCardPower(b)-_pvpCardPower(a)).map(c => {
+                    const isSel = sel.has(c.id);
+                    const isCombo = isSel && d.party.filter(x => x.id !== c.id && x.anime === c.anime && c.anime).length > 0;
+                    const rc = rarityBorderColor(c.rarity);
+                    const border = isCombo ? '#a855f7' : isSel ? 'var(--accent-yellow)' : rc;
+                    return `<div onclick="window._pvpTogglePartyCard('${c.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;">
+                        <div style="height:100%;position:relative;">
+                            <img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager">
+                            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;">
+                                <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
+                                <div style="color:${isCombo?'#d8a4ff':rc};">${rarityLabels[c.rarity]||c.rarity} · ⚡${_pvpCardPower(c)}</div>
+                            </div>
+                            ${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:${isCombo?'#a855f7':'var(--accent-yellow)'};color:${isCombo?'#fff':'#222'};font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}
+                            ${isCombo?`<div style="position:absolute;top:4px;left:4px;background:#a855f7;color:#fff;font-size:8px;font-weight:900;padding:2px 4px;border-radius:3px;">COMBO</div>`:''}
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button onclick="_pvpShowStep('${d.battleType==='card'?'wager-cards':d.battleType==='amber'?'amber':'type'}')" class="cancel-btn" style="flex:1;justify-content:center;">← Back</button>
+                <button onclick="window._pvpSendChallenge()" class="action-btn" style="flex:1;justify-content:center;font-weight:800;${canSend?'':'opacity:0.5;cursor:not-allowed;'}" ${canSend?'':' disabled'}>⚔️ Send Challenge</button>
+            </div>
+        </div>`;
+        window._pvpPartyPickerRender = render;
+        window._pvpAllCards = allCards;
+    }
+    window._pvpPartyPickerRender = render;
+    window._pvpAllCards = allCards;
+    render();
+}
+
+window._pvpTogglePartyCard = function(cardId) {
+    const d = window._pvpChallengeDraft;
+    const allCards = window._pvpAllCards || [];
+    const idx = d.party.findIndex(c => c.id === cardId);
+    if (idx >= 0) d.party.splice(idx, 1);
+    else if (d.party.length < 3) { const card = allCards.find(c => c.id === cardId); if (card) d.party.push(card); }
+    window._pvpPartyPickerRender?.();
+};
+
+// ── Send Challenge ────────────────────────────
+
+window._pvpSendChallenge = async function() {
+    const d = window._pvpChallengeDraft;
+    if (!d || d.party.length !== 3) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const btn = document.querySelector('#pvp-challenge-modal .action-btn:last-child');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    try {
+        const myProfile = window._cachedMyProfile || {};
+        const now = new Date();
+        const expires = new Date(now.getTime() + PVP_CHALLENGE_TTL_MS);
+        const toStrip = c => ({ id: c.id, name: c.name, image: c.image||'', rarity: c.rarity, anime: c.anime||'', serial: c.serial ?? null });
+        const challengeDoc = {
+            challengerId: uid,
+            challengerName: myProfile.displayName || auth.currentUser.displayName || 'Challenger',
+            challengerAvatar: myProfile.avatar || auth.currentUser.photoURL || '',
+            defenderId: d.targetUid,
+            defenderName: d.targetName,
+            defenderAvatar: d.targetAvatar || '',
+            battleType: d.battleType,
+            amberWager: d.battleType === 'amber' ? d.amberWager : null,
+            challengerWagerCards: d.battleType === 'card' ? d.wagerCards.map(toStrip) : null,
+            defenderWagerCards: null,
+            challengerParty: d.party.map(toStrip),
+            defenderParty: null,
+            status: 'pending',
+            result: null,
+            createdAt: now,
+            expiresAt: expires,
+            resolvedAt: null,
+        };
+        const ref = await addDoc(collection(db, 'pvp_challenges'), challengeDoc);
+        await addDoc(collection(db, 'notifications'), {
+            targetUid: d.targetUid, type: 'pvp_challenge', challengeId: ref.id,
+            senderUid: uid,
+            senderName: challengeDoc.challengerName,
+            senderAvatar: challengeDoc.challengerAvatar,
+            message: `challenged you to a TCG Battle! (${_pvpBattleTypeLabel(d.battleType)})`,
+            timestamp: now, read: false,
+        });
+        document.getElementById('pvp-challenge-modal')?.remove();
+        alert(`⚔️ Challenge sent to ${d.targetName}!`);
+        window.loadPvpTab();
+    } catch(e) {
+        alert('Failed to send challenge: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = '⚔️ Send Challenge'; }
+    }
+};
+
+// ── Cancel / Decline ──────────────────────────
+
+window._pvpCancelChallenge = async function(challengeId) {
+    if (!confirm('Cancel this challenge? Any wager will be refunded.')) return;
+    try {
+        await updateDoc(doc(db, 'pvp_challenges', challengeId), { status: 'declined' });
+        window.loadPvpTab();
+    } catch(e) { alert('Failed: ' + e.message); }
+};
+
+window._pvpDeclineChallenge = async function(challengeId) {
+    if (!confirm('Decline this challenge?')) return;
+    try {
+        await updateDoc(doc(db, 'pvp_challenges', challengeId), { status: 'declined' });
+        window.loadPvpTab();
+    } catch(e) { alert('Failed: ' + e.message); }
+};
+
+// ── Accept Flow ───────────────────────────────
+
+window._pvpAcceptFlow = async function(challengeId) {
+    const snap = await getDoc(doc(db, 'pvp_challenges', challengeId));
+    if (!snap.exists()) { alert('Challenge not found.'); return; }
+    const c = { id: snap.id, ...snap.data() };
+    if (c.status !== 'pending') { alert('This challenge is no longer active.'); window.loadPvpTab(); return; }
+
+    window._pvpAcceptDraft = { challengeId, challenge: c, wagerCards: [], party: [] };
+
+    const modal = document.createElement('div');
+    modal.id = 'pvp-accept-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9001;display:flex;align-items:center;justify-content:center;padding:16px;';
+    document.body.appendChild(modal);
+
+    if (c.battleType === 'card') {
+        _pvpShowAcceptWagerCards(modal, c);
+    } else {
+        _pvpShowAcceptParty(modal, c);
+    }
+};
+
+window._pvpShowAcceptWagerCards = async function _pvpShowAcceptWagerCards(container, c) {
+    container.innerHTML = `<div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;"><div class="loading">Loading…</div></div>`;
+    const uid = auth.currentUser?.uid;
+    const allCards = (await _tcgLoadCollection(uid)).filter(c => !c.founder);
+    const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' };
+
+    function render() {
+        const d = window._pvpAcceptDraft;
+        const sel = new Set(d.wagerCards.map(x => x.id));
+        container.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;">
+            <div style="font-weight:900;font-size:17px;margin-bottom:4px;">🃏 Pick Your Wager Cards</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">${c.challengerName} wagered <strong>${c.challengerWagerCards?.length||0} card${(c.challengerWagerCards?.length||0)!==1?'s':''}</strong>. Pick up to 10 cards to put on the line.</div>
+            <div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px;">
+                ${(c.challengerWagerCards||[]).map(wc => `<div style="flex-shrink:0;width:52px;"><img src="${wc.image}" style="width:52px;height:70px;object-fit:cover;border-radius:6px;border:2px solid #a855f7;"><div style="font-size:8px;text-align:center;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${wc.name}</div></div>`).join('')}
+            </div>
+            <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Your wager: <strong style="color:${sel.size>0?'#a855f7':'var(--text-muted)'};">${sel.size}/10 cards</strong></div>
+            <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:135px;gap:8px;margin-bottom:14px;">
+                ${[...allCards].sort((a,b)=>_pvpCardPower(b)-_pvpCardPower(a)).map(card => {
+                    const isSel = sel.has(card.id);
+                    const rc = rarityBorderColor(card.rarity);
+                    const border = isSel ? '#a855f7' : rc;
+                    return `<div onclick="window._pvpToggleAcceptWagerCard('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;">
+                        <div style="height:100%;position:relative;">
+                            <img src="${card.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager">
+                            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;">
+                                <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div>
+                                <div style="color:${rc};">${rarityLabels[card.rarity]||card.rarity}</div>
+                            </div>
+                            ${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:#a855f7;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button onclick="window._pvpDeclineChallenge('${c.id}');document.getElementById('pvp-accept-modal').remove();" class="cancel-btn" style="flex:1;justify-content:center;">Decline</button>
+                <button onclick="window._pvpConfirmAcceptWager()" class="action-btn" style="flex:1;justify-content:center;font-weight:800;" ${sel.size===0?'disabled style="opacity:0.5;"':''}>Next →</button>
+            </div>
+        </div>`;
+        window._pvpAcceptWagerRender = render;
+        window._pvpAcceptAllCards = allCards;
+    }
+    window._pvpAcceptWagerRender = render;
+    window._pvpAcceptAllCards = allCards;
+    render();
+}
+
+window._pvpToggleAcceptWagerCard = function(cardId) {
+    const d = window._pvpAcceptDraft;
+    const allCards = window._pvpAcceptAllCards || [];
+    const idx = d.wagerCards.findIndex(c => c.id === cardId);
+    if (idx >= 0) d.wagerCards.splice(idx, 1);
+    else if (d.wagerCards.length < 10) { const card = allCards.find(c => c.id === cardId); if (card) d.wagerCards.push(card); }
+    window._pvpAcceptWagerRender?.();
+};
+
+window._pvpConfirmAcceptWager = function() {
+    if (!window._pvpAcceptDraft?.wagerCards.length) { alert('Select at least 1 card to wager.'); return; }
+    const modal = document.getElementById('pvp-accept-modal');
+    if (modal) _pvpShowAcceptParty(modal, window._pvpAcceptDraft.challenge);
+};
+
+async function _pvpShowAcceptParty(container, c) {
+    container.innerHTML = `<div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;"><div class="loading">Loading…</div></div>`;
+    const uid = auth.currentUser?.uid;
+    const allCards = (await _tcgLoadCollection(uid)).filter(c => !c.founder);
+    const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' };
+
+    function render() {
+        const d = window._pvpAcceptDraft;
+        const sel = new Set(d.party.map(x => x.id));
+        const selCards = d.party;
+        const combo = _pvpComboBonus(selCards);
+        const totalPower = selCards.reduce((s, card) => s + _pvpCardPower(card), 0) + combo;
+        const canFight = sel.size === 3;
+
+        container.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;">
+            <div style="font-weight:900;font-size:17px;margin-bottom:4px;">⚔️ Pick Your Battle Party</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">vs <strong>${c.challengerName}</strong> · ${_pvpBattleTypeLabel(c.battleType)}${c.amberWager ? ` · 🟡 ${c.amberWager} each` : ''}</div>
+            <div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+                <div style="font-size:13px;">Selected: <strong>${sel.size}/3</strong> · Power: <strong>${totalPower}</strong>${combo>0?` <span style="color:#a855f7;">(+${combo} Combo)</span>`:''}</div>
+            </div>
+            <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:135px;gap:8px;margin-bottom:14px;">
+                ${[...allCards].sort((a,b)=>_pvpCardPower(b)-_pvpCardPower(a)).map(card => {
+                    const isSel = sel.has(card.id);
+                    const isCombo = isSel && selCards.filter(x => x.id !== card.id && x.anime === card.anime && card.anime).length > 0;
+                    const rc = rarityBorderColor(card.rarity);
+                    const border = isCombo ? '#a855f7' : isSel ? 'var(--accent-yellow)' : rc;
+                    return `<div onclick="window._pvpToggleAcceptParty('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;">
+                        <div style="height:100%;position:relative;">
+                            <img src="${card.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager">
+                            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;">
+                                <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div>
+                                <div style="color:${isCombo?'#d8a4ff':rc};">${rarityLabels[card.rarity]||card.rarity} · ⚡${_pvpCardPower(card)}</div>
+                            </div>
+                            ${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:${isCombo?'#a855f7':'var(--accent-yellow)'};color:${isCombo?'#fff':'#222'};font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}
+                            ${isCombo?`<div style="position:absolute;top:4px;left:4px;background:#a855f7;color:#fff;font-size:8px;font-weight:900;padding:2px 4px;border-radius:3px;">COMBO</div>`:''}
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button onclick="${c.battleType==='card'?`_pvpShowAcceptWagerCards(document.getElementById('pvp-accept-modal'),window._pvpAcceptDraft.challenge)`:`document.getElementById('pvp-accept-modal').remove()`}" class="cancel-btn" style="flex:1;justify-content:center;">← Back</button>
+                <button onclick="window._pvpSubmitAccept()" class="action-btn" style="flex:1;justify-content:center;font-weight:800;background:linear-gradient(135deg,#6366f1,#a855f7);${canFight?'':'opacity:0.5;cursor:not-allowed;'}" ${canFight?'':' disabled'}>⚔️ Fight!</button>
+            </div>
+        </div>`;
+        window._pvpAcceptPartyRender = render;
+        window._pvpAcceptAllCards2 = allCards;
+    }
+    window._pvpAcceptPartyRender = render;
+    window._pvpAcceptAllCards2 = allCards;
+    render();
+}
+
+window._pvpToggleAcceptParty = function(cardId) {
+    const d = window._pvpAcceptDraft;
+    const allCards = window._pvpAcceptAllCards2 || [];
+    const idx = d.party.findIndex(c => c.id === cardId);
+    if (idx >= 0) d.party.splice(idx, 1);
+    else if (d.party.length < 3) { const card = allCards.find(c => c.id === cardId); if (card) d.party.push(card); }
+    window._pvpAcceptPartyRender?.();
+};
+
+// ── Submit Accept + Resolve Battle ────────────
+
+window._pvpSubmitAccept = async function() {
+    const d = window._pvpAcceptDraft;
+    if (!d || d.party.length !== 3) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const btn = document.querySelector('#pvp-accept-modal .action-btn:last-child');
+    if (btn) { btn.disabled = true; btn.textContent = 'Starting battle…'; }
+
+    try {
+        const c = d.challenge;
+        const myProfile = window._cachedMyProfile || {};
+        const toStrip = card => ({ id: card.id, name: card.name, image: card.image||'', rarity: card.rarity, anime: card.anime||'', serial: card.serial ?? null });
+
+        // Resolve battle
+        const cParty = _pvpSortParty(c.challengerParty);
+        const dParty = _pvpSortParty(d.party);
+        const rounds = [0, 1, 2].map(i => {
+            const cCard = cParty[i], dCard = dParty[i];
+            const cPow = _pvpRoundPower(cCard, c.challengerParty);
+            const dPow = _pvpRoundPower(dCard, d.party);
+            const chance = _dungeonSuccessChance(cPow, dPow, 1);
+            const cWins = Math.random() * 100 < chance;
+            return { challengerCard: cCard, defenderCard: dCard, challengerPower: cPow, defenderPower: dPow, winner: cWins ? 'challenger' : 'defender' };
+        });
+        const cScore = rounds.filter(r => r.winner === 'challenger').length;
+        const dScore = 3 - cScore;
+        const winner = cScore > dScore ? 'challenger' : 'defender';
+        const winnerUid = winner === 'challenger' ? c.challengerId : uid;
+        const loserUid  = winner === 'challenger' ? uid : c.challengerId;
+
+        const result = { rounds, winner, challengerScore: cScore, defenderScore: dScore };
+        const now = new Date();
+
+        // Update challenge doc
+        await updateDoc(doc(db, 'pvp_challenges', c.id), {
+            defenderParty: d.party.map(toStrip),
+            defenderWagerCards: c.battleType === 'card' ? d.wagerCards.map(toStrip) : null,
+            status: 'complete',
+            result,
+            resolvedAt: now,
+        });
+
+        // Handle payouts
+        if (c.battleType === 'amber') {
+            // loser pays winner their wager; net: winner +X, loser -X
+            await _awardAmberToUser(loserUid,  -c.amberWager, `pvp:loss:${c.id}`);
+            await _awardAmberToUser(winnerUid,  c.amberWager, `pvp:win:${c.id}`);
+        } else if (c.battleType === 'fun') {
+            // No amber payout — wins contribute to PVP achievements which award amber
+        } else if (c.battleType === 'card') {
+            // Transfer challenger's wager cards to winner, and defender's wager cards to winner
+            const allWagerCards = [...(c.challengerWagerCards||[]), ...(d.wagerCards||[])];
+            if (allWagerCards.length && winnerUid) {
+                await _tcgSavePackToCollection(winnerUid, allWagerCards);
+                window._tcgCollectionCache.delete(winnerUid);
+                // Remove from loser's collection
+                const loserWager = winnerUid === c.challengerId ? d.wagerCards : c.challengerWagerCards || [];
+                for (const wc of loserWager) {
+                    try { await deleteDoc(doc(db, 'card_collections', loserUid, 'cards', wc.id)); } catch(_e) {}
+                }
+            }
+        }
+
+        // Update pvp_stats for both players
+        await _pvpUpdateStats(c.challengerId, c.challengerName, c.challengerAvatar, winner === 'challenger', cScore, dScore, c, rounds, 'challenger');
+        await _pvpUpdateStats(uid, myProfile.displayName || auth.currentUser.displayName, myProfile.avatar || auth.currentUser.photoURL, winner === 'defender', dScore, cScore, c, rounds, 'defender');
+
+        // Notify challenger of result
+        await addDoc(collection(db, 'notifications'), {
+            targetUid: c.challengerId, type: 'pvp_result', challengeId: c.id,
+            senderUid: uid,
+            senderName: myProfile.displayName || auth.currentUser.displayName || 'Opponent',
+            senderAvatar: myProfile.avatar || auth.currentUser.photoURL || '',
+            message: winner === 'challenger' ? 'Your challenge was accepted — you won! ⚔️🏆' : 'Your challenge was accepted — you lost. ⚔️💀',
+            timestamp: now, read: false,
+        });
+
+        document.getElementById('pvp-accept-modal')?.remove();
+
+        // Show battle animation then result
+        const fullChallenge = { ...c, defenderParty: d.party.map(toStrip), defenderWagerCards: d.wagerCards.map(toStrip), result, status: 'complete' };
+        window._pvpPlayBattleAnimation(fullChallenge, uid);
+
+    } catch(e) {
+        alert('Battle failed: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = '⚔️ Fight!'; }
+    }
+};
+
+async function _pvpUpdateStats(uid, name, avatar, won, myScore, theirScore, challenge, rounds, role) {
+    try {
+        const snap = await getDoc(doc(db, 'pvp_stats', uid));
+        const s = snap.exists() ? snap.data() : { wins:0, losses:0, totalBattles:0, amberWon:0, amberLost:0, cardsWon:0, cardsLost:0, currentStreak:0, bestStreak:0, mvpCardName:null, mvpCardId:null, mvpCardWins:0, cardWinCounts:{}, displayName: name, avatar: avatar };
+
+        s.totalBattles = (s.totalBattles||0) + 1;
+        if (won) { s.wins = (s.wins||0) + 1; s.currentStreak = (s.currentStreak||0) + 1; s.bestStreak = Math.max(s.bestStreak||0, s.currentStreak); }
+        else { s.losses = (s.losses||0) + 1; s.currentStreak = 0; }
+        s.displayName = name;
+        s.avatar = avatar;
+
+        if (challenge.battleType === 'amber') {
+            if (won) s.amberWon = (s.amberWon||0) + challenge.amberWager;
+            else s.amberLost = (s.amberLost||0) + challenge.amberWager;
+        }
+        if (challenge.battleType === 'card' && won) {
+            const opponentCards = role === 'challenger' ? (challenge.defenderWagerCards||[]) : (challenge.challengerWagerCards||[]);
+            s.cardsWon = (s.cardsWon||0) + opponentCards.length;
+        }
+        if (challenge.battleType === 'card' && !won) {
+            const myCards = role === 'challenger' ? (challenge.challengerWagerCards||[]) : (challenge.defenderWagerCards||[]);
+            s.cardsLost = (s.cardsLost||0) + myCards.length;
+        }
+
+        // Track MVP card (most round wins)
+        const cardWins = s.cardWinCounts || {};
+        rounds.filter(r => r.winner === role).forEach(r => {
+            const card = role === 'challenger' ? r.challengerCard : r.defenderCard;
+            if (card?.id) cardWins[card.id] = { name: card.name, count: (cardWins[card.id]?.count||0) + 1 };
+        });
+        s.cardWinCounts = cardWins;
+        const topCard = Object.values(cardWins).sort((a,b) => b.count - a.count)[0];
+        if (topCard) { s.mvpCardName = topCard.name; s.mvpCardWins = topCard.count; }
+
+        await setDoc(doc(db, 'pvp_stats', uid), s);
+
+        // Check PVP achievements (only for the current user — awardAchievements uses auth.currentUser)
+        if (uid === auth.currentUser?.uid && won) {
+            const toCheck = [];
+            const wins = s.wins;
+            const streak = s.currentStreak;
+            if (wins >= 1)   toCheck.push('pvp_first');
+            if (wins >= 10)  toCheck.push('pvp_wins_10');
+            if (wins >= 25)  toCheck.push('pvp_wins_25');
+            if (wins >= 50)  toCheck.push('pvp_wins_50');
+            if (wins >= 100) toCheck.push('pvp_wins_100');
+            if (streak >= 5)  toCheck.push('pvp_streak_5');
+            if (streak >= 10) toCheck.push('pvp_streak_10');
+            if (challenge.battleType === 'card') {
+                const wonCards = role === 'challenger' ? (challenge.defenderWagerCards||[]) : (challenge.challengerWagerCards||[]);
+                toCheck.push('pvp_card_winner');
+                if (wonCards.length >= 10) toCheck.push('pvp_card_haul');
+            }
+            if (toCheck.length) window.awardAchievements?.(toCheck).catch(() => {});
+        }
+    } catch(e) { console.error('pvp stats update failed', e); }
+}
+
+// ── Battle Animation ──────────────────────────
+
+window._pvpPlayBattleAnimation = function(challenge, viewerUid) {
+    const existing = document.getElementById('pvp-battle-anim');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'pvp-battle-anim';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#0a0a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;';
+
+    const cParty = _pvpSortParty(challenge.challengerParty);
+    const dParty = _pvpSortParty(challenge.defenderParty || []);
+    const result = challenge.result;
+    const iAmChallenger = challenge.challengerId === viewerUid;
+    const myParty   = iAmChallenger ? cParty : dParty;
+    const theirParty = iAmChallenger ? dParty : cParty;
+    const iWon = result?.winner === (iAmChallenger ? 'challenger' : 'defender');
+
+    const cardThumb = (card, dim = false) => `
+        <div style="width:72px;flex-shrink:0;">
+            <img src="${card.image||''}" style="width:72px;height:98px;object-fit:cover;border-radius:8px;border:2px solid rgba(255,255,255,0.15);display:block;${dim?'opacity:0.35;filter:grayscale(0.6);':''}">
+            <div style="font-size:9px;color:rgba(255,255,255,0.6);text-align:center;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div>
+        </div>`;
+
+    overlay.innerHTML = `
+        <style>
+        @keyframes pvp-cloud-drift { 0%,100%{transform:scale(1) translate(0,0)} 25%{transform:scale(1.08) translate(-6px,4px)} 50%{transform:scale(1.04) translate(5px,-3px)} 75%{transform:scale(1.1) translate(-3px,5px)} }
+        @keyframes pvp-emoji-fly { 0%{transform:translate(0,0) scale(0) rotate(0deg);opacity:0} 15%{opacity:1;transform:translate(var(--ex),var(--ey)) scale(1.2) rotate(var(--er))} 80%{opacity:0.8} 100%{transform:translate(calc(var(--ex)*2.5),calc(var(--ey)*2.5)) scale(0.5) rotate(calc(var(--er)*2));opacity:0} }
+        @keyframes pvp-card-peek { 0%,100%{transform:translate(var(--px),var(--py)) rotate(var(--pr)) scale(0)} 30%,70%{transform:translate(0,0) rotate(0deg) scale(1)} }
+        @keyframes pvp-cloud-out { 0%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(2.5)} }
+        @keyframes pvp-win-glow { 0%,100%{box-shadow:0 0 18px #FFD700,0 0 40px rgba(255,215,0,0.5)} 50%{box-shadow:0 0 32px #FFD700,0 0 80px rgba(255,215,0,0.9)} }
+        @keyframes pvp-victory-stamp { 0%{transform:scale(2.5) rotate(-10deg);opacity:0} 60%{transform:scale(0.95) rotate(2deg);opacity:1} 80%{transform:scale(1.05) rotate(-1deg)} 100%{transform:scale(1) rotate(0deg);opacity:1} }
+        </style>
+        <div id="pvp-pre-fight" style="text-align:center;width:100%;padding:0 20px;">
+            <div style="font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:16px;">TCG PVP Battle</div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;max-width:440px;margin:0 auto 24px;">
+                <div style="text-align:center;">
+                    <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:8px;">YOU</div>
+                    <div style="display:flex;gap:6px;">${myParty.map(c => cardThumb(c)).join('')}</div>
+                </div>
+                <div style="font-size:28px;font-weight:900;color:rgba(255,255,255,0.6);padding:0 8px;">VS</div>
+                <div style="text-align:center;">
+                    <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:8px;">THEM</div>
+                    <div style="display:flex;gap:6px;">${theirParty.map(c => cardThumb(c)).join('')}</div>
+                </div>
+            </div>
+            <button id="pvp-anim-fight-btn" onclick="window._pvpRunCloudAnimation()" style="padding:14px 36px;border-radius:14px;background:linear-gradient(135deg,#6366f1,#a855f7);border:none;color:#fff;font-size:18px;font-weight:900;cursor:pointer;letter-spacing:1px;">⚔️ FIGHT!</button>
+        </div>
+        <div id="pvp-cloud-stage" style="display:none;position:relative;width:320px;height:260px;"></div>
+        <div id="pvp-result-stage" style="display:none;text-align:center;padding:24px 20px;width:100%;max-width:480px;"></div>
+    `;
+    document.body.appendChild(overlay);
+};
+
+window._pvpRunCloudAnimation = function() {
+    document.getElementById('pvp-pre-fight').style.display = 'none';
+    const stage = document.getElementById('pvp-cloud-stage');
+    stage.style.display = 'block';
+
+    const challenge = window._pvpAnimChallenge || (() => {
+        // Reconstruct from DOM context — find in recent/active
+        return null;
+    })();
+
+    const emojis = ['💥','⚡','👊','✨','💫','😤','🌟','🔥','💢','🌀','⚔️','🛡️'];
+    const peekCards = [];
+
+    // Build cloud
+    stage.innerHTML = `
+        <div id="pvp-cloud" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;animation:pvp-cloud-drift 0.8s ease-in-out infinite;">
+            <div style="width:240px;height:200px;border-radius:50%;background:radial-gradient(ellipse at center,rgba(200,200,255,0.95) 0%,rgba(180,180,240,0.85) 40%,rgba(140,140,220,0.4) 80%,transparent 100%);box-shadow:0 0 60px rgba(180,180,255,0.6),0 0 120px rgba(140,140,220,0.3),inset 0 0 40px rgba(255,255,255,0.4);position:relative;"></div>
+        </div>`;
+
+    const cloud = document.getElementById('pvp-cloud');
+
+    // Spawn emojis periodically
+    let emojiInterval = setInterval(() => {
+        const span = document.createElement('div');
+        const ex = (Math.random()-0.5)*220;
+        const ey = (Math.random()-0.5)*180;
+        const er = (Math.random()-0.5)*360;
+        span.style.cssText = `position:absolute;left:50%;top:50%;font-size:${18+Math.random()*18}px;pointer-events:none;--ex:${ex}px;--ey:${ey}px;--er:${er}deg;animation:pvp-emoji-fly ${0.6+Math.random()*0.8}s ease-out forwards;`;
+        span.textContent = emojis[Math.floor(Math.random()*emojis.length)];
+        stage.appendChild(span);
+        setTimeout(() => span.remove(), 1500);
+    }, 200);
+
+    // Peek cards occasionally
+    let peekInterval = setInterval(() => {
+        const allCards = [...(window._pvpAnimChallenge?.challengerParty||[]), ...(window._pvpAnimChallenge?.defenderParty||[])];
+        if (!allCards.length) return;
+        const card = allCards[Math.floor(Math.random()*allCards.length)];
+        const peek = document.createElement('div');
+        const px = (Math.random()-0.5)*260;
+        const py = (Math.random()-0.5)*200;
+        const pr = (Math.random()-0.5)*40;
+        peek.style.cssText = `position:absolute;left:50%;top:50%;width:54px;height:74px;margin-left:-27px;margin-top:-37px;border-radius:6px;overflow:hidden;pointer-events:none;--px:${px}px;--py:${py}px;--pr:${pr}deg;animation:pvp-card-peek 1s ease-in-out forwards;border:2px solid rgba(255,255,255,0.6);`;
+        peek.innerHTML = `<img src="${card.image||''}" style="width:100%;height:100%;object-fit:cover;">`;
+        stage.appendChild(peek);
+        setTimeout(() => peek.remove(), 1100);
+    }, 600);
+
+    // After 5 seconds, dissipate cloud and show result
+    setTimeout(() => {
+        clearInterval(emojiInterval);
+        clearInterval(peekInterval);
+        const cloudEl = document.getElementById('pvp-cloud');
+        if (cloudEl) { cloudEl.style.animation = 'pvp-cloud-out 1.2s ease-out forwards'; }
+        setTimeout(() => {
+            stage.style.display = 'none';
+            _pvpShowBattleResult();
+        }, 1200);
+    }, 5000);
+};
+
+function _pvpShowBattleResult() {
+    const c = window._pvpAnimChallenge;
+    if (!c) { document.getElementById('pvp-battle-anim')?.remove(); window.loadPvpTab(); return; }
+
+    const viewerUid = auth.currentUser?.uid;
+    const iAmChallenger = c.challengerId === viewerUid;
+    const result = c.result;
+    const iWon = result?.winner === (iAmChallenger ? 'challenger' : 'defender');
+    const myParty    = _pvpSortParty(iAmChallenger ? c.challengerParty : (c.defenderParty||[]));
+    const theirParty = _pvpSortParty(iAmChallenger ? (c.defenderParty||[]) : c.challengerParty);
+    const myScore    = iAmChallenger ? result.challengerScore : result.defenderScore;
+    const theirScore = iAmChallenger ? result.defenderScore : result.challengerScore;
+    const opponent   = iAmChallenger ? c.defenderName : c.challengerName;
+    const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' };
+
+    const roundHTML = (result.rounds||[]).map((r, i) => {
+        const myCard    = iAmChallenger ? r.challengerCard : r.defenderCard;
+        const theirCard = iAmChallenger ? r.defenderCard : r.challengerCard;
+        const myPow     = iAmChallenger ? r.challengerPower : r.defenderPower;
+        const theirPow  = iAmChallenger ? r.defenderPower : r.challengerPower;
+        const iWonRound = r.winner === (iAmChallenger ? 'challenger' : 'defender');
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;background:${iWonRound?'rgba(76,175,80,0.1)':'rgba(244,67,54,0.1)'};margin-bottom:8px;">
+            <div style="text-align:center;width:52px;flex-shrink:0;">
+                <img src="${myCard?.image||''}" style="width:52px;height:70px;object-fit:cover;border-radius:6px;border:2px solid ${iWonRound?'#4caf50':'#f44336'};display:block;">
+                <div style="font-size:9px;color:rgba(255,255,255,0.6);margin-top:2px;">⚡${myPow}</div>
+            </div>
+            <div style="flex:1;text-align:center;">
+                <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:2px;">Round ${i+1}</div>
+                <div style="font-size:16px;">${iWonRound?'✅':'💀'}</div>
+            </div>
+            <div style="text-align:center;width:52px;flex-shrink:0;">
+                <img src="${theirCard?.image||''}" style="width:52px;height:70px;object-fit:cover;border-radius:6px;border:2px solid ${!iWonRound?'#4caf50':'#f44336'};display:block;">
+                <div style="font-size:9px;color:rgba(255,255,255,0.6);margin-top:2px;">⚡${theirPow}</div>
+            </div>
+        </div>`;
+    }).join('');
+
+    let wagerNote = '';
+    if (c.battleType === 'amber') wagerNote = `<div style="font-size:14px;color:#FFD700;font-weight:800;margin-top:6px;">${iWon ? `+${c.amberWager*2} 🟡 Amber` : `-${c.amberWager} 🟡 Amber`}</div>`;
+    else if (c.battleType === 'card' && iWon) { const won = [...(c.challengerWagerCards||[]),...(c.defenderWagerCards||[])]; wagerNote = `<div style="font-size:14px;color:#a855f7;font-weight:800;margin-top:6px;">🃏 +${won.length} card${won.length!==1?'s':''} won!</div>`; }
+
+    const resultEl = document.getElementById('pvp-result-stage');
+    if (!resultEl) return;
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `
+        <div style="font-size:44px;font-weight:900;color:${iWon?'#FFD700':'#f44336'};margin-bottom:4px;animation:pvp-victory-stamp 0.5s ease-out forwards;">${iWon ? '🏆 VICTORY!' : '💀 DEFEAT'}</div>
+        <div style="font-size:15px;color:rgba(255,255,255,0.6);margin-bottom:4px;">${myScore}–${theirScore} vs ${opponent}</div>
+        ${wagerNote}
+        <div style="margin:20px auto;max-width:380px;">${roundHTML}</div>
+        <button onclick="document.getElementById('pvp-battle-anim').remove();window.loadPvpTab();" style="padding:12px 32px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#a855f7);border:none;color:#fff;font-size:15px;font-weight:800;cursor:pointer;margin-top:8px;">Continue</button>
+    `;
+}
+
+// Store challenge reference so animation can access it
+const _pvpOrigPlayAnim = window._pvpPlayBattleAnimation;
+window._pvpPlayBattleAnimation = function(challenge, viewerUid) {
+    window._pvpAnimChallenge = challenge;
+    _pvpOrigPlayAnim(challenge, viewerUid);
+};
+
+// Replay animation from recent battles
+window._pvpReplayBattle = async function(challengeId) {
+    try {
+        const snap = await getDoc(doc(db, 'pvp_challenges', challengeId));
+        if (!snap.exists()) return;
+        window._pvpPlayBattleAnimation({ id: snap.id, ...snap.data() }, auth.currentUser?.uid);
+    } catch(e) {}
+};
+
+// ── Profile Challenge Button ──────────────────
+
+window._pvpChallengeFromProfile = function(targetUid, targetName, targetAvatar) {
+    window._pvpStartChallenge(targetUid, targetName, targetAvatar);
 };
 
 // Mark today as done on load if already played
