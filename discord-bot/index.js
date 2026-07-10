@@ -172,8 +172,8 @@ const SSR_ACTIVE_CHANCE = 0.01;
 
 const RARITY_CONFIG = {
   common: { label: 'Common', emoji: '⬜', color: 0x9e9e9e, hex: '#9e9e9e', glow: 0  },
-  rare:   { label: 'Rare',   emoji: '🔵', color: 0x2196f3, hex: '#2196f3', glow: 8  },
-  sr:     { label: 'SR',     emoji: '⭐', color: 0xffc107, hex: '#ffc107', glow: 16 },
+  rare:   { label: 'Rare',   emoji: '🟡', color: 0xf59e0b, hex: '#f59e0b', glow: 8  },
+  sr:     { label: 'SR',     emoji: '⭐', color: 0x8b5cf6, hex: '#8b5cf6', glow: 16 },
   ssr:    { label: 'SSR',    emoji: '💜', color: 0x9c27b0, hex: '#9c27b0', glow: 22 },
 };
 

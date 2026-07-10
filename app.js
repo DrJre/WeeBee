@@ -12690,7 +12690,7 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
             ${!isPR ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                 <div><strong>Version:</strong> ${versionText}</div>
                 ${!(card.monthlyUr||card.tradedMonthlyUr) && !card.founder && card.serial != null ? `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="${card.rarity||''}" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">🔢 View All Versions</button>` : ''}
-            </div>` : ''}
+            </div>` : `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="pr" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">👑 View All Owners</button>`}
             <div><strong>Owner:</strong> <span onclick="document.getElementById('tcg-card-viewer-modal').remove();viewUserProfile('${safeOwnerUid}')" style="cursor:pointer;color:#f59e0b;font-weight:700;">${ownerName}</span></div>
         </div>
         <button onclick="navigator.clipboard.writeText('${shareUrl}').then(()=>alert('Link copied! Anyone you send it to can view this card.')).catch(()=>alert('Could not copy link'))" style="width:100%;padding:10px 22px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">🔗 Copy Share Link</button>`;
@@ -25990,20 +25990,23 @@ function _dungeonRenderDifficultyPicker(el) {
 }
 
 function _dungeonItemInventoryHTML(items) {
-    const allKeys = ['revivePotion', ...Object.keys(DUNGEON_ITEMS_DEF)];
-    const badges = allKeys.map(key => {
+    const REVIVAL_DEF = { label: 'Revival Fluid', emoji: '🧪', desc: 'Re-roll a failed gate with the same odds for another shot at victory.', how: 'Earned by completing a clean sweep — win all 5 gates in a single day.' };
+    const allEntries = [
+        ['revivePotion', REVIVAL_DEF],
+        ...Object.entries(DUNGEON_ITEMS_DEF),
+    ];
+    const badges = allEntries.map(([key, def]) => {
         const count = items?.[key] || 0;
-        if (!count) return '';
-        const def = DUNGEON_ITEMS_DEF[key] || { label: 'Revival Fluid', emoji: '🧪' };
-        return `<div title="${def.label}" style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1px solid rgba(168,85,247,0.4);background:rgba(168,85,247,0.08);">
+        const tooltip = `${def.label} — ${def.desc} | How to get: ${def.how}`;
+        const hasAny = count > 0;
+        return `<div title="${tooltip}" style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1px solid ${hasAny ? 'rgba(168,85,247,0.45)' : 'rgba(168,85,247,0.15)'};background:${hasAny ? 'rgba(168,85,247,0.1)' : 'transparent'};opacity:${hasAny ? '1' : '0.45'};cursor:default;">
             <span style="font-size:13px;">${def.emoji}</span>
-            <span style="font-size:11px;font-weight:800;color:#a855f7;">${def.label}</span>
-            <span style="font-size:12px;font-weight:900;color:var(--text-dark);">×${count}</span>
+            <span style="font-size:11px;font-weight:800;color:${hasAny ? '#a855f7' : 'var(--text-muted)'};">${def.label}</span>
+            <span style="font-size:12px;font-weight:900;color:${hasAny ? 'var(--text-dark)' : 'var(--text-muted)'};">×${count}</span>
         </div>`;
     }).join('');
-    if (!badges) return '';
     return `<div style="background:var(--bg-gray);border-radius:12px;padding:12px 16px;margin-bottom:12px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">🎒 Your Items</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">🎒 Items</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">${badges}</div>
     </div>`;
 }
@@ -26223,14 +26226,14 @@ function _dungeonIsFatigued(cardId) {
 const DUNGEON_RARITY_ORDER = { ur:6, pr:5, ssr:4, sr:3, rare:2, common:1 };
 
 const DUNGEON_ITEMS_DEF = {
-    energyDrink:  { label: 'Energy Drink',  emoji: '⚡', desc: 'Removes the resting period for your party cards after this raid.' },
-    powerScroll:  { label: 'Power Scroll',  emoji: '📜', desc: '+2 Power to every card in your party for this raid.' },
-    srCompass:    { label: 'SR Compass',    emoji: '🧭', desc: 'Guarantees an SR card if your party recruits a companion this raid.' },
-    summonScroll: { label: 'Summon Scroll', emoji: '📯', desc: 'Guarantees your party recruits at least one companion card this raid.' },
-    synergySeal:  { label: 'Synergy Seal',  emoji: '🔮', desc: 'Doubles combo bonus — shared-anime cards give +2 Power each instead of +1.' },
-    goldenIdol:   { label: 'Golden Idol',   emoji: '🏺', desc: 'Increases your amber reward by 50% on a successful raid.' },
-    warpStone:    { label: 'Warp Stone',    emoji: '💎', desc: 'Cuts the raid timer in half.' },
-    crazySlots:   { label: 'Crazy Slots',   emoji: '🎰', desc: 'Randomizes amber reward from 0 to 9,999.' },
+    energyDrink:  { label: 'Energy Drink',  emoji: '⚡', desc: 'Removes the resting period for your party cards after this raid.',              how: 'Drops from Gate E & D on success.' },
+    powerScroll:  { label: 'Power Scroll',  emoji: '📜', desc: '+2 Power to every card in your party for this raid.',                           how: 'Drops from Gate D, C & E on success.' },
+    srCompass:    { label: 'SR Compass',    emoji: '🧭', desc: 'Guarantees an SR card if your party recruits a companion this raid.',            how: 'Drops from Gate C, B & A on success.' },
+    summonScroll: { label: 'Summon Scroll', emoji: '📯', desc: 'Guarantees your party recruits at least one companion card this raid.',          how: 'Drops from Gate D, C & B on success.' },
+    synergySeal:  { label: 'Synergy Seal',  emoji: '🔮', desc: 'Doubles combo bonus — shared-anime cards give +2 Power each instead of +1.',    how: 'Drops from Gate B & A on success.' },
+    goldenIdol:   { label: 'Golden Idol',   emoji: '🏺', desc: 'Increases your amber reward by 50% on a successful raid.',                       how: 'Drops from Gate C, B & A on success.' },
+    warpStone:    { label: 'Warp Stone',    emoji: '💎', desc: 'Cuts the raid timer in half.',                                                   how: 'Drops from Gate D, C, B & A on success.' },
+    crazySlots:   { label: 'Crazy Slots',   emoji: '🎰', desc: 'Randomizes amber reward from 0 to 9,999.',                                       how: 'Drops from Gate B & A on success.' },
 };
 
 // Drop tables by gate tier — only drops on success
@@ -26312,7 +26315,7 @@ function _dungeonRenderPartySelect(panel) {
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
             <button onclick="window._dungeonCancelPartySelect()" class="cancel-btn" style="font-size:13px;">← Back to Gates</button>
             <div style="font-weight:800;font-size:16px;">${gate.icon} ${gate.name} — Pick ${gate.partySize} card${gate.partySize>1?'s':''}</div>
-            <button class="action-btn" style="font-weight:800;${canStart?'':'opacity:0.5;cursor:not-allowed;'}" ${canStart?`onclick="window._dungeonStartRaid()"`:''}>Begin Raid →</button>
+            <button class="action-btn" style="font-weight:800;${canStart?'':'opacity:0.5;cursor:not-allowed;'}" ${canStart?`onclick="window._dungeonPreflightItems()"`:''}>Begin Raid →</button>
         </div>
         <div style="background:var(--bg-gray);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
             <div style="font-size:13px;">Selected: <strong>${selected.size}/${gate.partySize}</strong> · Party Power: <strong>${partyPower}</strong>${combo > 0 ? ` <span style="color:#a855f7;font-weight:800;">(+${combo} Combo${activeItems.has('synergySeal')?' ×2':''}!)</span>` : ''}${powerScrollBonus > 0 ? ` <span style="color:#f59e0b;font-weight:800;">(+${powerScrollBonus} Scroll)</span>` : ''}</div>
@@ -26359,7 +26362,7 @@ function _dungeonRenderPartySelect(panel) {
             </select>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:10px;margin-bottom:20px;">${cardsHTML}</div>
-        <button class="action-btn" style="width:100%;justify-content:center;padding:14px;font-size:15px;font-weight:800;${canStart?'':'opacity:0.5;cursor:not-allowed;'}" ${canStart?`onclick="window._dungeonStartRaid()"`:''}>Begin Raid (${_dungeonFormatDuration(gate.durationMs)})</button>
+        <button class="action-btn" style="width:100%;justify-content:center;padding:14px;font-size:15px;font-weight:800;${canStart?'':'opacity:0.5;cursor:not-allowed;'}" ${canStart?`onclick="window._dungeonPreflightItems()"`:''}>Begin Raid (${_dungeonFormatDuration(gate.durationMs)})</button>
     `;
 }
 
@@ -26382,6 +26385,66 @@ window._dungeonCancelPartySelect = function() {
     if (listEl) listEl.style.display = 'block';
     if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
     window._dungeonPickState = null;
+};
+
+// Shows an item prompt before starting a raid if the user has usable items.
+// Called by the "Begin Raid" button; calls _dungeonStartRaid() when confirmed.
+window._dungeonPreflightItems = function() {
+    const usableKeys = Object.keys(DUNGEON_ITEMS_DEF).filter(k => (window._dungeonItems?.[k] || 0) > 0);
+    if (!usableKeys.length) { window._dungeonStartRaid(); return; }
+
+    const ps = window._dungeonPickState;
+    if (!ps) return;
+    const activeItems = ps.activeItems || new Set();
+
+    const existing = document.getElementById('dungeon-item-preflight');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'dungeon-item-preflight';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+
+    function renderOverlay() {
+        const chips = usableKeys.map(key => {
+            const def = DUNGEON_ITEMS_DEF[key];
+            const count = window._dungeonItems?.[key] || 0;
+            const isActive = activeItems.has(key);
+            return `<button onclick="window._dungeonPreflightToggle('${key}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border-radius:12px;border:2px solid ${isActive ? '#a855f7' : 'var(--border-color)'};background:${isActive ? 'rgba(168,85,247,0.12)' : 'var(--bg-gray)'};cursor:pointer;text-align:left;transition:all 0.15s;">
+                <span style="font-size:22px;">${def.emoji}</span>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:800;color:${isActive ? '#a855f7' : 'var(--text-dark)'};">${def.label} ×${count}</div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:1px;">${def.desc}</div>
+                </div>
+                <div style="width:22px;height:22px;border-radius:50%;border:2px solid ${isActive ? '#a855f7' : 'var(--border-color)'};background:${isActive ? '#a855f7' : 'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    ${isActive ? '<span style="color:#fff;font-size:13px;font-weight:900;">✓</span>' : ''}
+                </div>
+            </button>`;
+        }).join('');
+
+        overlay.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:420px;width:100%;">
+            <div style="font-size:17px;font-weight:900;margin-bottom:4px;">🎒 Use Items?</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">You have items in your inventory. Toggle any you'd like to use for this raid.</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">${chips}</div>
+            <div style="display:flex;gap:10px;">
+                <button onclick="document.getElementById('dungeon-item-preflight').remove();window._dungeonStartRaid();" class="cancel-btn" style="flex:1;justify-content:center;">Skip</button>
+                <button onclick="document.getElementById('dungeon-item-preflight').remove();window._dungeonStartRaid();" class="action-btn" style="flex:1;justify-content:center;font-weight:800;background:linear-gradient(135deg,#6366f1,#a855f7);">Begin Raid →</button>
+            </div>
+        </div>`;
+    }
+
+    window._dungeonPreflightToggle = function(key) {
+        const ps = window._dungeonPickState;
+        if (!ps) return;
+        ps.activeItems = ps.activeItems || new Set();
+        if (ps.activeItems.has(key)) ps.activeItems.delete(key);
+        else ps.activeItems.add(key);
+        renderOverlay();
+        _dungeonRenderPartySelect(document.getElementById('dungeon-party-select'));
+    };
+
+    renderOverlay();
+    document.body.appendChild(overlay);
 };
 
 // Rolls the raid outcome immediately (same trust model as Plinko/Wheel) and
@@ -26435,7 +26498,7 @@ window._dungeonStartRaid = async function() {
         bonusCards,
         testMode,
         startTime: now, endTime: now + durationMs,
-        activeItemsUsed: activeItems.size ? [...activeItems] : undefined,
+        activeItemsUsed: activeItems.size ? [...activeItems] : null,
     };
     const uid = auth.currentUser.uid;
     try {
@@ -27170,16 +27233,16 @@ async function _pvpLoadRecentBattles(uid) {
             getDocs(query(collection(db, 'pvp_challenges'),
                 where('challengerId', '==', uid),
                 where('status', '==', 'complete'),
-                orderBy('resolvedAt', 'desc'), limit(5))),
+                orderBy('resolvedAt', 'desc'), limit(10))),
             getDocs(query(collection(db, 'pvp_challenges'),
                 where('defenderId', '==', uid),
                 where('status', '==', 'complete'),
-                orderBy('resolvedAt', 'desc'), limit(5))),
+                orderBy('resolvedAt', 'desc'), limit(10))),
         ]);
         return [
             ...asC.docs.map(d => ({ id: d.id, ...d.data(), _role: 'challenger' })),
             ...asD.docs.map(d => ({ id: d.id, ...d.data(), _role: 'defender' })),
-        ].sort((a, b) => (b.resolvedAt?.toMillis?.() || 0) - (a.resolvedAt?.toMillis?.() || 0)).slice(0, 5);
+        ].sort((a, b) => (b.resolvedAt?.toMillis?.() || 0) - (a.resolvedAt?.toMillis?.() || 0)).slice(0, 10);
     } catch(e) { return []; }
 }
 
@@ -27236,22 +27299,19 @@ window.loadPvpTab = async function() {
 
         ${_pvpStatsHTML(myStats)}
 
-        ${active.length ? `
+        ${_pvpPendingChallengesHTML(active, uid)}
+
         <div style="margin-bottom:20px;">
-            <div style="font-weight:800;font-size:15px;margin-bottom:12px;">⚔️ Active Challenges</div>
-            ${active.map(c => _pvpChallengeCardHTML(c, uid)).join('')}
-        </div>` : ''}
+            <div style="font-weight:800;font-size:15px;margin-bottom:12px;">📜 Recent Fights</div>
+            ${recent.length
+                ? recent.map(c => _pvpRecentBattleHTML(c, uid)).join('')
+                : `<div style="background:var(--bg-gray);border-radius:14px;padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">No battles yet — challenge someone to get started!</div>`}
+        </div>
 
         <div style="margin-bottom:20px;">
             <div style="font-weight:800;font-size:15px;margin-bottom:12px;">🏆 Leaderboard</div>
             ${_pvpLeaderboardHTML(leaderboard, uid)}
         </div>
-
-        ${recent.length ? `
-        <div style="margin-bottom:20px;">
-            <div style="font-weight:800;font-size:15px;margin-bottom:12px;">📜 Recent Battles</div>
-            ${recent.map(c => _pvpRecentBattleHTML(c, uid)).join('')}
-        </div>` : ''}
 
         <div style="text-align:center;margin-top:8px;margin-bottom:24px;">
             <button class="action-btn" style="padding:14px 32px;font-size:15px;font-weight:800;background:linear-gradient(135deg,#6366f1,#a855f7);" onclick="window._pvpFindOpponent()">⚔️ Challenge a Player</button>
@@ -27309,8 +27369,43 @@ function _pvpLeaderboardHTML(rows, myUid) {
                     <div style="font-weight:800;color:var(--accent-yellow);">🟡 ${(r.amberWon||0).toLocaleString()}</div>
                     <div>${r.cardsWon||0} cards won</div>
                 </div>
+                ${!isMe ? `<button onclick="event.stopPropagation();window._pvpStartChallenge('${r.uid}','${(r.displayName||'').replace(/'/g,"\\'")}','${(r.avatar||'').replace(/'/g,"\\'")}');" style="padding:6px 12px;border-radius:8px;border:none;background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;flex-shrink:0;">⚔️ Challenge</button>` : ''}
             </div>`;
         }).join('')}
+    </div>`;
+}
+
+// ── Pending Challenges Panel ──────────────────
+
+function _pvpPendingChallengesHTML(active, myUid) {
+    const incoming = active.filter(c => c._role === 'defender');
+    const outgoing = active.filter(c => c._role === 'challenger');
+
+    const incomingHTML = incoming.length
+        ? incoming.map(c => _pvpChallengeCardHTML(c, myUid)).join('')
+        : `<div style="font-size:13px;color:var(--text-muted);padding:10px 0;">No incoming challenges.</div>`;
+
+    const outgoingHTML = outgoing.length
+        ? outgoing.map(c => _pvpChallengeCardHTML(c, myUid)).join('')
+        : `<div style="font-size:13px;color:var(--text-muted);padding:10px 0;">No outgoing challenges.</div>`;
+
+    return `
+    <div style="margin-bottom:20px;">
+        <div style="font-weight:800;font-size:15px;margin-bottom:12px;">⏳ Pending Challenges</div>
+        <div style="background:var(--bg-gray);border-radius:16px;padding:16px 18px;">
+            <div style="margin-bottom:${outgoing.length || !incoming.length ? '16px' : '0'};">
+                <div style="font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">
+                    Incoming ${incoming.length ? `<span style="background:#6366f1;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px;">${incoming.length}</span>` : ''}
+                </div>
+                ${incomingHTML}
+            </div>
+            <div style="border-top:1px solid var(--border-color);padding-top:14px;">
+                <div style="font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">
+                    Outgoing ${outgoing.length ? `<span style="background:rgba(99,102,241,0.2);color:#6366f1;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px;">${outgoing.length}</span>` : ''}
+                </div>
+                ${outgoingHTML}
+            </div>
+        </div>
     </div>`;
 }
 
@@ -27343,17 +27438,31 @@ function _pvpChallengeCardHTML(c, myUid) {
 // ── Recent Battle Row ─────────────────────────
 
 function _pvpRecentBattleHTML(c, myUid) {
-    const iWon = c.result?.winner === (c.challengerId === myUid ? 'challenger' : 'defender');
-    const opponent = c.challengerId === myUid ? c.defenderName : c.challengerName;
-    const myScore = c.challengerId === myUid ? c.result?.challengerScore : c.result?.defenderScore;
-    const theirScore = c.challengerId === myUid ? c.result?.defenderScore : c.result?.challengerScore;
-    return `<div onclick="window._pvpReplayBattle('${c.id}')" style="background:var(--bg-gray);border-radius:14px;padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;gap:14px;cursor:pointer;border-left:4px solid ${iWon?'#4caf50':'#f44336'};">
-        <div style="font-size:22px;">${iWon ? '✅' : '💀'}</div>
-        <div style="flex:1;min-width:0;">
-            <div style="font-weight:700;font-size:13px;">${iWon ? 'Victory' : 'Defeat'} vs ${opponent}</div>
-            <div style="font-size:12px;color:var(--text-muted);">${myScore}–${theirScore} · ${_pvpBattleTypeLabel(c.battleType)}</div>
+    const iAmChallenger = c.challengerId === myUid;
+    const iWon = c.result?.winner === (iAmChallenger ? 'challenger' : 'defender');
+    const opponent = iAmChallenger ? c.defenderName : c.challengerName;
+    const opponentAvatar = iAmChallenger ? (c.defenderAvatar || '') : (c.challengerAvatar || '');
+    const myScore = iAmChallenger ? c.result?.challengerScore : c.result?.defenderScore;
+    const theirScore = iAmChallenger ? c.result?.defenderScore : c.result?.challengerScore;
+    const myParty = _pvpSortParty(iAmChallenger ? (c.challengerParty || []) : (c.defenderParty || []));
+    const theirParty = _pvpSortParty(iAmChallenger ? (c.defenderParty || []) : (c.challengerParty || []));
+    const cardThumb = card => `<img src="${card.image||''}" title="${card.name}" style="width:38px;height:52px;object-fit:cover;object-position:top;border-radius:5px;border:2px solid ${rarityBorderColor(card.rarity)};flex-shrink:0;" onerror="this.style.display='none'">`;
+    const wagerNote = c.battleType === 'amber' && c.amberWager
+        ? ` · <span style="color:${iWon?'#4caf50':'#f44336'};font-weight:700;">${iWon?'+':'-'}${c.amberWager} 🟡</span>` : '';
+    return `<div onclick="window._pvpReplayBattle('${c.id}')" style="background:var(--bg-gray);border-radius:14px;padding:14px 16px;margin-bottom:8px;cursor:pointer;border-left:4px solid ${iWon?'#4caf50':'#f44336'};">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <img src="${opponentAvatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(opponent||'?')}&backgroundColor=ffc107&fontColor=333333`}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;font-size:13px;">${iWon ? '🏆 Victory' : '💀 Defeat'} vs <strong>${opponent}</strong></div>
+                <div style="font-size:11px;color:var(--text-muted);">${myScore}–${theirScore} · ${_pvpBattleTypeLabel(c.battleType)}${wagerNote}</div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;">▶ Replay</div>
         </div>
-        <div style="font-size:11px;color:var(--text-muted);">▶ Replay</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <div style="display:flex;gap:4px;">${myParty.map(cardThumb).join('')}</div>
+            <div style="font-size:12px;font-weight:900;color:var(--text-muted);padding:0 4px;flex-shrink:0;">vs</div>
+            <div style="display:flex;gap:4px;">${theirParty.map(cardThumb).join('')}</div>
+        </div>
     </div>`;
 }
 
@@ -27642,14 +27751,14 @@ window._pvpSendChallenge = async function() {
             resolvedAt: null,
         };
         const ref = await addDoc(collection(db, 'pvp_challenges'), challengeDoc);
-        await addDoc(collection(db, 'notifications'), {
+        await setDoc(doc(db, 'notifications', `pvpc_${ref.id}`), {
             targetUid: d.targetUid, type: 'pvp_challenge', challengeId: ref.id,
             senderUid: uid,
             senderName: challengeDoc.challengerName,
             senderAvatar: challengeDoc.challengerAvatar,
             message: `challenged you to a TCG Battle! (${_pvpBattleTypeLabel(d.battleType)})`,
             timestamp: now, read: false,
-        });
+        }, { merge: true });
         document.getElementById('pvp-challenge-modal')?.remove();
         alert(`⚔️ Challenge sent to ${d.targetName}!`);
         window.loadPvpTab();
@@ -27838,6 +27947,23 @@ window._pvpSubmitAccept = async function() {
         const myProfile = window._cachedMyProfile || {};
         const toStrip = card => ({ id: card.id, name: card.name, image: card.image||'', rarity: card.rarity, anime: card.anime||'', serial: card.serial ?? null });
 
+        // Amber wager: check both players have enough before the battle starts
+        if (c.battleType === 'amber' && c.amberWager > 0) {
+            const [cSnap, dSnap] = await Promise.all([
+                getDoc(doc(db, 'profiles', c.challengerId)),
+                getDoc(doc(db, 'profiles', uid)),
+            ]);
+            const cAmber = cSnap.exists() ? (cSnap.data().amber || 0) : 0;
+            const dAmber = dSnap.exists() ? (dSnap.data().amber || 0) : 0;
+            if (cAmber < c.amberWager || dAmber < c.amberWager) {
+                await updateDoc(doc(db, 'pvp_challenges', c.id), { status: 'cancelled', cancelReason: 'amber_insufficient' });
+                document.getElementById('pvp-accept-modal')?.remove();
+                alert('Battle cancelled — the wager amount could not be met by one or both players.');
+                window.loadPvpTab();
+                return;
+            }
+        }
+
         // Resolve battle
         const cParty = _pvpSortParty(c.challengerParty);
         const dParty = _pvpSortParty(d.party);
@@ -27869,9 +27995,16 @@ window._pvpSubmitAccept = async function() {
 
         // Handle payouts
         if (c.battleType === 'amber') {
-            // loser pays winner their wager; net: winner +X, loser -X
-            await _awardAmberToUser(loserUid,  -c.amberWager, `pvp:loss:${c.id}`);
-            await _awardAmberToUser(winnerUid,  c.amberWager, `pvp:win:${c.id}`);
+            // Deduct wager from both, award the full pot to winner
+            await Promise.all([
+                updateDoc(doc(db, 'profiles', c.challengerId), { amber: increment(-c.amberWager) }),
+                updateDoc(doc(db, 'profiles', uid), { amber: increment(-c.amberWager) }),
+            ]);
+            await updateDoc(doc(db, 'profiles', winnerUid), { amber: increment(c.amberWager * 2) });
+            Promise.all([
+                addDoc(collection(db, 'amber_log'), { uid: winnerUid, amount: c.amberWager, reason: `pvp:win:${c.id}`, timestamp: now }),
+                addDoc(collection(db, 'amber_log'), { uid: loserUid, amount: -c.amberWager, reason: `pvp:loss:${c.id}`, timestamp: now }),
+            ]).catch(() => {});
         } else if (c.battleType === 'fun') {
             // No amber payout — wins contribute to PVP achievements which award amber
         } else if (c.battleType === 'card') {
@@ -27893,14 +28026,14 @@ window._pvpSubmitAccept = async function() {
         await _pvpUpdateStats(uid, myProfile.displayName || auth.currentUser.displayName, myProfile.avatar || auth.currentUser.photoURL, winner === 'defender', dScore, cScore, c, rounds, 'defender');
 
         // Notify challenger of result
-        await addDoc(collection(db, 'notifications'), {
+        await setDoc(doc(db, 'notifications', `pvpr_${c.id}`), {
             targetUid: c.challengerId, type: 'pvp_result', challengeId: c.id,
             senderUid: uid,
             senderName: myProfile.displayName || auth.currentUser.displayName || 'Opponent',
             senderAvatar: myProfile.avatar || auth.currentUser.photoURL || '',
             message: winner === 'challenger' ? 'Your challenge was accepted — you won! ⚔️🏆' : 'Your challenge was accepted — you lost. ⚔️💀',
             timestamp: now, read: false,
-        });
+        }, { merge: true });
 
         document.getElementById('pvp-accept-modal')?.remove();
 
@@ -27991,8 +28124,8 @@ window._pvpPlayBattleAnimation = function(challenge, viewerUid) {
     const iWon = result?.winner === (iAmChallenger ? 'challenger' : 'defender');
 
     const cardThumb = (card, dim = false) => `
-        <div style="width:72px;flex-shrink:0;">
-            <img src="${card.image||''}" style="width:72px;height:98px;object-fit:cover;border-radius:8px;border:2px solid rgba(255,255,255,0.15);display:block;${dim?'opacity:0.35;filter:grayscale(0.6);':''}">
+        <div class="pvp-card-thumb" style="width:72px;flex-shrink:0;">
+            <img src="${card.image||''}" class="pvp-card-thumb-img" style="width:72px;height:98px;object-fit:cover;border-radius:8px;border:2px solid rgba(255,255,255,0.15);display:block;${dim?'opacity:0.35;filter:grayscale(0.6);':''}">
             <div style="font-size:9px;color:rgba(255,255,255,0.6);text-align:center;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div>
         </div>`;
 
@@ -28004,15 +28137,21 @@ window._pvpPlayBattleAnimation = function(challenge, viewerUid) {
         @keyframes pvp-cloud-out { 0%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(2.5)} }
         @keyframes pvp-win-glow { 0%,100%{box-shadow:0 0 18px #FFD700,0 0 40px rgba(255,215,0,0.5)} 50%{box-shadow:0 0 32px #FFD700,0 0 80px rgba(255,215,0,0.9)} }
         @keyframes pvp-victory-stamp { 0%{transform:scale(2.5) rotate(-10deg);opacity:0} 60%{transform:scale(0.95) rotate(2deg);opacity:1} 80%{transform:scale(1.05) rotate(-1deg)} 100%{transform:scale(1) rotate(0deg);opacity:1} }
+        @media (max-width:520px) {
+            .pvp-matchup-row { flex-direction:column !important; align-items:center !important; gap:16px !important; }
+            .pvp-matchup-vs { font-size:20px !important; padding:0 !important; }
+            .pvp-card-thumb { width:60px !important; }
+            .pvp-card-thumb-img { width:60px !important; height:82px !important; }
+        }
         </style>
-        <div id="pvp-pre-fight" style="text-align:center;width:100%;padding:0 20px;">
+        <div id="pvp-pre-fight" style="text-align:center;width:100%;max-width:520px;margin:0 auto;padding:0 20px;box-sizing:border-box;">
             <div style="font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:16px;">TCG PVP Battle</div>
-            <div style="display:flex;justify-content:space-between;align-items:flex-end;max-width:440px;margin:0 auto 24px;">
+            <div class="pvp-matchup-row" style="display:flex;justify-content:space-around;align-items:center;margin-bottom:24px;gap:8px;">
                 <div style="text-align:center;">
                     <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:8px;">YOU</div>
                     <div style="display:flex;gap:6px;">${myParty.map(c => cardThumb(c)).join('')}</div>
                 </div>
-                <div style="font-size:28px;font-weight:900;color:rgba(255,255,255,0.6);padding:0 8px;">VS</div>
+                <div class="pvp-matchup-vs" style="font-size:28px;font-weight:900;color:rgba(255,255,255,0.6);padding:0 8px;flex-shrink:0;">VS</div>
                 <div style="text-align:center;">
                     <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:8px;">THEM</div>
                     <div style="display:flex;gap:6px;">${theirParty.map(c => cardThumb(c)).join('')}</div>

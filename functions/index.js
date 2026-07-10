@@ -577,9 +577,15 @@ exports.purchasePacks = onRequest({ invoker: 'public' }, async (req, res) => {
     if (pack.prismatic) {
         try {
             const evSnap = await db.collection('tcg_event_config').doc('prismatic').get();
-            const startAt = evSnap.exists ? evSnap.data().startAt : null;
+            const evData = evSnap.exists ? evSnap.data() : {};
+            const startAt = evData.startAt ?? null;
             const start = startAt?.toDate ? startAt.toDate() : (startAt ? new Date(startAt) : null);
-            const endAt = start ? new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000) : null;
+            let endAt;
+            if (evData.endAt) {
+                endAt = evData.endAt.toDate ? evData.endAt.toDate() : new Date(evData.endAt);
+            } else {
+                endAt = start ? new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000) : null;
+            }
             if (!endAt || endAt <= new Date()) return sendErr(res, 400, 'FAILED_PRECONDITION', 'The Prismatic Pack event is not currently running.');
         } catch(e) {
             return sendErr(res, 500, 'INTERNAL', 'Failed to verify event status.');
