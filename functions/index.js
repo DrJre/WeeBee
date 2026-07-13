@@ -881,14 +881,15 @@ exports.settlePvpBattle = onRequest({ invoker: 'public' }, async (req, res) => {
                 tx.update(db.collection('profiles').doc(winnerUid),      { amber: FieldValue.increment(c.amberWager * 2) });
             }
 
-            // Card payouts
+            // Card payouts — only move the LOSER's cards to the winner.
+            // Winner already owns their wagered cards; re-writing them would create
+            // duplicates with mismatched doc IDs that break selection and dismantle.
             if (c.battleType === 'card') {
-                const allWager = [...(c.challengerWagerCards || []), ...(defenderWagerCards || [])];
-                for (const card of allWager) {
-                    tx.set(db.collection('card_collections').doc(winnerUid).collection('cards').doc(), card);
-                }
-                const loserCards = winnerUid === c.challengerId ? (defenderWagerCards || []) : (c.challengerWagerCards || []);
-                for (const wc of loserCards) {
+                const loserWagerCards = winnerUid === c.challengerId ? (defenderWagerCards || []) : (c.challengerWagerCards || []);
+                for (const wc of loserWagerCards) {
+                    const newRef = db.collection('card_collections').doc(winnerUid).collection('cards').doc();
+                    // Stamp id field to match the new document path so UI lookups stay consistent.
+                    tx.set(newRef, { ...wc, id: newRef.id });
                     if (wc.id) tx.delete(db.collection('card_collections').doc(loserUid).collection('cards').doc(wc.id));
                 }
             }

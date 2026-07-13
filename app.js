@@ -9900,6 +9900,10 @@ window._tcgScanCrossUserDupes = async function() {
             const uid = d.ref.parent.parent.id;
             const c = d.data();
             if (c.founder || (c.monthlyUr||c.tradedMonthlyUr)) continue;
+            // PR cards without a serial are legacy pulls from before server-side serial
+            // assignment — skip them since we can't determine dupe status without a serial.
+            // PR cards that DO have serials are already handled correctly by the key below.
+            if (c.rarity === 'pr' && c.serial == null) continue;
             const key = `${c.name}|${c.rarity}|${c.serial ?? 'null'}|${c.edition ?? 1}`;
             if (!byKey.has(key)) byKey.set(key, []);
             byKey.get(key).push({ uid, ref: d.ref, data: c });
@@ -28429,7 +28433,7 @@ function _pvpChallengeCardHTML(c, myUid) {
         <div style="flex:1;min-width:0;">
             <div style="font-weight:700;font-size:14px;">${isChallenger ? `Challenge sent to ${opponent}` : `${opponent} challenged you!`}</div>
             <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${_pvpBattleTypeLabel(c.battleType)}${c.amberWager ? ` · 🟡 ${c.amberWager}` : ''} · ${expired ? '<span style="color:#f44336;">Expired</span>' : timeLeft}</div>
-            ${c.battleType === 'card' && c.challengerWagerCards?.length ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${isChallenger ? 'You' : opponent} wagered ${c.challengerWagerCards.length} card${c.challengerWagerCards.length>1?'s':''}</div>` : ''}
+            ${c.battleType === 'card' && c.challengerWagerCards?.length ? `<div style="margin-top:6px;"><div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:4px;">${isChallenger ? 'Your' : `${opponent}'s`} wager:</div><div style="display:flex;gap:4px;flex-wrap:wrap;">${c.challengerWagerCards.map(wc=>`<img src="${wc.image||''}" title="${wc.name}" style="width:36px;height:49px;object-fit:cover;object-position:top;border-radius:4px;border:2px solid ${rarityBorderColor(wc.rarity)};" onerror="this.style.display='none'">`).join('')}</div></div>` : ''}
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0;">
             ${isChallenger
@@ -28601,46 +28605,78 @@ window._pvpConfirmAmber = function() {
     _pvpShowStep('party');
 };
 
+// ── Shared card picker helpers ────────────────
+window._pvpPickerFilter = { search: '', rarity: 'all', sort: 'power' };
+
+function _pvpFilterCards(allCards) {
+    const f = window._pvpPickerFilter;
+    let cards = [...allCards];
+    if (f.rarity !== 'all') cards = cards.filter(c => c.rarity === f.rarity);
+    if (f.search?.trim()) {
+        const q = f.search.toLowerCase();
+        cards = cards.filter(c => (c.name||'').toLowerCase().includes(q) || (c.anime||'').toLowerCase().includes(q));
+    }
+    const order = { ur:0, ssr:1, pr:2, sr:3, rare:4, common:5 };
+    if (f.sort === 'power') cards.sort((a,b) => _pvpCardPower(b) - _pvpCardPower(a));
+    else if (f.sort === 'rarity') cards.sort((a,b) => (order[a.rarity]??6) - (order[b.rarity]??6));
+    else cards.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+    return cards;
+}
+
+function _pvpFilterBarHTML() {
+    const f = window._pvpPickerFilter;
+    const rarities = [['all','All'],['ur','UR'],['ssr','SSR'],['sr','SR'],['rare','Rare'],['common','Common'],['pr','Event']];
+    return `<div style="margin-bottom:2px;">
+        <input id="pvp-picker-search" type="text" placeholder="Search by name or series…" value="${(f.search||'').replace(/"/g,'&quot;')}"
+            oninput="window._pvpPickerFilter.search=this.value;window._pvpPickerRefresh?.();setTimeout(()=>document.getElementById('pvp-picker-search')?.focus(),0)"
+            style="width:100%;padding:7px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;box-sizing:border-box;margin-bottom:8px;">
+        <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:2px;margin-bottom:6px;">
+            ${rarities.map(([r,l]) => { const a=f.rarity===r; return `<button onclick="window._pvpPickerFilter.rarity='${r}';window._pvpPickerRefresh?.()" style="flex-shrink:0;padding:4px 10px;border-radius:20px;border:1px solid ${a?'#a855f7':'var(--border-color)'};background:${a?'rgba(168,85,247,0.15)':'transparent'};color:${a?'#a855f7':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${l}</button>`; }).join('')}
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;margin-bottom:8px;">
+            <span style="font-size:11px;color:var(--text-muted);font-weight:700;white-space:nowrap;">Sort:</span>
+            ${[['power','⚡ Power'],['rarity','Rarity'],['name','A–Z']].map(([v,l]) => { const a=f.sort===v; return `<button onclick="window._pvpPickerFilter.sort='${v}';window._pvpPickerRefresh?.()" style="padding:3px 8px;border-radius:6px;border:1px solid ${a?'#6366f1':'var(--border-color)'};background:${a?'rgba(99,102,241,0.15)':'transparent'};color:${a?'#6366f1':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${l}</button>`; }).join('')}
+        </div>
+    </div>`;
+}
+
 async function _pvpShowWagerCardPicker(container) {
     container.innerHTML = `<div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;"><div class="loading">Loading your cards…</div></div>`;
     const uid = auth.currentUser?.uid;
     if (!uid) return;
     const allCards = (await _tcgLoadCollection(uid)).filter(c => !c.founder);
     const d = window._pvpChallengeDraft;
+    window._pvpPickerFilter = { search: '', rarity: 'all', sort: 'power' };
 
     function render() {
         const sel = new Set(d.wagerCards.map(c => c.id));
         const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' };
+        const filtered = _pvpFilterCards(allCards);
         container.innerHTML = `
         <div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;">
             <div style="font-weight:900;font-size:17px;margin-bottom:4px;">🃏 Pick Wager Cards</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">Select up to 10 cards to put on the line. Winner takes all wagered cards.</div>
-            <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Selected: <strong style="color:${sel.size>0?'#a855f7':'var(--text-muted)'};">${sel.size}/10</strong></div>
-            <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:135px;gap:8px;margin-bottom:14px;">
-                ${[...allCards].sort((a,b)=>_pvpCardPower(b)-_pvpCardPower(a)).map(c => {
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Select up to 10 cards to put on the line. Winner takes all wagered cards.</div>
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Selected: <strong style="color:${sel.size>0?'#a855f7':'var(--text-muted)'};">${sel.size}/10</strong></div>
+            ${_pvpFilterBarHTML()}
+            <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:148px;gap:8px;margin-bottom:14px;">
+                ${filtered.map(c => {
                     const isSel = sel.has(c.id);
                     const rc = rarityBorderColor(c.rarity);
                     const border = isSel ? '#a855f7' : rc;
-                    return `<div onclick="window._pvpToggleWagerCard('${c.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;">
-                        <div style="height:100%;position:relative;">
-                            <img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager">
-                            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;">
-                                <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
-                                <div style="color:${rc};">${rarityLabels[c.rarity]||c.rarity}</div>
-                            </div>
-                            ${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:#a855f7;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}
-                        </div>
-                    </div>`;
-                }).join('')}
+                    const ver = c.rarity !== 'pr' && c.serial != null ? `<div style="color:rgba(255,255,255,0.45);font-size:8px;">#${c.serial}${(c.edition||1)>1?` · Ed.${c.edition}`:''}</div>` : '';
+                    return `<div onclick="window._pvpToggleWagerCard('${c.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;"><div style="height:100%;position:relative;"><img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager"><div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div><div style="color:${rc};">${rarityLabels[c.rarity]||c.rarity}</div>${ver}</div>${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:#a855f7;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}</div></div>`;
+                }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">No cards match your search.</div>`}
             </div>
             <div style="display:flex;gap:8px;">
                 <button onclick="_pvpShowStep('type')" class="cancel-btn" style="flex:1;justify-content:center;">← Back</button>
                 <button onclick="window._pvpConfirmWagerCards()" class="action-btn" style="flex:1;justify-content:center;font-weight:800;" ${sel.size===0?'disabled style="opacity:0.5;flex:1;justify-content:center;"':''}>Next → (${sel.size} card${sel.size!==1?'s':''})</button>
             </div>
         </div>`;
+        window._pvpPickerRefresh = render;
         window._pvpWagerCardPickerRender = render;
         window._pvpWagerAllCards = allCards;
     }
+    window._pvpPickerRefresh = render;
     window._pvpWagerCardPickerRender = render;
     window._pvpWagerAllCards = allCards;
     render();
@@ -28667,6 +28703,7 @@ async function _pvpShowPartyPicker(container) {
     const allCards = (await _tcgLoadCollection(uid)).filter(c => !c.founder);
     const d = window._pvpChallengeDraft;
     const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' };
+    window._pvpPickerFilter = { search: '', rarity: 'all', sort: 'power' };
 
     function render() {
         const sel = new Set(d.party.map(c => c.id));
@@ -28674,42 +28711,35 @@ async function _pvpShowPartyPicker(container) {
         const combo = _pvpComboBonus(selCards);
         const totalPower = selCards.reduce((s, c) => s + _pvpCardPower(c), 0) + combo;
         const canSend = sel.size === 3;
+        const filtered = _pvpFilterCards(allCards);
 
         container.innerHTML = `
         <div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;">
             <div style="font-weight:900;font-size:17px;margin-bottom:4px;">⚔️ Pick Your Battle Party</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Choose exactly 3 cards. Cards sorted by power in battle.</div>
-            <div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-                <div style="font-size:13px;">Selected: <strong>${sel.size}/3</strong> · Power: <strong>${totalPower}</strong>${combo>0?` <span style="color:#a855f7;">(+${combo} Combo)</span>`:''}
-                </div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Choose exactly 3 cards. Cards sorted by power in battle.</div>
+            <div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+                <div style="font-size:13px;">Selected: <strong>${sel.size}/3</strong> · Power: <strong>${totalPower}</strong>${combo>0?` <span style="color:#a855f7;">(+${combo} Combo)</span>`:''}</div>
             </div>
+            ${_pvpFilterBarHTML()}
             <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:135px;gap:8px;margin-bottom:14px;">
-                ${[...allCards].sort((a,b)=>_pvpCardPower(b)-_pvpCardPower(a)).map(c => {
+                ${filtered.map(c => {
                     const isSel = sel.has(c.id);
-                    const isCombo = isSel && d.party.filter(x => x.id !== c.id && x.anime === c.anime && c.anime).length > 0;
+                    const isCombo = isSel && selCards.filter(x => x.id !== c.id && x.anime === c.anime && c.anime).length > 0;
                     const rc = rarityBorderColor(c.rarity);
                     const border = isCombo ? '#a855f7' : isSel ? 'var(--accent-yellow)' : rc;
-                    return `<div onclick="window._pvpTogglePartyCard('${c.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;">
-                        <div style="height:100%;position:relative;">
-                            <img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager">
-                            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;">
-                                <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
-                                <div style="color:${isCombo?'#d8a4ff':rc};">${rarityLabels[c.rarity]||c.rarity} · ⚡${_pvpCardPower(c)}</div>
-                            </div>
-                            ${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:${isCombo?'#a855f7':'var(--accent-yellow)'};color:${isCombo?'#fff':'#222'};font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}
-                            ${isCombo?`<div style="position:absolute;top:4px;left:4px;background:#a855f7;color:#fff;font-size:8px;font-weight:900;padding:2px 4px;border-radius:3px;">COMBO</div>`:''}
-                        </div>
-                    </div>`;
-                }).join('')}
+                    return `<div onclick="window._pvpTogglePartyCard('${c.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;"><div style="height:100%;position:relative;"><img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager"><div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div><div style="color:${isCombo?'#d8a4ff':rc};">${rarityLabels[c.rarity]||c.rarity} · ⚡${_pvpCardPower(c)}</div></div>${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:${isCombo?'#a855f7':'var(--accent-yellow)'};color:${isCombo?'#fff':'#222'};font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}${isCombo?`<div style="position:absolute;top:4px;left:4px;background:#a855f7;color:#fff;font-size:8px;font-weight:900;padding:2px 4px;border-radius:3px;">COMBO</div>`:''}</div></div>`;
+                }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">No cards match your search.</div>`}
             </div>
             <div style="display:flex;gap:8px;">
                 <button onclick="_pvpShowStep('${d.battleType==='card'?'wager-cards':d.battleType==='amber'?'amber':'type'}')" class="cancel-btn" style="flex:1;justify-content:center;">← Back</button>
                 <button onclick="window._pvpSendChallenge()" class="action-btn" style="flex:1;justify-content:center;font-weight:800;${canSend?'':'opacity:0.5;cursor:not-allowed;'}" ${canSend?'':' disabled'}>⚔️ Send Challenge</button>
             </div>
         </div>`;
+        window._pvpPickerRefresh = render;
         window._pvpPartyPickerRender = render;
         window._pvpAllCards = allCards;
     }
+    window._pvpPickerRefresh = render;
     window._pvpPartyPickerRender = render;
     window._pvpAllCards = allCards;
     render();
@@ -28820,43 +28850,40 @@ window._pvpShowAcceptWagerCards = async function _pvpShowAcceptWagerCards(contai
     const uid = auth.currentUser?.uid;
     const allCards = (await _tcgLoadCollection(uid)).filter(c => !c.founder);
     const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' };
+    window._pvpPickerFilter = { search: '', rarity: 'all', sort: 'power' };
 
     function render() {
         const d = window._pvpAcceptDraft;
         const sel = new Set(d.wagerCards.map(x => x.id));
+        const filtered = _pvpFilterCards(allCards);
         container.innerHTML = `
         <div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;">
             <div style="font-weight:900;font-size:17px;margin-bottom:4px;">🃏 Pick Your Wager Cards</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">${c.challengerName} wagered <strong>${c.challengerWagerCards?.length||0} card${(c.challengerWagerCards?.length||0)!==1?'s':''}</strong>. Pick up to 10 cards to put on the line.</div>
-            <div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px;">
-                ${(c.challengerWagerCards||[]).map(wc => `<div style="flex-shrink:0;width:52px;"><img src="${wc.image}" style="width:52px;height:70px;object-fit:cover;border-radius:6px;border:2px solid #a855f7;"><div style="font-size:8px;text-align:center;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${wc.name}</div></div>`).join('')}
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">${c.challengerName} is wagering <strong>${c.challengerWagerCards?.length||0} card${(c.challengerWagerCards?.length||0)!==1?'s':''}</strong> — pick cards to put on the line.</div>
+            <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;padding-bottom:4px;">
+                ${(c.challengerWagerCards||[]).map(wc => `<div style="flex-shrink:0;width:52px;"><img src="${wc.image}" style="width:52px;height:70px;object-fit:cover;border-radius:6px;border:2px solid #a855f7;" title="${wc.name}"><div style="font-size:8px;text-align:center;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${wc.name}</div></div>`).join('')}
             </div>
-            <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Your wager: <strong style="color:${sel.size>0?'#a855f7':'var(--text-muted)'};">${sel.size}/10 cards</strong></div>
-            <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:135px;gap:8px;margin-bottom:14px;">
-                ${[...allCards].sort((a,b)=>_pvpCardPower(b)-_pvpCardPower(a)).map(card => {
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Your wager: <strong style="color:${sel.size>0?'#a855f7':'var(--text-muted)'};">${sel.size}/10 cards</strong></div>
+            ${_pvpFilterBarHTML()}
+            <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:148px;gap:8px;margin-bottom:14px;">
+                ${filtered.map(card => {
                     const isSel = sel.has(card.id);
                     const rc = rarityBorderColor(card.rarity);
                     const border = isSel ? '#a855f7' : rc;
-                    return `<div onclick="window._pvpToggleAcceptWagerCard('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;">
-                        <div style="height:100%;position:relative;">
-                            <img src="${card.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager">
-                            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;">
-                                <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div>
-                                <div style="color:${rc};">${rarityLabels[card.rarity]||card.rarity}</div>
-                            </div>
-                            ${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:#a855f7;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}
-                        </div>
-                    </div>`;
-                }).join('')}
+                    const ver = card.rarity !== 'pr' && card.serial != null ? `<div style="color:rgba(255,255,255,0.45);font-size:8px;">#${card.serial}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : '';
+                    return `<div onclick="window._pvpToggleAcceptWagerCard('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;"><div style="height:100%;position:relative;"><img src="${card.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager"><div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div><div style="color:${rc};">${rarityLabels[card.rarity]||card.rarity}</div>${ver}</div>${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:#a855f7;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}</div></div>`;
+                }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">No cards match your search.</div>`}
             </div>
             <div style="display:flex;gap:8px;">
                 <button onclick="window._pvpDeclineChallenge('${c.id}');document.getElementById('pvp-accept-modal').remove();" class="cancel-btn" style="flex:1;justify-content:center;">Decline</button>
                 <button onclick="window._pvpConfirmAcceptWager()" class="action-btn" style="flex:1;justify-content:center;font-weight:800;" ${sel.size===0?'disabled style="opacity:0.5;"':''}>Next →</button>
             </div>
         </div>`;
+        window._pvpPickerRefresh = render;
         window._pvpAcceptWagerRender = render;
         window._pvpAcceptAllCards = allCards;
     }
+    window._pvpPickerRefresh = render;
     window._pvpAcceptWagerRender = render;
     window._pvpAcceptAllCards = allCards;
     render();
@@ -28882,6 +28909,7 @@ async function _pvpShowAcceptParty(container, c) {
     const uid = auth.currentUser?.uid;
     const allCards = (await _tcgLoadCollection(uid)).filter(c => !c.founder);
     const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' };
+    window._pvpPickerFilter = { search: '', rarity: 'all', sort: 'power' };
 
     function render() {
         const d = window._pvpAcceptDraft;
@@ -28890,41 +28918,35 @@ async function _pvpShowAcceptParty(container, c) {
         const combo = _pvpComboBonus(selCards);
         const totalPower = selCards.reduce((s, card) => s + _pvpCardPower(card), 0) + combo;
         const canFight = sel.size === 3;
+        const filtered = _pvpFilterCards(allCards);
 
         container.innerHTML = `
         <div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;">
             <div style="font-weight:900;font-size:17px;margin-bottom:4px;">⚔️ Pick Your Battle Party</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">vs <strong>${c.challengerName}</strong> · ${_pvpBattleTypeLabel(c.battleType)}${c.amberWager ? ` · 🟡 ${c.amberWager} each` : ''}</div>
-            <div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">vs <strong>${c.challengerName}</strong> · ${_pvpBattleTypeLabel(c.battleType)}${c.amberWager ? ` · 🟡 ${c.amberWager} each` : ''}</div>
+            <div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
                 <div style="font-size:13px;">Selected: <strong>${sel.size}/3</strong> · Power: <strong>${totalPower}</strong>${combo>0?` <span style="color:#a855f7;">(+${combo} Combo)</span>`:''}</div>
             </div>
+            ${_pvpFilterBarHTML()}
             <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:135px;gap:8px;margin-bottom:14px;">
-                ${[...allCards].sort((a,b)=>_pvpCardPower(b)-_pvpCardPower(a)).map(card => {
+                ${filtered.map(card => {
                     const isSel = sel.has(card.id);
                     const isCombo = isSel && selCards.filter(x => x.id !== card.id && x.anime === card.anime && card.anime).length > 0;
                     const rc = rarityBorderColor(card.rarity);
                     const border = isCombo ? '#a855f7' : isSel ? 'var(--accent-yellow)' : rc;
-                    return `<div onclick="window._pvpToggleAcceptParty('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;">
-                        <div style="height:100%;position:relative;">
-                            <img src="${card.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager">
-                            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;">
-                                <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div>
-                                <div style="color:${isCombo?'#d8a4ff':rc};">${rarityLabels[card.rarity]||card.rarity} · ⚡${_pvpCardPower(card)}</div>
-                            </div>
-                            ${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:${isCombo?'#a855f7':'var(--accent-yellow)'};color:${isCombo?'#fff':'#222'};font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}
-                            ${isCombo?`<div style="position:absolute;top:4px;left:4px;background:#a855f7;color:#fff;font-size:8px;font-weight:900;padding:2px 4px;border-radius:3px;">COMBO</div>`:''}
-                        </div>
-                    </div>`;
-                }).join('')}
+                    return `<div onclick="window._pvpToggleAcceptParty('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;"><div style="height:100%;position:relative;"><img src="${card.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager"><div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div><div style="color:${isCombo?'#d8a4ff':rc};">${rarityLabels[card.rarity]||card.rarity} · ⚡${_pvpCardPower(card)}</div></div>${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:${isCombo?'#a855f7':'var(--accent-yellow)'};color:${isCombo?'#fff':'#222'};font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}${isCombo?`<div style="position:absolute;top:4px;left:4px;background:#a855f7;color:#fff;font-size:8px;font-weight:900;padding:2px 4px;border-radius:3px;">COMBO</div>`:''}</div></div>`;
+                }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">No cards match your search.</div>`}
             </div>
             <div style="display:flex;gap:8px;">
                 <button onclick="${c.battleType==='card'?`_pvpShowAcceptWagerCards(document.getElementById('pvp-accept-modal'),window._pvpAcceptDraft.challenge)`:`document.getElementById('pvp-accept-modal').remove()`}" class="cancel-btn" style="flex:1;justify-content:center;">← Back</button>
                 <button onclick="window._pvpSubmitAccept()" class="action-btn" style="flex:1;justify-content:center;font-weight:800;background:linear-gradient(135deg,#6366f1,#a855f7);${canFight?'':'opacity:0.5;cursor:not-allowed;'}" ${canFight?'':' disabled'}>⚔️ Fight!</button>
             </div>
         </div>`;
+        window._pvpPickerRefresh = render;
         window._pvpAcceptPartyRender = render;
         window._pvpAcceptAllCards2 = allCards;
     }
+    window._pvpPickerRefresh = render;
     window._pvpAcceptPartyRender = render;
     window._pvpAcceptAllCards2 = allCards;
     render();
@@ -29212,8 +29234,18 @@ function _pvpShowBattleResult() {
     }).join('');
 
     let wagerNote = '';
-    if (c.battleType === 'amber') wagerNote = `<div style="font-size:14px;color:#FFD700;font-weight:800;margin-top:6px;">${iWon ? `+${c.amberWager*2} 🟡 Amber` : `-${c.amberWager} 🟡 Amber`}</div>`;
-    else if (c.battleType === 'card' && iWon) { const won = [...(c.challengerWagerCards||[]),...(c.defenderWagerCards||[])]; wagerNote = `<div style="font-size:14px;color:#a855f7;font-weight:800;margin-top:6px;">🃏 +${won.length} card${won.length!==1?'s':''} won!</div>`; }
+    if (c.battleType === 'amber') {
+        wagerNote = `<div style="font-size:14px;color:#FFD700;font-weight:800;margin-top:6px;">${iWon ? `+${c.amberWager*2} 🟡 Amber` : `-${c.amberWager} 🟡 Amber`}</div>`;
+    } else if (c.battleType === 'card') {
+        const wonCards  = iAmChallenger ? (c.defenderWagerCards||[]) : (c.challengerWagerCards||[]);
+        const lostCards = iAmChallenger ? (c.challengerWagerCards||[]) : (c.defenderWagerCards||[]);
+        const cardRow = cards => cards.map(wc => `<img src="${wc.image||''}" title="${wc.name}" style="width:44px;height:60px;object-fit:cover;object-position:top;border-radius:5px;border:2px solid ${rarityBorderColor(wc.rarity)};flex-shrink:0;" onerror="this.style.display='none'">`).join('');
+        if (iWon && wonCards.length) {
+            wagerNote = `<div style="margin-top:10px;"><div style="font-size:13px;color:#a855f7;font-weight:800;margin-bottom:6px;">🃏 Cards Won (${wonCards.length})</div><div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;">${cardRow(wonCards)}</div></div>`;
+        } else if (!iWon && lostCards.length) {
+            wagerNote = `<div style="margin-top:10px;"><div style="font-size:13px;color:#f44336;font-weight:800;margin-bottom:6px;">🃏 Cards Lost (${lostCards.length})</div><div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;">${cardRow(lostCards)}</div></div>`;
+        }
+    }
 
     const resultEl = document.getElementById('pvp-result-stage');
     if (!resultEl) return;
