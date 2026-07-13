@@ -122,6 +122,18 @@ exports.settleTrade = onRequest({ invoker: 'public' }, async (req, res) => {
 
     if (userError) return sendErr(res, ...userError);
 
+    // Log amber transfers outside transaction (non-critical)
+    try {
+        const net = (tradeData.offerAmber || 0) - (tradeData.requestAmber || 0);
+        const now = new Date();
+        if (net !== 0) {
+            await Promise.all([
+                db.collection('amber_log').add({ uid: tradeData.fromUid, amount: -net, reason: `trade:${tradeId}`, timestamp: now }),
+                db.collection('amber_log').add({ uid: tradeData.toUid,   amount:  net, reason: `trade:${tradeId}`, timestamp: now }),
+            ]);
+        }
+    } catch(e) {}
+
     try {
         await getFirestore().collection('notifications').add({
             targetUid: tradeData.fromUid, type: 'trade_offer', tradeId,
@@ -185,6 +197,15 @@ exports.settleAuction = onRequest({ invoker: 'public' }, async (req, res) => {
 
     if (userError) return sendErr(res, ...userError);
 
+    if (item?.currentBidderUid && item?.currentBid > 0) {
+        try {
+            await Promise.all([
+                getFirestore().collection('amber_log').add({ uid: item.uid, amount: item.currentBid, reason: `auction:sold:${listingId}`, timestamp: new Date() }),
+                getFirestore().collection('amber_log').add({ uid: item.currentBidderUid, amount: -item.currentBid, reason: `auction:bid:${listingId}`, timestamp: new Date() }),
+            ]);
+        } catch(e) {}
+    }
+
     if (item?.currentBidderUid) {
         try {
             await Promise.all([
@@ -239,37 +260,63 @@ exports.settleBulletinOffer = onRequest({ invoker: 'public' }, async (req, res) 
             if (offer.status   !== 'pending') { userError = [400, 'FAILED_PRECONDITION', 'This offer is no longer available.']; return; }
             if (listing.uid    !== callerUid) { userError = [403, 'PERMISSION_DENIED', 'Only the listing owner can accept offers.']; return; }
 
-            const listingCardRefs = (listing.cardIds || []).map(id =>
-                db.collection('card_collections').doc(callerUid).collection('cards').doc(id));
             const offerCardRefs = (offer.offerCardIds || []).map(id =>
                 db.collection('card_collections').doc(offer.fromUid).collection('cards').doc(id));
 
-            const [lCardSnaps, oCardSnaps] = await Promise.all([
-                Promise.all(listingCardRefs.map(r => tx.get(r))),
-                Promise.all(offerCardRefs.map(r => tx.get(r))),
-            ]);
-            if (lCardSnaps.some(s => !s.exists)) { userError = [400, 'FAILED_PRECONDITION', 'You no longer have all your listed cards.']; return; }
-            if (oCardSnaps.some(s => !s.exists)) { userError = [400, 'FAILED_PRECONDITION', 'The offerer no longer has all their offered cards.']; return; }
+            if (listing.type === 'wanted') {
+                // Wanted listing: seller offers a card → poster pays amber
+                const oCardSnaps = await Promise.all(offerCardRefs.map(r => tx.get(r)));
+                if (oCardSnaps.some(s => !s.exists)) { userError = [400, 'FAILED_PRECONDITION', 'The seller no longer has the offered card.']; return; }
 
-            const offerAmber = offer.offerAmber || 0;
-            if (offerAmber > 0) {
-                const offerProfile = await tx.get(db.collection('profiles').doc(offer.fromUid));
-                if (!offerProfile.exists || (offerProfile.data().amber || 0) < offerAmber) { userError = [400, 'FAILED_PRECONDITION', 'The offerer no longer has enough Amber.']; return; }
-            }
+                const payAmber = listing.offerAmber || 0;
+                if (payAmber > 0) {
+                    const ownerProfile = await tx.get(db.collection('profiles').doc(callerUid));
+                    if (!ownerProfile.exists || (ownerProfile.data().amber || 0) < payAmber) {
+                        userError = [400, 'FAILED_PRECONDITION', 'You no longer have enough Amber.']; return;
+                    }
+                }
 
-            listingCardRefs.forEach(ref => tx.delete(ref));
-            (offer.offerCards || []).forEach(card => {
-                tx.set(db.collection('card_collections').doc(callerUid).collection('cards').doc(), card);
-            });
+                offerCardRefs.forEach(ref => tx.delete(ref));
+                (offer.offerCards || []).forEach(card => {
+                    tx.set(db.collection('card_collections').doc(callerUid).collection('cards').doc(), card);
+                });
 
-            offerCardRefs.forEach(ref => tx.delete(ref));
-            (listing.cards || []).forEach(card => {
-                tx.set(db.collection('card_collections').doc(offer.fromUid).collection('cards').doc(), card);
-            });
+                if (payAmber > 0) {
+                    tx.update(db.collection('profiles').doc(callerUid),     { amber: FieldValue.increment(-payAmber) });
+                    tx.update(db.collection('profiles').doc(offer.fromUid), { amber: FieldValue.increment( payAmber) });
+                }
+            } else {
+                // For-trade listing: swap cards + offeror pays amber
+                const listingCardRefs = (listing.cardIds || []).map(id =>
+                    db.collection('card_collections').doc(callerUid).collection('cards').doc(id));
 
-            if (offerAmber > 0) {
-                tx.update(db.collection('profiles').doc(callerUid),    { amber: FieldValue.increment( offerAmber) });
-                tx.update(db.collection('profiles').doc(offer.fromUid), { amber: FieldValue.increment(-offerAmber) });
+                const [lCardSnaps, oCardSnaps] = await Promise.all([
+                    Promise.all(listingCardRefs.map(r => tx.get(r))),
+                    Promise.all(offerCardRefs.map(r => tx.get(r))),
+                ]);
+                if (lCardSnaps.some(s => !s.exists)) { userError = [400, 'FAILED_PRECONDITION', 'You no longer have all your listed cards.']; return; }
+                if (oCardSnaps.some(s => !s.exists)) { userError = [400, 'FAILED_PRECONDITION', 'The offerer no longer has all their offered cards.']; return; }
+
+                const offerAmber = offer.offerAmber || 0;
+                if (offerAmber > 0) {
+                    const offerProfile = await tx.get(db.collection('profiles').doc(offer.fromUid));
+                    if (!offerProfile.exists || (offerProfile.data().amber || 0) < offerAmber) { userError = [400, 'FAILED_PRECONDITION', 'The offerer no longer has enough Amber.']; return; }
+                }
+
+                listingCardRefs.forEach(ref => tx.delete(ref));
+                (offer.offerCards || []).forEach(card => {
+                    tx.set(db.collection('card_collections').doc(callerUid).collection('cards').doc(), card);
+                });
+
+                offerCardRefs.forEach(ref => tx.delete(ref));
+                (listing.cards || []).forEach(card => {
+                    tx.set(db.collection('card_collections').doc(offer.fromUid).collection('cards').doc(), card);
+                });
+
+                if (offerAmber > 0) {
+                    tx.update(db.collection('profiles').doc(callerUid),    { amber: FieldValue.increment( offerAmber) });
+                    tx.update(db.collection('profiles').doc(offer.fromUid), { amber: FieldValue.increment(-offerAmber) });
+                }
             }
 
             tx.update(listingRef, { status: 'closed' });
@@ -282,7 +329,31 @@ exports.settleBulletinOffer = onRequest({ invoker: 'public' }, async (req, res) 
 
     if (userError) return sendErr(res, ...userError);
 
+    // Log amber transfer outside transaction (non-critical)
     const db2 = getFirestore();
+    if (listing?.type === 'wanted') {
+        const payAmber = listing.offerAmber || 0;
+        if (payAmber > 0) {
+            try {
+                const now = new Date();
+                await Promise.all([
+                    db2.collection('amber_log').add({ uid: callerUid,       amount: -payAmber, reason: `bulletin:wanted:paid:${listingId}`,   timestamp: now }),
+                    db2.collection('amber_log').add({ uid: offer.fromUid,   amount:  payAmber, reason: `bulletin:wanted:earned:${listingId}`, timestamp: now }),
+                ]);
+            } catch(e) {}
+        }
+    } else {
+        if ((offer?.offerAmber || 0) > 0) {
+            try {
+                const now = new Date();
+                await Promise.all([
+                    db2.collection('amber_log').add({ uid: callerUid,       amount:  offer.offerAmber, reason: `bulletin:sold:${listingId}`, timestamp: now }),
+                    db2.collection('amber_log').add({ uid: offer.fromUid,   amount: -offer.offerAmber, reason: `bulletin:offer:${listingId}`, timestamp: now }),
+                ]);
+            } catch(e) {}
+        }
+    }
+
     try {
         const otherSnap = await db2.collection('bulletin_offers')
             .where('listingOwnerUid', '==', callerUid)
@@ -296,11 +367,14 @@ exports.settleBulletinOffer = onRequest({ invoker: 'public' }, async (req, res) 
         }
     } catch(e) {}
 
+    const notifMessage = listing?.type === 'wanted'
+        ? 'accepted your offer! The card has been transferred and Amber sent to you.'
+        : 'accepted your Trade Bulletin offer! Your cards have been transferred.';
     try {
         await db2.collection('notifications').add({
             targetUid: offer.fromUid, type: 'bulletin_offer_accepted',
             senderUid: callerUid, senderName: listing.displayName || 'Someone',
-            message: 'accepted your Trade Bulletin offer! Your cards have been transferred.',
+            message: notifMessage,
             listingId, timestamp: new Date(), read: false,
         });
     } catch(e) {}
@@ -312,7 +386,8 @@ exports.settleBulletinOffer = onRequest({ invoker: 'public' }, async (req, res) 
             toUid: callerUid, toName: listing.displayName || 'Unknown',
             offerCards: offer.offerCards || [], requestCards: listing.cards || [],
             offerCardIds: offer.offerCardIds || [], requestCardIds: listing.cardIds || [],
-            offerAmber: offer.offerAmber || 0, requestAmber: 0,
+            offerAmber: listing?.type === 'wanted' ? (listing.offerAmber || 0) : (offer.offerAmber || 0),
+            requestAmber: 0,
             status: 'completed', fromCompleted: true, toCompleted: true,
             source: 'bulletin', bulletinListingId: listingId,
             history: [], createdAt: new Date(), updatedAt: new Date(),
@@ -356,7 +431,7 @@ const TCG_PACKS = {
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FStandard%20Pack.png?alt=media&token=8db206cf-8f57-4c64-b3cf-d2b8316d7364',
     },
     premium: {
-        id: 'premium', name: 'Premium Pack', cost: 1000, salePrice: 750,
+        id: 'premium', name: 'Premium Pack', cost: 750, salePrice: null,
         guaranteedSR: true, prismatic: false,
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
     },
@@ -419,6 +494,16 @@ async function ensureCardPool(db) {
     };
     _cardPoolCacheAt = now;
     return _cardPoolCache;
+}
+
+function computeCurrentBatch(pool) {
+    let max = 1;
+    for (const tier of Object.values(pool)) {
+        for (const card of tier) {
+            if ((card.batch || 1) > max) max = card.batch;
+        }
+    }
+    return max;
 }
 
 // Mirrors _tcgPickCard() in app.js
@@ -622,6 +707,7 @@ exports.purchasePacks = onRequest({ invoker: 'public' }, async (req, res) => {
 
     try {
         const pool = await ensureCardPool(db);
+        const cardBatch = computeCurrentBatch(pool);
         const bulkBatchId = quantity > 1 ? db.collection('inventory').doc().id : null;
         const itemIds = [];
         const batch = db.batch();
@@ -632,7 +718,7 @@ exports.purchasePacks = onRequest({ invoker: 'public' }, async (req, res) => {
             batch.set(itemRef, {
                 type: 'pack', packId: pack.id, packName: pack.name, packImage: pack.image,
                 rolledCards: cards, godPackTheme, source: 'purchase', bulkBatchId,
-                grantedAt: new Date(),
+                cardBatch, grantedAt: new Date(),
             });
             itemIds.push(itemRef.id);
         }
@@ -695,6 +781,156 @@ exports.openInventoryItems = onRequest({ invoker: 'public' }, async (req, res) =
     res.json({ result: { success: true, packs: revealed } });
 });
 
+// ── PVP Battle Settlement ─────────────────────────────────────────────────────
+// Runs battle resolution and handles all cross-user Firestore writes (amber/card
+// payouts) that client-side rules can't do safely.
+exports.settlePvpBattle = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+
+    const callerUid = await getCallerUid(req);
+    if (!callerUid) return sendErr(res, 401, 'UNAUTHENTICATED', 'Must be signed in.');
+
+    const { challengeId, defenderParty, defenderWagerCards } = req.body?.data || {};
+    if (!challengeId || !Array.isArray(defenderParty) || defenderParty.length !== 3)
+        return sendErr(res, 400, 'INVALID_ARGUMENT', 'challengeId and defenderParty (3 cards) are required.');
+
+    const db = getFirestore();
+    const challengeRef = db.collection('pvp_challenges').doc(challengeId);
+
+    // Port of the client-side power/battle helpers
+    const RARITY_POWER = { common:1, rare:5, sr:9, pr:11, ssr:13, ur:17 };
+    function cardPower(card) {
+        if (card.monthlyUr || card.tradedMonthlyUr) return 16;
+        let p = RARITY_POWER[card.rarity] || 1;
+        if (card.founder) p += 3;
+        else if (card.rarity !== 'pr' && !card.event && card.serial != null) {
+            if (card.serial < 10) p += 3;
+            else if (card.serial < 100) p += 2;
+            else if (card.serial < 1000) p += 1;
+        }
+        return p;
+    }
+    function roundPower(card, party) {
+        const isCombo = party.some(c => c !== card && (c.anime||'') === (card.anime||'') && card.anime);
+        return cardPower(card) + (isCombo ? 1 : 0);
+    }
+    function sortParty(party) { return [...party].sort((a,b) => cardPower(b) - cardPower(a)); }
+    function successChance(partyPow, difficulty) {
+        return Math.max(15, Math.min(98, Math.round(50 + (partyPow - difficulty) * 4)));
+    }
+
+    let battleResult, challengeData, userError = null;
+    try {
+        await db.runTransaction(async tx => {
+            const snap = await tx.get(challengeRef);
+            if (!snap.exists) { userError = [404, 'NOT_FOUND', 'Challenge not found.']; return; }
+            const c = snap.data();
+            if (c.status !== 'pending') { userError = [400, 'FAILED_PRECONDITION', 'This challenge is no longer active.']; return; }
+            if (c.defenderId !== callerUid) { userError = [403, 'PERMISSION_DENIED', 'Only the defender can accept this challenge.']; return; }
+            challengeData = c;
+
+            // Amber check
+            if (c.battleType === 'amber' && c.amberWager > 0) {
+                const [cProf, dProf] = await Promise.all([
+                    tx.get(db.collection('profiles').doc(c.challengerId)),
+                    tx.get(db.collection('profiles').doc(callerUid)),
+                ]);
+                const cAmber = cProf.exists ? (cProf.data().amber || 0) : 0;
+                const dAmber = dProf.exists ? (dProf.data().amber || 0) : 0;
+                if (cAmber < c.amberWager || dAmber < c.amberWager) {
+                    userError = [400, 'FAILED_PRECONDITION', 'amber_insufficient'];
+                    tx.update(challengeRef, { status: 'cancelled', cancelReason: 'amber_insufficient' });
+                    return;
+                }
+            }
+
+            // Resolve battle
+            const cParty = sortParty(c.challengerParty);
+            const dParty = sortParty(defenderParty);
+            const rounds = [0, 1, 2].map(i => {
+                const cCard = cParty[i], dCard = dParty[i];
+                const cPow = roundPower(cCard, c.challengerParty);
+                const dPow = roundPower(dCard, defenderParty);
+                const chance = successChance(cPow, dPow);
+                const cWins = Math.random() * 100 < chance;
+                return { challengerCard: cCard, defenderCard: dCard, challengerPower: cPow, defenderPower: dPow, winner: cWins ? 'challenger' : 'defender' };
+            });
+            const cScore = rounds.filter(r => r.winner === 'challenger').length;
+            const dScore = 3 - cScore;
+            const winner = cScore > dScore ? 'challenger' : 'defender';
+            const winnerUid = winner === 'challenger' ? c.challengerId : callerUid;
+            const loserUid  = winner === 'challenger' ? callerUid : c.challengerId;
+
+            battleResult = { rounds, winner, challengerScore: cScore, defenderScore: dScore };
+            const now = new Date();
+
+            // Update challenge doc
+            tx.update(challengeRef, {
+                defenderParty,
+                defenderWagerCards: c.battleType === 'card' ? (defenderWagerCards || null) : null,
+                status: 'complete',
+                result: battleResult,
+                resolvedAt: now,
+            });
+
+            // Amber payouts
+            if (c.battleType === 'amber' && c.amberWager > 0) {
+                tx.update(db.collection('profiles').doc(c.challengerId), { amber: FieldValue.increment(-c.amberWager) });
+                tx.update(db.collection('profiles').doc(callerUid),      { amber: FieldValue.increment(-c.amberWager) });
+                tx.update(db.collection('profiles').doc(winnerUid),      { amber: FieldValue.increment(c.amberWager * 2) });
+            }
+
+            // Card payouts
+            if (c.battleType === 'card') {
+                const allWager = [...(c.challengerWagerCards || []), ...(defenderWagerCards || [])];
+                for (const card of allWager) {
+                    tx.set(db.collection('card_collections').doc(winnerUid).collection('cards').doc(), card);
+                }
+                const loserCards = winnerUid === c.challengerId ? (defenderWagerCards || []) : (c.challengerWagerCards || []);
+                for (const wc of loserCards) {
+                    if (wc.id) tx.delete(db.collection('card_collections').doc(loserUid).collection('cards').doc(wc.id));
+                }
+            }
+        });
+    } catch(e) {
+        console.error('settlePvpBattle error:', e);
+        return sendErr(res, 500, 'INTERNAL', e.message || 'Transaction failed.');
+    }
+
+    if (userError) return sendErr(res, ...userError);
+
+    // Log amber wager payouts (outside transaction — non-critical)
+    if (challengeData?.battleType === 'amber' && challengeData?.amberWager > 0) {
+        try {
+            const winnerUid2 = battleResult.winner === 'challenger' ? challengeData.challengerId : callerUid;
+            const loserUid2  = battleResult.winner === 'challenger' ? callerUid : challengeData.challengerId;
+            const now = new Date();
+            await Promise.all([
+                db.collection('amber_log').add({ uid: winnerUid2, amount: challengeData.amberWager, reason: `pvp:win:${challengeId}`, timestamp: now }),
+                db.collection('amber_log').add({ uid: loserUid2,  amount: -challengeData.amberWager, reason: `pvp:loss:${challengeId}`, timestamp: now }),
+            ]);
+        } catch(e) {}
+    }
+
+    // Notify challenger (outside transaction — non-critical)
+    try {
+        const c = challengeData;
+        await db.collection('notifications').doc(`pvpr_${challengeId}`).set({
+            targetUid: c.challengerId, type: 'pvp_result', challengeId,
+            senderUid: callerUid,
+            senderName: c.defenderName || 'Opponent',
+            senderAvatar: c.defenderAvatar || '',
+            message: battleResult.winner === 'challenger'
+                ? 'Your challenge was accepted — you won! ⚔️🏆'
+                : 'Your challenge was accepted — you lost. ⚔️💀',
+            timestamp: new Date(), read: false,
+        }, { merge: true });
+    } catch(e) {}
+
+    res.json({ result: { battleResult } });
+});
+
 // ── Admin: Gift Pack(s) to a User ───────────────────────────────────────────────
 exports.adminGiftPack = onRequest({ invoker: 'public' }, async (req, res) => {
     setCORS(res);
@@ -713,6 +949,7 @@ exports.adminGiftPack = onRequest({ invoker: 'public' }, async (req, res) => {
     const db = getFirestore();
     try {
         const pool = await ensureCardPool(db);
+        const cardBatch = computeCurrentBatch(pool);
         const bulkBatchId = qty > 1 ? db.collection('inventory').doc().id : null;
         const itemIds = [];
         const batch = db.batch();
@@ -723,7 +960,7 @@ exports.adminGiftPack = onRequest({ invoker: 'public' }, async (req, res) => {
             batch.set(itemRef, {
                 type: 'pack', packId: pack.id, packName: pack.name, packImage: pack.image,
                 rolledCards: cards, godPackTheme, source: 'gift', grantedBy: callerUid, bulkBatchId,
-                grantedAt: new Date(),
+                cardBatch, grantedAt: new Date(),
             });
             itemIds.push(itemRef.id);
         }

@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=136">
+    <link rel="stylesheet" href="styles.css?v=138">
 </head>
 <body>
     <div class="app-container">
@@ -196,8 +196,11 @@
 
                 <div id="discover-view" class="view">
 
-                    <!-- Advanced Search Button -->
-                    <div style="display:flex; justify-content:flex-end; margin-bottom:20px;">
+                    <!-- Advanced Search + Seasonal Archive Buttons -->
+                    <div style="display:flex; justify-content:flex-end; gap:10px; margin-bottom:20px;">
+                        <button class="action-btn" onclick="openAdvancedSearch(); openSeasonalArchive()">
+                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">calendar_month</span> Seasonal Archive
+                        </button>
                         <button class="action-btn adv-search-trigger-btn" onclick="openAdvancedSearch()">
                             <span class="material-symbols-outlined">manage_search</span> Anime Search
                         </button>
@@ -1245,6 +1248,19 @@
                                 <button onclick="window._tcgBrowsePool()" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Browse Pool</button>
                             </div>
 
+                            <!-- Add Anime to Pool -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">➕ Add Anime to Pool</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Search for any anime and add its top 30 characters as Rare/Common cards. Narrators are filtered automatically.</div>
+                                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+                                    <input id="tcg-anime-add-input" type="text" placeholder="Type anime name…" onkeydown="if(event.key==='Enter')window._tcgSearchAnimeForPool()" style="flex:1; min-width:160px; padding:9px 14px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                    <button onclick="window._tcgSearchAnimeForPool()" style="padding:9px 18px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Search</button>
+                                    <button id="tcg-preset-add-btn" onclick="window._tcgAddPresetAnime()" style="padding:9px 18px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Add 11 Preset Anime</button>
+                                </div>
+                                <span id="tcg-anime-add-status" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:6px;"></span>
+                                <div id="tcg-anime-add-results"></div>
+                            </div>
+
                             <!-- Sync Hand-Curated Art -->
                             <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                                 <div style="flex:1; min-width:200px;">
@@ -1468,6 +1484,16 @@
                                 <div id="pack-gift-results" style="margin-top:10px;"></div>
                             </div>
 
+                            <!-- Fix Pack Batch -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🔧 Fix Pack Batch Label</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">View and correct the batch number on a user's unopened inventory packs.</div>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                                    <input type="text" id="pack-batch-search" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsersForBatchFix();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                    <button onclick="window._tcgAdminSearchUsersForBatchFix()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
+                                </div>
+                                <div id="pack-batch-results" style="margin-top:10px;"></div>
+                            </div>
 
                         </div>
 
@@ -2569,14 +2595,9 @@
                         <span class="material-symbols-outlined" style="font-size:26px; color:var(--accent-yellow);">manage_search</span>
                         <h2 style="margin:0; font-size:20px;">Anime Search</h2>
                     </div>
-                    <div style="display:flex; gap:10px; align-items:center;">
-                        <button class="action-btn" onclick="openSeasonalArchive()" style="font-size:13px;">
-                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">calendar_month</span> Seasonal Archive
-                        </button>
-                        <button class="icon-btn" onclick="closeAdvancedSearch()" title="Close">
-                            <span class="material-symbols-outlined">close</span>
-                        </button>
-                    </div>
+                    <button class="icon-btn" onclick="closeAdvancedSearch()" title="Close">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
                 </div>
 
                 <!-- Search Bar -->
@@ -2695,7 +2716,7 @@
                     </div>
                     <div id="adv-season-results" style="display:none;">
                         <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-                            <button class="cancel-btn" onclick="backToArchiveGrid()" style="font-size:12px;">← Back to Archive</button>
+                            <button class="icon-btn" onclick="backToArchiveGrid()" title="Back to Archive" style="gap:4px;font-size:13px;font-weight:600;"><span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span> Archive</button>
                             <h3 id="adv-season-title" style="margin:0; font-size:17px;"></h3>
                         </div>
                         <div id="adv-season-results-grid" class="adv-results-grid"></div>
@@ -2767,6 +2788,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=565"></script>
+    <script type="module" src="app.js?v=606"></script>
 </body>
 </html>

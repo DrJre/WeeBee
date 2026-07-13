@@ -161,6 +161,8 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
 .mobile-search-inner .material-symbols-outlined { color: var(--text-muted); font-size: 18px; flex-shrink: 0; }
 .mobile-search-inner input { flex: 1; border: none; background: transparent; outline: none; font-size: 14px; color: var(--text-dark); min-width: 0; }
 .search-close-btn { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 2px; display: flex; align-items: center; flex-shrink: 0; }
+.icon-btn { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s; }
+.icon-btn:hover { background: var(--bg-gray); color: var(--text-dark); }
 
 /* ── PWA-only tweaks: no custom cursor / bee trail settings in standalone mode ── */
 @media (display-mode: standalone) {
@@ -2100,53 +2102,51 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     100% { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(255,0,120,0.7)); }
 }
 
-/* ── Prismatic Event Banner (home page) ──────────────────────────────────── */
-.prismatic-event-banner {
+/* ── Discord Promo Banner (home page) ─────────────────────────────────────── */
+.discord-promo-banner {
     position: relative;
     overflow: hidden;
     border-radius: 16px;
-    padding: 5px;
-    animation: prismatic-outer-glow 6s ease-in-out infinite;
+    padding: 2px;
+    background: linear-gradient(135deg, #3c416e, #5865F2, #7289DA, #5865F2, #3c416e);
+    background-size: 300% 300%;
+    animation: discord-border-shift 6s ease-in-out infinite;
+    box-shadow: 0 4px 40px rgba(88,101,242,0.35), 0 2px 8px rgba(0,0,0,0.5);
 }
-.prismatic-event-banner::before {
-    content: '';
-    position: absolute;
-    inset: -100%;
-    background: conic-gradient(
-        from 0deg,
-        #ff9aaa, rgba(255,255,255,0.7), #ffcc88, rgba(255,255,255,0.7),
-        #99ffcc, rgba(255,255,255,0.7), #88ddff, rgba(255,255,255,0.7),
-        #bb99ff, rgba(255,255,255,0.7), #ff9aaa
-    );
-    animation: prismatic-border-spin 6s linear infinite;
-    z-index: 0;
-    pointer-events: none;
+@keyframes discord-border-shift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
-.prismatic-event-banner-inner {
-    position: relative;
-    z-index: 1;
-    background: #07070f;
-    border-radius: 12px;
+.discord-promo-banner-inner {
+    border-radius: 14px;
+    background: #0f1117;
     padding: 20px 24px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 20px;
     overflow: hidden;
+    position: relative;
 }
-.prismatic-event-banner-inner .wb-prismatic-sparkles { pointer-events: none; }
-.prismatic-event-banner-inner .wb-sparkle { animation-play-state: running; }
-.prismatic-event-banner-pack {
-    height: 110px;
-    object-fit: contain;
-    filter: drop-shadow(0 4px 20px rgba(168,85,247,0.6));
+.discord-promo-banner-inner::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(88,101,242,0.1) 0%, transparent 70%);
+    pointer-events: none;
+}
+.discord-promo-deco {
     flex-shrink: 0;
+    width: 80px;
+    height: 80px;
+    fill: rgba(255,255,255,0.12);
 }
 @media (max-width: 640px) {
-    /* Hide flanking pack images on mobile — text fills the full width */
-    .prismatic-event-banner-pack { display: none !important; }
-    .prismatic-event-banner-inner { gap: 0; padding: 20px 18px; justify-content: center; }
-    .prismatic-banner-heading { font-size: 17px !important; }
+    /* Hide flanking Discord icons on mobile — text fills the full width */
+    .discord-promo-deco { display: none !important; }
+    .discord-promo-banner-inner { gap: 0; padding: 20px 18px; }
+    .discord-promo-heading { font-size: 17px !important; }
 
     /* BuzzWord game card rows — tighten padding and gap to keep Play button on screen */
     .bw-banner-op,
