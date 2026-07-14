@@ -7346,7 +7346,6 @@ const TCG_UR_CARDS = [
     { name: 'Tony Chopper', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FChopper.gif?alt=media&token=97e02889-3cd5-4007-a26c-6f3c4bdb38f7' },
     { name: 'Byakuya', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FUR%2FByakuya.gif?alt=media&token=0a078e68-cc6d-4377-84d3-6e95b928113a' },
     { name: 'Ichigo', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FUR%2FIchigo.gif?alt=media&token=04fef526-df17-4a25-941a-a5c35cc3add1' },
-    { name: 'Rock Lee', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FRock%20Lee.gif?alt=media&token=bb34d915-5b99-4f94-8d2c-9348ca1b2442' },
     { name: 'Levi Ackerman', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FUR%2FLevi%20Ackerman.gif?alt=media&token=be445e89-10ac-420d-b314-58364db4588f' },
     { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FUR%2FGoku_UR.gif?alt=media&token=ac0ef55d-d237-40a2-8212-c512bfdefadd' },
     { name: 'Alucard', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FUR%2FAlucard_UR.gif?alt=media&token=0b2b575e-be21-4264-801d-acecde367605', batch: 2 },
@@ -7422,11 +7421,6 @@ const TCG_FOUNDER_CARDS = [
     {
         id: 'dreaded', name: 'Dreaded', anime: 'WeeBee Original', rarity: 'ur',
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDreaded%2Funnamed.jpg?alt=media&token=7c7e085e-d137-430b-8166-60594a3c866e',
-        founder: true,
-    },
-    {
-        id: 'rock_lee', name: 'Rock Lee', anime: 'Naruto', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FRock%20Lee.gif?alt=media&token=bb34d915-5b99-4f94-8d2c-9348ca1b2442',
         founder: true,
     },
     {
@@ -8559,7 +8553,7 @@ const TCG_PACKS = [
         gradient: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FStandard%20Pack.png?alt=media&token=8db206cf-8f57-4c64-b3cf-d2b8316d7364',
         description: '5 cards · 1 guaranteed Rare+',
-        odds: 'Common 90% · Rare 9.5% · SR 0.4% · SSR 0.1%\nGuaranteed slot: Rare 95% · SR 4.6% · SSR 0.4%\n+0.25% chance per pack for a bonus UR card',
+        odds: 'Common 90% · Rare 9.5%\nSR 0.4% · SSR 0.1%\nGuar slot: Rare 95% · SR 4.6% · SSR 0.4%\n+0.25% bonus UR chance per pack',
         guaranteedSR: false,
     },
     {
@@ -8570,7 +8564,7 @@ const TCG_PACKS = [
         gradient: 'linear-gradient(135deg,#b45309,#f59e0b)',
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
         description: '5 cards · 1 guaranteed SR+',
-        odds: 'Common 75% · Rare 21% · SR 3.5% · SSR 0.5%\nGuaranteed slot: SR 96.5% · SSR 3.5%\n+0.5% chance per pack for a bonus UR card',
+        odds: 'Common 75% · Rare 21%\nSR 3.5% · SSR 0.5%\nGuaranteed: SR 96.5% · SSR 3.5%\n+0.5% bonus UR chance per pack',
         guaranteedSR: true,
     },
     {
@@ -8579,9 +8573,9 @@ const TCG_PACKS = [
         cost: 800,
         salePrice: null,
         gradient: 'linear-gradient(135deg,#92400e,#b45309)',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FBatch%202%20Premium%20Pack.png?alt=media&token=024ce78a-03a9-4de9-9d0e-ca1fd36c0dd3',
         description: '5 cards · 1 guaranteed SR+',
-        odds: 'Common 75% · Rare 20.75% · SR 3.5% · SSR 0.75%\nGuaranteed slot: SR 96% · SSR 4%\n+0.5% UR bonus · 4:1 current batch weighting',
+        odds: 'Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.5% UR bonus · 4:1 current batch',
         guaranteedSR: true,
         currentBatch: true,
     },
@@ -8591,7 +8585,7 @@ const TCG_PACKS = [
         cost: 800,
         salePrice: null,
         gradient: 'linear-gradient(135deg,#065f46,#047857)',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FBatch%201%20Premium%20Pack.png?alt=media&token=00bbda25-324a-4a52-82b6-2c835fba84b6',
         description: 'Previous batch · 1 guaranteed SR+',
         odds: '',
         guaranteedSR: true,
@@ -12098,6 +12092,84 @@ function _tcgRollCurrentBatchPackCards(pack, targetBatch) {
     return cards.sort(() => Math.random() - 0.5);
 }
 
+window._tcgShowWhatsInside = async function(packId, batchNum) {
+    document.getElementById('tcg-whats-inside-modal')?.remove();
+    await _tcgEnsureCardPool();
+
+    const pack = TCG_PACKS.find(p => p.id === packId);
+    if (!pack) return;
+
+    let packDisplayName = pack.name;
+    if (pack.filler && batchNum) packDisplayName = `Batch ${batchNum} Pack`;
+    if (pack.currentBatch && batchNum) packDisplayName = `Batch ${batchNum} Premium`;
+
+    // Build pool — SR/SSR filtered by batch if batch-specific; UR/Rare/Common always all
+    let fullPool;
+    if (pack.prismatic) {
+        fullPool = _tcgFullCardPool().filter(c => c.rarity === 'pr');
+    } else {
+        const base = _tcgFullCardPool().filter(c => c.rarity !== 'pr' && !c.founder);
+        fullPool = batchNum
+            ? base.filter(c => c.rarity === 'ur' || c.rarity === 'rare' || c.rarity === 'common' || _tcgCardBatch(c) === batchNum)
+            : base;
+    }
+
+    const rarityOrder = { ur: 0, ssr: 1, sr: 2, rare: 3, common: 4, pr: 0 };
+    fullPool.sort((a, b) => (rarityOrder[a.rarity] ?? 9) - (rarityOrder[b.rarity] ?? 9));
+
+    const counts = {};
+    for (const c of fullPool) counts[c.rarity] = (counts[c.rarity] || 0) + 1;
+    const rarities = pack.prismatic ? ['pr'] : ['ur', 'ssr', 'sr', 'rare', 'common'];
+    const rarityLabels = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'Event' };
+    const srPlusRarities = new Set(['ur', 'ssr', 'sr', 'pr']);
+    const srPlusCount = fullPool.filter(c => srPlusRarities.has(c.rarity)).length;
+
+    // Default to SR+ (UR/SSR/SR) — hides the large Common/Rare pools unless explicitly selected
+    let activeRarity = pack.prismatic ? 'pr' : 'sr_plus';
+
+    const filterBarHTML = () => {
+        const tabs = pack.prismatic
+            ? [['pr', `Event (${counts.pr || 0})`]]
+            : [['sr_plus', `SR+ (${srPlusCount})`], ['ur', `UR (${counts.ur || 0})`], ['ssr', `SSR (${counts.ssr || 0})`], ['sr', `SR (${counts.sr || 0})`], ['rare', `Rare (${counts.rare || 0})`], ['common', `Common (${counts.common || 0})`]];
+        return tabs.map(([r, label]) => {
+            const isActive = r === activeRarity;
+            return `<button data-wii="${r}" onclick="window._tcgWIISetFilter('${r}')"
+                style="padding:5px 12px;border-radius:20px;border:1px solid ${isActive ? '#3b82f6' : 'var(--border-color)'};background:${isActive ? 'rgba(59,130,246,0.12)' : 'var(--bg-gray)'};color:${isActive ? '#3b82f6' : 'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">${label}</button>`;
+        }).join('');
+    };
+
+    const gridHTML = () => {
+        const cards = activeRarity === 'sr_plus'
+            ? fullPool.filter(c => srPlusRarities.has(c.rarity))
+            : fullPool.filter(c => c.rarity === activeRarity);
+        return cards.map(card => `<div class="tcg-card-cell"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div></div>`).join('');
+    };
+
+    const overlay = document.createElement('div');
+    overlay.id = 'tcg-whats-inside-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.75);display:flex;align-items:flex-start;justify-content:center;padding:20px;box-sizing:border-box;overflow-y:auto;';
+    overlay.innerHTML = `
+        <div style="background:var(--bg-card);border-radius:16px;max-width:940px;width:100%;margin:auto;display:flex;flex-direction:column;overflow:hidden;">
+            <div style="padding:16px 20px;border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+                <div style="font-size:16px;font-weight:800;">📦 What's Inside — ${packDisplayName}</div>
+                <button onclick="document.getElementById('tcg-whats-inside-modal').remove()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--text-muted);line-height:1;padding:0 4px;">✕</button>
+            </div>
+            <div id="wii-filter-bar" style="padding:12px 16px;border-bottom:1px solid var(--border-color);display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;">${filterBarHTML()}</div>
+            <div id="wii-grid" class="tcg-card-grid" style="padding:16px;display:flex;flex-wrap:wrap;gap:18px;justify-content:center;">${gridHTML()}</div>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    _tcgObserveSSRCards(document.getElementById('wii-grid'));
+
+    window._tcgWIISetFilter = function(rarity) {
+        activeRarity = rarity;
+        const fb = document.getElementById('wii-filter-bar');
+        const g = document.getElementById('wii-grid');
+        if (fb) fb.innerHTML = filterBarHTML();
+        if (g) { g.innerHTML = gridHTML(); _tcgObserveSSRCards(g); }
+    };
+};
+
 window._tcgRenderStore = async function() {
     const el = document.getElementById('tcg-store');
     if (!el) return;
@@ -12135,22 +12207,25 @@ window._tcgRenderStore = async function() {
             <div id="tcg-qty-pills-${pack.id}" style="display:flex;gap:6px;justify-content:center;margin:8px 0;">
                 ${[1, 5, 10].map(n => `<button onclick="window._tcgSetPackQty('${pack.id}',${n})" style="padding:5px 14px;border-radius:20px;border:1px solid ${qty === n ? 'var(--accent-yellow)' : 'var(--border-color)'};background:${qty === n ? 'rgba(245,158,11,0.12)' : 'transparent'};color:${qty === n ? '#f59e0b' : 'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${n}×</button>`).join('')}
             </div>` : '';
+        const wiBatch = pack.filler ? (fillerBatch || 1) : pack.currentBatch ? TCG_CURRENT_BATCH : 0;
+        const wiBtn = !isComingSoon ? `<button onclick="window._tcgShowWhatsInside('${pack.id}'${wiBatch ? `,${wiBatch}` : ''})" style="padding:4px 12px;border-radius:20px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:600;cursor:pointer;margin-top:8px;">What's inside</button>` : '';
         return `
         <div class="wb-card-wrap tcg-pack-card${extraClass ? ' ' + extraClass : ''}">
-            ${topHtml}
+            ${topHtml || '<div style="height:32px;"></div>'}
             <img src="${pack.image}" style="height:300px;object-fit:contain;filter:drop-shadow(0 8px 32px rgba(0,0,0,0.5))${grayscale ? ' grayscale(1) brightness(0.7)' : ''};display:block;" draggable="false">
-            <div style="text-align:center;margin-top:12px;">
+            ${wiBtn}
+            <div style="text-align:center;margin-top:8px;">
                 <div style="font-size:15px;font-weight:800;color:var(--text-primary);">${pack.name}</div>
                 <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">${pack.description}</div>
             </div>
             <div style="font-size:11px;color:var(--text-muted);line-height:1.6;white-space:pre-line;text-align:center;min-height:48px;">${pack.odds || ''}</div>
             ${qtyPills}
-            <div id="tcg-price-${pack.id}" style="font-size:16px;font-weight:800;color:#f59e0b;min-height:22px;">${priceHtml}</div>
+            <div id="tcg-price-${pack.id}" style="font-size:16px;font-weight:800;color:#f59e0b;min-height:22px;margin-top:auto;">${priceHtml}</div>
             <button id="tcg-buy-btn-${pack.id}" ${isComingSoon ? 'disabled' : `onclick="window._tcgBuyPacks('${pack.id}',${qty})"`}
                 style="width:100%;padding:10px;border-radius:8px;border:none;background:${isComingSoon ? 'var(--bg-gray)' : pack.gradient};color:${isComingSoon ? 'var(--text-muted)' : 'white'};font-weight:700;font-size:13px;cursor:${isComingSoon ? 'not-allowed' : 'pointer'};opacity:${isComingSoon ? '0.6' : (canAfford ? '1' : '0.5')};">
                 ${isComingSoon ? (pack.comingSoonLabel || 'Coming Soon') : (qty > 1 ? `Buy ${qty} Packs` : 'Buy Pack')}
             </button>
-            <div id="tcg-cost-note-${pack.id}" style="font-size:11px;color:var(--text-muted);">${!isComingSoon && !canAfford ? `🟡 ${(totalCost - amber).toLocaleString()} more needed` : ''}</div>
+            <div id="tcg-cost-note-${pack.id}" style="font-size:11px;color:var(--text-muted);min-height:18px;">${!isComingSoon && !canAfford ? `🟡 ${(totalCost - amber).toLocaleString()} more needed` : ''}</div>
             ${bottomHtml}
         </div>`;
     };
@@ -12175,13 +12250,15 @@ window._tcgRenderStore = async function() {
             ...fillerBase,
             name: `Batch ${fillerBatch} Pack`,
             description: `Batch ${fillerBatch} cards · 1 guaranteed SR+`,
-            odds: `Batch ${fillerBatch} · Common 75% · Rare 20.75% · SR 3.75% · SSR 0.5%\nGuaranteed slot: SR 97% · SSR 3%\n+0.5% UR bonus · UR favors Batch ${fillerBatch} 4:1`,
+            odds: `Batch ${fillerBatch} · Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.5% UR bonus · favors Batch ${fillerBatch} 4:1`,
         };
-        const batchLabelHtml = `<div style="width:100%;box-sizing:border-box;background:linear-gradient(135deg,#065f46,#047857);color:white;border-radius:10px;padding:6px 12px;margin-bottom:6px;text-align:center;font-weight:800;font-size:11px;letter-spacing:0.5px;">📦 BATCH ${fillerBatch} PACK</div>`;
+        const batchLabelHtml = `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#065f46,#047857);color:white;border-radius:8px;font-weight:800;font-size:11px;letter-spacing:0.5px;">📦 BATCH ${fillerBatch} PACK</div>`;
         flexSlotHtml = packCard(fillerDisplay, false, batchLabelHtml, false, '', '');
     } else {
         flexSlotHtml = packCard(genericComingSoonPack, true, '', false);
     }
+
+    const curBatchLabelHtml = `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#92400e,#b45309);color:white;border-radius:8px;font-weight:800;font-size:11px;letter-spacing:0.5px;">📦 BATCH ${TCG_CURRENT_BATCH} PACK</div>`;
 
     const curBatchPool = _tcgFullCardPool().filter(c => (c.batch || 1) === TCG_CURRENT_BATCH);
     const curBatchCards = curBatchPool.length ? [...curBatchPool].sort(() => Math.random() - 0.5) : [];
@@ -12204,7 +12281,7 @@ window._tcgRenderStore = async function() {
             <div class="tcg-pack-grid" id="tcg-pack-carousel" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
                 ${packCard(TCG_PACKS.find(p => p.id === 'standard'))}
                 ${packCard(TCG_PACKS.find(p => p.id === 'premium'))}
-                ${packCard(TCG_PACKS.find(p => p.id === 'current_premium'))}
+                ${packCard(TCG_PACKS.find(p => p.id === 'current_premium'), false, curBatchLabelHtml)}
                 ${flexSlotHtml}
             </div>
             <button class="tcg-carousel-arrow tcg-carousel-prev" onclick="window._tcgCarouselPrev()">‹</button>
@@ -14112,7 +14189,8 @@ window._tcgRenderMyMissingCards = async function(uid, filter) {
         name: c.name,
         anime: _normalizeSeriesName(c.series || c.anime || ''),
         image: c.image,
-        rarity
+        rarity,
+        batch: c.batch,
     }));
     const pools = {
         ur:     mapPool(window._tcgURPool?.length        ? window._tcgURPool        : TCG_UR_CARDS,  'ur'),
@@ -14123,9 +14201,11 @@ window._tcgRenderMyMissingCards = async function(uid, filter) {
         common: mapPool(window._tcgCommonPool, 'common'),
     };
 
-    const poolCards = filter === 'all'
+    const batchFilterVal = window._tcgCardBatchFilter || 'all';
+    const poolCards = (filter === 'all'
         ? ['ur','pr','ssr','sr','rare','common'].flatMap(r => pools[r])
-        : (pools[filter] || []);
+        : (pools[filter] || []))
+        .filter(c => batchFilterVal === 'all' || _tcgCardBatch(c) === (batchFilterVal === 'b2' ? 2 : 1));
 
     const missingCards = poolCards.filter(c => !ownedKeys.has(`${c.name}|||${c.rarity}`));
     const filtered = searchQ
