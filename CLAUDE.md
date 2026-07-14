@@ -11,7 +11,7 @@
 
 ## TCG Pity System — Spec (ready to build)
 
-- **Standard Pack** pity at 400, **Premium Pack** pity at 50, **Prismatic Pack** excluded (no UR drops).
+- **Standard Pack** (+ Current Batch Standard) share counter `pityStandard`. **Premium Pack** (+ Current Batch Premium + Filler Pack) share counter `pityPremium`. **Prismatic Pack** excluded (no UR drops).
 - Counters stored on `profiles/{uid}` as `pityStandard` / `pityPremium`, starting at 0 for all users when the feature ships (no backfill).
 - Counter increments after every pack open of that type, including within bulk opens (processed sequentially server-side).
 - Resets to 0 on any UR pull — natural, pity-triggered, or God Pack.
@@ -19,8 +19,10 @@
 - **Cloud Function `openPack`** handles everything: verifies amber, deducts it in a transaction, rolls packs sequentially, applies pity mid-batch if hit, writes cards to `card_collections/{uid}/cards/`, returns rolled cards to client. Client is display-only.
 - **Bulk open + pity:** CF rolls each pack in the batch in order, incrementing the counter after each. If pity triggers on pack #2 of a 10-pack, that pack gets the forced UR and the counter resets; packs #3–10 continue from 0. No special pre-check needed — sequential rolling handles it.
 - **Bulk open UX (Option A):** All non-UR cards appear instantly in the grid. Then the full UR reveal animation plays at the end for any UR(s) in the batch. Works on mobile since the instant grid render has no flip animations — only one UR reveal animation runs.
-- **UI:** Counter shown under each eligible pack tile on the store: `38 / 50 packs since last UR`. No special pity announcement — the UR reveal itself is the moment.
-- Hard pity only for now (no soft pity).
+- **No pity UI** — counter is not displayed anywhere on the store. Hidden mechanic for now.
+- **Soft + hard pity:**
+  - Standard: soft pity starts at pack 400 → UR chance = 0.25% + (count − 400) × 0.5% per pack. Hard pity (guaranteed UR) at pack 600.
+  - Premium: soft pity starts at pack 50 → UR chance = 0.5% + (count − 50) × 2% per pack. Hard pity (guaranteed UR) at pack 75.
 
 ## TCG / Amber — Next Up
 - [ ] **Remove dead TCG admin code** — once admin tooling is fully migrated/stable, delete now-unused functions (old SR/SSR grid renderers if replaced, old pool seeder helpers, etc.) — left in place for now just in case

@@ -435,6 +435,16 @@ const TCG_PACKS = {
         guaranteedSR: true, prismatic: false,
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
     },
+    current_premium: {
+        id: 'current_premium', name: 'Current Batch Premium', cost: 800, salePrice: null,
+        guaranteedSR: true, currentBatch: true,
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+    },
+    filler: {
+        id: 'filler', name: 'Filler Pack', cost: 800, salePrice: null,
+        guaranteedSR: true, filler: true,
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+    },
     prismatic: {
         id: 'prismatic', name: '2026 Prismatic Pack', cost: 800, salePrice: null,
         guaranteedSR: false, prismatic: true,
@@ -443,6 +453,33 @@ const TCG_PACKS = {
 };
 
 const RARITY_MAX_VERSIONS = { common: 5000, rare: 2500, sr: 500, ssr: 250, ur: 50, pr: 100 };
+
+// ── Pity system ───────────────────────────────────────────────────────────────
+function getPityField(packId) {
+    if (packId === 'standard') return 'pityStandard';
+    if (packId === 'premium'  || packId === 'current_premium' || packId === 'filler') return 'pityPremium';
+    return null; // prismatic and other event packs have no pity
+}
+// 30% headstart for users who opened packs before pity was tracked
+const PITY_HEADSTART = { pityStandard: 180, pityPremium: 22 };
+
+// Returns the incremental pity UR injection chance for a given counter.
+// 0 = below threshold (natural roll only). 1.0 = hard pity (guaranteed inject).
+// Standard: soft pity at 400 (+0.5%/pack), hard pity at 600.
+// Premium:  soft pity at 50  (+2%/pack),   hard pity at 75.
+function calcPityUrChance(packId, counter) {
+    if (packId === 'standard') {
+        if (counter >= 600) return 1.0;
+        if (counter > 400)  return Math.min(1.0, (counter - 400) * 0.005);
+        return 0;
+    }
+    if (packId === 'premium') {
+        if (counter >= 75) return 1.0;
+        if (counter > 50)  return Math.min(1.0, (counter - 50) * 0.02);
+        return 0;
+    }
+    return 0;
+}
 
 // Mirrors _normalizeSeriesName() in app.js
 function normalizeSeriesName(title) {
@@ -539,6 +576,84 @@ function pickCard(pool, rarity) {
     return { name: c.name, anime: normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity };
 }
 
+// Picks a card filtered to targetBatch. UR uses 4:1 weighting (current vs older).
+function pickCardBatch(pool, rarity, targetBatch) {
+    if (rarity === 'ur') {
+        const all = pool.ur.length ? pool.ur : TCG_UR_CARDS;
+        const cur = all.filter(c => (c.batch || 1) === targetBatch);
+        const old = all.filter(c => (c.batch || 1) !== targetBatch);
+        let src;
+        if (cur.length && (!old.length || Math.random() < 0.8))
+            src = cur[Math.floor(Math.random() * cur.length)];
+        else if (old.length)
+            src = old[Math.floor(Math.random() * old.length)];
+        else if (all.length)
+            src = all[Math.floor(Math.random() * all.length)];
+        else return pickCard(pool, 'ssr');
+        return { name: src.name, anime: normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity: 'ur' };
+    }
+    let arr;
+    if (rarity === 'ssr') {
+        const all = pool.ssr.length ? pool.ssr : TCG_SSR_CARDS;
+        arr = all.filter(c => (c.batch || 1) === targetBatch);
+        if (!arr.length) arr = all;
+        if (!arr.length) return pickCardBatch(pool, 'sr', targetBatch);
+    } else if (rarity === 'sr') {
+        const all = pool.sr.length ? pool.sr : TCG_SR_CARDS;
+        arr = all.filter(c => (c.batch || 1) === targetBatch);
+        if (!arr.length) arr = all;
+    } else if (rarity === 'rare') {
+        arr = pool.rare.filter(c => (c.batch || 1) === targetBatch);
+        if (!arr.length) arr = pool.rare;
+        if (!arr.length) return { name: '???', anime: '', image: '', rarity };
+    } else {
+        arr = pool.common.filter(c => (c.batch || 1) === targetBatch);
+        if (!arr.length) arr = pool.common;
+        if (!arr.length) return { name: '???', anime: '', image: '', rarity };
+    }
+    if (!arr.length) return { name: '???', anime: '', image: '', rarity };
+    const src = arr[Math.floor(Math.random() * arr.length)];
+    return { name: src.name, anime: normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity };
+}
+
+// Mirrors _tcgRollCurrentBatchPackCards() in app.js.
+// SR boosted: +0.5% guaranteed slot, +0.25% normal slots (taken from Rare).
+function rollCurrentBatchPackCards(pool, pack, targetBatch) {
+    const cards = [];
+    const pick = (r) => pickCardBatch(pool, r, targetBatch);
+    const g = Math.random();
+    if (pack.guaranteedSR) {
+        // Current Batch Premium: SSR 4% (+0.5% vs regular), SR 96%
+        cards.push(pick(g < 0.04 ? 'ssr' : 'sr'));
+    } else {
+        if      (g < 0.004) cards.push(pick('ssr'));
+        else if (g < 0.055) cards.push(pick('sr'));
+        else                cards.push(pick('rare'));
+    }
+    for (let i = 0; i < 4; i++) {
+        const r = Math.random();
+        let rarity;
+        if (pack.guaranteedSR) {
+            // Current Batch Premium: SSR 0.75% (+0.25%), SR 3.5%, Rare 20.75%, Common 75%
+            if      (r < 0.0075) rarity = 'ssr';
+            else if (r < 0.0425) rarity = 'sr';
+            else if (r < 0.2500) rarity = 'rare';
+            else                 rarity = 'common';
+        } else {
+            if      (r < 0.001)  rarity = 'ssr';
+            else if (r < 0.0075) rarity = 'sr';
+            else if (r < 0.1000) rarity = 'rare';
+            else                 rarity = 'common';
+        }
+        cards.push(pick(rarity));
+    }
+    const urChance = pack.guaranteedSR ? 0.005 : 0.0025;
+    if (Math.random() < urChance) {
+        cards[Math.floor(Math.random() * cards.length)] = pick('ur');
+    }
+    return cards.sort(() => Math.random() - 0.5);
+}
+
 // Mirrors _tcgRollPackCards() in app.js (standard/premium, no customOdds — that's an
 // admin-only client preview tool, never used in the real purchase flow)
 function rollPackCards(pool, pack) {
@@ -588,9 +703,9 @@ function rollPrismaticPackCards(pool) {
     return cards.sort(() => Math.random() - 0.5);
 }
 
-// Rolls a single pack's 5 cards, including god-pack odds — mirrors the logic
-// inline in _tcgBuyPack() in app.js (1-in-10000 standard/premium, 1-in-100 prismatic)
-function rollOnePack(pool, pack) {
+// Rolls a single pack's 5 cards, including god-pack odds.
+// currentBatch and filler packs filter the pool to a specific batch with 4:1 UR weighting.
+function rollOnePack(pool, pack, fillerBatch = null) {
     let godPackTheme = null;
     let cards;
     if (pack.prismatic) {
@@ -599,8 +714,15 @@ function rollOnePack(pool, pack) {
         cards = isPrismaticGodPack
             ? [pickCard(pool,'pr'), pickCard(pool,'pr'), pickCard(pool,'pr'), pickCard(pool,'pr'), pickCard(pool,'pr')]
             : rollPrismaticPackCards(pool);
+    } else if (pack.currentBatch || pack.filler) {
+        const targetBatch = pack.filler ? (fillerBatch || 1) : computeCurrentBatch(pool);
+        const isGodPack = pack.guaranteedSR && Math.random() < 0.0002;
+        godPackTheme = isGodPack ? 'gold' : null;
+        cards = isGodPack
+            ? [pickCard(pool,'ur'), pickCard(pool,'ur'), pickCard(pool,'ssr'), pickCard(pool,'ssr'), pickCard(pool,'ssr')]
+            : rollCurrentBatchPackCards(pool, pack, targetBatch);
     } else {
-        const isGodPack = pack.guaranteedSR && Math.random() < 0.0001;
+        const isGodPack = pack.guaranteedSR && Math.random() < 0.0002;
         godPackTheme = isGodPack ? 'gold' : null;
         cards = isGodPack
             ? [pickCard(pool,'ur'), pickCard(pool,'ur'), pickCard(pool,'ssr'), pickCard(pool,'ssr'), pickCard(pool,'ssr')]
@@ -705,6 +827,16 @@ exports.purchasePacks = onRequest({ invoker: 'public' }, async (req, res) => {
         await db.collection('amber_log').add({ uid: callerUid, amount: -totalCost, reason: `pack:${packId}x${quantity}`, timestamp: new Date() });
     } catch(e) {}
 
+    // Load filler batch for filler packs
+    let fillerBatch = null;
+    if (pack.filler) {
+        try {
+            const fillerSnap = await db.collection('tcg_event_config').doc('filler').get();
+            fillerBatch = fillerSnap.exists ? (fillerSnap.data().batch || null) : null;
+        } catch(e) {}
+        if (!fillerBatch) return sendErr(res, 400, 'FAILED_PRECONDITION', 'Filler pack is not currently available.');
+    }
+
     try {
         const pool = await ensureCardPool(db);
         const cardBatch = computeCurrentBatch(pool);
@@ -713,7 +845,7 @@ exports.purchasePacks = onRequest({ invoker: 'public' }, async (req, res) => {
         const batch = db.batch();
         const invCol = db.collection('inventory').doc(callerUid).collection('items');
         for (let i = 0; i < quantity; i++) {
-            const { cards, godPackTheme } = rollOnePack(pool, pack);
+            const { cards, godPackTheme } = rollOnePack(pool, pack, fillerBatch);
             const itemRef = invCol.doc();
             batch.set(itemRef, {
                 type: 'pack', packId: pack.id, packName: pack.name, packImage: pack.image,
@@ -756,11 +888,49 @@ exports.openInventoryItems = onRequest({ invoker: 'public' }, async (req, res) =
         return sendErr(res, 500, 'INTERNAL', 'Failed to load packs.');
     }
 
+    // Load card pool (needed for pity UR injection)
+    let pool = null;
+    try { pool = await ensureCardPool(db); } catch(e) { console.error('openInventoryItems pool error:', e); }
+
+    // Read pity counters — default to headstart if field has never been set
+    const profileRef = db.collection('profiles').doc(callerUid);
+    const pityCounters = { pityStandard: PITY_HEADSTART.pityStandard, pityPremium: PITY_HEADSTART.pityPremium };
+    try {
+        const profSnap = await profileRef.get();
+        const profData = profSnap.exists ? profSnap.data() : {};
+        if (profData.pityStandard !== undefined) pityCounters.pityStandard = profData.pityStandard;
+        if (profData.pityPremium  !== undefined) pityCounters.pityPremium  = profData.pityPremium;
+    } catch(e) { console.error('openInventoryItems pity read error:', e); }
+    const pityFieldsChanged = new Set();
+
     const revealed = [];
     try {
         for (const item of items) {
+            // Apply pity: potentially inject UR into pre-rolled cards
+            let rolledCards = [...(item.rolledCards || [])];
+            const pityField = getPityField(item.packId);
+            if (pityField) {
+                const hasNaturalUR = rolledCards.some(c => c.rarity === 'ur');
+                if (hasNaturalUR) {
+                    pityCounters[pityField] = 0;
+                } else {
+                    const pityChance = calcPityUrChance(item.packId, pityCounters[pityField]);
+                    if (pityChance > 0 && Math.random() < pityChance) {
+                        const urArr = pool?.ur?.length ? pool.ur : TCG_UR_CARDS;
+                        const src = urArr[Math.floor(Math.random() * urArr.length)];
+                        const urCard = { name: src.name, anime: normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity: 'ur' };
+                        rolledCards = [...rolledCards];
+                        rolledCards[Math.floor(Math.random() * rolledCards.length)] = urCard;
+                        pityCounters[pityField] = 0;
+                    } else {
+                        pityCounters[pityField]++;
+                    }
+                }
+                pityFieldsChanged.add(pityField);
+            }
+
             const finishedCards = [];
-            for (const card of (item.rolledCards || [])) {
+            for (const card of rolledCards) {
                 const { version, edition } = await assignSerial(db, card);
                 finishedCards.push({ ...card, serial: version, edition });
             }
@@ -776,6 +946,13 @@ exports.openInventoryItems = onRequest({ invoker: 'public' }, async (req, res) =
     } catch(e) {
         console.error('openInventoryItems open error:', e);
         return res.status(500).json({ error: { status: 'INTERNAL', message: 'Failed to open one or more packs — please try again for the rest. Already-opened packs were saved to your collection.' }, partial: { packs: revealed } });
+    }
+
+    // Write updated pity counters
+    if (pityFieldsChanged.size > 0) {
+        const pityUpdate = {};
+        for (const f of pityFieldsChanged) pityUpdate[f] = pityCounters[f];
+        try { await profileRef.update(pityUpdate); } catch(e) { console.error('openInventoryItems pity write error:', e); }
     }
 
     res.json({ result: { success: true, packs: revealed } });
@@ -948,6 +1125,13 @@ exports.adminGiftPack = onRequest({ invoker: 'public' }, async (req, res) => {
     const qty = [1, 5, 10].includes(quantity) ? quantity : 1;
 
     const db = getFirestore();
+    let fillerBatch = null;
+    if (pack.filler) {
+        try {
+            const snap = await db.collection('tcg_event_config').doc('filler').get();
+            fillerBatch = snap.exists ? (snap.data().batch || null) : null;
+        } catch(e) {}
+    }
     try {
         const pool = await ensureCardPool(db);
         const cardBatch = computeCurrentBatch(pool);
@@ -956,7 +1140,7 @@ exports.adminGiftPack = onRequest({ invoker: 'public' }, async (req, res) => {
         const batch = db.batch();
         const invCol = db.collection('inventory').doc(targetUid).collection('items');
         for (let i = 0; i < qty; i++) {
-            const { cards, godPackTheme } = rollOnePack(pool, pack);
+            const { cards, godPackTheme } = rollOnePack(pool, pack, fillerBatch);
             const itemRef = invCol.doc();
             batch.set(itemRef, {
                 type: 'pack', packId: pack.id, packName: pack.name, packImage: pack.image,

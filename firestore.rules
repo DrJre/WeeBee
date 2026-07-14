@@ -348,6 +348,12 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // ── Admin log queue (bot reads via Admin SDK, bypasses rules) ────────────
+    match /discord_log_queue/{doc} {
+      allow create: if isAdmin();
+      allow read, update, delete: if false;
+    }
+
     // ── Feedback ──────────────────────────────────────────────────────────────
     match /bug_reports/{doc} {
       allow read: if isAuth();

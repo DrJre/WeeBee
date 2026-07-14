@@ -1166,11 +1166,24 @@
                             <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                                 <div style="flex:1;">
                                     <div style="font-size:14px; font-weight:800; margin-bottom:2px;">✦ Prismatic Pack Event</div>
-                                    <div style="font-size:12px; color:var(--text-muted);">Starts the 7-day Prismatic Pack window. Store shows a "coming soon" placeholder until started.</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Starts the 7-day Prismatic Pack window. When active, it takes the flex slot (slot 5) in the store.</div>
                                 </div>
                                 <button id="tcg-prismatic-event-start-btn" onclick="window._tcgStartPrismaticEvent()" style="padding:8px 16px; border-radius:8px; border:none; background:linear-gradient(135deg,#6366f1,#a855f7,#ec4899); color:white; font-weight:700; font-size:13px; cursor:pointer;">Start Prismatic Event</button>
                                 <button id="tcg-prismatic-event-extend-btn" onclick="window._tcgExtendPrismaticEvent(24)" style="display:none; padding:8px 16px; border-radius:8px; border:none; background:#7c3aed; color:white; font-weight:700; font-size:13px; cursor:pointer;">+24h</button>
                                 <span id="tcg-prismatic-event-status" style="font-size:13px; color:var(--text-muted);"></span>
+                            </div>
+
+                            <!-- Filler Pack (flex slot default) -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                                <div style="flex:1;">
+                                    <div style="font-size:14px; font-weight:800; margin-bottom:2px;">📦 Filler Pack (Flex Slot)</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Shown in store slot 5 when no event is running. Set the batch number to pull cards from.</div>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <input id="tcg-filler-batch-input" type="number" min="1" placeholder="Batch #" style="width:80px; padding:8px 10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-primary); font-size:13px; font-weight:700;">
+                                    <button onclick="window._tcgSaveFillerBatch()" style="padding:8px 16px; border-radius:8px; border:none; background:#047857; color:white; font-weight:700; font-size:13px; cursor:pointer;">Save</button>
+                                </div>
+                                <span id="tcg-filler-status" style="font-size:13px; color:var(--text-muted); width:100%;"></span>
                             </div>
 
                             <!-- Amber Wallet -->
@@ -2788,6 +2801,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=608"></script>
+    <script type="module" src="app.js?v=616"></script>
 </body>
 </html>

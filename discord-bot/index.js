@@ -150,6 +150,7 @@ const client = new Client({
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CHANNEL_ID              = process.env.DISCORD_CHANNEL_ID;
 const DROP_ROLE_CHANNEL_ID    = '1521636275403362527';
+const LOGS_CHANNEL_ID         = process.env.LOGS_CHANNEL_ID;
 
 // ── Drop-role config (loaded from Firestore on startup) ───────────────────────
 let dropRoleConfig = null; // { roleId, messageId, channelId }
@@ -592,7 +593,7 @@ function buildSuggestEmbed(data) {
   const catEmoji = data.category === 'discord' ? '🎮' : '🌐';
   const catLabel = data.category === 'discord' ? 'Discord Server' : 'Website';
   const status   = data.status || 'pending';
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(SUGGEST_STATUS_COLORS[status] || 0x5865f2)
     .setTitle(`${catEmoji} ${data.title}`)
     .setDescription(data.description)
@@ -603,6 +604,10 @@ function buildSuggestEmbed(data) {
     )
     .setFooter({ text: 'Use /suggest to submit your own idea' })
     .setTimestamp(data.timestamp?.toDate?.() ?? new Date());
+  if (data.amberAwarded) {
+    embed.addFields({ name: 'Reward', value: `🟡 ${data.amberAwarded} Amber awarded`, inline: true });
+  }
+  return embed;
 }
 
 function buildSuggestButtons(docId, status) {
@@ -739,8 +744,37 @@ async function handleSuggestStatus(interaction, newStatus, docId) {
     return interaction.editReply({ content: '❌ Suggestion not found.' });
   }
 
-  const data = { ...snap.data(), status: newStatus, updatedAt: Timestamp.now() };
-  await ref.update({ status: newStatus, updatedAt: Timestamp.now() });
+  const docUpdate = { status: newStatus, updatedAt: Timestamp.now() };
+  let amberAwarded = null;
+  let replyContent = `✅ Status updated to **${SUGGEST_STATUS_LABELS[newStatus]}**.`;
+
+  if (newStatus === 'approved') {
+    const submitterDiscordId = snap.data().discordUserId;
+    if (submitterDiscordId) {
+      try {
+        const linkSnap = await db.doc(`discord_links/${submitterDiscordId}`).get();
+        if (linkSnap.exists) {
+          const { uid } = linkSnap.data();
+          await db.doc(`profiles/${uid}`).update({ amber: FieldValue.increment(SUGGESTION_APPROVE_AMBER) });
+          docUpdate.amberAwarded = SUGGESTION_APPROVE_AMBER;
+          amberAwarded = SUGGESTION_APPROVE_AMBER;
+          replyContent += ` 🟡 **${SUGGESTION_APPROVE_AMBER} Amber** awarded to the submitter.`;
+          try {
+            const user = await client.users.fetch(submitterDiscordId);
+            await user.send(`✅ Your feature suggestion on WeeBee has been approved! Thanks for the great idea — you've been awarded 🟡 **${SUGGESTION_APPROVE_AMBER} Amber** as a thank you.`);
+          } catch { /* DMs disabled — skip */ }
+        } else {
+          replyContent += ` ⚠️ Submitter hasn't linked their WeeBee account — no Amber awarded.`;
+        }
+      } catch(e) {
+        console.error('[suggest] Failed to award amber:', e.message);
+        replyContent += ` ⚠️ Failed to award Amber: ${e.message}`;
+      }
+    }
+  }
+
+  await ref.update(docUpdate);
+  const data = { ...snap.data(), ...docUpdate, amberAwarded: amberAwarded ?? snap.data().amberAwarded ?? null };
 
   try {
     await interaction.message.edit({
@@ -751,11 +785,12 @@ async function handleSuggestStatus(interaction, newStatus, docId) {
     console.error('[suggest] Failed to edit embed:', e.message);
   }
 
-  await interaction.editReply({ content: `✅ Status updated to **${SUGGEST_STATUS_LABELS[newStatus]}**.` });
+  await interaction.editReply({ content: replyContent });
 }
 
 // ── /bug command ─────────────────────────────────────────────────────────────
 
+const SUGGESTION_APPROVE_AMBER = 750;
 const BUG_FIX_AMBER = 250;
 
 const BUG_STATUS_COLORS = {
@@ -1203,10 +1238,73 @@ client.on('messageReactionRemove', async (reaction, user) => {
   } catch(e) { console.error('[drop-role] Remove role failed:', e.message); }
 });
 
+function startLogQueueListener() {
+  if (!LOGS_CHANNEL_ID) return console.warn('[logs] LOGS_CHANNEL_ID not set — admin log posts disabled');
+
+  db.collection('discord_log_queue')
+    .where('processed', '==', false)
+    .onSnapshot(async snap => {
+      for (const change of snap.docChanges()) {
+        if (change.type !== 'added') continue;
+        const data = change.doc.data();
+
+        try {
+          const channel = await client.channels.fetch(LOGS_CHANNEL_ID).catch(() => null);
+          if (!channel) { console.error('[logs] Logs channel not found:', LOGS_CHANNEL_ID); continue; }
+
+          let embed;
+          const desc = (data.description || '').slice(0, 1024) || '_(no description)_';
+
+          if (data.type === 'suggestion_status') {
+            const approved = data.status === 'approved';
+            embed = new EmbedBuilder()
+              .setColor(approved ? 0x22c55e : 0xef4444)
+              .setTitle(approved ? '✅ Suggestion Approved' : '❌ Suggestion Declined')
+              .addFields(
+                { name: 'Suggestion', value: data.title || 'Feature Suggestion' },
+                { name: 'Description', value: desc },
+                { name: 'Submitted by', value: data.author || 'Unknown', inline: true },
+                { name: 'Action by', value: data.adminName || 'Admin', inline: true },
+              )
+              .setTimestamp();
+          } else if (data.type === 'bug_fixed') {
+            embed = new EmbedBuilder()
+              .setColor(0x22c55e)
+              .setTitle('🐛 Bug Marked as Fixed')
+              .addFields(
+                { name: 'Bug', value: data.title || 'Bug Report' },
+                { name: 'Description', value: desc },
+                { name: 'Reported by', value: data.author || 'Unknown', inline: true },
+                { name: 'Fixed by', value: data.adminName || 'Admin', inline: true },
+              )
+              .setTimestamp();
+          } else if (data.type === 'bug_deleted') {
+            embed = new EmbedBuilder()
+              .setColor(0x9ca3af)
+              .setTitle('🗑️ Bug Report Deleted')
+              .addFields(
+                { name: 'Bug', value: data.title || 'Bug Report' },
+                { name: 'Description', value: desc },
+                { name: 'Reported by', value: data.author || 'Unknown', inline: true },
+                { name: 'Deleted by', value: data.adminName || 'Admin', inline: true },
+              )
+              .setTimestamp();
+          }
+
+          if (embed) await channel.send({ embeds: [embed] });
+          await change.doc.ref.update({ processed: true });
+        } catch(e) {
+          console.error('[logs] Failed to post log entry:', e.message);
+        }
+      }
+    }, err => console.error('[logs] Listener error:', err.message));
+}
+
 client.once('ready', async () => {
   console.log(`[bot] Online as ${client.user.tag}`);
   await loadFont();
   await loadDropRoleConfig();
+  startLogQueueListener();
   // Cache the opt-in message so reaction events fire reliably after restarts
   if (dropRoleConfig?.messageId && dropRoleConfig?.channelId) {
     try {

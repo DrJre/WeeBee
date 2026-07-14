@@ -6655,7 +6655,7 @@ window.switchTcgTab = function(event, tabId) {
     if (tabId === 'tcg-tab-dungeon') window.loadDungeonTab();
     else window._dungeonStopRefresh?.();
     if (tabId === 'tcg-tab-pvp') window.loadPvpTab();
-    if (tabId === 'tcg-tab-admin') { window._tcgRenderFounderPreview(); window._tcgLoadSaleConfigUI(); window._tcgLoadPrismaticEventUI(); }
+    if (tabId === 'tcg-tab-admin') { window._tcgRenderFounderPreview(); window._tcgLoadSaleConfigUI(); window._tcgLoadPrismaticEventUI(); window._tcgLoadFillerConfigUI(); }
 };
 
 // Renders a preview of the currently-selected Founder gift card so admins
@@ -8498,6 +8498,38 @@ window._tcgExtendPrismaticEvent = async function(hours = 24) {
     } catch(e) { alert('Failed to extend event: ' + e.message); }
 };
 
+// ── Filler Pack config — admin selects which batch number the Filler Pack pulls from ──
+async function _tcgLoadFillerConfig(force = false) {
+    if (window._tcgFillerConfig && !force) return window._tcgFillerConfig;
+    try {
+        const snap = await getDoc(doc(db, 'tcg_event_config', 'filler'));
+        window._tcgFillerConfig = snap.exists() ? snap.data() : { batch: null };
+    } catch(e) { window._tcgFillerConfig = { batch: null }; }
+    return window._tcgFillerConfig;
+}
+window._tcgLoadFillerConfigUI = async function() {
+    if (!window.isAdmin) return;
+    window._tcgFillerConfig = null;
+    const config = await _tcgLoadFillerConfig(true);
+    const input = document.getElementById('tcg-filler-batch-input');
+    const status = document.getElementById('tcg-filler-status');
+    if (input) input.value = config.batch != null ? config.batch : '';
+    if (status) status.textContent = config.batch != null ? `Currently: Batch ${config.batch}` : 'Not set — flex slot shows "coming soon"';
+};
+window._tcgSaveFillerBatch = async function() {
+    if (!window.isAdmin) return;
+    const input = document.getElementById('tcg-filler-batch-input');
+    const status = document.getElementById('tcg-filler-status');
+    const val = parseInt(input?.value, 10);
+    if (!val || val < 1) return alert('Enter a valid batch number (1 or higher).');
+    try {
+        await setDoc(doc(db, 'tcg_event_config', 'filler'), { batch: val }, { merge: true });
+        window._tcgFillerConfig = { batch: val };
+        if (status) { status.textContent = `Saved — Batch ${val}`; setTimeout(() => { status.textContent = `Currently: Batch ${val}`; }, 2000); }
+        window._tcgRenderStore();
+    } catch(e) { alert('Save failed: ' + e.message); }
+};
+
 window._renderPrismaticEventBanner = function() {
     const el = document.getElementById('prismatic-event-banner');
     if (!el) return;
@@ -8540,6 +8572,30 @@ const TCG_PACKS = [
         description: '5 cards · 1 guaranteed SR+',
         odds: 'Common 75% · Rare 21% · SR 3.5% · SSR 0.5%\nGuaranteed slot: SR 96.5% · SSR 3.5%\n+0.5% chance per pack for a bonus UR card',
         guaranteedSR: true,
+    },
+    {
+        id: 'current_premium',
+        name: 'Current Batch Premium',
+        cost: 800,
+        salePrice: null,
+        gradient: 'linear-gradient(135deg,#92400e,#b45309)',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+        description: '5 cards · 1 guaranteed SR+',
+        odds: 'Common 75% · Rare 20.75% · SR 3.5% · SSR 0.75%\nGuaranteed slot: SR 96% · SSR 4%\n+0.5% UR bonus · 4:1 current batch weighting',
+        guaranteedSR: true,
+        currentBatch: true,
+    },
+    {
+        id: 'filler',
+        name: 'Filler Pack',
+        cost: 800,
+        salePrice: null,
+        gradient: 'linear-gradient(135deg,#065f46,#047857)',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+        description: 'Previous batch · 1 guaranteed SR+',
+        odds: '',
+        guaranteedSR: true,
+        filler: true,
     },
     {
         id: 'prismatic',
@@ -9231,6 +9287,7 @@ window._adminLoadFeedback = async function() {
             const bodyText  = item.description || item.text || '';
             const author    = item.discordUsername || item.displayName || 'Anonymous';
 
+            const bugFixed = item.status === 'fixed';
             const statusBtns = (!isBug && isDisc) ? `
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
                     ${['pending','under_review','approved','declined'].map(s =>
@@ -9241,7 +9298,11 @@ window._adminLoadFeedback = async function() {
                     ${['pending','approved','declined'].map(s =>
                         `<button onclick="window._adminSetSuggestionStatus('${item.id}','${s}',this)" style="padding:4px 10px;border-radius:8px;border:1px solid ${s===status?statusColors[s]:'var(--border-color)'};background:${s===status?statusColors[s]+'22':'transparent'};color:${s===status?statusColors[s]:'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${statusLabels[s]}</button>`
                     ).join('')}
-                </div>` : '');
+                </div>` : `
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+                    <button onclick="window._adminMarkBugFixed('${item.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid ${bugFixed?'#22c55e':'var(--border-color)'};background:${bugFixed?'#22c55e22':'transparent'};color:${bugFixed?'#22c55e':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${bugFixed?'✅ Fixed':'Mark Fixed'}</button>
+                    <button onclick="window._adminDeleteBug('${item.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:11px;font-weight:700;cursor:pointer;">🗑️ Delete</button>
+                </div>`);
 
             return `<div style="background:var(--bg-gray);border-radius:12px;padding:14px 16px;margin-bottom:10px;border-left:3px solid ${isBug?'#ef4444':statusColors[status]};">
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
@@ -9261,8 +9322,71 @@ window._adminLoadFeedback = async function() {
 window._adminSetSuggestionStatus = async function(docId, status, btn) {
     if (!window.isAdmin) return;
     try {
-        await updateDoc(doc(db,'feature_suggestions',docId), { status, updatedAt: serverTimestamp() });
-        // Refresh the whole list so all status buttons re-render
+        const ref = doc(db,'feature_suggestions',docId);
+        const snap = await getDoc(ref);
+        await updateDoc(ref, { status, updatedAt: serverTimestamp() });
+        if ((status === 'approved' || status === 'declined') && snap.exists()) {
+            const d = snap.data();
+            await addDoc(collection(db,'discord_log_queue'), {
+                type: 'suggestion_status',
+                status,
+                title: d.title || 'Feature Suggestion',
+                description: d.description || d.text || '',
+                author: d.discordUsername || d.displayName || 'Anonymous',
+                adminName: auth.currentUser?.displayName || 'Admin',
+                createdAt: serverTimestamp(),
+                processed: false,
+            });
+        }
+        window._adminLoadFeedback();
+    } catch(e) {
+        alert('Failed: ' + e.message);
+    }
+};
+
+window._adminMarkBugFixed = async function(bugId) {
+    if (!window.isAdmin) return;
+    try {
+        const ref = doc(db,'bug_reports',bugId);
+        const snap = await getDoc(ref);
+        await updateDoc(ref, { status: 'fixed', updatedAt: serverTimestamp() });
+        if (snap.exists()) {
+            const d = snap.data();
+            await addDoc(collection(db,'discord_log_queue'), {
+                type: 'bug_fixed',
+                title: d.title || 'Bug Report',
+                description: d.description || d.text || '',
+                author: d.discordUsername || d.displayName || 'Anonymous',
+                adminName: auth.currentUser?.displayName || 'Admin',
+                createdAt: serverTimestamp(),
+                processed: false,
+            });
+        }
+        window._adminLoadFeedback();
+    } catch(e) {
+        alert('Failed: ' + e.message);
+    }
+};
+
+window._adminDeleteBug = async function(bugId) {
+    if (!window.isAdmin) return;
+    if (!confirm('Delete this bug report?')) return;
+    try {
+        const ref = doc(db,'bug_reports',bugId);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+            const d = snap.data();
+            await addDoc(collection(db,'discord_log_queue'), {
+                type: 'bug_deleted',
+                title: d.title || 'Bug Report',
+                description: d.description || d.text || '',
+                author: d.discordUsername || d.displayName || 'Anonymous',
+                adminName: auth.currentUser?.displayName || 'Admin',
+                createdAt: serverTimestamp(),
+                processed: false,
+            });
+        }
+        await deleteDoc(ref);
         window._adminLoadFeedback();
     } catch(e) {
         alert('Failed: ' + e.message);
@@ -11231,6 +11355,47 @@ function _tcgPickCard(rarity) {
     return { name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity, batch: c.batch || 1 };
 }
 
+// Picks a card filtered to a specific batch, with 4:1 weighting for UR
+// (80% current-batch UR, 20% older UR). Used by current-batch and filler packs.
+function _tcgPickCardBatch(rarity, targetBatch) {
+    if (rarity === 'ur') {
+        const all = (window._tcgURPool && window._tcgURPool.length) ? window._tcgURPool : TCG_UR_CARDS;
+        const cur = all.filter(c => (c.batch || 1) === targetBatch);
+        const old = all.filter(c => (c.batch || 1) !== targetBatch);
+        let src;
+        if (cur.length && (!old.length || Math.random() < 0.8))
+            src = cur[Math.floor(Math.random() * cur.length)];
+        else if (old.length)
+            src = old[Math.floor(Math.random() * old.length)];
+        else if (all.length)
+            src = all[Math.floor(Math.random() * all.length)];
+        else return _tcgPickCard('ssr');
+        return { name: src.name, anime: _normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity: 'ur' };
+    }
+    let pool;
+    if (rarity === 'ssr') {
+        const all = (window._tcgSSRPool && window._tcgSSRPool.length) ? window._tcgSSRPool : TCG_SSR_CARDS;
+        pool = all.filter(c => (c.batch || 1) === targetBatch);
+        if (!pool.length) pool = all;
+        if (!pool.length) return _tcgPickCardBatch('sr', targetBatch);
+    } else if (rarity === 'sr') {
+        const all = (window._tcgSRPool && window._tcgSRPool.length) ? window._tcgSRPool : TCG_SR_CARDS;
+        pool = all.filter(c => (c.batch || 1) === targetBatch);
+        if (!pool.length) pool = all;
+    } else if (rarity === 'rare') {
+        pool = (window._tcgRarePool || []).filter(c => (c.batch || 1) === targetBatch);
+        if (!pool.length) pool = window._tcgRarePool || [];
+        if (!pool.length) return { name: '???', anime: '', image: '', rarity };
+    } else {
+        pool = (window._tcgCommonPool || []).filter(c => (c.batch || 1) === targetBatch);
+        if (!pool.length) pool = window._tcgCommonPool || [];
+        if (!pool.length) return { name: '???', anime: '', image: '', rarity };
+    }
+    if (!pool.length) return { name: '???', anime: '', image: '', rarity };
+    const src = pool[Math.floor(Math.random() * pool.length)];
+    return { name: src.name, anime: _normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity };
+}
+
 // ── TCG Card Pool Browser (admin) ────────────────────────────────────────────
 window._tcgBrowsePool = async function(filter = 'all', search = '', offset = 0) {
     const el = document.getElementById('tcg-pool-browser');
@@ -11889,6 +12054,50 @@ function _tcgRollPrismaticPackCards(pack) {
     return cards.sort(() => Math.random() - 0.5);
 }
 
+// Current Batch / Filler Pack roll — same as standard/premium but pool is
+// filtered to a specific batch, and UR is weighted 4:1 current vs older.
+// SR boosted: +0.5% guaranteed slot, +0.25% normal slots (taken from Rare).
+function _tcgRollCurrentBatchPackCards(pack, targetBatch) {
+    const cards = [];
+    const pick = (r) => _tcgPickCardBatch(r, targetBatch);
+    // Slot 1 — guaranteed slot
+    const g = Math.random();
+    if (pack.guaranteedSR) {
+        // Current Batch Premium: SSR 4% (+0.5% vs regular), SR 96%
+        cards.push(pick(g < 0.04 ? 'ssr' : 'sr'));
+    } else {
+        // Standard: SSR 0.4%, SR 5.1%, Rare rest
+        if      (g < 0.004) cards.push(pick('ssr'));
+        else if (g < 0.055) cards.push(pick('sr'));
+        else                cards.push(pick('rare'));
+    }
+    // Slots 2–5
+    for (let i = 0; i < 4; i++) {
+        const r = Math.random();
+        let rarity;
+        if (pack.guaranteedSR) {
+            // Current Batch Premium: SSR 0.75% (+0.25%), SR 3.5%, Rare 20.75%, Common 75%
+            if      (r < 0.0075) rarity = 'ssr';
+            else if (r < 0.0425) rarity = 'sr';
+            else if (r < 0.2500) rarity = 'rare';
+            else                 rarity = 'common';
+        } else {
+            // Standard: SSR 0.1%, SR 0.65%, Rare 9.25%, Common 90%
+            if      (r < 0.001)  rarity = 'ssr';
+            else if (r < 0.0075) rarity = 'sr';
+            else if (r < 0.1000) rarity = 'rare';
+            else                 rarity = 'common';
+        }
+        cards.push(pick(rarity));
+    }
+    // UR bonus (same chance as regular packs), batch-weighted
+    const urChance = pack.guaranteedSR ? 0.005 : 0.0025;
+    if (Math.random() < urChance) {
+        cards[Math.floor(Math.random() * cards.length)] = pick('ur');
+    }
+    return cards.sort(() => Math.random() - 0.5);
+}
+
 window._tcgRenderStore = async function() {
     const el = document.getElementById('tcg-store');
     if (!el) return;
@@ -11902,11 +12111,17 @@ window._tcgRenderStore = async function() {
     } catch(e) {}
 
     const saleActive = await _tcgFlashSaleActive();
-    const prismaticConfig = await _tcgLoadPrismaticEventConfig();
+    const [prismaticConfig, fillerConfig] = await Promise.all([
+        _tcgLoadPrismaticEventConfig(),
+        _tcgLoadFillerConfig(),
+    ]);
     const prismaticEndAt = _tcgPrismaticEventEndAt(prismaticConfig);
     const prismaticActive = !!prismaticEndAt && prismaticEndAt > new Date();
+    const fillerBatch = fillerConfig?.batch ?? null;
 
     window._tcgPackQty = window._tcgPackQty || {};
+    window._tcgLastAmber = amber;
+    window._tcgLastSaleActive = saleActive;
     const packCard = (pack, isComingSoon = false, topHtml = '', grayscale = false, extraClass = '', bottomHtml = '') => {
         const onSale = !isComingSoon && saleActive && pack.salePrice != null;
         const unitCost = onSale ? pack.salePrice : pack.cost;
@@ -11917,7 +12132,7 @@ window._tcgRenderStore = async function() {
             ? `<span style="text-decoration:line-through;text-decoration-color:#ef4444;color:var(--text-muted);font-weight:700;margin-right:8px;">🟡 ${(pack.cost * qty).toLocaleString()}</span><span style="color:#f59e0b;">🟡 ${totalCost.toLocaleString()}</span>`
             : `🟡 ${totalCost.toLocaleString()}`;
         const qtyPills = !isComingSoon ? `
-            <div style="display:flex;gap:6px;justify-content:center;margin:8px 0;">
+            <div id="tcg-qty-pills-${pack.id}" style="display:flex;gap:6px;justify-content:center;margin:8px 0;">
                 ${[1, 5, 10].map(n => `<button onclick="window._tcgSetPackQty('${pack.id}',${n})" style="padding:5px 14px;border-radius:20px;border:1px solid ${qty === n ? 'var(--accent-yellow)' : 'var(--border-color)'};background:${qty === n ? 'rgba(245,158,11,0.12)' : 'transparent'};color:${qty === n ? '#f59e0b' : 'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${n}×</button>`).join('')}
             </div>` : '';
         return `
@@ -11930,42 +12145,47 @@ window._tcgRenderStore = async function() {
             </div>
             <div style="font-size:11px;color:var(--text-muted);line-height:1.6;white-space:pre-line;text-align:center;min-height:48px;">${pack.odds || ''}</div>
             ${qtyPills}
-            <div style="font-size:16px;font-weight:800;color:#f59e0b;min-height:22px;">${priceHtml}</div>
-            <button ${isComingSoon ? 'disabled' : `onclick="window._tcgBuyPacks('${pack.id}',${qty})"`}
+            <div id="tcg-price-${pack.id}" style="font-size:16px;font-weight:800;color:#f59e0b;min-height:22px;">${priceHtml}</div>
+            <button id="tcg-buy-btn-${pack.id}" ${isComingSoon ? 'disabled' : `onclick="window._tcgBuyPacks('${pack.id}',${qty})"`}
                 style="width:100%;padding:10px;border-radius:8px;border:none;background:${isComingSoon ? 'var(--bg-gray)' : pack.gradient};color:${isComingSoon ? 'var(--text-muted)' : 'white'};font-weight:700;font-size:13px;cursor:${isComingSoon ? 'not-allowed' : 'pointer'};opacity:${isComingSoon ? '0.6' : (canAfford ? '1' : '0.5')};">
                 ${isComingSoon ? (pack.comingSoonLabel || 'Coming Soon') : (qty > 1 ? `Buy ${qty} Packs` : 'Buy Pack')}
             </button>
-            ${!isComingSoon && !canAfford ? `<div style="font-size:11px;color:var(--text-muted);">🟡 ${(totalCost - amber).toLocaleString()} more needed</div>` : ''}
+            <div id="tcg-cost-note-${pack.id}" style="font-size:11px;color:var(--text-muted);">${!isComingSoon && !canAfford ? `🟡 ${(totalCost - amber).toLocaleString()} more needed` : ''}</div>
             ${bottomHtml}
         </div>`;
     };
 
-    // Before the event ever runs, tease the specific Prismatic pack art with a date.
-    // Once that event has run and ended, fall back to a generic placeholder since
-    // there's no specific next event scheduled yet.
-    const futureEventPack = { ...TCG_PACKS.find(p => p.prismatic), description: 'Coming July 3rd', odds: '', comingSoonLabel: 'Coming July 3rd' };
+    // Flex slot (slot 5): Prismatic event when running, Filler Pack when configured, else coming soon.
     const genericComingSoonPack = {
+        id: 'flex_soon',
         name: 'Mystery Event Pack',
         description: 'A new limited-time pack is on the way',
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FComing%20Soon%20Pack.png?alt=media&token=3bb755b3-a7f9-494d-852c-a0105bebd308',
         odds: '',
+        cost: 0,
         comingSoonLabel: 'Coming Soon',
     };
-    const eventEverRan = !!prismaticConfig.startAt;
-
-    let thirdSlotHtml;
+    let flexSlotHtml;
     if (prismaticActive) {
         const countdownHtml = `<div style="width:100%;box-sizing:border-box;background:linear-gradient(135deg,#6366f1,#a855f7,#ec4899);color:white;border-radius:10px;padding:8px 12px;margin-top:10px;text-align:center;font-weight:800;font-size:12px;letter-spacing:0.3px;">✦ Event ends in <span id="prismatic-countdown-timer">…</span></div>`;
-        thirdSlotHtml = packCard(TCG_PACKS.find(p => p.prismatic), false, '', false, 'prismatic-pack-glow', countdownHtml);
-    } else if (eventEverRan) {
-        thirdSlotHtml = packCard(genericComingSoonPack, true, '', false);
+        flexSlotHtml = packCard(TCG_PACKS.find(p => p.prismatic), false, '', false, 'prismatic-pack-glow', countdownHtml);
+    } else if (fillerBatch != null) {
+        const fillerBase = TCG_PACKS.find(p => p.filler);
+        const fillerDisplay = {
+            ...fillerBase,
+            name: `Batch ${fillerBatch} Pack`,
+            description: `Batch ${fillerBatch} cards · 1 guaranteed SR+`,
+            odds: `Batch ${fillerBatch} · Common 75% · Rare 20.75% · SR 3.75% · SSR 0.5%\nGuaranteed slot: SR 97% · SSR 3%\n+0.5% UR bonus · UR favors Batch ${fillerBatch} 4:1`,
+        };
+        const batchLabelHtml = `<div style="width:100%;box-sizing:border-box;background:linear-gradient(135deg,#065f46,#047857);color:white;border-radius:10px;padding:6px 12px;margin-bottom:6px;text-align:center;font-weight:800;font-size:11px;letter-spacing:0.5px;">📦 BATCH ${fillerBatch} PACK</div>`;
+        flexSlotHtml = packCard(fillerDisplay, false, batchLabelHtml, false, '', '');
     } else {
-        thirdSlotHtml = packCard(futureEventPack, true, '', false);
+        flexSlotHtml = packCard(genericComingSoonPack, true, '', false);
     }
 
-    const b2Pool = _tcgFullCardPool().filter(c => (c.batch || 1) === 2);
-    const b2Cards = b2Pool.length ? [...b2Pool].sort(() => Math.random() - 0.5) : [];
-    const b2CarouselItemHtml = b2Cards.map(c => `
+    const curBatchPool = _tcgFullCardPool().filter(c => (c.batch || 1) === TCG_CURRENT_BATCH);
+    const curBatchCards = curBatchPool.length ? [...curBatchPool].sort(() => Math.random() - 0.5) : [];
+    const curBatchCarouselHtml = curBatchCards.map(c => `
         <div style="width:160px;height:224px;overflow:hidden;flex-shrink:0;">
             <div style="transform:scale(0.727);transform-origin:top left;">${_tcgBuildCardFace(c)}</div>
         </div>`).join('');
@@ -11982,9 +12202,10 @@ window._tcgRenderStore = async function() {
         ${saleActive ? `<div style="background:linear-gradient(135deg,#dc2626,#f59e0b);color:white;border-radius:10px;padding:10px 16px;margin-bottom:18px;text-align:center;font-weight:800;font-size:14px;letter-spacing:0.5px;">🎉 FLASH SALE — Pack prices rolled back for 72 hours! 🎉</div>` : ''}
         <div style="position:relative;">
             <div class="tcg-pack-grid" id="tcg-pack-carousel" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
-                ${packCard(TCG_PACKS[0])}
-                ${packCard(TCG_PACKS[1])}
-                ${thirdSlotHtml}
+                ${packCard(TCG_PACKS.find(p => p.id === 'standard'))}
+                ${packCard(TCG_PACKS.find(p => p.id === 'premium'))}
+                ${packCard(TCG_PACKS.find(p => p.id === 'current_premium'))}
+                ${flexSlotHtml}
             </div>
             <button class="tcg-carousel-arrow tcg-carousel-prev" onclick="window._tcgCarouselPrev()">‹</button>
             <button class="tcg-carousel-arrow tcg-carousel-next" onclick="window._tcgCarouselNext()">›</button>
@@ -11992,17 +12213,18 @@ window._tcgRenderStore = async function() {
                 <div class="tcg-carousel-dot active" onclick="window._tcgCarouselGo(0)"></div>
                 <div class="tcg-carousel-dot" onclick="window._tcgCarouselGo(1)"></div>
                 <div class="tcg-carousel-dot" onclick="window._tcgCarouselGo(2)"></div>
+                <div class="tcg-carousel-dot" onclick="window._tcgCarouselGo(3)"></div>
             </div>
         </div>
 
-        ${b2Cards.length ? `
+        ${curBatchCards.length ? `
         <div style="margin-top:36px;">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-                <h3 style="margin:0;">✨ Batch 2 — New Cards</h3>
-                <span style="font-size:12px;color:var(--text-muted);font-weight:600;">${b2Cards.length} cards</span>
+                <h3 style="margin:0;">✨ Batch ${TCG_CURRENT_BATCH} — New Cards</h3>
+                <span style="font-size:12px;color:var(--text-muted);font-weight:600;">${curBatchCards.length} cards</span>
             </div>
             <div class="tcg-carousel-viewport">
-                <div class="tcg-carousel-track" style="animation-duration:${Math.round(b2Cards.length * 2.9)}s">${b2CarouselItemHtml}${b2CarouselItemHtml}</div>
+                <div class="tcg-carousel-track" style="animation-duration:${Math.round(curBatchCards.length * 2.9)}s">${curBatchCarouselHtml}${curBatchCarouselHtml}</div>
             </div>
         </div>` : ''}`;
 
@@ -12046,7 +12268,42 @@ window._tcgCarouselGo = function(idx) {
 window._tcgSetPackQty = function(packId, qty) {
     window._tcgPackQty = window._tcgPackQty || {};
     window._tcgPackQty[packId] = qty;
-    window._tcgRenderStore();
+
+    // Update qty-dependent elements in-place to avoid a full store re-render
+    // which would reset scroll position on mobile.
+    const pack = TCG_PACKS.find(p => p.id === packId);
+    if (!pack) return;
+    const amber = window._tcgLastAmber || 0;
+    const onSale = window._tcgLastSaleActive && pack.salePrice != null;
+    const unitCost = onSale ? pack.salePrice : pack.cost;
+    const totalCost = unitCost * qty;
+    const canAfford = amber >= totalCost;
+
+    const pillsEl = document.getElementById(`tcg-qty-pills-${packId}`);
+    if (pillsEl) {
+        pillsEl.innerHTML = [1, 5, 10].map(n =>
+            `<button onclick="window._tcgSetPackQty('${packId}',${n})" style="padding:5px 14px;border-radius:20px;border:1px solid ${qty === n ? 'var(--accent-yellow)' : 'var(--border-color)'};background:${qty === n ? 'rgba(245,158,11,0.12)' : 'transparent'};color:${qty === n ? '#f59e0b' : 'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${n}×</button>`
+        ).join('');
+    }
+
+    const priceEl = document.getElementById(`tcg-price-${packId}`);
+    if (priceEl) {
+        priceEl.innerHTML = onSale
+            ? `<span style="text-decoration:line-through;text-decoration-color:#ef4444;color:var(--text-muted);font-weight:700;margin-right:8px;">🟡 ${(pack.cost * qty).toLocaleString()}</span><span style="color:#f59e0b;">🟡 ${totalCost.toLocaleString()}</span>`
+            : `🟡 ${totalCost.toLocaleString()}`;
+    }
+
+    const btnEl = document.getElementById(`tcg-buy-btn-${packId}`);
+    if (btnEl) {
+        btnEl.textContent = qty > 1 ? `Buy ${qty} Packs` : 'Buy Pack';
+        btnEl.onclick = () => window._tcgBuyPacks(packId, qty);
+        btnEl.style.opacity = canAfford ? '1' : '0.5';
+    }
+
+    const noteEl = document.getElementById(`tcg-cost-note-${packId}`);
+    if (noteEl) {
+        noteEl.textContent = !canAfford ? `🟡 ${(totalCost - amber).toLocaleString()} more needed` : '';
+    }
 };
 
 // ── Inventory tab — unopened packs (and future item types) ─────────────────────
