@@ -52,10 +52,61 @@ const db = getFirestore();
 const stripe = process.env.STRIPE_SECRET_KEY ? Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 const AMBER_BUNDLES = [
-  { id: 'amber_1000',  label: '750 Amber',    bonus: 250,   amount: 1000,  price: 99  },
-  { id: 'amber_5750',  label: '5,000 Amber',  bonus: 750,   amount: 5750,  price: 499 },
-  { id: 'amber_12000', label: '10,000 Amber', bonus: 2000,  amount: 12000, price: 999 },
+  { id: 'amber_1000',  label: '750 Amber',    bonus: 250,   amount: 1000,  price: 99   },
+  { id: 'amber_5750',  label: '5,000 Amber',  bonus: 750,   amount: 5750,  price: 499  },
+  { id: 'amber_12000', label: '10,000 Amber', bonus: 2000,  amount: 12000, price: 999  },
+  { id: 'amber_36000', label: '36,000 Amber', bonus: 0,     amount: 36000, price: 3000, bonusUr: true },
 ];
+
+// Pity: every $30 spent across any purchases grants a bonus UR (resets on UR grant).
+const STRIPE_PITY_THRESHOLD_CENTS = 3000;
+
+function normalizeSeriesName(title) {
+  if (!title) return title;
+  let t = title;
+  t = t.replace(/:\s*(The\s+)?Final Season.*/i, '');
+  t = t.replace(/:\s*\d+(st|nd|rd|th)?\s+Season.*/i, '');
+  t = t.replace(/:\s*Season\s+\d+.*/i, '');
+  t = t.replace(/\s+Season\s+\d+\s*$/i, '');
+  t = t.replace(/\s*[:\-]\s*Part\s+\d+\s*$/i, '');
+  t = t.replace(/\s+Part\s+\d+\s*$/i, '');
+  t = t.replace(/\s+[-–]\s+.*?(Arc|Chapter|Cour)\s*\d*\s*$/i, '');
+  return t.trim();
+}
+
+async function grantUrInventoryItem(uid, source) {
+  try {
+    const snap = await db.collection('characters').where('rarityTier', '==', 'ur').limit(100).get();
+    const pool = [];
+    snap.forEach(d => {
+      const c = d.data();
+      if (c.name && c.image && !c.imageBroken) pool.push(c);
+    });
+    if (!pool.length) { console.error('[stripe] No UR cards in pool for', source); return; }
+    const src = pool[Math.floor(Math.random() * pool.length)];
+    const urCard = {
+      name: src.name,
+      anime: normalizeSeriesName(src.series || src.anime || ''),
+      image: src.image,
+      rarity: 'ur',
+    };
+    const packName = source === 'stripe_pity' ? 'Pity UR' : 'Bonus UR';
+    await db.collection('inventory').doc(uid).collection('items').add({
+      type: 'pack',
+      packId: 'bonus_ur',
+      packName,
+      packImage: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+      rolledCards: [urCard],
+      godPackTheme: null,
+      source,
+      bulkBatchId: null,
+      grantedAt: Timestamp.now(),
+    });
+    console.log(`[stripe] Granted ${packName} inventory item to ${uid} (${src.name})`);
+  } catch(e) {
+    console.error('[stripe] grantUrInventoryItem failed:', e.message);
+  }
+}
 
 // ── Webhook server (Stripe) ───────────────────────────────────────────────────
 const webhookApp = express();
@@ -99,6 +150,8 @@ async function handleAmberPurchase(session) {
   const linkRef    = db.doc(`discord_links/${discordId}`);
 
   let uid;
+  let bundleUrGranted = bundle.bonusUr || false;
+  let pityUrGranted = false;
   try {
     await db.runTransaction(async tx => {
       const [sessionSnap, linkSnap] = await Promise.all([tx.get(sessionRef), tx.get(linkRef)]);
@@ -108,8 +161,32 @@ async function handleAmberPurchase(session) {
       if (!linkSnap.exists) throw Object.assign(new Error('no_link'), { discordId });
 
       uid = linkSnap.data().uid;
-      tx.set(sessionRef, { uid, bundleId, amberGranted: bundle.amount, processedAt: Timestamp.now() });
-      tx.update(db.doc(`profiles/${uid}`), { amber: FieldValue.increment(bundle.amount) });
+      const profileRef = db.doc(`profiles/${uid}`);
+      const profileSnap = await tx.get(profileRef);
+      const currentPity = profileSnap.exists ? (profileSnap.data().stripePityCents || 0) : 0;
+
+      let newPity;
+      if (bundle.bonusUr) {
+        // $30 bundle always includes a UR — reset pity counter
+        newPity = 0;
+        pityUrGranted = false;
+      } else {
+        newPity = currentPity + bundle.price;
+        if (newPity >= STRIPE_PITY_THRESHOLD_CENTS) {
+          pityUrGranted = true;
+          newPity = 0;
+        }
+      }
+
+      tx.set(sessionRef, {
+        uid, bundleId, amberGranted: bundle.amount,
+        bundleUrGranted, pityUrGranted,
+        processedAt: Timestamp.now(),
+      });
+      tx.update(profileRef, {
+        amber: FieldValue.increment(bundle.amount),
+        stripePityCents: newPity,
+      });
     });
   } catch (err) {
     if (err.message === 'no_link') {
@@ -135,16 +212,23 @@ async function handleAmberPurchase(session) {
     });
   } catch(e) { console.error('[stripe] amber_log write failed:', e.message); }
 
+  // Grant UR inventory items
+  if (bundleUrGranted) await grantUrInventoryItem(uid, 'stripe_bundle');
+  if (pityUrGranted)   await grantUrInventoryItem(uid, 'stripe_pity');
+
   // Notify user
   const amountStr = bundle.amount.toLocaleString();
+  const urNote = (bundleUrGranted || pityUrGranted)
+    ? '\n✨ **Bonus UR card** has been added to your inventory — open it from the pack store!'
+    : '';
   try {
     const user = await client.users.fetch(discordId);
-    await user.send(`🟡 **+${amountStr} Amber** has been added to your WeeBee account!\nHead to https://weebee.buzz to spend it in the pack store.`);
+    await user.send(`🟡 **+${amountStr} Amber** has been added to your WeeBee account!${urNote}\nHead to https://weebee.buzz to spend it in the pack store.`);
   } catch {
     // DMs disabled — fall back to the drops channel
     try {
       const channel = await client.channels.fetch(CHANNEL_ID);
-      await channel.send(`<@${discordId}> 🟡 **+${amountStr} Amber** added to your WeeBee account!`);
+      await channel.send(`<@${discordId}> 🟡 **+${amountStr} Amber** added to your WeeBee account!${urNote}`);
     } catch {}
   }
 }
@@ -522,20 +606,31 @@ async function handleBuyAmber(interaction) {
 
   const embed = new EmbedBuilder()
     .setTitle('🟡  Buy Amber')
-    .setDescription('Amber is WeeBee\'s TCG currency. Use it to open packs in the store.')
-    .addFields(AMBER_BUNDLES.map(b => ({
-      name: `$${(b.price / 100).toFixed(2)} — ${b.label} + **${b.bonus.toLocaleString()} Bonus** 🎁`,
-      value: `**${b.amount.toLocaleString()} Amber total**`,
-      inline: false,
-    })))
+    .setDescription('Amber is WeeBee\'s TCG currency. Use it to open packs in the store.\n✨ Spend **$30 total** across any purchases to earn a free Bonus UR card.')
+    .addFields(AMBER_BUNDLES.map(b => b.bonusUr
+      ? {
+          name: `$${(b.price / 100).toFixed(2)} — ${b.label} + **Bonus UR Card** ✨`,
+          value: `**${b.amount.toLocaleString()} Amber** + a guaranteed UR card added to your inventory`,
+          inline: false,
+        }
+      : {
+          name: `$${(b.price / 100).toFixed(2)} — ${b.label} + **${b.bonus.toLocaleString()} Bonus** 🎁`,
+          value: `**${b.amount.toLocaleString()} Amber total**`,
+          inline: false,
+        }
+    ))
     .setColor(0xffc107)
     .setFooter({ text: 'Payments processed securely by Stripe · Link expires in 30 min' });
 
-  const buttons = AMBER_BUNDLES.map(b =>
-    new ButtonBuilder()
-      .setCustomId(`buy_amber_${b.id}`)
-      .setLabel(`${b.label} + ${b.bonus.toLocaleString()} Bonus · $${(b.price / 100).toFixed(2)}`)
-      .setStyle(ButtonStyle.Primary)
+  const buttons = AMBER_BUNDLES.map(b => b.bonusUr
+    ? new ButtonBuilder()
+        .setCustomId(`buy_amber_${b.id}`)
+        .setLabel(`${b.label} + UR Card · $${(b.price / 100).toFixed(2)}`)
+        .setStyle(ButtonStyle.Success)
+    : new ButtonBuilder()
+        .setCustomId(`buy_amber_${b.id}`)
+        .setLabel(`${b.label} + ${b.bonus.toLocaleString()} Bonus · $${(b.price / 100).toFixed(2)}`)
+        .setStyle(ButtonStyle.Primary)
   );
 
   await interaction.reply({
@@ -559,7 +654,9 @@ async function handleBuyAmberButton(interaction, bundleId) {
           currency: 'usd',
           product_data: {
             name: `${bundle.label} — WeeBee TCG`,
-            description: 'Amber currency for WeeBee TCG. Added to your linked WeeBee account automatically.',
+            description: bundle.bonusUr
+              ? 'Amber + Bonus UR card for WeeBee TCG. Both added to your linked WeeBee account automatically.'
+              : 'Amber currency for WeeBee TCG. Added to your linked WeeBee account automatically.',
           },
           unit_amount: bundle.price,
         },

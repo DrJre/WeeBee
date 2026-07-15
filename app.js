@@ -28467,7 +28467,11 @@ window._dungeonClaim = async function() {
         if (dungeonAch.length) window.awardAchievements(dungeonAch).catch(() => {});
     } catch(e) {
         window._dungeonClaiming = false;
-        if (e.message !== 'already_claimed') alert('Claim failed: ' + e.message);
+        if (e.message !== 'already_claimed') {
+            alert('Claim failed: ' + e.message);
+            window._dungeonState = null;
+            window.loadDungeonTab();
+        }
         return;
     }
     window._dungeonClaiming = false;
