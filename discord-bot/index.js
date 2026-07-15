@@ -125,6 +125,16 @@ async function handleAmberPurchase(session) {
     throw err;
   }
 
+  // Log to amber_log so the WeeBee admin panel can see this purchase
+  try {
+    await db.collection('amber_log').add({
+      uid,
+      amount: bundle.amount,
+      reason: `stripe:${bundleId}:${sessionId}`,
+      timestamp: Timestamp.now(),
+    });
+  } catch(e) { console.error('[stripe] amber_log write failed:', e.message); }
+
   // Notify user
   const amountStr = bundle.amount.toLocaleString();
   try {
@@ -756,6 +766,7 @@ async function handleSuggestStatus(interaction, newStatus, docId) {
         if (linkSnap.exists) {
           const { uid } = linkSnap.data();
           await db.doc(`profiles/${uid}`).update({ amber: FieldValue.increment(SUGGESTION_APPROVE_AMBER) });
+          await db.collection('amber_log').add({ uid, amount: SUGGESTION_APPROVE_AMBER, reason: `discord:suggestion_approved:${docId}`, timestamp: Timestamp.now() }).catch(() => {});
           docUpdate.amberAwarded = SUGGESTION_APPROVE_AMBER;
           amberAwarded = SUGGESTION_APPROVE_AMBER;
           replyContent += ` 🟡 **${SUGGESTION_APPROVE_AMBER} Amber** awarded to the submitter.`;
@@ -947,6 +958,7 @@ async function handleBugStatus(interaction, newStatus, docId) {
         if (linkSnap.exists) {
           const { uid } = linkSnap.data();
           await db.doc(`profiles/${uid}`).update({ amber: FieldValue.increment(BUG_FIX_AMBER) });
+          await db.collection('amber_log').add({ uid, amount: BUG_FIX_AMBER, reason: `discord:bug_fixed:${docId}`, timestamp: Timestamp.now() }).catch(() => {});
           docUpdate.amberAwarded = BUG_FIX_AMBER;
           amberAwarded = BUG_FIX_AMBER;
           replyContent += ` 🟡 **${BUG_FIX_AMBER} Amber** awarded to the reporter.`;

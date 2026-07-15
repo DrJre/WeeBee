@@ -7517,8 +7517,11 @@ window._amberLoadWallet = async function() {
             if (reason === 'wheel:spin')              return '🎡 Wheel spin';
             if (reason === 'plinko:drop')             return '🪙 Plinko';
             if (reason === 'tcg:dismantle')           return '♻️ Dismantle cards';
-            if (reason === 'admin:deduct')            return '🔧 Admin deduct';
-            if (reason === 'admin:test_grant')        return '🔧 Admin test grant';
+            if (reason === 'admin:deduct')                    return '🔧 Admin deduct';
+            if (reason === 'admin:test_grant')                return '🔧 Admin test grant';
+            if (reason.startsWith('stripe:'))                 return '💳 Stripe purchase';
+            if (reason.startsWith('discord:suggestion_approved:')) return '💡 Suggestion approved (Discord)';
+            if (reason.startsWith('discord:bug_fixed:'))      return '🐛 Bug fix reward (Discord)';
             return reason;
         }
 
@@ -8131,6 +8134,51 @@ window._tcgSimulatePacks = function() {
 
     document.body.appendChild(modal);
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+};
+
+// Admin: look up Stripe purchase history for a user by UID
+window._adminLookupStripePurchases = async function() {
+    if (!window.isAdmin) return;
+    const uid = document.getElementById('stripe-lookup-uid')?.value.trim();
+    const el = document.getElementById('stripe-lookup-results');
+    if (!el) return;
+    if (!uid) { el.innerHTML = '<p style="color:#ef4444;font-size:13px;">Enter a UID.</p>'; return; }
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Loading…</p>';
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'stripe_sessions'),
+            where('uid', '==', uid),
+            orderBy('processedAt', 'desc'),
+            limit(50)
+        ));
+        if (snap.empty) {
+            el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No Stripe purchases found for this user.</p>';
+            return;
+        }
+        const BUNDLE_LABELS = { amber_1000: '750 Amber + 250 bonus', amber_5750: '5,000 Amber + 750 bonus', amber_12000: '10,000 Amber + 2,000 bonus' };
+        const BUNDLE_PRICES = { amber_1000: '$0.99', amber_5750: '$4.99', amber_12000: '$9.99' };
+        let total = 0;
+        const rows = snap.docs.map(d => {
+            const s = d.data();
+            const ts = s.processedAt?.toDate?.()?.toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }) || '—';
+            total += s.amberGranted || 0;
+            return `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-bottom:1px solid var(--border-color);font-size:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:700;">🟡 ${(s.amberGranted||0).toLocaleString()} Amber <span style="color:var(--text-muted);font-weight:400;">— ${BUNDLE_LABELS[s.bundleId]||s.bundleId||'?'}</span></div>
+                    <div style="color:var(--text-muted);margin-top:2px;">${ts} · Session: <code style="font-size:10px;">${d.id}</code></div>
+                </div>
+                <span style="font-weight:800;color:#10b981;white-space:nowrap;">${BUNDLE_PRICES[s.bundleId]||'?'}</span>
+            </div>`;
+        }).join('');
+        el.innerHTML = `
+            <div style="margin-bottom:8px;padding:8px 12px;border-radius:8px;background:#10b98111;border:1px solid #10b98133;font-size:12px;">
+                <strong>${snap.size} purchase${snap.size!==1?'s':''} · 🟡 ${total.toLocaleString()} Amber total</strong>
+            </div>
+            <div style="border-radius:8px;overflow:hidden;background:var(--bg-white);">${rows}</div>
+        `;
+    } catch(e) {
+        el.innerHTML = `<p style="color:#ef4444;font-size:13px;">Failed: ${e.message}</p>`;
+    }
 };
 
 // Admin: search users by display name to send a manual Amber payment (refunds, etc.)
@@ -18749,38 +18797,244 @@ window._tcgDeclineBulletinOffer = async function(btn, offerId, listingId) {
     }
 };
 
+// Admin — Trade Reversal Tool
+window._tcgReversalTrades = null;
+
+window._tcgAdminFindUserTrades = async function() {
+    if (!window.isAdmin) return;
+    const uid = document.getElementById('tcg-reversal-uid')?.value.trim();
+    if (!uid) { alert('Enter the sender\'s UID.'); return; }
+    const windowVal = document.getElementById('tcg-reversal-window')?.value || 'today';
+    const el = document.getElementById('tcg-reversal-results');
+    if (!el) return;
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Searching…</p>';
+
+    const now = new Date();
+    let since = null;
+    if      (windowVal === 'today')  since = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    else if (windowVal === '3days')  since = new Date(now - 3 * 86400000);
+    else if (windowVal === '7days')  since = new Date(now - 7 * 86400000);
+
+    try {
+        const constraints = [
+            where('fromUid', '==', uid),
+            where('status', '==', 'completed'),
+            orderBy('updatedAt', 'desc'),
+            limit(200),
+        ];
+        if (since) constraints.splice(2, 0, where('updatedAt', '>=', since));
+        const snap = await getDocs(query(collection(db, 'trades'), ...constraints));
+
+        if (snap.empty) {
+            el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No completed trades found for this user in that window.</p>';
+            return;
+        }
+
+        window._tcgReversalTrades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        _tcgRenderReversalResults(el);
+    } catch(e) {
+        el.innerHTML = `<p style="color:#ef4444;font-size:13px;">Failed: ${e.message}</p>`;
+    }
+};
+
+function _tcgRenderReversalResults(el) {
+    const trades = window._tcgReversalTrades || [];
+    if (!el || !trades.length) return;
+
+    const totalCards = trades.reduce((sum, t) => sum + (t.offerCards || []).length, 0);
+    const urCount    = trades.reduce((sum, t) => sum + (t.offerCards || []).filter(c => c.rarity === 'ur').length, 0);
+
+    const rows = trades.map(t => {
+        const ts = t.updatedAt?.toDate?.()?.toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) || '—';
+        const cards = t.offerCards || [];
+        const urCards = cards.filter(c => c.rarity === 'ur');
+        const summary = cards.map(c => `${(c.rarity||'?').toUpperCase()} ${c.name||'?'}${c.serial != null ? ` #${c.serial}` : ''}`).join(', ');
+        return `<div style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);margin-bottom:6px;background:var(--bg-white);">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <div style="font-size:12px;">
+                    <span style="font-weight:700;">→ ${t.toName||'?'}</span>
+                    <span style="color:var(--text-muted);margin-left:8px;">${ts}</span>
+                    ${urCards.length ? `<span style="margin-left:6px;font-size:10px;font-weight:800;color:#f59e0b;background:#f59e0b22;padding:1px 6px;border-radius:10px;">${urCards.length} UR</span>` : ''}
+                </div>
+                <button id="rev-btn-${t.id}" onclick="window._tcgAdminReverseOneTrade('${t.id}',this)" style="padding:4px 10px;border-radius:6px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">Delete cards</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${summary || 'No cards'}</div>
+        </div>`;
+    }).join('');
+
+    el.innerHTML = `
+        <div style="margin-bottom:10px;padding:10px 14px;border-radius:8px;background:#ef444411;border:1px solid #ef444433;">
+            <div style="font-size:13px;font-weight:800;color:#ef4444;">${trades.length} trades · ${totalCards} cards sent · ${urCount} UR</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Deleting removes cards from recipients' collections. It cannot be undone.</div>
+        </div>
+        <button id="tcg-rev-all-btn" onclick="window._tcgAdminReverseAllTrades(this)" style="margin-bottom:10px;padding:8px 16px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:800;font-size:12px;cursor:pointer;">⏪ Delete cards from all ${trades.length} trades</button>
+        ${rows}
+    `;
+}
+
+async function _tcgDeleteTradedCards(trade) {
+    const cards = trade.offerCards || [];
+    if (!cards.length) return { deleted: 0, notFound: 0 };
+    const colRef = collection(db, 'card_collections', trade.toUid, 'cards');
+    const snap = await getDocs(colRef);
+    const recipientCards = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+    const claimed = new Set();
+    const toDelete = [];
+    for (const card of cards) {
+        const match = recipientCards.find(rc =>
+            !claimed.has(rc._docId) &&
+            rc.name === card.name &&
+            rc.rarity === card.rarity &&
+            rc.serial === card.serial
+        );
+        if (match) { claimed.add(match._docId); toDelete.push(match._docId); }
+    }
+    if (toDelete.length) {
+        const batch = writeBatch(db);
+        toDelete.forEach(id => batch.delete(doc(db, 'card_collections', trade.toUid, 'cards', id)));
+        await batch.commit();
+    }
+    return { deleted: toDelete.length, notFound: cards.length - toDelete.length };
+}
+
+window._tcgAdminReverseOneTrade = async function(tradeId, btn) {
+    if (!window.isAdmin) return;
+    const trade = window._tcgReversalTrades?.find(t => t.id === tradeId);
+    if (!trade) return;
+    if (!confirm(`Delete ${(trade.offerCards||[]).length} card(s) from ${trade.toName||'this user'}'s collection?`)) return;
+    btn.disabled = true; btn.textContent = 'Working…';
+    try {
+        const { deleted, notFound } = await _tcgDeleteTradedCards(trade);
+        btn.textContent = `✅ ${deleted} deleted${notFound ? ` (${notFound} not found)` : ''}`;
+        btn.style.color = '#10b981'; btn.style.borderColor = '#10b981';
+    } catch(e) {
+        btn.disabled = false; btn.textContent = 'Delete cards';
+        alert('Failed: ' + e.message);
+    }
+};
+
+window._tcgAdminReverseAllTrades = async function(btn) {
+    if (!window.isAdmin) return;
+    const trades = window._tcgReversalTrades || [];
+    if (!trades.length) return;
+    const totalCards = trades.reduce((sum, t) => sum + (t.offerCards || []).length, 0);
+    if (!confirm(`Delete cards from all ${trades.length} trades (${totalCards} cards total)?\n\nThis cannot be undone.`)) return;
+    btn.disabled = true;
+    let totalDeleted = 0, totalNotFound = 0, errors = 0;
+    for (let i = 0; i < trades.length; i++) {
+        btn.textContent = `Working… (${i + 1}/${trades.length})`;
+        const rowBtn = document.getElementById(`rev-btn-${trades[i].id}`);
+        try {
+            const { deleted, notFound } = await _tcgDeleteTradedCards(trades[i]);
+            totalDeleted += deleted;
+            totalNotFound += notFound;
+            if (rowBtn) { rowBtn.textContent = `✅ ${deleted} deleted`; rowBtn.style.color = '#10b981'; rowBtn.style.borderColor = '#10b981'; rowBtn.disabled = true; }
+        } catch(e) {
+            errors++;
+            if (rowBtn) { rowBtn.textContent = 'Error'; rowBtn.style.color = '#ef4444'; }
+        }
+    }
+    btn.textContent = `✅ Done — ${totalDeleted} deleted${totalNotFound ? `, ${totalNotFound} already gone` : ''}${errors ? `, ${errors} errors` : ''}`;
+};
+
+// Admin — trade log: cached data + filter state
+window._tcgTradeLogData = null;
+window._tcgTradeLogRarity = 'all';
+
+function _tcgAdminUpdateTradeRarityPills() {
+    ['all','ur','ssr','sr'].forEach(r => {
+        const btn = document.getElementById(`tcg-tl-rarity-${r}`);
+        if (!btn) return;
+        const active = r === window._tcgTradeLogRarity;
+        btn.style.background = active ? '#6366f1' : 'transparent';
+        btn.style.color = active ? '#fff' : 'var(--text-muted)';
+        btn.style.border = active ? 'none' : '1px solid var(--border-color)';
+    });
+}
+
+window._tcgAdminSetTradeRarity = function(rarity) {
+    window._tcgTradeLogRarity = rarity;
+    _tcgAdminUpdateTradeRarityPills();
+    _tcgAdminRenderTradeLog();
+};
+
+window._tcgAdminFilterTradeLog = function() {
+    _tcgAdminRenderTradeLog();
+};
+
+function _tcgAdminRenderTradeLog() {
+    const el = document.getElementById('tcg-admin-trade-log');
+    if (!el || !window._tcgTradeLogData) return;
+
+    const search = (document.getElementById('tcg-trade-log-search')?.value || '').toLowerCase().trim();
+    const rarity = window._tcgTradeLogRarity || 'all';
+    const STATUS_COLOR = { pending:'#f59e0b', processing:'#3b82f6', accepted:'#10b981', completed:'#6366f1', declined:'#6b7280', invalid:'#ef4444', cancelled:'#6b7280' };
+
+    let filtered = window._tcgTradeLogData;
+    if (search) {
+        filtered = filtered.filter(t =>
+            (t.fromName||'').toLowerCase().includes(search) ||
+            (t.toName||'').toLowerCase().includes(search)
+        );
+    }
+    if (rarity !== 'all') {
+        filtered = filtered.filter(t => {
+            const allCards = [...(t.offerCards||[]), ...(t.requestCards||[])];
+            return allCards.some(c => (c.rarity||'').toLowerCase() === rarity);
+        });
+    }
+
+    if (!filtered.length) {
+        el.innerHTML = `<p style="color:var(--text-muted);margin:0;font-size:13px;">No trades match the current filter.</p>`;
+        return;
+    }
+
+    const rows = filtered.map(t => {
+        const status = t.status || 'unknown';
+        const color = STATUS_COLOR[status] || '#6b7280';
+        const ts = t.updatedAt?.toDate?.()?.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }) || '—';
+        const offerCount = (t.offerCards || t.offerCardIds || []).length;
+        const requestCount = (t.requestCards || t.requestCardIds || []).length;
+        const amberLine = (t.offerAmber || t.requestAmber)
+            ? `<span style="font-size:11px;color:#f59e0b;">${t.offerAmber||0}🟡 → ${t.requestAmber||0}🟡</span>`
+            : '';
+        const allCards = [...(t.offerCards||[]), ...(t.requestCards||[])];
+        const hasUR = allCards.some(c => (c.rarity||'') === 'ur');
+        const hasSSR = !hasUR && allCards.some(c => (c.rarity||'') === 'ssr');
+        const rarityBadge = hasUR
+            ? `<span style="font-size:10px;font-weight:800;color:#f59e0b;background:#f59e0b22;padding:1px 6px;border-radius:10px;white-space:nowrap;">UR</span>`
+            : hasSSR
+            ? `<span style="font-size:10px;font-weight:800;color:#8b5cf6;background:#8b5cf622;padding:1px 6px;border-radius:10px;white-space:nowrap;">SSR</span>`
+            : '';
+        return `<div onclick="window._tcgAdminTradeDetail('${t.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;cursor:pointer;border-bottom:1px solid var(--border-color);transition:background .1s;" onmouseover="this.style.background='var(--bg-gray)'" onmouseout="this.style.background='transparent'">
+            <span style="font-size:11px;font-weight:700;color:${color};background:${color}22;padding:2px 8px;border-radius:20px;min-width:72px;text-align:center;text-transform:uppercase;">${status}</span>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t.fromName||'?'} → ${t.toName||'?'}</div>
+                <div style="font-size:11px;color:var(--text-muted);">${offerCount} card${offerCount!==1?'s':''} offered · ${requestCount} requested ${amberLine}</div>
+            </div>
+            ${rarityBadge}
+            <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${ts}</div>
+            <span class="material-symbols-outlined" style="font-size:16px;color:var(--text-muted);">chevron_right</span>
+        </div>`;
+    }).join('');
+    el.innerHTML = `<div style="border-radius:8px;overflow:hidden;">${rows}</div>`;
+}
+
 // Admin — load all trades across all users, most recent first
 window._tcgAdminLoadTradeLog = async function() {
     if (!window.isAdmin) return;
     const el = document.getElementById('tcg-admin-trade-log');
     if (!el) return;
     el.innerHTML = '<p style="color:var(--text-muted);margin:0;">Loading…</p>';
+    const searchEl = document.getElementById('tcg-trade-log-search');
+    if (searchEl) searchEl.value = '';
+    window._tcgTradeLogRarity = 'all';
+    _tcgAdminUpdateTradeRarityPills();
     try {
         const snap = await getDocs(query(collection(db, 'trades'), orderBy('updatedAt', 'desc'), limit(100)));
         if (snap.empty) { el.innerHTML = '<p style="color:var(--text-muted);margin:0;">No trades found.</p>'; return; }
-
-        const STATUS_COLOR = { pending:'#f59e0b', processing:'#3b82f6', accepted:'#10b981', completed:'#6366f1', declined:'#6b7280', invalid:'#ef4444', cancelled:'#6b7280' };
-        const rows = snap.docs.map(d => {
-            const t = d.data();
-            const status = t.status || 'unknown';
-            const color = STATUS_COLOR[status] || '#6b7280';
-            const ts = t.updatedAt?.toDate?.()?.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }) || '—';
-            const offerCount = (t.offerCards || t.offerCardIds || []).length;
-            const requestCount = (t.requestCards || t.requestCardIds || []).length;
-            const amberLine = (t.offerAmber || t.requestAmber)
-                ? `<span style="font-size:11px;color:#f59e0b;">${t.offerAmber||0}🟡 → ${t.requestAmber||0}🟡</span>`
-                : '';
-            return `<div onclick="window._tcgAdminTradeDetail('${d.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;cursor:pointer;border-bottom:1px solid var(--border-color);transition:background .1s;" onmouseover="this.style.background='var(--bg-white)'" onmouseout="this.style.background='transparent'">
-                <span style="font-size:11px;font-weight:700;color:${color};background:${color}22;padding:2px 8px;border-radius:20px;min-width:72px;text-align:center;text-transform:uppercase;">${status}</span>
-                <div style="flex:1;min-width:0;">
-                    <div style="font-size:13px;font-weight:700;color:var(--text-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t.fromName||'?'} → ${t.toName||'?'}</div>
-                    <div style="font-size:11px;color:var(--text-muted);">${offerCount} card${offerCount!==1?'s':''} offered · ${requestCount} requested ${amberLine}</div>
-                </div>
-                <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${ts}</div>
-                <span class="material-symbols-outlined" style="font-size:16px;color:var(--text-muted);">chevron_right</span>
-            </div>`;
-        }).join('');
-        el.innerHTML = `<div style="border-radius:8px;overflow:hidden;">${rows}</div>`;
+        window._tcgTradeLogData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        _tcgAdminRenderTradeLog();
     } catch(e) { el.innerHTML = `<p style="color:#ef4444;margin:0;">Failed: ${e.message}</p>`; }
 };
 

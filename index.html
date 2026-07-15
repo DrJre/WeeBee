@@ -1073,9 +1073,35 @@
                                     </div>
                                     <button onclick="window._tcgAdminLoadTradeLog()" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Refresh</button>
                                 </div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+                                    <input id="tcg-trade-log-search" type="text" placeholder="Filter by username…" oninput="window._tcgAdminFilterTradeLog()" style="flex:1; min-width:160px; padding:6px 10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; outline:none;">
+                                    <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                                        <button id="tcg-tl-rarity-all" onclick="window._tcgAdminSetTradeRarity('all')" style="padding:4px 10px; border-radius:20px; border:none; background:#6366f1; color:#fff; font-size:11px; font-weight:700; cursor:pointer;">All</button>
+                                        <button id="tcg-tl-rarity-ur" onclick="window._tcgAdminSetTradeRarity('ur')" style="padding:4px 10px; border-radius:20px; border:1px solid var(--border-color); background:transparent; color:var(--text-muted); font-size:11px; font-weight:700; cursor:pointer;">UR</button>
+                                        <button id="tcg-tl-rarity-ssr" onclick="window._tcgAdminSetTradeRarity('ssr')" style="padding:4px 10px; border-radius:20px; border:1px solid var(--border-color); background:transparent; color:var(--text-muted); font-size:11px; font-weight:700; cursor:pointer;">SSR</button>
+                                        <button id="tcg-tl-rarity-sr" onclick="window._tcgAdminSetTradeRarity('sr')" style="padding:4px 10px; border-radius:20px; border:1px solid var(--border-color); background:transparent; color:var(--text-muted); font-size:11px; font-weight:700; cursor:pointer;">SR</button>
+                                    </div>
+                                </div>
                                 <div id="tcg-admin-trade-log" style="background:var(--bg-white); border-radius:10px; padding:16px;">
                                     <p style="color:var(--text-muted); margin:0; font-size:13px;">Click Refresh to load trades.</p>
                                 </div>
+                            </div>
+
+                            <!-- Trade Reversal Tool -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">⏪ Trade Reversal Tool</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Find all completed trades sent by a user and delete the cards they sent from recipients' collections. Paste the sender's UID (found in the trade log detail modal).</div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; align-items:center;">
+                                    <input id="tcg-reversal-uid" type="text" placeholder="Sender UID…" style="flex:1; min-width:220px; padding:6px 10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; outline:none;">
+                                    <select id="tcg-reversal-window" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                        <option value="today">Today</option>
+                                        <option value="3days">Last 3 days</option>
+                                        <option value="7days">Last 7 days</option>
+                                        <option value="all">All time</option>
+                                    </select>
+                                    <button onclick="window._tcgAdminFindUserTrades()" style="padding:8px 16px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:800; font-size:12px; cursor:pointer;">Find Trades</button>
+                                </div>
+                                <div id="tcg-reversal-results"></div>
                             </div>
 
                             <!-- Repair Stuck Auctions -->
@@ -1198,6 +1224,17 @@
                                 <div id="amber-wallet-content" style="background:var(--bg-white); border-radius:10px; padding:16px;">
                                     <p style="color:var(--text-muted); margin:0; font-size:13px;">Click Refresh to load wallet data.</p>
                                 </div>
+                            </div>
+
+                            <!-- Stripe Purchase History -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">💳 Stripe Purchase History</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Look up all Amber purchases a user has made via Stripe. Paste their WeeBee UID.</div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+                                    <input id="stripe-lookup-uid" type="text" placeholder="User UID…" style="flex:1; min-width:220px; padding:6px 10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px; outline:none;">
+                                    <button onclick="window._adminLookupStripePurchases()" style="padding:8px 16px; border-radius:8px; border:none; background:var(--accent-yellow); color:#222; font-weight:800; font-size:12px; cursor:pointer;">Look Up</button>
+                                </div>
+                                <div id="stripe-lookup-results"></div>
                             </div>
 
                             <!-- Send Amber -->
@@ -2801,6 +2838,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=626"></script>
+    <script type="module" src="app.js?v=629"></script>
 </body>
 </html>
