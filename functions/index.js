@@ -473,7 +473,7 @@ function calcPityUrChance(packId, counter) {
         if (counter > 400)  return Math.min(1.0, (counter - 400) * 0.005);
         return 0;
     }
-    if (packId === 'premium') {
+    if (packId === 'premium' || packId === 'current_premium' || packId === 'filler') {
         if (counter >= 75) return 1.0;
         if (counter > 50)  return Math.min(1.0, (counter - 50) * 0.02);
         return 0;
