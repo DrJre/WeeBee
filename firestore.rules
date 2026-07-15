@@ -386,17 +386,16 @@ service cloud.firestore {
     }
     match /card_collections/{uid}/cards/{card} {
       allow read: if true;
-      // Admin can also create cards directly in another user's collection —
-      // used to gift the 1-of-1 Founder edition card.
-      // Monthly Prize Wheel UR cards are special-cased: the owner can only
-      // create one if their wheel_state shows they actually landed on the
-      // UR slot this spin (pendingUrClaim == true) — prevents writing a
-      // fake monthly UR directly.
+      // All card writes go through Cloud Functions (Admin SDK bypasses rules).
+      // The only remaining client-side path is the Prize Wheel monthly UR:
+      // the owner may create exactly one card per spin, and only when their
+      // wheel_state confirms they actually landed on the UR slot this spin
+      // (pendingUrClaim == true). All other client card creates are blocked —
+      // pack opens, trades, auctions, and PVP payouts go through CFs.
       allow create: if isAdmin() || (
-        isOwner(uid) && (
-          request.resource.data.get('monthlyUr', false) != true ||
-          get(/databases/$(database)/documents/wheel_state/$(uid)).data.pendingUrClaim == true
-        )
+        isOwner(uid) &&
+        request.resource.data.get('monthlyUr', false) == true &&
+        get(/databases/$(database)/documents/wheel_state/$(uid)).data.pendingUrClaim == true
       );
       allow update: if isOwner(uid) || isAdmin();
       allow delete: if isOwner(uid) || isAdmin();

@@ -83,12 +83,13 @@ exports.settleTrade = onRequest({ invoker: 'public' }, async (req, res) => {
             for (const r of fromPackRefs) fromPackSnaps.push(await tx.get(r));
             if (fromPackSnaps.some(s => !s.exists)) { userError = [400, 'FAILED_PRECONDITION', 'The offerer no longer has all their offered packs.']; return; }
 
+            const tradeNow = new Date();
             fromCardRefs.forEach(ref => tx.delete(ref));
             for (const card of (t.requestCards || [])) {
                 if (!card || typeof card !== 'object') continue;
                 const { monthlyUr, id: _id, ...rest } = card;
                 tx.set(db.collection('card_collections').doc(t.fromUid).collection('cards').doc(),
-                    monthlyUr ? { ...rest, tradedMonthlyUr: true } : rest);
+                    monthlyUr ? { ...rest, tradedMonthlyUr: true, acquiredVia: 'trade', acquiredAt: tradeNow } : { ...rest, acquiredVia: 'trade', acquiredAt: tradeNow });
             }
 
             toCardRefs.forEach(ref => tx.delete(ref));
@@ -96,7 +97,7 @@ exports.settleTrade = onRequest({ invoker: 'public' }, async (req, res) => {
                 if (!card || typeof card !== 'object') continue;
                 const { monthlyUr, id: _id, ...rest } = card;
                 tx.set(db.collection('card_collections').doc(t.toUid).collection('cards').doc(),
-                    monthlyUr ? { ...rest, tradedMonthlyUr: true } : rest);
+                    monthlyUr ? { ...rest, tradedMonthlyUr: true, acquiredVia: 'trade', acquiredAt: tradeNow } : { ...rest, acquiredVia: 'trade', acquiredAt: tradeNow });
             }
 
             // Transfer packs: delete from fromUid, create for toUid
@@ -182,11 +183,11 @@ exports.settleAuction = onRequest({ invoker: 'public' }, async (req, res) => {
 
             const now = new Date();
             if (item.currentBidderUid) {
-                tx.set(db.collection('card_collections').doc(item.currentBidderUid).collection('cards').doc(), item.card);
+                tx.set(db.collection('card_collections').doc(item.currentBidderUid).collection('cards').doc(), { ...item.card, acquiredVia: 'auction', acquiredAt: now });
                 tx.update(db.collection('profiles').doc(item.uid), { amber: FieldValue.increment(item.currentBid) });
                 tx.update(listingRef, { status: 'won', deliveredAt: now });
             } else {
-                tx.set(db.collection('card_collections').doc(item.uid).collection('cards').doc(), item.card);
+                tx.set(db.collection('card_collections').doc(item.uid).collection('cards').doc(), { ...item.card, acquiredVia: 'auction', acquiredAt: now });
                 tx.update(listingRef, { status: 'unsold', deliveredAt: now });
             }
         });
@@ -276,9 +277,10 @@ exports.settleBulletinOffer = onRequest({ invoker: 'public' }, async (req, res) 
                     }
                 }
 
+                const bulletinNow = new Date();
                 offerCardRefs.forEach(ref => tx.delete(ref));
                 (offer.offerCards || []).forEach(card => {
-                    tx.set(db.collection('card_collections').doc(callerUid).collection('cards').doc(), card);
+                    tx.set(db.collection('card_collections').doc(callerUid).collection('cards').doc(), { ...card, acquiredVia: 'trade', acquiredAt: bulletinNow });
                 });
 
                 if (payAmber > 0) {
@@ -303,14 +305,15 @@ exports.settleBulletinOffer = onRequest({ invoker: 'public' }, async (req, res) 
                     if (!offerProfile.exists || (offerProfile.data().amber || 0) < offerAmber) { userError = [400, 'FAILED_PRECONDITION', 'The offerer no longer has enough Amber.']; return; }
                 }
 
+                const bulletinNow = new Date();
                 listingCardRefs.forEach(ref => tx.delete(ref));
                 (offer.offerCards || []).forEach(card => {
-                    tx.set(db.collection('card_collections').doc(callerUid).collection('cards').doc(), card);
+                    tx.set(db.collection('card_collections').doc(callerUid).collection('cards').doc(), { ...card, acquiredVia: 'trade', acquiredAt: bulletinNow });
                 });
 
                 offerCardRefs.forEach(ref => tx.delete(ref));
                 (listing.cards || []).forEach(card => {
-                    tx.set(db.collection('card_collections').doc(offer.fromUid).collection('cards').doc(), card);
+                    tx.set(db.collection('card_collections').doc(offer.fromUid).collection('cards').doc(), { ...card, acquiredVia: 'trade', acquiredAt: bulletinNow });
                 });
 
                 if (offerAmber > 0) {
@@ -936,8 +939,9 @@ exports.openInventoryItems = onRequest({ invoker: 'public' }, async (req, res) =
             }
             const cardCol = db.collection('card_collections').doc(callerUid).collection('cards');
             const batch = db.batch();
+            const pulledAt = new Date();
             finishedCards.forEach(c => {
-                batch.set(cardCol.doc(), { name: c.name, anime: c.anime, rarity: c.rarity, image: c.image, serial: c.serial, edition: c.edition, pulledAt: new Date() });
+                batch.set(cardCol.doc(), { name: c.name, anime: c.anime, rarity: c.rarity, image: c.image, serial: c.serial, edition: c.edition, pulledAt, acquiredVia: 'pack', acquiredAt: pulledAt });
             });
             batch.delete(invCol.doc(item.id));
             await batch.commit();
@@ -1062,11 +1066,12 @@ exports.settlePvpBattle = onRequest({ invoker: 'public' }, async (req, res) => {
             // Winner already owns their wagered cards; re-writing them would create
             // duplicates with mismatched doc IDs that break selection and dismantle.
             if (c.battleType === 'card') {
+                const pvpNow = new Date();
                 const loserWagerCards = winnerUid === c.challengerId ? (defenderWagerCards || []) : (c.challengerWagerCards || []);
                 for (const wc of loserWagerCards) {
                     const newRef = db.collection('card_collections').doc(winnerUid).collection('cards').doc();
                     // Stamp id field to match the new document path so UI lookups stay consistent.
-                    tx.set(newRef, { ...wc, id: newRef.id });
+                    tx.set(newRef, { ...wc, id: newRef.id, acquiredVia: 'pvp', acquiredAt: pvpNow });
                     if (wc.id) tx.delete(db.collection('card_collections').doc(loserUid).collection('cards').doc(wc.id));
                 }
             }
