@@ -60,6 +60,8 @@ const AMBER_BUNDLES = [
 
 // Pity: every $30 spent across any purchases grants a bonus UR (resets on UR grant).
 const STRIPE_PITY_THRESHOLD_CENTS = 3000;
+// Maximum pity-triggered URs per calendar month (bundle URs are never capped).
+const STRIPE_UR_MONTHLY_CAP = 3;
 
 function normalizeSeriesName(title) {
   if (!title) return title;
@@ -151,7 +153,7 @@ async function handleAmberPurchase(session) {
 
   let uid;
   let bundleUrGranted = bundle.bonusUr || false;
-  let pityUrGranted = false;
+  let pityUrGranted   = false;
   try {
     await db.runTransaction(async tx => {
       const [sessionSnap, linkSnap] = await Promise.all([tx.get(sessionRef), tx.get(linkRef)]);
@@ -161,21 +163,37 @@ async function handleAmberPurchase(session) {
       if (!linkSnap.exists) throw Object.assign(new Error('no_link'), { discordId });
 
       uid = linkSnap.data().uid;
-      const profileRef = db.doc(`profiles/${uid}`);
+      const profileRef  = db.doc(`profiles/${uid}`);
       const profileSnap = await tx.get(profileRef);
-      const currentPity = profileSnap.exists ? (profileSnap.data().stripePityCents || 0) : 0;
+      const profileData = profileSnap.exists ? profileSnap.data() : {};
+      const currentPity = profileData.stripePityCents || 0;
+
+      // Monthly cap tracking (for pity URs only; bundle URs are never capped)
+      const monthKey         = new Date().toISOString().slice(0, 7); // "2026-07"
+      const savedMonth       = profileData.stripeUrMonthKey   || '';
+      const urCountThisMonth = savedMonth === monthKey ? (profileData.stripeUrMonthCount || 0) : 0;
 
       let newPity;
       if (bundle.bonusUr) {
-        // $30 bundle always includes a UR — reset pity counter
-        newPity = 0;
+        newPity       = 0;
         pityUrGranted = false;
       } else {
         newPity = currentPity + bundle.price;
         if (newPity >= STRIPE_PITY_THRESHOLD_CENTS) {
-          pityUrGranted = true;
-          newPity = 0;
+          if (urCountThisMonth < STRIPE_UR_MONTHLY_CAP) {
+            pityUrGranted = true;
+          }
+          newPity = 0; // always consume the $30 threshold, UR granted or not
         }
+      }
+
+      const profileUpdate = {
+        amber: FieldValue.increment(bundle.amount),
+        stripePityCents: newPity,
+      };
+      if (pityUrGranted) {
+        profileUpdate.stripeUrMonthKey   = monthKey;
+        profileUpdate.stripeUrMonthCount = (savedMonth === monthKey ? urCountThisMonth : 0) + 1;
       }
 
       tx.set(sessionRef, {
@@ -183,10 +201,7 @@ async function handleAmberPurchase(session) {
         bundleUrGranted, pityUrGranted,
         processedAt: Timestamp.now(),
       });
-      tx.update(profileRef, {
-        amber: FieldValue.increment(bundle.amount),
-        stripePityCents: newPity,
-      });
+      tx.update(profileRef, profileUpdate);
     });
   } catch (err) {
     if (err.message === 'no_link') {
@@ -606,7 +621,7 @@ async function handleBuyAmber(interaction) {
 
   const embed = new EmbedBuilder()
     .setTitle('🟡  Buy Amber')
-    .setDescription('Amber is WeeBee\'s TCG currency. Use it to open packs in the store.\n✨ Spend **$30 total** across any purchases to earn a free Bonus UR card.')
+    .setDescription('Amber is WeeBee\'s TCG currency. Use it to open packs in the store.\n✨ Spend **$30 total** across any purchases to earn a free Bonus UR card (max 3 per month).')
     .addFields(AMBER_BUNDLES.map(b => b.bonusUr
       ? {
           name: `$${(b.price / 100).toFixed(2)} — ${b.label} + **Bonus UR Card** ✨`,
