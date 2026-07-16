@@ -899,6 +899,19 @@ async function handleSuggestStatus(interaction, newStatus, docId) {
   await ref.update(docUpdate);
   const data = { ...snap.data(), ...docUpdate, amberAwarded: amberAwarded ?? snap.data().amberAwarded ?? null };
 
+  if (newStatus === 'approved' || newStatus === 'declined') {
+    await db.collection('discord_log_queue').add({
+      type: 'suggestion_status',
+      status: newStatus,
+      title: snap.data().title || 'Feature Suggestion',
+      description: snap.data().description || '',
+      author: snap.data().username || 'Unknown',
+      adminName: interaction.user.username,
+      processed: false,
+      createdAt: Timestamp.now(),
+    }).catch(e => console.error('[suggest] Failed to queue log:', e.message));
+  }
+
   try {
     await interaction.message.edit({
       embeds:     [buildSuggestEmbed(data)],
@@ -1090,6 +1103,18 @@ async function handleBugStatus(interaction, newStatus, docId) {
 
   await ref.update(docUpdate);
   const data = { ...snap.data(), ...docUpdate, amberAwarded: amberAwarded ?? snap.data().amberAwarded ?? null };
+
+  if (newStatus === 'fixed') {
+    await db.collection('discord_log_queue').add({
+      type: 'bug_fixed',
+      title: snap.data().title || 'Bug Report',
+      description: snap.data().description || '',
+      author: snap.data().username || 'Unknown',
+      adminName: interaction.user.username,
+      processed: false,
+      createdAt: Timestamp.now(),
+    }).catch(e => console.error('[bug] Failed to queue log:', e.message));
+  }
 
   try {
     await interaction.message.edit({

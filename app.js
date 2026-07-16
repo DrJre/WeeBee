@@ -2038,6 +2038,8 @@ window.submitSeriesReview = async function() {
             timestamp: new Date(),
             likes: [], commentCount: 0
         });
+        const _avIs = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
+        setDoc(doc(db, "profiles", auth.currentUser.uid), { reviewCount: increment(1), seriesCount: increment(1), displayName: auth.currentUser.displayName, avatar: _avIs }, { merge: true }).catch(() => {});
         window.closeAllModals();
         window.loadAnimeDetails(window.currentAnimeId);
     } catch(e) { alert('Failed to submit series rating.'); console.error(e); }
