@@ -962,6 +962,82 @@ exports.openInventoryItems = onRequest({ invoker: 'public' }, async (req, res) =
     res.json({ result: { success: true, packs: revealed } });
 });
 
+// ── Admin: Backfill Stripe Pity URs (one-time) ───────────────────────────────
+// Reads all stripe_sessions, computes how many $30 thresholds each user has
+// crossed on non-bonusUr bundles, grants Pity UR inventory items, and sets
+// stripePityCents to the leftover cents. Safe to re-run: already-processed
+// sessions are detected by checking existing stripePityCents + inventory.
+const STRIPE_BUNDLE_PRICES = { amber_1000: 99, amber_5750: 499, amber_12000: 999 };
+const STRIPE_PITY_THRESHOLD = 3000;
+
+exports.adminBackfillStripePity = onRequest({ invoker: 'public', timeoutSeconds: 300 }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    const callerUid = await getCallerUid(req);
+    if (callerUid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
+
+    const db = getFirestore();
+    const dryRun = req.body?.data?.dryRun !== false;
+
+    // Load all stripe sessions
+    const sessionsSnap = await db.collection('stripe_sessions').get();
+
+    // Sum spend per user (bonusUr bundle already includes a UR — skip it)
+    const spendByUid = {};
+    sessionsSnap.forEach(d => {
+        const { uid, bundleId } = d.data();
+        if (!uid || !STRIPE_BUNDLE_PRICES[bundleId]) return;
+        spendByUid[uid] = (spendByUid[uid] || 0) + STRIPE_BUNDLE_PRICES[bundleId];
+    });
+
+    const grants = Object.entries(spendByUid)
+        .map(([uid, totalCents]) => ({
+            uid,
+            totalCents,
+            ursOwed: Math.floor(totalCents / STRIPE_PITY_THRESHOLD),
+            remainderCents: totalCents % STRIPE_PITY_THRESHOLD,
+        }))
+        .filter(g => g.ursOwed > 0);
+
+    if (dryRun) {
+        return res.json({ result: { dryRun: true, usersQualified: grants.length, totalUrs: grants.reduce((s,g) => s+g.ursOwed,0), grants } });
+    }
+
+    // Load UR pool once
+    const pool = [];
+    const poolSnap = await db.collection('characters').where('rarityTier', '==', 'ur').limit(100).get();
+    poolSnap.forEach(d => { const c = d.data(); if (c.name && c.image && !c.imageBroken) pool.push(c); });
+    if (!pool.length) return sendErr(res, 500, 'INTERNAL', 'No UR cards in pool.');
+
+    const results = [];
+    for (const g of grants) {
+        try {
+            const invCol = db.collection('inventory').doc(g.uid).collection('items');
+            const profileRef = db.collection('profiles').doc(g.uid);
+            const batch = db.batch();
+            const granted = [];
+            for (let i = 0; i < g.ursOwed; i++) {
+                const src = pool[Math.floor(Math.random() * pool.length)];
+                const urCard = { name: src.name, anime: normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity: 'ur' };
+                const itemRef = invCol.doc();
+                batch.set(itemRef, {
+                    type: 'pack', packId: 'bonus_ur', packName: 'Pity UR',
+                    packImage: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+                    rolledCards: [urCard], godPackTheme: null, source: 'stripe_pity_backfill', bulkBatchId: null, grantedAt: new Date(),
+                });
+                granted.push(urCard.name);
+            }
+            batch.update(profileRef, { stripePityCents: g.remainderCents });
+            await batch.commit();
+            results.push({ uid: g.uid, granted, remainderCents: g.remainderCents, ok: true });
+        } catch(e) {
+            results.push({ uid: g.uid, ok: false, error: e.message });
+        }
+    }
+
+    res.json({ result: { dryRun: false, results } });
+});
+
 // ── PVP Battle Settlement ─────────────────────────────────────────────────────
 // Runs battle resolution and handles all cross-user Firestore writes (amber/card
 // payouts) that client-side rules can't do safely.

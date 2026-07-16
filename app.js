@@ -8136,6 +8136,40 @@ window._tcgSimulatePacks = function() {
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 };
 
+window._adminBackfillStripePity = async function(dryRun) {
+    if (!window.isAdmin) return;
+    const el = document.getElementById('tcg-pity-backfill-result');
+    el.style.display = 'block';
+    el.textContent = dryRun ? 'Running dry run…' : '⚡ Committing — please wait…';
+    try {
+        const idToken = await auth.currentUser.getIdToken();
+        const res = await fetch('https://adminbackfillstripepity-omvkxcmt7q-uc.a.run.app', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+            body: JSON.stringify({ data: { dryRun } }),
+        });
+        const json = await res.json();
+        if (json.error) { el.textContent = '❌ ' + json.error.message; return; }
+        const r = json.result;
+        if (r.dryRun) {
+            const lines = [`DRY RUN — ${r.usersQualified} users qualify, ${r.totalUrs} URs to grant\n`];
+            for (const g of (r.grants || [])) {
+                lines.push(`  ${g.uid}  $${(g.totalCents/100).toFixed(2)} spent  →  ${g.ursOwed} UR(s)  (remainder: ${g.remainderCents}¢)`);
+            }
+            el.textContent = lines.join('\n');
+        } else {
+            const lines = ['COMMITTED\n'];
+            for (const g of (r.results || [])) {
+                if (g.ok) lines.push(`  ✅ ${g.uid}  granted: ${g.granted?.join(', ')}  (pity: ${g.remainderCents}¢)`);
+                else       lines.push(`  ❌ ${g.uid}  FAILED: ${g.error}`);
+            }
+            el.textContent = lines.join('\n');
+        }
+    } catch(e) {
+        el.textContent = '❌ ' + e.message;
+    }
+};
+
 // Admin: look up Stripe purchase history for a user by UID
 window._adminLookupStripePurchases = async function() {
     if (!window.isAdmin) return;
