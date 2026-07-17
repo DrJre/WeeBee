@@ -13845,7 +13845,6 @@ const TCG_DISMANTLE_RATES = { common: 5, rare: 20, sr: 100, ssr: 400, ur: 1500, 
 window._tcgDismantling = false;
 window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
     if (!auth.currentUser || window._tcgDismantling) return;
-    if (_tcgIsEventCard({ rarity })) { alert(`Event cards cannot be dismantled — they're limited to the event period and won't be re-released.`); return; }
     if (window._tcgFavoriteIds?.has(cardId)) { alert(`"${name}" is favorited. Unfavorite it first to dismantle.`); return; }
     const amount = TCG_DISMANTLE_RATES[rarity] || 0;
     const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'Event' }[rarity] || rarity;
@@ -14248,7 +14247,7 @@ window._tcgRefreshCollectionGrid = function(uid, filter) {
             ${serial ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${serial}</div>` : ''}
             ${!ms.active ? `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">
                 <button onclick="window._tcgTogglePin('${card.id}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isPinned?'var(--accent-yellow)':'var(--border-color)'};background:${isPinned?'rgba(245,158,11,0.12)':'transparent'};color:${isPinned?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;" title="${isPinned ? 'Remove from showcase' : 'Pin to profile showcase'}">${isPinned ? '★ Pinned' : '☆ Pin'}</button>
-                ${!_tcgIsEventCard(card) ? `<button class="tcg-dismantle-btn" onclick="window._tcgDismantleCard('${card.id}','${card.rarity}','${card.name.replace(/'/g,"\\'")}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isFav?'rgba(239,68,68,0.3)':'var(--border-color)'};background:transparent;color:${isFav?'rgba(239,68,68,0.4)':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:${isFav?'not-allowed':'pointer'};" title="${isFav?'Unfavorite to dismantle':'Break down for amber'}">Dismantle · 🟡 ${dismantleAmount}</button>` : ''}
+                <button class="tcg-dismantle-btn" onclick="window._tcgDismantleCard('${card.id}','${card.rarity}','${card.name.replace(/'/g,"\\'")}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isFav?'rgba(239,68,68,0.3)':'var(--border-color)'};background:transparent;color:${isFav?'rgba(239,68,68,0.4)':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:${isFav?'not-allowed':'pointer'};" title="${isFav?'Unfavorite to dismantle':'Break down for amber'}">Dismantle · 🟡 ${dismantleAmount}</button>
             </div>` : ''}
         </div>`;
     }).join('');
@@ -14415,7 +14414,7 @@ window._tcgRefreshProfileCardGrid = function(uid) {
             ${serial ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${serial}</div>` : ''}
             ${isOwner && !ms.active ? `<div style="display:flex;gap:6px;">
                 <button onclick="window._tcgTogglePin('${card.id}','${uid}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isPinned?'var(--accent-yellow)':'var(--border-color)'};background:${isPinned?'rgba(245,158,11,0.12)':'transparent'};color:${isPinned?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;" title="${isPinned ? 'Remove from showcase' : 'Pin to profile showcase'}">${isPinned ? '★ Pinned' : '☆ Pin'}</button>
-                ${!_tcgIsEventCard(card) ? `<button class="tcg-dismantle-btn" onclick="window._tcgDismantleCard('${card.id}','${card.rarity}','${card.name.replace(/'/g,"\\'")}','${uid}')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;" title="Break down for amber">Dismantle · 🟡 ${dismantleAmount}</button>` : ''}
+                <button class="tcg-dismantle-btn" onclick="window._tcgDismantleCard('${card.id}','${card.rarity}','${card.name.replace(/'/g,"\\'")}','${uid}')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;" title="Break down for amber">Dismantle · 🟡 ${dismantleAmount}</button>
             </div>` : ''}
         </div>`;
     }).join('');
@@ -14857,7 +14856,7 @@ async function _tcgLoadCollection(uid, forceRefresh = false) {
     if (window._tcgCollectionCache.has(uid) && !forceRefresh) return window._tcgCollectionCache.get(uid);
     const snap = await getDocs(collection(db, 'card_collections', uid, 'cards'));
     const cards = [];
-    snap.forEach(d => cards.push({ id: d.id, ...d.data() }));
+    snap.forEach(d => cards.push({ ...d.data(), id: d.id }));
     window._tcgCollectionCache.set(uid, cards);
     return cards;
 }

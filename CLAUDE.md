@@ -6,6 +6,31 @@
 - [ ] **User Stats page** — permanent "Your Stats" profile tab: total episodes watched, top genres, top studios, rank progression, review streaks (like Spotify Wrapped but always available)
 - [ ] **Connections-style game** — daily: group 16 anime characters into 4 categories, shareable results (ON HOLD)
 
+## TCG Dungeon — Community Boss (ready to build this weekend)
+
+Boss spawns every **Monday**, expires **Friday** (5 days). Users fight once per day. All damage pools together to take down the boss. Community wins together or loses together.
+
+**Card power scale:**
+- Common: 10 · Rare: 30 · SR: 150 · SSR: 500 · UR: 2,000 · PR: 800
+
+**HP calibration:** Before building, run an admin scan tool — scan all `card_collections`, find each user's top-5 power sum, average across active users, set boss HP so it's beatable if ~60–70% of active users attack all 5 days.
+
+**Open design decisions (get answers before building):**
+1. User picks their 5 attack cards, or auto-pick strongest 5?
+2. If boss survives Friday — expires with no reward, or carries over?
+3. Damage leaderboard visible to community?
+4. Attack animation — reuse card flip style or something new?
+5. Reward amount (Amber)? Does everyone who attacked get it, or only if boss dies?
+
+**Proposed data model:**
+- `dungeon_boss/current` — active boss def, HP, spawn/end timestamps
+- `dungeon_attacks/{weekId}/daily/{date_uid}` — one doc per user per day, tracks damage dealt
+- `dungeon_progress/{weekId}` — running `hpRemaining` total
+
+**Files to touch:** `app.js` (boss UI in existing Dungeon tab), `functions/index.js` (`attackBoss` CF — verify once-per-day, calc damage, subtract HP, write log), `firestore.rules` (lock dungeon_attacks to CF only), `index.html` / `sw.js` (version bumps).
+
+Bosses are anime villains/boss characters. Flat reward for all participants to start; tiered rewards by damage dealt is a future enhancement.
+
 ## Security — Next Up
 - [ ] **Server-side pack opening** — `card_collections/{uid}/cards/{card}` allows `create: if isOwner(uid)`, and pack rolls (rarity + serial assignment) happen client-side before the write. A user could write themselves a fake `{rarity:'ur', serial:1, ...}` card directly via Firestore, bypassing odds entirely. Real fix requires a Cloud Function (Blaze plan) to roll packs and assign serials server-side. (profiles/amber + characters + patch_notes write-access holes already fixed in firestore.rules.)
 
