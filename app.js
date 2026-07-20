@@ -27443,6 +27443,8 @@ window.loadDungeonTab = async function() {
     const el = document.getElementById('dungeon-tab-content');
     if (!el) return;
     window._dungeonStopRefresh();
+    // Load community boss section in parallel (non-blocking)
+    window.loadCommunityBossSection?.();
     if (!auth.currentUser) {
         el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">Sign in to raid dungeons!</div>`;
         return;
@@ -27478,6 +27480,507 @@ window.loadDungeonTab = async function() {
         _dungeonRenderGateSelect(el);
     }
 };
+
+// ── Community Boss ────────────────────────────────────────────────────────────
+
+const BOSS_CARD_DAMAGE = { common: 10, rare: 30, sr: 150, ssr: 500, ur: 2000, pr: 800 };
+
+function _bossCardDamage(card) { return BOSS_CARD_DAMAGE[card?.rarity] || 0; }
+
+function _bossFormatHP(n) {
+    if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (n >= 1000)    return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    return String(n);
+}
+
+function _bossWeekId() {
+    const now = new Date();
+    const jan1 = new Date(now.getFullYear(), 0, 1);
+    const week = Math.ceil(((now - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+    return `${now.getFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+function _bossRarityLabel(r) {
+    return { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' }[r] || r;
+}
+
+window.loadCommunityBossSection = async function() {
+    const el = document.getElementById('community-boss-content');
+    if (!el) return;
+
+    const isAdminUser = window.isAdmin || auth.currentUser?.uid === 'XUD3ym2NcdWtrUiPLlFFaO5ufMh1';
+    const bossSnap = await getDoc(doc(db, 'dungeon_boss', 'current')).catch(() => null);
+    if (!bossSnap?.exists()) {
+        el.innerHTML = isAdminUser ? `
+            <div style="margin-bottom:24px;padding:16px 20px;border-radius:14px;border:1px dashed var(--border-color);text-align:center;">
+                <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px;">No active community boss. Spawn one to get started.</div>
+                <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+                    <button onclick="window._bossAdminSpawnForm()" class="action-btn" style="font-size:13px;font-weight:800;">🐉 Spawn New Boss</button>
+                    <button onclick="window._bossAdminScanHP()" class="cancel-btn" style="font-size:13px;">📊 Scan HP Calibration</button>
+                </div>
+            </div>` : '';
+        return;
+    }
+
+    const boss = { id: bossSnap.id, ...bossSnap.data() };
+    const uid  = auth.currentUser?.uid;
+
+    let userAttacks = null, leaderboard = [];
+    if (uid) {
+        const [userSnap, lbSnap] = await Promise.all([
+            getDoc(doc(db, 'dungeon_attacks', boss.weekId, 'users', uid)).catch(() => null),
+            getDocs(collection(db, 'dungeon_attacks', boss.weekId, 'users')).catch(() => null),
+        ]);
+        if (userSnap?.exists()) userAttacks = userSnap.data();
+        if (lbSnap) {
+            leaderboard = lbSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
+        }
+    }
+
+    window._bossData = { boss, userAttacks, leaderboard, lbMode: 'damage' };
+    _bossRender(el, boss, userAttacks, leaderboard, 'damage');
+};
+
+function _bossRender(el, boss, userAttacks, leaderboard, lbMode) {
+    if (!boss) { el.innerHTML = ''; return; }
+
+    const now   = new Date();
+    const start = boss.startDate?.toDate ? boss.startDate.toDate() : new Date(boss.startDate);
+    const end   = boss.endDate?.toDate   ? boss.endDate.toDate()   : new Date(boss.endDate);
+    const hpPct = Math.max(0, Math.min(100, Math.round((boss.hpRemaining / boss.hp) * 100)));
+    const isOver = boss.status === 'defeated' || boss.status === 'expired' || (boss.status === 'active' && end < now);
+    const isActive = boss.status === 'active' && end >= now;
+
+    // HP bar color
+    const hpColor = hpPct > 50 ? '#22c55e' : hpPct > 25 ? '#f59e0b' : '#ef4444';
+
+    // Countdown
+    let timerStr = '';
+    if (isActive) {
+        const msLeft = end - now;
+        const days   = Math.floor(msLeft / 86400000);
+        const hrs    = Math.floor((msLeft % 86400000) / 3600000);
+        const mins   = Math.floor((msLeft % 3600000) / 60000);
+        timerStr = days > 0 ? `${days}d ${hrs}h remaining` : hrs > 0 ? `${hrs}h ${mins}m remaining` : `${mins}m remaining`;
+    }
+
+    // Attack state
+    const todayStr = now.toISOString().slice(0, 10);
+    const attackedToday = userAttacks?.lastAttacked
+        ? (userAttacks.lastAttacked?.toDate ? userAttacks.lastAttacked.toDate() : new Date(userAttacks.lastAttacked)).toISOString().slice(0, 10) === todayStr
+        : false;
+    const daysAttacked  = userAttacks?.daysAttacked || 0;
+    const totalDamage   = userAttacks?.totalDamage || 0;
+
+    // Leaderboard HTML
+    const lbSorted = lbMode === 'damage'
+        ? [...leaderboard].sort((a, b) => (b.totalDamage || 0) - (a.totalDamage || 0))
+        : [...leaderboard].sort((a, b) => (b.daysAttacked || 0) - (a.daysAttacked || 0));
+    const topLb = lbSorted.slice(0, 10);
+
+    const profileCache = window._bossProfileCache || {};
+    const lbRows = topLb.map((entry, i) => {
+        const p = profileCache[entry.uid] || {};
+        const medal = ['🥇','🥈','🥉'][i] || `${i+1}.`;
+        const name  = p.displayName || entry.uid.slice(0, 8);
+        const val   = lbMode === 'damage' ? `${_bossFormatHP(entry.totalDamage || 0)} dmg` : `${entry.daysAttacked || 0} day${(entry.daysAttacked||0)!==1?'s':''}`;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;${entry.uid === auth.currentUser?.uid ? 'background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.25);' : ''}">
+            <span style="font-size:14px;min-width:26px;">${medal}</span>
+            <span style="flex:1;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span>
+            <span style="font-size:12px;color:var(--text-muted);">${val}</span>
+        </div>`;
+    }).join('') || `<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:12px;">No attacks yet — be the first!</div>`;
+
+    // Reward section (boss over)
+    let rewardHTML = '';
+    if (isOver && auth.currentUser) {
+        if (!userAttacks) {
+            rewardHTML = `<div style="padding:12px 16px;border-radius:10px;background:var(--bg-gray);text-align:center;font-size:13px;color:var(--text-muted);">You didn't participate in this battle.</div>`;
+        } else if (userAttacks.claimedAt) {
+            rewardHTML = `<div style="padding:12px 16px;border-radius:10px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);text-align:center;font-size:13px;color:#22c55e;">✅ Reward claimed — 🟡 ${userAttacks.amberClaimed || 0} Amber</div>`;
+        } else {
+            const multiplier    = boss.status === 'defeated' ? 1 : (boss.partialMultiplier || 0.5);
+            const rewardPerDay  = boss.rewardPerDay || 150;
+            const previewAmber  = Math.round(daysAttacked * rewardPerDay * multiplier);
+            rewardHTML = `
+                <div style="padding:16px;border-radius:12px;background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.3);text-align:center;">
+                    <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px;">You fought ${daysAttacked} day${daysAttacked!==1?'s':''} — reward ready</div>
+                    <div style="font-size:20px;font-weight:900;color:var(--accent-yellow);margin-bottom:10px;">🟡 ${previewAmber} Amber</div>
+                    <button class="action-btn" onclick="window._bossClaimReward('${boss.weekId}')" style="font-weight:800;">Claim Reward</button>
+                </div>`;
+        }
+    }
+
+    // Attack section
+    let attackHTML = '';
+    if (isActive && auth.currentUser) {
+        if (attackedToday) {
+            attackHTML = `
+                <div style="padding:14px 16px;border-radius:10px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                    <span style="font-size:22px;">⚔️</span>
+                    <div style="flex:1;">
+                        <div style="font-size:13px;font-weight:800;color:#22c55e;">Attack submitted for today!</div>
+                        <div style="font-size:12px;color:var(--text-muted);">Dealt ${_bossFormatHP(totalDamage)} total · ${daysAttacked}/5 days fought · Come back tomorrow</div>
+                    </div>
+                </div>`;
+        } else {
+            const rewardPreview = Math.round((boss.rewardPerDay || 150));
+            attackHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 16px;border-radius:10px;background:var(--bg-gray);">
+                    <div>
+                        <div style="font-size:13px;font-weight:800;">Your Progress: ${daysAttacked}/5 days</div>
+                        <div style="font-size:12px;color:var(--text-muted);">🟡 ${rewardPreview} Amber per day fought${boss.status==='defeated'?'' : ` · ${Math.round(rewardPreview*(boss.partialMultiplier||0.5))} if boss escapes`}</div>
+                    </div>
+                    <button class="action-btn" onclick="window._bossOpenAttackPicker()" style="font-weight:800;">⚔️ Attack Boss</button>
+                </div>`;
+        }
+    } else if (!auth.currentUser) {
+        attackHTML = `<div style="text-align:center;font-size:13px;color:var(--text-muted);padding:12px;">Sign in to join the fight!</div>`;
+    }
+
+    // Status badge
+    const statusBadge = boss.status === 'defeated'
+        ? `<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:rgba(34,197,94,0.15);color:#22c55e;font-size:11px;font-weight:800;">DEFEATED</span>`
+        : boss.status === 'expired' || (!isActive && isOver)
+        ? `<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:rgba(239,68,68,0.15);color:#ef4444;font-size:11px;font-weight:800;">ESCAPED</span>`
+        : `<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:rgba(255,215,0,0.15);color:var(--accent-yellow);font-size:11px;font-weight:800;">ACTIVE · ${timerStr}</span>`;
+
+    // Admin tools
+    const adminHTML = window.isAdmin ? `
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-color);display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+            <button onclick="window._bossAdminSpawnForm()" class="cancel-btn" style="font-size:12px;">🐉 Spawn New Boss</button>
+            <button onclick="window._bossAdminScanHP()" class="cancel-btn" style="font-size:12px;">📊 Scan HP Calibration</button>
+        </div>` : '';
+
+    el.innerHTML = `
+        <div style="margin-bottom:24px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
+            <!-- Boss Banner -->
+            <div style="position:relative;min-height:220px;background:linear-gradient(135deg,rgba(15,0,30,0.95) 0%,rgba(40,0,60,0.9) 100%);">
+                <img src="${boss.image}" alt="${boss.name}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;opacity:0.35;" onerror="this.style.display='none'">
+                <div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,0.85) 100%);pointer-events:none;"></div>
+                <div style="position:relative;z-index:1;padding:24px 24px 20px;display:flex;flex-direction:column;justify-content:flex-end;min-height:220px;">
+                    <div style="font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:4px;">⚔️ Community Boss</div>
+                    <div style="font-size:28px;font-weight:900;color:white;line-height:1.1;margin-bottom:2px;">${boss.name}</div>
+                    <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:12px;">${boss.anime}</div>
+                    ${statusBadge}
+                </div>
+            </div>
+
+            <!-- HP Bar -->
+            <div style="padding:16px 20px;background:rgba(0,0,0,0.35);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-size:12px;font-weight:800;color:${hpColor};">HP: ${_bossFormatHP(boss.hpRemaining)} / ${_bossFormatHP(boss.hp)}</span>
+                    <span style="font-size:11px;color:var(--text-muted);">${hpPct}% remaining</span>
+                </div>
+                <div style="height:10px;background:rgba(255,255,255,0.08);border-radius:99px;overflow:hidden;">
+                    <div style="height:100%;width:${hpPct}%;background:${hpColor};border-radius:99px;transition:width 0.5s;box-shadow:0 0 8px ${hpColor}88;"></div>
+                </div>
+            </div>
+
+            <!-- Attack / Reward section -->
+            <div style="padding:0 16px 16px;">
+                ${attackHTML}
+                ${rewardHTML}
+                ${adminHTML}
+            </div>
+        </div>
+
+        <!-- Leaderboard -->
+        <div style="margin-bottom:24px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+                <div style="font-weight:800;font-size:15px;">🏆 Damage Leaderboard</div>
+                <div style="display:flex;gap:6px;">
+                    <button onclick="window._bossToggleLb('damage')" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border-color);background:${lbMode==='damage'?'var(--accent-yellow)':'transparent'};color:${lbMode==='damage'?'#222':'var(--text-muted)'};font-size:11px;font-weight:800;cursor:pointer;">Damage</button>
+                    <button onclick="window._bossToggleLb('days')" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border-color);background:${lbMode==='days'?'var(--accent-yellow)':'transparent'};color:${lbMode==='days'?'#222':'var(--text-muted)'};font-size:11px;font-weight:800;cursor:pointer;">Days Fought</button>
+                </div>
+            </div>
+            <div id="boss-leaderboard-list" style="display:flex;flex-direction:column;gap:4px;">${lbRows}</div>
+        </div>
+    `;
+
+    // Load display names in background
+    _bossLoadLeaderboardNames(topLb, lbMode);
+}
+
+async function _bossLoadLeaderboardNames(entries, lbMode) {
+    if (!entries.length) return;
+    const missing = entries.filter(e => !window._bossProfileCache?.[e.uid]);
+    if (!missing.length) return;
+    window._bossProfileCache = window._bossProfileCache || {};
+    await Promise.all(missing.map(async e => {
+        try {
+            const s = await getDoc(doc(db, 'profiles', e.uid));
+            if (s.exists()) window._bossProfileCache[e.uid] = s.data();
+        } catch {}
+    }));
+    // Re-render leaderboard rows only
+    const el = document.getElementById('boss-leaderboard-list');
+    if (!el || !window._bossData) return;
+    const { boss, leaderboard } = window._bossData;
+    const sorted = lbMode === 'damage'
+        ? [...leaderboard].sort((a, b) => (b.totalDamage||0)-(a.totalDamage||0))
+        : [...leaderboard].sort((a, b) => (b.daysAttacked||0)-(a.daysAttacked||0));
+    const top = sorted.slice(0, 10);
+    const rows = top.map((entry, i) => {
+        const p      = window._bossProfileCache[entry.uid] || {};
+        const medal  = ['🥇','🥈','🥉'][i] || `${i+1}.`;
+        const name   = p.displayName || entry.uid.slice(0, 8);
+        const val    = lbMode === 'damage' ? `${_bossFormatHP(entry.totalDamage||0)} dmg` : `${entry.daysAttacked||0} day${(entry.daysAttacked||0)!==1?'s':''}`;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;${entry.uid===auth.currentUser?.uid?'background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.25);':''}">
+            <span style="font-size:14px;min-width:26px;">${medal}</span>
+            <span style="flex:1;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span>
+            <span style="font-size:12px;color:var(--text-muted);">${val}</span>
+        </div>`;
+    }).join('') || `<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:12px;">No attacks yet — be the first!</div>`;
+    el.innerHTML = rows;
+}
+
+window._bossToggleLb = function(mode) {
+    if (!window._bossData) return;
+    window._bossData.lbMode = mode;
+    const { boss, userAttacks, leaderboard } = window._bossData;
+    _bossRender(document.getElementById('community-boss-content'), boss, userAttacks, leaderboard, mode);
+};
+
+// ── Boss Attack Picker ────────────────────────────────────────────────────────
+
+window._bossOpenAttackPicker = async function() {
+    document.getElementById('boss-attack-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'boss-attack-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;padding:16px;';
+    modal.innerHTML = `<div style="background:var(--bg-dark);border-radius:20px;padding:24px;width:100%;max-width:860px;max-height:90vh;overflow-y:auto;border:1px solid var(--border-color);">
+        <div class="loading">Loading your cards...</div>
+    </div>`;
+    document.body.appendChild(modal);
+
+    const uid   = auth.currentUser?.uid;
+    const cards = uid ? (await _tcgLoadCollection(uid)).filter(c => !c.founder) : [];
+    cards.sort((a, b) => (_bossCardDamage(b) - _bossCardDamage(a)) || b.serial - a.serial);
+    window._bossPickState = { selected: new Set(), cards, sort: 'damage-desc' };
+    _bossRenderPicker(modal);
+};
+
+function _bossRenderPicker(modal) {
+    const { selected, cards, sort } = window._bossPickState;
+    const boss = window._bossData?.boss;
+
+    let sorted = [...cards];
+    if (sort === 'damage-desc') sorted.sort((a, b) => _bossCardDamage(b) - _bossCardDamage(a));
+    else if (sort === 'rarity-desc') sorted.sort((a, b) => (DUNGEON_RARITY_ORDER[b.rarity]||0) - (DUNGEON_RARITY_ORDER[a.rarity]||0));
+    else if (sort === 'name-asc') sorted.sort((a, b) => a.name.localeCompare(b.name));
+
+    const selectedCards = [...selected].map(id => cards.find(c => c.id === id)).filter(Boolean);
+    const totalDmg = selectedCards.reduce((s, c) => s + _bossCardDamage(c), 0);
+    const canSubmit = selected.size >= 1 && selected.size <= 5;
+
+    const RARITY_COLORS = { ur:'#c084fc', ssr:'#f59e0b', sr:'#60a5fa', rare:'#4ade80', common:'#9ca3af', pr:'#f97316' };
+
+    const cardGrid = sorted.map(c => {
+        const isSel  = selected.has(c.id);
+        const dmg    = _bossCardDamage(c);
+        const border = isSel ? '2px solid #FFD700' : '1px solid transparent';
+        const bg     = isSel ? 'rgba(255,215,0,0.12)' : 'transparent';
+        return `<div onclick="window._bossToggleCard('${c.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:${border};background:${bg};padding:4px;transition:border .12s,background .12s;">
+            <div style="position:relative;aspect-ratio:3/4;overflow:hidden;border-radius:8px;margin-bottom:4px;">
+                <img src="${c.image}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
+                <div style="position:absolute;top:4px;right:4px;padding:2px 6px;border-radius:6px;background:rgba(0,0,0,0.7);font-size:10px;font-weight:900;color:${RARITY_COLORS[c.rarity]||'#fff'};">${_bossRarityLabel(c.rarity)}</div>
+                ${isSel ? `<div style="position:absolute;inset:0;background:rgba(255,215,0,0.18);display:flex;align-items:center;justify-content:center;"><span style="font-size:28px;">✅</span></div>` : ''}
+            </div>
+            <div style="font-size:10px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.name}</div>
+            <div style="font-size:10px;color:var(--text-muted);">⚔️ ${dmg.toLocaleString()} dmg</div>
+        </div>`;
+    }).join('');
+
+    const inner = modal.querySelector('div');
+    inner.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div style="font-size:18px;font-weight:900;">⚔️ Choose Attack Cards</div>
+            <button onclick="document.getElementById('boss-attack-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Select up to 5 cards to attack <strong>${boss?.name || 'the boss'}</strong> with. Higher rarity = more damage.</div>
+
+        <!-- Selection summary -->
+        <div style="padding:12px 16px;border-radius:10px;background:var(--bg-gray);margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div>
+                <span style="font-size:14px;font-weight:900;">${selected.size}/5 cards selected</span>
+                ${totalDmg ? `<span style="font-size:13px;color:var(--text-muted);margin-left:10px;">Total damage: ⚔️ <strong>${totalDmg.toLocaleString()}</strong></span>` : ''}
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <select onchange="window._bossPickState.sort=this.value;_bossRenderPicker(document.getElementById('boss-attack-modal'))" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:12px;">
+                    <option value="damage-desc" ${sort==='damage-desc'?'selected':''}>Highest Damage</option>
+                    <option value="rarity-desc" ${sort==='rarity-desc'?'selected':''}>Rarity</option>
+                    <option value="name-asc" ${sort==='name-asc'?'selected':''}>Name A–Z</option>
+                </select>
+                <button onclick="window._bossSubmitAttack()" ${canSubmit?'':'disabled'} class="action-btn" style="font-weight:800;${canSubmit?'':'opacity:0.4;cursor:not-allowed;'}">Attack!</button>
+            </div>
+        </div>
+
+        <!-- Damage reference -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+            ${Object.entries(BOSS_CARD_DAMAGE).map(([r,d])=>`<span style="padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;background:rgba(255,255,255,0.05);color:${RARITY_COLORS[r]||'#fff'};">${_bossRarityLabel(r)}: ${d.toLocaleString()}</span>`).join('')}
+        </div>
+
+        <!-- Card grid -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;">${cardGrid || '<div style="color:var(--text-muted);text-align:center;padding:20px;grid-column:1/-1;">No cards in your collection yet.</div>'}</div>
+    `;
+}
+
+window._bossToggleCard = function(cardId) {
+    const ps = window._bossPickState;
+    if (!ps) return;
+    if (ps.selected.has(cardId)) {
+        ps.selected.delete(cardId);
+    } else {
+        if (ps.selected.size >= 5) return;
+        ps.selected.add(cardId);
+    }
+    _bossRenderPicker(document.getElementById('boss-attack-modal'));
+};
+
+window._bossSubmitAttack = async function() {
+    const ps   = window._bossPickState;
+    const boss = window._bossData?.boss;
+    if (!ps || !boss || ps.selected.size === 0) return;
+
+    const modal = document.getElementById('boss-attack-modal');
+    const btn   = modal?.querySelector('.action-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Attacking...'; }
+
+    try {
+        const { damage, hpRemaining, bossDefeated } = await _callFn('attackBoss', { cardIds: [...ps.selected] });
+        modal?.remove();
+
+        // Refresh the boss section
+        await window.loadCommunityBossSection();
+
+        // Toast
+        const msg = bossDefeated
+            ? `💀 You dealt the killing blow! +${damage.toLocaleString()} damage — Boss Defeated!`
+            : `⚔️ Attack successful! Dealt ${damage.toLocaleString()} damage — Boss HP: ${_bossFormatHP(hpRemaining)}`;
+        if (window.showToast) window.showToast(msg);
+        else alert(msg);
+    } catch(e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Attack!'; }
+        alert('Attack failed: ' + e.message);
+    }
+};
+
+// ── Claim Reward ──────────────────────────────────────────────────────────────
+
+window._bossClaimReward = async function(weekId) {
+    const btn = event?.target;
+    if (btn) { btn.disabled = true; btn.textContent = 'Claiming...'; }
+    try {
+        const { amberAwarded } = await _callFn('claimBossReward', { weekId });
+        await window.loadCommunityBossSection();
+        if (window.showToast) window.showToast(`🟡 +${amberAwarded} Amber claimed!`);
+        else alert(`+${amberAwarded} Amber claimed!`);
+    } catch(e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Claim Reward'; }
+        alert('Claim failed: ' + e.message);
+    }
+};
+
+// ── Admin Tools ───────────────────────────────────────────────────────────────
+
+window._bossAdminSpawnForm = function() {
+    document.getElementById('boss-admin-spawn-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'boss-admin-spawn-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;padding:16px;';
+
+    // Default end date = this Friday at midnight ET
+    const now = new Date();
+    const daysToFriday = (5 - now.getDay() + 7) % 7 || 7;
+    const friday = new Date(now);
+    friday.setDate(friday.getDate() + daysToFriday);
+    friday.setHours(4, 0, 0, 0); // Friday midnight ET (UTC-4 / UTC-5)
+    const fridayStr = friday.toISOString().slice(0, 16);
+    const defaultWeekId = _bossWeekId();
+
+    modal.innerHTML = `<div style="background:var(--bg-dark);border-radius:20px;padding:28px;width:100%;max-width:500px;border:1px solid var(--border-color);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+            <div style="font-size:18px;font-weight:900;">🐉 Spawn Community Boss</div>
+            <button onclick="document.getElementById('boss-admin-spawn-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+            <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Boss Name</label>
+            <input id="bs-name" placeholder="e.g. Frieza" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;"></div>
+
+            <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Anime</label>
+            <input id="bs-anime" placeholder="e.g. Dragon Ball Z" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;"></div>
+
+            <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Image URL</label>
+            <input id="bs-image" placeholder="https://..." style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;" oninput="const img=document.getElementById('bs-img-preview');if(img)img.src=this.value">
+            <img id="bs-img-preview" src="" style="width:80px;height:80px;object-fit:cover;border-radius:8px;margin-top:6px;display:block;" onerror="this.style.display='none'" onload="this.style.display='block'"></div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Boss HP</label>
+                <input id="bs-hp" type="number" placeholder="500000" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;"></div>
+
+                <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Amber / Day (kill)</label>
+                <input id="bs-reward" type="number" value="150" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;"></div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Partial Reward (0–1)</label>
+                <input id="bs-partial" type="number" step="0.1" min="0" max="1" value="0.5" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;"></div>
+
+                <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Week ID</label>
+                <input id="bs-weekid" value="${defaultWeekId}" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;"></div>
+            </div>
+
+            <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">End Date / Time</label>
+            <input id="bs-end" type="datetime-local" value="${fridayStr}" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;"></div>
+
+            <button onclick="window._bossAdminSpawn()" class="action-btn" style="font-weight:800;margin-top:4px;">🐉 Spawn Boss</button>
+        </div>
+    </div>`;
+    document.body.appendChild(modal);
+};
+
+window._bossAdminSpawn = async function() {
+    const name    = document.getElementById('bs-name')?.value?.trim();
+    const anime   = document.getElementById('bs-anime')?.value?.trim();
+    const image   = document.getElementById('bs-image')?.value?.trim();
+    const hp      = parseInt(document.getElementById('bs-hp')?.value);
+    const reward  = parseInt(document.getElementById('bs-reward')?.value) || 150;
+    const partial = parseFloat(document.getElementById('bs-partial')?.value) || 0.5;
+    const weekId  = document.getElementById('bs-weekid')?.value?.trim();
+    const endDate = document.getElementById('bs-end')?.value;
+
+    if (!name || !anime || !image || !hp || !weekId) return alert('Fill in all required fields.');
+
+    const btn = event?.target;
+    if (btn) { btn.disabled = true; btn.textContent = 'Spawning...'; }
+
+    try {
+        await _callFn('adminSpawnBoss', { name, anime, image, hp, rewardPerDay: reward, partialMultiplier: partial, weekId, endDate });
+        document.getElementById('boss-admin-spawn-modal')?.remove();
+        window._bossProfileCache = {};
+        await window.loadCommunityBossSection();
+        if (window.showToast) window.showToast(`🐉 Boss "${name}" spawned!`);
+    } catch(e) {
+        if (btn) { btn.disabled = false; btn.textContent = '🐉 Spawn Boss'; }
+        alert('Spawn failed: ' + e.message);
+    }
+};
+
+window._bossAdminScanHP = async function() {
+    const btn = event?.target;
+    if (btn) { btn.disabled = true; btn.textContent = 'Scanning...'; }
+    try {
+        const { suggestedHp, activeUsers, avgTop5Power, minTop5, maxTop5 } = await _callFn('adminScanBossHP', {});
+        alert(`HP Calibration Results:\n\nActive users (≥5 cards): ${activeUsers}\nAvg top-5 damage: ${avgTop5Power.toLocaleString()}\nMin top-5: ${minTop5?.toLocaleString()}\nMax top-5: ${maxTop5?.toLocaleString()}\n\n✅ Suggested Boss HP:\n${suggestedHp.toLocaleString()}\n\n(Based on 65% participation × 5 days)`);
+    } catch(e) {
+        alert('Scan failed: ' + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '📊 Scan HP Calibration'; }
+    }
+};
+
+// ── End Community Boss ────────────────────────────────────────────────────────
 
 window._dungeonToggleTestMode = function() {
     const on = localStorage.getItem('weebee_dungeon_testmode') === '1';

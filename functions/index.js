@@ -1237,3 +1237,187 @@ exports.adminGiftPack = onRequest({ invoker: 'public' }, async (req, res) => {
         return sendErr(res, 500, 'INTERNAL', 'Gift failed: ' + e.message);
     }
 });
+
+// ── TCG Community Boss ─────────────────────────────────────────────────────
+
+const BOSS_CARD_DAMAGE_CF = { common: 10, rare: 30, sr: 150, ssr: 500, ur: 2000, pr: 800 };
+
+exports.attackBoss = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+
+    const callerUid = await getCallerUid(req);
+    if (!callerUid) return sendErr(res, 401, 'UNAUTHENTICATED', 'Must be signed in.');
+
+    const { cardIds } = req.body?.data || {};
+    if (!Array.isArray(cardIds) || cardIds.length === 0 || cardIds.length > 5) {
+        return sendErr(res, 400, 'INVALID_ARGUMENT', 'Pick 1–5 cards to attack with.');
+    }
+
+    const db = getFirestore();
+    const bossRef = db.collection('dungeon_boss').doc('current');
+
+    const bossSnap = await bossRef.get();
+    if (!bossSnap.exists) return sendErr(res, 400, 'NOT_FOUND', 'No active boss right now.');
+    const boss = bossSnap.data();
+    if (boss.status !== 'active') return sendErr(res, 400, 'FAILED_PRECONDITION', boss.status === 'defeated' ? 'The boss has already been defeated!' : 'The boss battle has ended.');
+
+    const now = new Date();
+    if (boss.endDate.toDate() < now) return sendErr(res, 400, 'FAILED_PRECONDITION', 'The boss battle has ended.');
+
+    const todayStr = now.toISOString().slice(0, 10);
+    const weekId = boss.weekId;
+
+    const dailyRef = db.collection('dungeon_attacks').doc(weekId).collection('daily').doc(`${todayStr}_${callerUid}`);
+    const userRef  = db.collection('dungeon_attacks').doc(weekId).collection('users').doc(callerUid);
+
+    const cardRefs  = cardIds.map(id => db.collection('card_collections').doc(callerUid).collection('cards').doc(id));
+    const cardSnaps = await Promise.all(cardRefs.map(r => r.get()));
+    if (cardSnaps.some(s => !s.exists)) return sendErr(res, 400, 'FAILED_PRECONDITION', 'One or more selected cards were not found.');
+
+    const totalDamage = cardSnaps.reduce((sum, s) => sum + (BOSS_CARD_DAMAGE_CF[s.data().rarity] || 0), 0);
+    const attackedCards = cardSnaps.map(s => ({
+        id: s.id, name: s.data().name, rarity: s.data().rarity, image: s.data().image,
+        damage: BOSS_CARD_DAMAGE_CF[s.data().rarity] || 0,
+    }));
+
+    let newHp = 0, bossDefeated = false, userError = null;
+
+    try {
+        await db.runTransaction(async tx => {
+            const dailySnap = await tx.get(dailyRef);
+            if (dailySnap.exists) {
+                userError = [400, 'FAILED_PRECONDITION', "You already attacked the boss today! Come back tomorrow."];
+                return;
+            }
+            const liveBoss = await tx.get(bossRef);
+            if (!liveBoss.exists || liveBoss.data().status !== 'active') {
+                userError = [400, 'FAILED_PRECONDITION', 'Boss is no longer active.'];
+                return;
+            }
+            newHp = Math.max(0, liveBoss.data().hpRemaining - totalDamage);
+            bossDefeated = newHp <= 0;
+
+            tx.set(dailyRef, { uid: callerUid, weekId, date: todayStr, damage: totalDamage, cards: attackedCards, attackedAt: new Date() });
+            tx.set(userRef, { uid: callerUid, totalDamage: FieldValue.increment(totalDamage), daysAttacked: FieldValue.increment(1), lastAttacked: new Date() }, { merge: true });
+            tx.update(bossRef, bossDefeated ? { hpRemaining: 0, status: 'defeated', defeatedAt: new Date() } : { hpRemaining: newHp });
+        });
+    } catch(e) {
+        console.error('attackBoss error:', e);
+        return sendErr(res, 500, 'INTERNAL', 'Attack failed: ' + e.message);
+    }
+
+    if (userError) return sendErr(res, ...userError);
+    res.json({ result: { success: true, damage: totalDamage, hpRemaining: newHp, bossDefeated } });
+});
+
+exports.claimBossReward = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+
+    const callerUid = await getCallerUid(req);
+    if (!callerUid) return sendErr(res, 401, 'UNAUTHENTICATED', 'Must be signed in.');
+
+    const { weekId } = req.body?.data || {};
+    if (!weekId) return sendErr(res, 400, 'INVALID_ARGUMENT', 'weekId is required.');
+
+    const db = getFirestore();
+    const bossRef = db.collection('dungeon_boss').doc('current');
+    const userRef  = db.collection('dungeon_attacks').doc(weekId).collection('users').doc(callerUid);
+
+    const bossSnap = await bossRef.get();
+    if (!bossSnap.exists) return sendErr(res, 400, 'NOT_FOUND', 'Boss not found.');
+    const boss = bossSnap.data();
+    if (boss.weekId !== weekId) return sendErr(res, 400, 'NOT_FOUND', 'Boss week mismatch.');
+
+    const now = new Date();
+    const isOver = boss.status === 'defeated' || (boss.endDate.toDate() < now);
+    if (!isOver) return sendErr(res, 400, 'FAILED_PRECONDITION', 'The boss battle is still ongoing!');
+
+    let amberAwarded = 0, userError = null;
+
+    try {
+        await db.runTransaction(async tx => {
+            const userSnap = await tx.get(userRef);
+            if (!userSnap.exists) { userError = [400, 'NOT_FOUND', "You didn't participate in this boss battle."]; return; }
+            const ud = userSnap.data();
+            if (ud.claimedAt) { userError = [400, 'FAILED_PRECONDITION', "You've already claimed this reward."]; return; }
+
+            const daysAttacked = ud.daysAttacked || 0;
+            const rewardPerDay = boss.rewardPerDay || 150;
+            const multiplier   = boss.status === 'defeated' ? 1 : (boss.partialMultiplier || 0.5);
+            amberAwarded = Math.round(daysAttacked * rewardPerDay * multiplier);
+
+            if (amberAwarded > 0) {
+                tx.update(db.collection('profiles').doc(callerUid), { amber: FieldValue.increment(amberAwarded) });
+            }
+            tx.update(userRef, { claimedAt: new Date(), amberClaimed: amberAwarded });
+        });
+    } catch(e) {
+        console.error('claimBossReward error:', e);
+        return sendErr(res, 500, 'INTERNAL', 'Claim failed: ' + e.message);
+    }
+
+    if (userError) return sendErr(res, ...userError);
+    res.json({ result: { success: true, amberAwarded } });
+});
+
+exports.adminSpawnBoss = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+
+    const callerUid = await getCallerUid(req);
+    if (!callerUid || callerUid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
+
+    const { name, anime, image, hp, rewardPerDay, partialMultiplier, weekId, endDate } = req.body?.data || {};
+    if (!name || !anime || !image || !hp || !weekId) {
+        return sendErr(res, 400, 'INVALID_ARGUMENT', 'name, anime, image, hp, weekId required.');
+    }
+
+    const db = getFirestore();
+    const end = endDate ? new Date(endDate) : new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    await db.collection('dungeon_boss').doc('current').set({
+        name, anime, image,
+        hp: Number(hp), hpRemaining: Number(hp),
+        weekId, startDate: new Date(), endDate: end,
+        status: 'active',
+        rewardPerDay: Number(rewardPerDay) || 150,
+        partialMultiplier: Number(partialMultiplier) || 0.5,
+        spawnedAt: new Date(),
+    });
+
+    res.json({ result: { success: true } });
+});
+
+exports.adminScanBossHP = onRequest({ invoker: 'public', timeoutSeconds: 300 }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+
+    const callerUid = await getCallerUid(req);
+    if (!callerUid || callerUid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
+
+    const db = getFirestore();
+    const DAMAGE = { common: 10, rare: 30, sr: 150, ssr: 500, ur: 2000, pr: 800 };
+    const colDocs = await db.collection('card_collections').listDocuments();
+
+    const userPowers = [];
+    for (const colRef of colDocs) {
+        const cardsSnap = await colRef.collection('cards').get();
+        if (cardsSnap.size < 5) continue;
+        const powers = cardsSnap.docs.map(d => DAMAGE[d.data().rarity] || 0).sort((a, b) => b - a);
+        userPowers.push(powers.slice(0, 5).reduce((s, p) => s + p, 0));
+    }
+
+    if (userPowers.length === 0) return res.json({ result: { suggestedHp: 100000, activeUsers: 0, avgTop5Power: 0 } });
+
+    const avgTop5 = userPowers.reduce((s, p) => s + p, 0) / userPowers.length;
+    const suggestedHp = Math.round(avgTop5 * 0.65 * 5 * userPowers.length);
+
+    res.json({ result: {
+        suggestedHp,
+        activeUsers: userPowers.length,
+        avgTop5Power: Math.round(avgTop5),
+        minTop5: Math.min(...userPowers),
+        maxTop5: Math.max(...userPowers),
+    }});
+});

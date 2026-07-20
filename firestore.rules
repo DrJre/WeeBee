@@ -157,6 +157,22 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.uid);
     }
 
+    // ── TCG Community Boss ────────────────────────────────────────────────────
+    // Boss definition and HP are written only by Cloud Functions (Admin SDK).
+    // All users can read so they can see boss state and leaderboard.
+    match /dungeon_boss/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /dungeon_attacks/{weekId}/daily/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /dungeon_attacks/{weekId}/users/{uid} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // ── TCG Dungeon raid result shares ────────────────────────────────────────
     match /dungeon_posts/{doc} {
       allow read: if true;
