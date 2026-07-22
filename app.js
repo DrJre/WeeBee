@@ -28843,9 +28843,9 @@ function _dungeonLifetimeSummaryHTML(progress) {
         </div>`;
     }
     const bigStat = (value, label) =>
-        `<div style="text-align:center;">
-            <div style="font-size:32px;font-weight:900;color:rgb(var(--stats-ink));letter-spacing:-1px;line-height:1;">${value}</div>
-            <div style="font-size:12px;font-weight:700;color:rgba(var(--stats-ink),0.55);margin-top:4px;">${label}</div>
+        `<div style="text-align:center;min-width:0;">
+            <div style="font-size:clamp(18px,5vw,30px);font-weight:900;color:rgb(var(--stats-ink));letter-spacing:-0.5px;line-height:1;word-break:break-all;">${value}</div>
+            <div style="font-size:11px;font-weight:700;color:rgba(var(--stats-ink),0.55);margin-top:4px;line-height:1.2;">${label}</div>
         </div>`;
 
     const winRate = Math.round((l.wins / l.totalRaids) * 100);
