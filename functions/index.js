@@ -713,7 +713,7 @@ function rollOnePack(pool, pack, fillerBatch = null) {
     let cards;
     if (pack.prismatic) {
         const isPrismaticGodPack = Math.random() < 0.01;
-        godPackTheme = isPrismaticGodPack ? 'prismatic' : null;
+        godPackTheme = isPrismaticGodPack ? 'neon' : null;
         cards = isPrismaticGodPack
             ? [pickCard(pool,'pr'), pickCard(pool,'pr'), pickCard(pool,'pr'), pickCard(pool,'pr'), pickCard(pool,'pr')]
             : rollPrismaticPackCards(pool);

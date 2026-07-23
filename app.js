@@ -590,8 +590,8 @@ async function _awardLoginBonus() {
         const newStreak = lastDate === yesterday ? streak + 1 : 1;
         const bonus = 100 + Math.min((newStreak - 1) * 5, 100);
         await setDoc(doc(db, 'profiles', uid), { loginStreak: newStreak, lastLoginDate: today }, { merge: true });
+        localStorage.setItem(storageKey, '1'); // set after streak write so a tab-close before amber doesn't block tomorrow's run
         await _awardAmber(bonus, `login:streak${newStreak}`);
-        localStorage.setItem(storageKey, '1');
         _showAmberToast(bonus, newStreak);
     } catch(e) { console.error('[LoginBonus]', e); }
 }
@@ -1072,6 +1072,15 @@ onAuthStateChanged(auth, async (user) => {
         }
     }
     if(window.currentActiveViewId === 'home-view') fetchHomepageReviews();
+});
+
+// Re-run the login bonus whenever the user brings the page back into focus
+// (PWA resume, tab switch back, etc.) so a backgrounded tab crossing midnight
+// still gets its streak updated without needing a full page reload.
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && auth.currentUser) {
+        _awardLoginBonus().catch(() => {});
+    }
 });
 
 // On mobile (no room for the chevron) tapping the avatar opens the account
@@ -7379,7 +7388,7 @@ const TCG_PR_CARDS = [
 // Neon 2026 event card preview — shown in TCG admin tab for design review.
 // Replace this array each event; neonA/B/C drive the border color via CSS vars.
 const TCG_EVENT_PREVIEW_CARDS = [
-    { name: 'Lucy',             anime: 'Cyberpunk: Edgerunners',      neonClass: '',       neonA: '#ffacd9', neonB: '#cc88ff', neonC: '#7fe8ff', flickerDelay: '0s',   image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FLucy.png?alt=media&token=724ec011-0948-45f6-a3b6-67afcda756bc' },
+    { name: 'Lucy',             anime: 'Cyberpunk: Edgerunners',      neonClass: '',       neonA: '#ff3fe3', neonB: '#01F9C6',                    flickerDelay: '0s',   image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FLucy.png?alt=media&token=724ec011-0948-45f6-a3b6-67afcda756bc' },
     { name: 'Shinra Kusakabe', anime: 'Fire Force',                   neonClass: 'custom', neonA: '#FF2F09', neonB: '#FA9F2D', neonC: '#ECDCB9', flickerDelay: '1.8s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FFire%20Force%20Guy.png?alt=media&token=27e93126-dc14-4f23-a898-1c57f05d2e9b' },
     { name: 'Koby',             anime: 'One Piece',                   neonClass: 'custom', neonA: '#EF7EF7', neonB: '#54FF1C', neonC: '#40B8FA', flickerDelay: '3.5s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FKoby.png?alt=media&token=32fcec7b-4c7c-49ed-aa38-1032b2206f06' },
     { name: 'Sylphiette',       anime: 'Jobless Reincarnation',       neonClass: '2col',   neonA: '#5AF3C3', neonB: '#ffffff',                    flickerDelay: '5.2s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FSylphiette.png?alt=media&token=96397553-9423-4ec0-893e-632389077670' },
@@ -7412,7 +7421,8 @@ window._tcgRenderEventCardPreview = function() {
               <div class="wb-card-footer">
                 <div class="wb-card-name">${card.name}</div>
                 <div class="wb-card-series">${card.anime}</div>
-                <div class="wb-card-rarity-label">Neon 2026</div>
+                <div class="wb-card-rarity-label">NR</div>
+                <div class="wb-neon-event-label">✦ Neon 2026</div>
               </div>
             </div>
           </div>
@@ -8587,7 +8597,7 @@ window._tcgLoadPrismaticEventUI = async function() {
     const extendBtn = document.getElementById('tcg-prismatic-event-extend-btn');
     const endAt = _tcgPrismaticEventEndAt(config);
     const active = endAt && endAt > new Date();
-    if (btn) { btn.disabled = !!active; btn.textContent = active ? 'Event Running' : 'Start Prismatic Event'; }
+    if (btn) { btn.disabled = !!active; btn.textContent = active ? 'Event Running' : 'Start Neon Event'; }
     if (extendBtn) extendBtn.style.display = active ? 'inline-flex' : 'none';
     if (status) status.textContent = active
         ? `Live — ends ${endAt.toLocaleString()}`
@@ -8596,7 +8606,7 @@ window._tcgLoadPrismaticEventUI = async function() {
 window._tcgStartPrismaticEvent = async function() {
     if (!window.isAdmin) return;
     if (await _tcgPrismaticEventActive()) return;
-    if (!confirm('Start the Prismatic Pack event now? It will run for 7 days.')) return;
+    if (!confirm('Start the Neon Event now? It will run for 7 days.')) return;
     try {
         await setDoc(doc(db, 'tcg_event_config', 'prismatic'), { startAt: serverTimestamp(), endAt: null }, { merge: true });
         window._tcgPrismaticEventConfig = null;
@@ -8609,7 +8619,7 @@ window._tcgExtendPrismaticEvent = async function(hours = 24) {
     if (!window.isAdmin) return;
     const config = await _tcgLoadPrismaticEventConfig(true);
     if (!config?.startAt) return alert('No active event to extend.');
-    if (!confirm(`Extend the Prismatic event by ${hours} hour${hours !== 1 ? 's' : ''}?`)) return;
+    if (!confirm(`Extend the Neon Event by ${hours} hour${hours !== 1 ? 's' : ''}?`)) return;
     try {
         const currentEnd = _tcgPrismaticEventEndAt(config);
         const newEnd = new Date(currentEnd.getTime() + hours * 60 * 60 * 1000);
@@ -12886,8 +12896,9 @@ window._tcgShowBulkRevealAnimation = async function(itemIds) {
     window._tcgOpeningPack = { name: packs[0]?.packName || 'Packs' };
 
     // If any pack in the batch was a god pack, play the intro before the grid.
-    // Prefer prismatic over gold if somehow both appear.
-    const godTheme = packs.find(p => p.godPackTheme === 'prismatic')?.godPackTheme
+    // Prefer neon > prismatic > gold if somehow multiple appear.
+    const godTheme = packs.find(p => p.godPackTheme === 'neon')?.godPackTheme
+        || packs.find(p => p.godPackTheme === 'prismatic')?.godPackTheme
         || packs.find(p => p.godPackTheme)?.godPackTheme;
     if (godTheme) {
         _tcgShowGodPackIntro(() => _tcgRenderBulkGridReveal(allCards), godTheme);
@@ -12976,6 +12987,19 @@ window._tcgSimulateGodPack = async function() {
     _tcgShowPackOpening(fakePack, fakeCards, 'gold');
 };
 
+// Admin-only browser preview of the Neon God Pack reveal — fake cards, no Firestore writes.
+window._tcgSimulateNeonGodPack = async function() {
+    if (!window.isAdmin) return;
+    const shuffled = [...TCG_EVENT_PREVIEW_CARDS].sort(() => Math.random() - 0.5).slice(0, 5);
+    const fakeCards = shuffled.map((c, i) => ({
+        name: c.name, anime: c.anime, rarity: 'pr', image: c.image, serial: i + 1,
+        neonA: c.neonA, neonB: c.neonB, neonC: c.neonC,
+        neonClass: c.neonClass, flickerDelay: c.flickerDelay,
+    }));
+    const fakePack = TCG_PACKS.find(p => p.prismatic) || TCG_PACKS[0];
+    _tcgShowPackOpening(fakePack, fakeCards, 'neon');
+};
+
 // Admin-only browser preview of the Prismatic God Pack reveal — fake cards, no Firestore writes.
 window._tcgSimulatePrismaticGodPack = async function() {
     if (!window.isAdmin) return;
@@ -13005,37 +13029,68 @@ function _tcgShowGodPackIntro(onDone, theme = 'gold') {
             @keyframes gpSubtitle { 0%{opacity:0;letter-spacing:8px} 100%{opacity:1;letter-spacing:3px} }
             @keyframes gpFlicker  { 0%,90%,100%{opacity:1} 92%{opacity:0.7} 95%{opacity:1} 97%{opacity:0.85} }
             @keyframes gpHueRotate { 0%{filter:hue-rotate(0deg)} 100%{filter:hue-rotate(360deg)} }
+            @keyframes gpNeonFlicker {
+                0%{opacity:1} 3.9%{opacity:0} 4.6%{opacity:1} 5.3%{opacity:0} 5.7%{opacity:1}
+                70%{opacity:0} 70.6%{opacity:1} 71.2%{opacity:0} 72%{opacity:1}
+                72.6%{opacity:0} 73.2%{opacity:1} 100%{opacity:1}
+            }
+            @keyframes gpNeonGlow {
+                0%,100%{text-shadow:0 0 8px rgba(230,230,255,.95),0 0 22px rgba(220,220,255,.8),0 0 48px rgba(200,200,255,.55),0 0 90px rgba(180,180,255,.3)}
+                50%{text-shadow:0 0 14px rgba(240,240,255,1),0 0 36px rgba(230,230,255,.9),0 0 72px rgba(210,210,255,.7),0 0 130px rgba(190,190,255,.45)}
+            }
+            @keyframes neonBackBorder {
+                0%{background:#d8d8f0;box-shadow:0 0 8px rgba(230,230,255,.95),0 0 22px rgba(220,220,255,.8),0 0 48px rgba(200,200,255,.55),0 0 90px rgba(180,180,255,.3),0 0 60px 30px rgba(210,215,255,.5),0 0 110px 65px rgba(200,210,255,.22)}
+                3.9%{background:#070710;box-shadow:none} 4.6%{background:#d8d8f0;box-shadow:0 0 8px rgba(230,230,255,.95),0 0 22px rgba(220,220,255,.8),0 0 48px rgba(200,200,255,.55),0 0 90px rgba(180,180,255,.3),0 0 60px 30px rgba(210,215,255,.5),0 0 110px 65px rgba(200,210,255,.22)}
+                5.3%{background:#070710;box-shadow:none} 5.7%{background:#d8d8f0;box-shadow:0 0 8px rgba(230,230,255,.95),0 0 22px rgba(220,220,255,.8),0 0 48px rgba(200,200,255,.55),0 0 90px rgba(180,180,255,.3),0 0 60px 30px rgba(210,215,255,.5),0 0 110px 65px rgba(200,210,255,.22)}
+                70%{background:#070710;box-shadow:none} 70.6%{background:#d8d8f0;box-shadow:0 0 8px rgba(230,230,255,.95),0 0 22px rgba(220,220,255,.8),0 0 48px rgba(200,200,255,.55),0 0 90px rgba(180,180,255,.3),0 0 60px 30px rgba(210,215,255,.5),0 0 110px 65px rgba(200,210,255,.22)}
+                71.2%{background:#070710;box-shadow:none} 72%{background:#d8d8f0;box-shadow:0 0 8px rgba(230,230,255,.95),0 0 22px rgba(220,220,255,.8),0 0 48px rgba(200,200,255,.55),0 0 90px rgba(180,180,255,.3),0 0 60px 30px rgba(210,215,255,.5),0 0 110px 65px rgba(200,210,255,.22)}
+                72.6%{background:#070710;box-shadow:none} 73.2%{background:#d8d8f0;box-shadow:0 0 8px rgba(230,230,255,.95),0 0 22px rgba(220,220,255,.8),0 0 48px rgba(200,200,255,.55),0 0 90px rgba(180,180,255,.3),0 0 60px 30px rgba(210,215,255,.5),0 0 110px 65px rgba(200,210,255,.22)}
+                100%{background:#d8d8f0;box-shadow:0 0 8px rgba(230,230,255,.95),0 0 22px rgba(220,220,255,.8),0 0 48px rgba(200,200,255,.55),0 0 90px rgba(180,180,255,.3),0 0 60px 30px rgba(210,215,255,.5),0 0 110px 65px rgba(200,210,255,.22)}
+            }
+            .neon-back-flicker { animation: neonBackBorder 5s steps(1,end) infinite; }
         `;
         document.head.appendChild(s);
     }
 
     const isPrismatic = theme === 'prismatic';
-    const accent = isPrismatic ? '#c084fc' : '#ffd700';
-    const radialBg = isPrismatic
-        ? 'radial-gradient(ellipse at 50% 55%, rgba(168,85,247,0.18) 0%, rgba(236,72,153,0.10) 40%, transparent 70%)'
-        : 'radial-gradient(ellipse at 50% 55%, rgba(251,191,36,0.18) 0%, rgba(180,83,9,0.08) 40%, transparent 70%)';
-    const titleGradient = isPrismatic
-        ? 'background:linear-gradient(90deg,#ff9999,#ffcc77,#ffee88,#88ffcc,#88ccff,#cc88ff,#ff88cc,#ff9999);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:gpGlowPrismatic 1.8s ease-in-out infinite,prismatic-text-scroll 3s linear infinite;'
-        : 'color:#ffd700;animation:gpGlow 1.8s ease-in-out infinite;';
-    const symbol = isPrismatic ? '✦' : '⚜️';
-    const title = isPrismatic ? 'PRISMATIC PACK' : 'GOD PACK';
-    const subColor = isPrismatic ? 'rgba(192,132,252,0.75)' : 'rgba(255,215,0,0.65)';
+    const isNeon = theme === 'neon';
+    const accent = isNeon ? '#d8d8f0' : (isPrismatic ? '#c084fc' : '#ffd700');
+    const radialBg = isNeon
+        ? 'radial-gradient(ellipse at 50% 55%, rgba(216,216,255,0.14) 0%, rgba(127,232,255,0.06) 40%, transparent 70%)'
+        : (isPrismatic
+            ? 'radial-gradient(ellipse at 50% 55%, rgba(168,85,247,0.18) 0%, rgba(236,72,153,0.10) 40%, transparent 70%)'
+            : 'radial-gradient(ellipse at 50% 55%, rgba(251,191,36,0.18) 0%, rgba(180,83,9,0.08) 40%, transparent 70%)');
+    const titleGradient = isNeon
+        ? 'color:#d8d8f0;animation:gpNeonGlow 2.2s ease-in-out infinite,gpNeonFlicker 5s steps(1,end) 0.4s infinite;'
+        : (isPrismatic
+            ? 'background:linear-gradient(90deg,#ff9999,#ffcc77,#ffee88,#88ffcc,#88ccff,#cc88ff,#ff88cc,#ff9999);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:gpGlowPrismatic 1.8s ease-in-out infinite,prismatic-text-scroll 3s linear infinite;'
+            : 'color:#ffd700;animation:gpGlow 1.8s ease-in-out infinite;');
+    const symbol = isNeon ? '✦' : (isPrismatic ? '✦' : '⚜️');
+    const title = isNeon ? 'NEON GOD PACK' : (isPrismatic ? 'PRISMATIC PACK' : 'GOD PACK');
+    const subColor = isNeon ? 'rgba(216,216,255,0.65)' : (isPrismatic ? 'rgba(192,132,252,0.75)' : 'rgba(255,215,0,0.65)');
+    const symbolAnim = isNeon ? 'animation:gpNeonFlicker 5s steps(1,end) infinite;' : 'animation:gpFlicker 3s ease-in-out 1s infinite;';
+    const bgColor = isNeon ? '#070710' : '#000';
+    const scanlineOverlay = isNeon
+        ? `<div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(255,255,255,0.012) 3px,rgba(255,255,255,0.012) 4px);pointer-events:none;z-index:1;"></div>`
+        : '';
 
     const overlay = document.createElement('div');
     overlay.id = 'god-pack-intro';
-    overlay.style.cssText = 'position:fixed;inset:0;background:#000;z-index:10001;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;';
+    overlay.style.cssText = `position:fixed;inset:0;background:${bgColor};z-index:10001;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;`;
     overlay.innerHTML = `
-        <div style="position:absolute;inset:0;background:${radialBg};animation:gpRadial 1.2s ease-out forwards;pointer-events:none;"></div>
-        <div id="gp-particles" style="position:absolute;inset:0;pointer-events:none;overflow:hidden;"></div>
+        ${scanlineOverlay}
+        <div style="position:absolute;inset:0;background:${radialBg};animation:gpRadial 1.2s ease-out forwards;pointer-events:none;z-index:1;"></div>
+        <div id="gp-particles" style="position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1;"></div>
         <div style="position:relative;z-index:2;text-align:center;animation:gpPulseIn 0.9s cubic-bezier(0.22,1,0.36,1) 0.2s both;">
-            <div style="font-size:52px;margin-bottom:10px;animation:gpFlicker 3s ease-in-out 1s infinite;">${symbol}</div>
+            <div style="font-size:52px;margin-bottom:10px;${symbolAnim}">${symbol}</div>
             <div style="font-size:58px;font-weight:900;letter-spacing:5px;line-height:1;font-family:Georgia,serif;${titleGradient}">${title}</div>
             <div style="font-size:13px;color:${subColor};margin-top:18px;font-weight:600;animation:gpSubtitle 1s ease-out 0.6s both;">You've been chosen</div>
         </div>
-        <div style="position:absolute;bottom:28px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">tap anywhere to reveal</div>`;
+        <div style="position:absolute;bottom:28px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;z-index:2;">tap anywhere to reveal</div>`;
     document.body.appendChild(overlay);
 
-    const symbols = isPrismatic ? ['✦','✧','✨','◆','◇'] : ['✦','✧','★','⭐','✨','◆','◇','⬥','✵'];
+    const neonParticleColors = ['#d8d8f0','#d8d8f0','#d8d8f0','#d8d8f0','#d8d8f0','#d8d8f0','#d8d8f0','#ffacd9','#cc88ff','#7fe8ff'];
+    const symbols = isNeon ? ['✦','✧','◆','◇','✵'] : (isPrismatic ? ['✦','✧','✨','◆','◇'] : ['✦','✧','★','⭐','✨','◆','◇','⬥','✵']);
     const prismaticColors = ['#ff9999','#ffcc77','#ffee88','#88ffcc','#88ccff','#cc88ff','#ff88cc'];
     const pc = document.getElementById('gp-particles');
     for (let i = 0; i < 55; i++) {
@@ -13043,7 +13098,9 @@ function _tcgShowGodPackIntro(onDone, theme = 'gold') {
         const dur = 2.5 + Math.random() * 2.5;
         const delay = Math.random() * 3.5;
         const size = 9 + Math.random() * 18;
-        const color = isPrismatic ? prismaticColors[Math.floor(Math.random()*prismaticColors.length)] : '#ffd700';
+        const color = isNeon
+            ? neonParticleColors[Math.floor(Math.random()*neonParticleColors.length)]
+            : (isPrismatic ? prismaticColors[Math.floor(Math.random()*prismaticColors.length)] : '#ffd700');
         p.style.cssText = `position:absolute;top:-30px;left:${Math.random()*100}%;font-size:${size}px;color:${color};opacity:${0.25 + Math.random()*0.75};animation:gpParticle ${dur}s ease-in ${delay}s infinite;`;
         p.textContent = symbols[Math.floor(Math.random()*symbols.length)];
         pc.appendChild(p);
@@ -13171,6 +13228,7 @@ window._tcgShowPackOpening = function(pack, cards, godPackTheme = null) {
     document.getElementById('tcg-pack-modal')?.remove();
     const isGodPack = !!godPackTheme;
     const isPrismatic = godPackTheme === 'prismatic';
+    const isNeon = godPackTheme === 'neon';
     const build = () => {
         const isMobile = window.matchMedia('(max-width: 768px)').matches;
         window._tcgStackMode = isMobile;
@@ -13178,20 +13236,24 @@ window._tcgShowPackOpening = function(pack, cards, godPackTheme = null) {
 
         const modal = document.createElement('div');
         modal.id = 'tcg-pack-modal';
-        const modalBg = isPrismatic
-            ? 'radial-gradient(ellipse at 50% 0%,rgba(168,85,247,0.30) 0%,rgba(0,0,0,0.96) 60%)'
-            : (isGodPack ? 'radial-gradient(ellipse at 50% 0%,rgba(120,53,15,0.35) 0%,rgba(0,0,0,0.96) 60%)' : 'rgba(0,0,0,0.93)');
+        const modalBg = isNeon
+            ? 'radial-gradient(ellipse at 50% 0%,rgba(216,216,255,0.12) 0%,rgba(7,7,16,0.97) 60%)'
+            : (isPrismatic
+                ? 'radial-gradient(ellipse at 50% 0%,rgba(168,85,247,0.30) 0%,rgba(0,0,0,0.96) 60%)'
+                : (isGodPack ? 'radial-gradient(ellipse at 50% 0%,rgba(120,53,15,0.35) 0%,rgba(0,0,0,0.96) 60%)' : 'rgba(0,0,0,0.93)'));
         modal.style.cssText = `position:fixed;inset:0;background:${modalBg};z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;`;
 
-        const titleHTML = isPrismatic
-            ? `<div style="font-size:28px;font-weight:900;letter-spacing:3px;margin-bottom:6px;font-family:Georgia,serif;background:linear-gradient(90deg,#ff9999,#ffcc77,#ffee88,#88ffcc,#88ccff,#cc88ff,#ff88cc,#ff9999);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:prismatic-text-scroll 3s linear infinite;">✦ PRISMATIC PACK ✦</div>`
-            : (isGodPack
-                ? `<div style="font-size:28px;font-weight:900;color:#ffd700;letter-spacing:3px;margin-bottom:6px;text-shadow:0 0 20px rgba(251,191,36,0.5);font-family:Georgia,serif;">⚜️ GOD PACK ⚜️</div>`
-                : `<div style="font-size:26px;font-weight:800;color:white;margin-bottom:6px;">${pack.name}</div>`);
+        const titleHTML = isNeon
+            ? `<div style="font-size:28px;font-weight:900;letter-spacing:3px;margin-bottom:6px;font-family:Georgia,serif;color:#d8d8f0;animation:gpNeonGlow 2.2s ease-in-out infinite,gpNeonFlicker 5s steps(1,end) infinite;">✦ NEON GOD PACK ✦</div>`
+            : (isPrismatic
+                ? `<div style="font-size:28px;font-weight:900;letter-spacing:3px;margin-bottom:6px;font-family:Georgia,serif;background:linear-gradient(90deg,#ff9999,#ffcc77,#ffee88,#88ffcc,#88ccff,#cc88ff,#ff88cc,#ff9999);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:prismatic-text-scroll 3s linear infinite;">✦ PRISMATIC PACK ✦</div>`
+                : (isGodPack
+                    ? `<div style="font-size:28px;font-weight:900;color:#ffd700;letter-spacing:3px;margin-bottom:6px;text-shadow:0 0 20px rgba(251,191,36,0.5);font-family:Georgia,serif;">⚜️ GOD PACK ⚜️</div>`
+                    : `<div style="font-size:26px;font-weight:800;color:white;margin-bottom:6px;">${pack.name}</div>`));
 
-        const revealBtnBg = isPrismatic ? 'rgba(168,85,247,0.2)' : (isGodPack ? 'rgba(251,191,36,0.2)' : 'rgba(255,255,255,0.14)');
-        const revealBtnColor = isPrismatic ? '#c084fc' : (isGodPack ? '#ffd700' : 'white');
-        const revealBtnBorder = isPrismatic ? 'border:1px solid rgba(168,85,247,0.4);' : (isGodPack ? 'border:1px solid rgba(251,191,36,0.4);' : '');
+        const revealBtnBg = isNeon ? 'rgba(216,216,255,0.1)' : (isPrismatic ? 'rgba(168,85,247,0.2)' : (isGodPack ? 'rgba(251,191,36,0.2)' : 'rgba(255,255,255,0.14)'));
+        const revealBtnColor = isNeon ? '#d8d8f0' : (isPrismatic ? '#c084fc' : (isGodPack ? '#ffd700' : 'white'));
+        const revealBtnBorder = isNeon ? 'border:1px solid rgba(216,216,255,0.3);' : (isPrismatic ? 'border:1px solid rgba(168,85,247,0.4);' : (isGodPack ? 'border:1px solid rgba(251,191,36,0.4);' : ''));
 
         modal.innerHTML = `
             <div style="text-align:center;margin-bottom:28px;">
@@ -13227,7 +13289,11 @@ window._tcgShowPackOpening = function(pack, cards, godPackTheme = null) {
 
             const back = document.createElement('div');
             back.className = 'tcg-flip-back';
-            if (isPrismatic) {
+            if (isNeon) {
+                back.className = 'tcg-flip-back neon-back-flicker';
+                back.style.cssText = 'background:#070710;padding:6px;display:flex;align-items:center;justify-content:center;';
+                back.innerHTML = `<div style="width:100%;height:100%;background:#070710;border-radius:8px;display:flex;align-items:center;justify-content:center;"><div style="text-align:center;pointer-events:none;"><div style="font-size:30px;color:#d8d8f0;text-shadow:0 0 8px rgba(216,216,255,0.9),0 0 22px rgba(210,210,255,0.6);">✦</div><div style="font-size:9px;font-weight:900;letter-spacing:2px;color:#d8d8f0;margin-top:10px;font-family:Georgia,serif;text-shadow:0 0 8px rgba(216,216,255,0.9);">NEON</div></div></div>`;
+            } else if (isPrismatic) {
                 back.style.cssText = 'background:linear-gradient(155deg,#4c1d95,#7c3aed,#a855f7,#ec4899,#7c3aed,#4c1d95);border:2px solid #e9d5ff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 24px rgba(168,85,247,0.4);';
                 back.innerHTML = `<div style="text-align:center;pointer-events:none;"><div style="font-size:30px;">✦</div><div style="font-size:9px;font-weight:900;letter-spacing:2px;color:#f5d0fe;margin-top:10px;font-family:Georgia,serif;text-shadow:0 0 8px rgba(232,121,249,0.8);">PRISMATIC</div></div>`;
             } else if (isGodPack) {
@@ -13335,6 +13401,31 @@ window._tcgImgFallback = function(name, anime) {
 
 function _tcgBuildCardFace(card) {
     const rarity = card.rarity || 'common';
+    // Neon 2026 event cards carry their own border colors — render with neon-event-frame
+    if (card.neonA) {
+        const eName = (card.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const eAnime = (card.anime || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const extraClass = card.neonClass ? ` neon-${card.neonClass}` : '';
+        const vars = [
+            `--neon-a:${card.neonA}`,
+            card.neonB ? `--neon-b:${card.neonB}` : '',
+            card.neonC ? `--neon-c:${card.neonC}` : '',
+            `--flicker-delay:${card.flickerDelay || '0s'}`,
+        ].filter(Boolean).join(';');
+        const art = card.image ? `<img src="${card.image}" alt="${card.name}" onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
+        return `<div class="neon-event-frame rarity-pr wb-card--prismatic tcg-anim-in-view${extraClass}" style="${vars}">
+            <div class="wb-card-inner">
+                <div class="wb-card-header"><span class="wb-mark">WEEBEE</span><span class="wb-rarity-gem wb-rarity-gem--star">★</span></div>
+                <div class="wb-card-art">${art}</div>
+                <div class="wb-card-footer">
+                    <div class="wb-card-name">${card.name}</div>
+                    <div class="wb-card-series">${card.anime}</div>
+                    <div class="wb-card-rarity-label">NR</div>
+                    <div class="wb-neon-event-label">✦ Neon 2026</div>
+                </div>
+            </div>
+        </div>`;
+    }
     const isPrismatic = rarity === 'pr';
     const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'PR' }[rarity] || 'Common';
     const eName = (card.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');

@@ -2110,18 +2110,42 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 .neon-event-frame .wb-card-inner { background: #0b0b1c; }
 /* Remove extra prismatic stamp padding — neon cards don't have the stamp */
 .neon-event-frame .wb-card-footer { padding-bottom: 12px !important; }
-/* Beat the prismatic !important rule on the label */
+/* Consistent spacing between all footer elements */
+.neon-event-frame .wb-card-series { margin-top: 4px; }
+/* NR rarity badge — animated neon gradient box background with dark text */
 .neon-event-frame .wb-card-rarity-label {
-    background: linear-gradient(90deg, var(--neon-a), var(--neon-b), var(--neon-c, var(--neon-a))) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    background-clip: text !important;
-    background-size: 200% 100% !important;
+    background: linear-gradient(90deg, var(--neon-a), var(--neon-b), var(--neon-c, var(--neon-a)), var(--neon-a)) !important;
+    background-size: 300% 100% !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+    color: rgba(5, 5, 20, 0.88) !important;
+    -webkit-text-fill-color: rgba(5, 5, 20, 0.88) !important;
     border: none !important;
-    padding: 0 !important;
-    margin-top: 6px !important;
-    color: transparent !important;
+    padding: 3px 9px !important;
+    margin-top: 5px !important;
+    border-radius: 5px !important;
     animation: neon-ef-shift 4s linear infinite !important;
+}
+/* ✦ Neon 2026 event tag — base style (used outside neon-event-frame if ever needed) */
+.wb-neon-event-label {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.55);
+    margin-top: 5px;
+}
+/* Inside a neon card, the event tag gets the same gradient treatment as the name */
+.neon-event-frame .wb-neon-event-label {
+    background: linear-gradient(90deg, var(--neon-a), var(--neon-b), var(--neon-c, var(--neon-a)));
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: neon-ef-shift 4s linear infinite;
+    animation-play-state: running;
 }
 /* Override the hardcoded prismatic rainbow on the card name */
 .neon-event-frame .wb-card-name {
@@ -2133,6 +2157,17 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     animation: neon-ef-shift 4s linear infinite;
     animation-play-state: running;
 }
+/* Cursor-reactive neon spotlight — radial gradient follows --mx/--my set by JS mousemove listener */
+.neon-event-frame .wb-card-art::before {
+    background: radial-gradient(
+        circle at calc(var(--mx, 0.5) * 100%) calc(var(--my, 0.5) * 100%),
+        rgba(255,255,255,0.55) 0%,
+        var(--neon-a) 22%,
+        var(--neon-b) 52%,
+        transparent 75%
+    );
+}
+.neon-event-frame:hover .wb-card-art::before { opacity: 0.72; }
 @keyframes neon-ef-shift {
     0%   { background-position: 0% 50%;   }
     50%  { background-position: 100% 50%; }
