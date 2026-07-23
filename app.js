@@ -6657,7 +6657,7 @@ window.switchTcgTab = function(event, tabId) {
     if (tabId === 'tcg-tab-dungeon') window.loadDungeonTab();
     else window._dungeonStopRefresh?.();
     if (tabId === 'tcg-tab-pvp') window.loadPvpTab();
-    if (tabId === 'tcg-tab-admin') { window._tcgRenderFounderPreview(); window._tcgLoadSaleConfigUI(); window._tcgLoadPrismaticEventUI(); window._tcgLoadFillerConfigUI(); }
+    if (tabId === 'tcg-tab-admin') { window._tcgRenderFounderPreview(); window._tcgRenderEventCardPreview(); window._tcgLoadSaleConfigUI(); window._tcgLoadPrismaticEventUI(); window._tcgLoadFillerConfigUI(); }
 };
 
 // Renders a preview of the currently-selected Founder gift card so admins
@@ -7375,6 +7375,51 @@ const TCG_PR_CARDS = [
     { name: 'Takamura',         anime: 'Sakamoto Days',      image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FTakamura.jpg?alt=media&token=55dccfd3-c994-40df-8fcc-37c314d0519a' },
     { name: 'Tomura Shigaraki', anime: 'My Hero Academia',   image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FTomura%20Shigaraki.webp?alt=media&token=7448fbbb-e2f4-4eb6-ba11-46ca641806e1' },
 ];
+
+// Neon 2026 event card preview — shown in TCG admin tab for design review.
+// Replace this array each event; neonA/B/C drive the border color via CSS vars.
+const TCG_EVENT_PREVIEW_CARDS = [
+    { name: 'Lucy',             anime: 'Cyberpunk: Edgerunners',      neonClass: '',       neonA: '#ffacd9', neonB: '#cc88ff', neonC: '#7fe8ff', flickerDelay: '0s',   image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FLucy.png?alt=media&token=724ec011-0948-45f6-a3b6-67afcda756bc' },
+    { name: 'Shinra Kusakabe', anime: 'Fire Force',                   neonClass: 'custom', neonA: '#FF2F09', neonB: '#FA9F2D', neonC: '#ECDCB9', flickerDelay: '1.8s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FFire%20Force%20Guy.png?alt=media&token=27e93126-dc14-4f23-a898-1c57f05d2e9b' },
+    { name: 'Koby',             anime: 'One Piece',                   neonClass: 'custom', neonA: '#EF7EF7', neonB: '#54FF1C', neonC: '#40B8FA', flickerDelay: '3.5s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FKoby.png?alt=media&token=32fcec7b-4c7c-49ed-aa38-1032b2206f06' },
+    { name: 'Sylphiette',       anime: 'Jobless Reincarnation',       neonClass: '2col',   neonA: '#5AF3C3', neonB: '#ffffff',                    flickerDelay: '5.2s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FSylphiette.png?alt=media&token=96397553-9423-4ec0-893e-632389077670' },
+    { name: 'Jotaro Kujo',      anime: "JoJo's Bizarre Adventure",    neonClass: 'custom', neonA: '#7B00D4', neonB: '#E2E207', neonC: '#3EFF05', flickerDelay: '7.0s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FJotaro%20Kujo.png?alt=media&token=5531c090-9a6b-409c-bc66-e5363c7948e6' },
+    { name: 'Fern',             anime: 'Frieren',                     neonClass: '2col',   neonA: '#7B00D4', neonB: '#ffffff',                    flickerDelay: '8.8s',  image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FFern.png?alt=media&token=6688dd12-da25-4d81-ad5f-a754899238b5' },
+    { name: 'Cell',             anime: 'Dragon Ball Z',               neonClass: '2col',   neonA: '#3EFF05', neonB: '#7B00D4',                    flickerDelay: '10.5s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FCell.png?alt=media&token=0a52e3c6-3927-446f-9d34-e8fb7dae7e52' },
+    { name: 'Kaiju No. 8',     anime: 'Kaiju No. 8',                 neonClass: '2col',   neonA: '#3DDFFF', neonB: '#ffffff',                    flickerDelay: '12.2s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FKaiju%20No.%208.png?alt=media&token=806a4d93-1663-405b-979f-8a320a2b0ec5' },
+    { name: 'Rei Ayanami',     anime: 'Neon Genesis Evangelion',     neonClass: '2col',   neonA: '#E99FB6', neonB: '#B2EDF7',                    flickerDelay: '13.9s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FRei%20Ayanami.png?alt=media&token=a3228a43-4208-4284-b808-0d683d513199' },
+    { name: 'Taro Sakamoto',   anime: 'Sakamoto Days',               neonClass: '2col',   neonA: '#3EFF05', neonB: '#E2E207',                    flickerDelay: '15.6s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FSakamoto.png?alt=media&token=0b201476-518a-4649-9ec3-8d936250b01b' },
+    { name: 'Akaza',           anime: 'Demon Slayer',                neonClass: '2col',   neonA: '#F902AD', neonB: '#00A3FF',                    flickerDelay: '17.3s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FAkaza.png?alt=media&token=5813a742-2c0f-45eb-8059-97f8e89caf0c' },
+];
+
+window._tcgRenderEventCardPreview = function() {
+    const el = document.getElementById('event-card-preview-grid');
+    if (!el) return;
+    el.innerHTML = TCG_EVENT_PREVIEW_CARDS.map(card => {
+        const extraClass = card.neonClass ? ` neon-${card.neonClass}` : '';
+        const vars = [
+            card.neonA ? `--neon-a:${card.neonA}` : '',
+            card.neonB ? `--neon-b:${card.neonB}` : '',
+            card.neonC ? `--neon-c:${card.neonC}` : '',
+            `--flicker-delay:${card.flickerDelay || '0s'}`,
+        ].filter(Boolean).join(';');
+        return `
+        <div style="isolation:isolate;">
+          <div class="neon-event-frame rarity-pr wb-card--prismatic tcg-anim-in-view${extraClass}" style="${vars}">
+            <div class="wb-card-inner">
+              <div class="wb-card-art"><img src="${card.image}" alt="${card.name}" loading="lazy"></div>
+              <div class="wb-card-header"><span class="wb-mark">WEEBEE</span><span class="wb-rarity-gem wb-rarity-gem--star">★</span></div>
+              <div class="wb-card-footer">
+                <div class="wb-card-name">${card.name}</div>
+                <div class="wb-card-series">${card.anime}</div>
+                <div class="wb-card-rarity-label">Neon 2026</div>
+              </div>
+            </div>
+          </div>
+          <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);margin-top:10px;text-align:center;">${card.name}</div>
+        </div>`;
+    }).join('');
+};
 
 // Founder gift cards — 1-of-1 designs, hand-gifted by an admin. Never enter
 // the pack pool; rendered with the gold "Founder" label instead of a serial.

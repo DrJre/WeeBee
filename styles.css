@@ -2057,6 +2057,98 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 }
 .wb-card--prismatic.tcg-anim-in-view .wb-prismatic-stamp { animation-play-state: running; }
 
+/* ── Neon Event Frame — admin event card preview ─────────────────────────── */
+.neon-event-frame {
+    width: 220px; height: 308px;
+    border-radius: 14px;
+    position: relative;
+    padding: 6px;
+    flex-shrink: 0;
+    display: inline-block;
+    animation: none !important;
+    box-shadow: none !important;
+    --neon-a: #ffacd9;
+    --neon-b: #cc88ff;
+    --neon-c: #7fe8ff;
+    --flicker-delay: 0s;
+}
+.neon-event-frame::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--neon-a) 0%, var(--neon-b) 40%, var(--neon-c) 75%, var(--neon-a) 100%);
+    background-size: 300% 300%;
+    z-index: 0;
+    animation: neon-ef-shift 4s linear infinite, neon-ef-flicker 7s ease-in-out infinite;
+    animation-delay: 0s, var(--flicker-delay, 0s);
+}
+/* Blurred glow halo — overrides the prismatic ::before (inset:-100%) by cascade order */
+.neon-event-frame::before {
+    content: '';
+    position: absolute; inset: -4px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--neon-a) 0%, var(--neon-b) 40%, var(--neon-c) 75%, var(--neon-a) 100%);
+    background-size: 300% 300%;
+    filter: blur(18px);
+    z-index: -1;
+    animation: neon-ef-shift 4s linear infinite, neon-ef-flicker 7s ease-in-out infinite;
+    animation-delay: 0s, var(--flicker-delay, 0s);
+}
+/* dominant-first: color A holds 0-38%, then B at 62%, C hint at 86% */
+.neon-event-frame.neon-custom::after,
+.neon-event-frame.neon-custom::before {
+    background: linear-gradient(135deg, var(--neon-a) 0%, var(--neon-a) 38%, var(--neon-b) 62%, var(--neon-c) 86%, var(--neon-a) 100%);
+    background-size: 300% 300%;
+}
+/* two-color: A dominant with white flash */
+.neon-event-frame.neon-2col::after,
+.neon-event-frame.neon-2col::before {
+    background: linear-gradient(135deg, var(--neon-a) 0%, var(--neon-a) 30%, var(--neon-b) 58%, var(--neon-a) 80%, var(--neon-a) 100%);
+    background-size: 300% 300%;
+}
+/* Use real card classes inside the frame; override prismatic styles with neon vars */
+.neon-event-frame .wb-card-inner { background: #0b0b1c; }
+/* Remove extra prismatic stamp padding — neon cards don't have the stamp */
+.neon-event-frame .wb-card-footer { padding-bottom: 12px !important; }
+/* Beat the prismatic !important rule on the label */
+.neon-event-frame .wb-card-rarity-label {
+    background: linear-gradient(90deg, var(--neon-a), var(--neon-b), var(--neon-c, var(--neon-a))) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+    background-size: 200% 100% !important;
+    border: none !important;
+    padding: 0 !important;
+    margin-top: 6px !important;
+    color: transparent !important;
+    animation: neon-ef-shift 4s linear infinite !important;
+}
+/* Override the hardcoded prismatic rainbow on the card name */
+.neon-event-frame .wb-card-name {
+    background: linear-gradient(90deg, var(--neon-a), var(--neon-b), var(--neon-c, var(--neon-a)));
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    filter: none;
+    animation: neon-ef-shift 4s linear infinite;
+    animation-play-state: running;
+}
+@keyframes neon-ef-shift {
+    0%   { background-position: 0% 50%;   }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%;   }
+}
+@keyframes neon-ef-flicker {
+    0%    { opacity: 1;    }
+    35%   { opacity: 0.42; }
+    36%   { opacity: 1;    }
+    70.0% { opacity: 0;    }
+    70.8% { opacity: 1;    }
+    71.6% { opacity: 0;    }
+    72.4% { opacity: 1;    }
+    100%  { opacity: 1;    }
+}
+
 /* Floating sparkle particles */
 .wb-prismatic-sparkles {
     position: absolute;

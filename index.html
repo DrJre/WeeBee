@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=138">
+    <link rel="stylesheet" href="styles.css?v=149">
 </head>
 <body>
     <div class="app-container">
@@ -1198,6 +1198,13 @@
                                 <button id="tcg-prismatic-event-start-btn" onclick="window._tcgStartPrismaticEvent()" style="padding:8px 16px; border-radius:8px; border:none; background:linear-gradient(135deg,#6366f1,#a855f7,#ec4899); color:white; font-weight:700; font-size:13px; cursor:pointer;">Start Prismatic Event</button>
                                 <button id="tcg-prismatic-event-extend-btn" onclick="window._tcgExtendPrismaticEvent(24)" style="display:none; padding:8px 16px; border-radius:8px; border:none; background:#7c3aed; color:white; font-weight:700; font-size:13px; cursor:pointer;">+24h</button>
                                 <span id="tcg-prismatic-event-status" style="font-size:13px; color:var(--text-muted);"></span>
+                            </div>
+
+                            <!-- Event Card Preview -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">✦ Event Card Preview</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">Current event card designs with neon borders. Update <code>TCG_EVENT_PREVIEW_CARDS</code> in app.js to swap in new samples.</div>
+                                <div id="event-card-preview-grid" style="display:flex; flex-wrap:wrap; gap:24px; align-items:flex-start;"></div>
                             </div>
 
                             <!-- Filler Pack (flex slot default) -->
@@ -2850,6 +2857,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=633"></script>
+    <script type="module" src="app.js?v=644"></script>
 </body>
 </html>
