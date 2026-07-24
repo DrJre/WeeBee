@@ -242,23 +242,23 @@ const ACHIEVEMENTS = [
     { id: 'suggestor_5',  name: 'The Recommender',        desc: 'Made 5 anime suggestions to the community',  icon: 'lightbulb',         cat: 'Special',   color: '#FF9800' },
     // Community: BuzzWord — One Piece
     { id: 'bwop_first',       name: "Devil's Luck",       desc: 'Solved your first One Piece BuzzWord puzzle',        icon: 'casino',                cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000' },
-    { id: 'bwop_1guess',      name: 'First Mate',          desc: 'Solved the One Piece puzzle in just 1 guess',        icon: 'anchor',                cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000', perk: '+25 Amber every time you solve this puzzle' },
+    { id: 'bwop_1guess',      name: 'First Mate',          desc: 'Solved the One Piece puzzle in just 1 guess',        icon: 'anchor',                cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000', perk: '+50 Amber every time you solve this puzzle' },
     { id: 'bwop_streak_7',    name: 'Straw Hat',           desc: 'Solved the One Piece puzzle 7 days in a row',        icon: 'wb_sunny',              cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000' },
     { id: 'bwop_total_30',    name: 'Grand Line',          desc: 'Solved the One Piece puzzle 30 times total',         icon: 'explore',               cat: 'Community', subcat: 'BuzzWord',   color: '#8B0000' },
     { id: 'bwop_streak_100',  name: 'The One Piece',       desc: 'Solved the One Piece puzzle 100 days in a row',      icon: 'diamond',               cat: 'Community', subcat: 'BuzzWord',   color: '#FFD700' },
     // Community: BuzzWord — Naruto
     { id: 'bwnrt_first',      name: 'Genin',               desc: 'Solved your first Naruto BuzzWord puzzle',           icon: 'star',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00' },
-    { id: 'bwnrt_1guess',     name: 'Dattebayo!',          desc: 'Solved the Naruto puzzle in just 1 guess',           icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00', perk: '+25 Amber every time you solve this puzzle' },
+    { id: 'bwnrt_1guess',     name: 'Dattebayo!',          desc: 'Solved the Naruto puzzle in just 1 guess',           icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00', perk: '+50 Amber every time you solve this puzzle' },
     { id: 'bwnrt_streak_7',   name: 'Shinobi Way',         desc: 'Solved the Naruto puzzle 7 days in a row',           icon: 'local_fire_department', cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00' },
     { id: 'bwnrt_total_30',   name: "Hokage's Path",       desc: 'Solved the Naruto puzzle 30 times total',            icon: 'military_tech',         cat: 'Community', subcat: 'BuzzWord',   color: '#FF6B00' },
     // Community: BuzzWord — Bleach
     { id: 'bwblc_first',      name: 'Soul Reaper',         desc: 'Solved your first Bleach BuzzWord puzzle',           icon: 'star',                  cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4' },
-    { id: 'bwblc_1guess',     name: 'Bankai!',             desc: 'Solved the Bleach puzzle in just 1 guess',           icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4', perk: '+25 Amber every time you solve this puzzle' },
+    { id: 'bwblc_1guess',     name: 'Bankai!',             desc: 'Solved the Bleach puzzle in just 1 guess',           icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4', perk: '+50 Amber every time you solve this puzzle' },
     { id: 'bwblc_streak_7',   name: 'Gotei 13',            desc: 'Solved the Bleach puzzle 7 days in a row',           icon: 'local_fire_department', cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4' },
     { id: 'bwblc_total_30',   name: "Captain's Path",      desc: 'Solved the Bleach puzzle 30 times total',            icon: 'military_tech',         cat: 'Community', subcat: 'BuzzWord',   color: '#00BCD4' },
     // Community: BuzzWord — Dragon Ball
     { id: 'bwdb_first',       name: 'Power Level',         desc: 'Solved your first Dragon Ball BuzzWord puzzle',      icon: 'star',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00' },
-    { id: 'bwdb_1guess',      name: 'Over 9000!',          desc: 'Solved the Dragon Ball puzzle in just 1 guess',      icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00', perk: '+25 Amber every time you solve this puzzle' },
+    { id: 'bwdb_1guess',      name: 'Over 9000!',          desc: 'Solved the Dragon Ball puzzle in just 1 guess',      icon: 'bolt',                  cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00', perk: '+50 Amber every time you solve this puzzle' },
     { id: 'bwdb_streak_7',    name: 'Super Saiyan',        desc: 'Solved the Dragon Ball puzzle 7 days in a row',      icon: 'local_fire_department', cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00' },
     { id: 'bwdb_total_30',    name: 'Limit Breaker',       desc: 'Solved the Dragon Ball puzzle 30 times total',       icon: 'military_tech',         cat: 'Community', subcat: 'BuzzWord',   color: '#FF6F00' },
     // Community: BuzzWord — General + Feed
@@ -334,6 +334,7 @@ window.awardAchievements = async function(ids) {
             const now = new Date();
             toAward.forEach(id => { updates[id] = { earnedAt: now }; });
             await setDoc(doc(db, "achievements", uid), updates, { merge: true });
+            _incrementUserStats({ achievementsEarned: toAward.length }).catch(() => {});
             for (let i = 0; i < toAward.length; i++) {
                 const ach = ACHIEVEMENTS.find(a => a.id === toAward[i]);
                 if (ach) { if (i > 0) await new Promise(r => setTimeout(r, 3800)); window.showAchievementToast(ach); }
@@ -446,7 +447,20 @@ async function _awardAmber(amount, reason) {
     try {
         await updateDoc(doc(db, 'profiles', uid), { amber: increment(amount) });
         addDoc(collection(db, 'amber_log'), { uid, amount, reason, timestamp: new Date() }).catch(() => {});
+        _incrementUserStats({ amberEarned: amount }).catch(() => {});
     } catch(e) {}
+}
+
+async function _incrementUserStats(fields) {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const year = new Date().getFullYear().toString();
+    const updates = {};
+    for (const [k, v] of Object.entries(fields)) updates[k] = increment(v);
+    await Promise.all([
+        setDoc(doc(db, 'user_stats', uid), updates, { merge: true }),
+        setDoc(doc(db, 'user_stats', uid, 'years', year), updates, { merge: true }),
+    ]);
 }
 
 // Award amber to any uid — used for likes received by post author
@@ -592,6 +606,7 @@ async function _awardLoginBonus() {
         await setDoc(doc(db, 'profiles', uid), { loginStreak: newStreak, lastLoginDate: today }, { merge: true });
         localStorage.setItem(storageKey, '1'); // set after streak write so a tab-close before amber doesn't block tomorrow's run
         await _awardAmber(bonus, `login:streak${newStreak}`);
+        _incrementUserStats({ loginDays: 1 }).catch(() => {});
         _showAmberToast(bonus, newStreak);
     } catch(e) { console.error('[LoginBonus]', e); }
 }
@@ -1900,7 +1915,8 @@ window.submitInDepthReview = async function() {
             });
             if (!window.isSeriesReview) {
                 if (!(window.myReviewCount > 0)) _awardFirstReviewBonus().catch(() => {});
-                _awardAmber(10 + (window._amberAnimeAuthority ? 10 : 0), 'review:indepth').catch(() => {});
+                _awardAmber(100 + (window._amberAnimeAuthority ? 50 : 0), 'review:indepth').catch(() => {});
+                _incrementUserStats({ reviewsWritten: 1 }).catch(() => {});
                 window.myReviewCount = (window.myReviewCount || 0) + 1;
                 window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
                 const _avId = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
@@ -1956,7 +1972,8 @@ window.submitQuickReview = async function() {
                 likes: [], dislikes: [], commentCount: 0
             });
             if (!(window.myReviewCount > 0)) _awardFirstReviewBonus().catch(() => {});
-            _awardAmber(5, 'review:quick').catch(() => {});
+            _awardAmber(50, 'review:quick').catch(() => {});
+            _incrementUserStats({ reviewsWritten: 1 }).catch(() => {});
             window.myReviewCount = (window.myReviewCount || 0) + 1;
             window.userRankCache[auth.currentUser.uid] = window.myReviewCount;
             const _avIq = auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(auth.currentUser.displayName)}&backgroundColor=ffc107&fontColor=333333`;
@@ -2582,7 +2599,7 @@ window.saveListEntry = async function(docId, mal_id, title, img, totalEps) {
         // Track completed/dropped counts for achievements
         if (auth.currentUser && status !== prevStatus) {
             const profileUpdates = {};
-            if (status === 'completed' && !alreadyCompleted) { profileUpdates.completedCount = increment(1); _awardAmber(2, 'anime:complete').catch(() => {}); }
+            if (status === 'completed' && !alreadyCompleted) { profileUpdates.completedCount = increment(1); _awardAmber(2, 'anime:complete').catch(() => {}); _incrementUserStats({ animeCompleted: 1 }).catch(() => {}); }
             if (status === 'dropped') profileUpdates.droppedCount = increment(1);
             if (Object.keys(profileUpdates).length) {
                 setDoc(doc(db, "profiles", auth.currentUser.uid), profileUpdates, { merge: true }).then(() =>
@@ -6457,7 +6474,7 @@ window.saveTierList = async function() {
     const data = { uid:auth.currentUser.uid, authorName:displayName, authorAvatar:myAvatar, title, caption, type:st.type, sourceAnimeId:st.sourceAnimeId||null, sourceAnimeTitle:st.sourceAnimeTitle||null, sourceAnimeTitles, coverImage, tiers:st.tiers, unranked:st.unranked, public:isPublic, isTemplate, updatedAt:new Date() };
     try {
         if (st.editingId) { await updateDoc(doc(db,"tier_lists",st.editingId), data); }
-        else { await addDoc(collection(db,"tier_lists"), { ...data, likes:[], dislikes:[], commentCount:0, templateLikes:[], templateDislikes:[], timestamp:new Date() }); }
+        else { await addDoc(collection(db,"tier_lists"), { ...data, likes:[], dislikes:[], commentCount:0, templateLikes:[], templateDislikes:[], timestamp:new Date() }); _incrementUserStats({ tierListsCreated: 1 }).catch(() => {}); }
         window.closeAllModals();
         if (window.currentActiveViewId==='profile-view') window.loadTierListsTab(auth.currentUser.uid);
     } catch(e) { alert('Failed to save.'); console.error(e); }
@@ -7399,6 +7416,9 @@ const TCG_EVENT_PREVIEW_CARDS = [
     { name: 'Rei Ayanami',     anime: 'Neon Genesis Evangelion',     neonClass: '2col',   neonA: '#E99FB6', neonB: '#B2EDF7',                    flickerDelay: '13.9s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FRei%20Ayanami.png?alt=media&token=a3228a43-4208-4284-b808-0d683d513199' },
     { name: 'Taro Sakamoto',   anime: 'Sakamoto Days',               neonClass: '2col',   neonA: '#3EFF05', neonB: '#E2E207',                    flickerDelay: '15.6s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FSakamoto.png?alt=media&token=0b201476-518a-4649-9ec3-8d936250b01b' },
     { name: 'Akaza',           anime: 'Demon Slayer',                neonClass: '2col',   neonA: '#F902AD', neonB: '#00A3FF',                    flickerDelay: '17.3s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FAkaza.png?alt=media&token=5813a742-2c0f-45eb-8059-97f8e89caf0c' },
+    { name: 'Armored Titan',  anime: 'Attack on Titan',             neonClass: '2col',   neonA: '#FF1A1A', neonB: '#ffffff',                    flickerDelay: '19.0s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FArmored%20Titan.png?alt=media&token=a4f9db3c-955e-4f80-9108-64d088b30c6f' },
+    { name: 'Caiman',         anime: 'Dorohedoro',                  neonClass: '2col',   neonA: '#AAFF00', neonB: '#FF1A1A',                    flickerDelay: '20.7s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FCaiman-%20Dorohedoro.png?alt=media&token=f471d3eb-0b9b-4222-9612-789170d87b89' },
+    { name: 'Alphonse Elric', anime: 'Fullmetal Alchemist',         neonClass: '2col',   neonA: '#FF1A1A', neonB: '#ffffff',                    flickerDelay: '22.4s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FAlphonse%20Elric.png?alt=media&token=c8b66220-568c-445f-97a0-2bffb761f438' },
 ];
 
 window._tcgRenderEventCardPreview = function() {
@@ -8193,40 +8213,6 @@ window._tcgSimulatePacks = function() {
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 };
 
-window._adminBackfillStripePity = async function(dryRun) {
-    if (!window.isAdmin) return;
-    const el = document.getElementById('tcg-pity-backfill-result');
-    el.style.display = 'block';
-    el.textContent = dryRun ? 'Running dry run…' : '⚡ Committing — please wait…';
-    try {
-        const idToken = await auth.currentUser.getIdToken();
-        const res = await fetch('https://adminbackfillstripepity-omvkxcmt7q-uc.a.run.app', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-            body: JSON.stringify({ data: { dryRun } }),
-        });
-        const json = await res.json();
-        if (json.error) { el.textContent = '❌ ' + json.error.message; return; }
-        const r = json.result;
-        if (r.dryRun) {
-            const lines = [`DRY RUN — ${r.usersQualified} users qualify, ${r.totalUrs} URs to grant\n`];
-            for (const g of (r.grants || [])) {
-                lines.push(`  ${g.uid}  $${(g.totalCents/100).toFixed(2)} spent  →  ${g.ursOwed} UR(s)  (remainder: ${g.remainderCents}¢)`);
-            }
-            el.textContent = lines.join('\n');
-        } else {
-            const lines = ['COMMITTED\n'];
-            for (const g of (r.results || [])) {
-                if (g.ok) lines.push(`  ✅ ${g.uid}  granted: ${g.granted?.join(', ')}  (pity: ${g.remainderCents}¢)`);
-                else       lines.push(`  ❌ ${g.uid}  FAILED: ${g.error}`);
-            }
-            el.textContent = lines.join('\n');
-        }
-    } catch(e) {
-        el.textContent = '❌ ' + e.message;
-    }
-};
-
 // Admin: look up Stripe purchase history for a user by UID
 window._adminLookupStripePurchases = async function() {
     if (!window.isAdmin) return;
@@ -8466,60 +8452,6 @@ window._tcgAdminSearchUsersForPackGift = async function() {
     } catch(e) { el.innerHTML = `<p style="color:red;font-size:13px;">${e.message}</p>`; }
 };
 
-window._tcgAdminSearchUsersForBatchFix = async function() {
-    if (!window.isAdmin) return;
-    const term = (document.getElementById('pack-batch-search')?.value || '').trim().toLowerCase();
-    const el = document.getElementById('pack-batch-results');
-    if (!el) return;
-    if (!term) { el.innerHTML = ''; return; }
-    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Searching…</p>';
-    try {
-        const snap = await getDocs(query(collection(db, 'profiles'), limit(300)));
-        const matches = [];
-        snap.forEach(d => {
-            const p = d.data();
-            if ((p.displayName || '').toLowerCase().includes(term)) matches.push({ uid: d.id, name: p.displayName || 'Unknown' });
-        });
-        if (!matches.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No users found.</p>'; return; }
-        el.innerHTML = matches.slice(0, 10).map(u => `
-            <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-color);flex-wrap:wrap;">
-                <span style="font-size:13px;flex:1;min-width:120px;">${u.name}</span>
-                <button onclick="window._tcgAdminLoadInventoryForBatchFix('${u.uid}','${u.name.replace(/'/g,"\\'")}','pack-batch-results')" style="padding:7px 16px;border-radius:6px;border:none;background:var(--bg-gray-darker);color:var(--text-dark);font-weight:700;font-size:12px;cursor:pointer;">View Packs</button>
-            </div>`).join('');
-    } catch(e) { el.innerHTML = `<p style="color:red;font-size:13px;">${e.message}</p>`; }
-};
-
-window._tcgAdminLoadInventoryForBatchFix = async function(uid, name, containerId) {
-    if (!window.isAdmin) return;
-    const el = document.getElementById(containerId);
-    if (!el) return;
-    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Loading…</p>';
-    try {
-        const snap = await getDocs(collection(db, 'inventory', uid, 'items'));
-        const items = [];
-        snap.forEach(d => items.push({ id: d.id, ...d.data() }));
-        if (!items.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No unopened packs.</p>'; return; }
-        el.innerHTML = `<div style="margin-top:8px;font-size:13px;font-weight:700;margin-bottom:8px;">${name}'s packs:</div>` +
-            items.map(it => {
-                const inferredBatch = it.cardBatch || (((it.rolledCards||[]).some(c => (c.rarity==='rare'||c.rarity==='common') && c.name && c.name !== '???')) ? 2 : 1);
-                return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-color);flex-wrap:wrap;">
-                    <span style="font-size:12px;flex:1;">${it.packName}</span>
-                    <span style="font-size:11px;color:var(--text-muted);">Batch ${inferredBatch}${it.cardBatch ? ' (saved)' : ' (inferred)'}</span>
-                    <button onclick="window._tcgAdminSetPackBatch('${uid}','${it.id}',1,'${containerId}','${name}')" style="padding:5px 10px;border-radius:6px;border:1px solid #6366f1;background:transparent;color:#6366f1;font-weight:700;font-size:11px;cursor:pointer;">Set Batch 1</button>
-                    <button onclick="window._tcgAdminSetPackBatch('${uid}','${it.id}',2,'${containerId}','${name}')" style="padding:5px 10px;border-radius:6px;border:1px solid #10b981;background:transparent;color:#10b981;font-weight:700;font-size:11px;cursor:pointer;">Set Batch 2</button>
-                </div>`;
-            }).join('');
-    } catch(e) { el.innerHTML = `<p style="color:red;font-size:13px;">${e.message}</p>`; }
-};
-
-window._tcgAdminSetPackBatch = async function(uid, itemId, batch, containerId, name) {
-    if (!window.isAdmin) return;
-    try {
-        await updateDoc(doc(db, 'inventory', uid, 'items', itemId), { cardBatch: batch });
-        window._tcgAdminLoadInventoryForBatchFix(uid, name, containerId);
-    } catch(e) { alert('Failed: ' + e.message); }
-};
-
 window._tcgAdminGiftPackToUser = async function(uid, name) {
     if (!window.isAdmin) return;
     const packId = document.getElementById('pack-gift-select')?.value || 'standard';
@@ -8732,13 +8664,13 @@ const TCG_PACKS = [
     },
     {
         id: 'prismatic',
-        name: '2026 Prismatic Pack',
+        name: 'Neon 2026 Pack',
         cost: 800,
         salePrice: null,
-        gradient: 'linear-gradient(135deg,#6366f1,#a855f7,#ec4899)',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2F2026%20Prismatic%20Pack.png?alt=media&token=0fd87cb6-3811-443b-a75c-e87c2513366f',
-        description: '5 cards · Rare/SR only · chance of Event card',
-        odds: 'Rare 70% · SR 26% · Event 4%\n~1-in-5 chance of at least one Event card per pack\nNo Common/SSR/UR · +1% chance per pack for a Prismatic God Pack (5 Event cards)',
+        gradient: 'linear-gradient(135deg,#ff3fe3,#7B2FBE,#01F9C6)',
+        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FNeon%202026%20Pack.png?alt=media&token=e467dc4c-e687-4818-ae37-a19e0282f49c',
+        description: '5 cards · Rare/SR only · chance of Neon card',
+        odds: 'Rare 70% · SR 26% · Neon 4%\n~1-in-5 chance of at least one Neon card per pack\nNo Common/SSR/UR · 1-in-100 chance for a Neon God Pack (5 Neon cards)',
         guaranteedSR: false,
         prismatic: true,
     }
@@ -10229,34 +10161,6 @@ window._tcgDeleteDupeCopy = async function(refPath, uid, rowIndex) {
         const row = document.getElementById(`crossdupe-row-${rowIndex}`);
         if (row) row.innerHTML = `<div style="font-size:12px;color:#22c55e;font-weight:700;padding:4px 0;">✅ Deleted — dupe resolved.</div>`;
     } catch(e) { alert('Failed to delete: ' + e.message); }
-};
-
-// Nulls out serial/edition on all event cards (PR rarity or event:true) that
-// were accidentally assigned version numbers during the prismatic event launch.
-window._tcgCleanEventCardSerials = async function() {
-    if (!window.isAdmin) return;
-    const statusEl = document.getElementById('tcg-event-cleanup-status');
-    const setStatus = msg => { if (statusEl) statusEl.textContent = msg; };
-    if (!confirm('This will null out serial/edition on all PR/event cards across all users. Continue?')) return;
-    setStatus('Scanning all cards…');
-    try {
-        const allSnap = await getDocs(collectionGroup(db, 'cards'));
-        const toFix = allSnap.docs.filter(d => {
-            const c = d.data();
-            return _tcgIsEventCard(c) && (c.serial != null || c.edition != null);
-        });
-        setStatus(`Found ${toFix.length} event card(s) with stale serial/edition. Cleaning…`);
-        let done = 0;
-        const BATCH_SIZE = 400;
-        for (let i = 0; i < toFix.length; i += BATCH_SIZE) {
-            const batch = writeBatch(db);
-            toFix.slice(i, i + BATCH_SIZE).forEach(d => batch.update(d.ref, { serial: null, edition: null }));
-            await batch.commit();
-            done += Math.min(BATCH_SIZE, toFix.length - i);
-            setStatus(`Cleaned ${done} / ${toFix.length}…`);
-        }
-        setStatus(`✅ Done — ${toFix.length} event card(s) cleaned.`);
-    } catch(e) { setStatus('❌ Error: ' + e.message); console.error(e); }
 };
 
 window._tcgRenderPoolMeters = async function() {
@@ -12381,20 +12285,12 @@ window._tcgRenderStore = async function() {
     };
     let flexSlotHtml;
     if (prismaticActive) {
-        const countdownHtml = `<div style="width:100%;box-sizing:border-box;background:linear-gradient(135deg,#6366f1,#a855f7,#ec4899);color:white;border-radius:10px;padding:8px 12px;margin-top:10px;text-align:center;font-weight:800;font-size:12px;letter-spacing:0.3px;">✦ Event ends in <span id="prismatic-countdown-timer">…</span></div>`;
+        const countdownHtml = `<div style="width:100%;box-sizing:border-box;background:linear-gradient(135deg,#ff3fe3,#7B2FBE,#01F9C6);color:#050514;border-radius:10px;padding:8px 12px;margin-top:10px;text-align:center;font-weight:800;font-size:12px;letter-spacing:0.3px;">✦ Event ends in <span id="prismatic-countdown-timer">…</span></div>`;
         flexSlotHtml = packCard(TCG_PACKS.find(p => p.prismatic), false, '', false, 'prismatic-pack-glow', countdownHtml);
-    } else if (fillerBatch != null) {
-        const fillerBase = TCG_PACKS.find(p => p.filler);
-        const fillerDisplay = {
-            ...fillerBase,
-            name: `Batch ${fillerBatch} Pack`,
-            description: `Batch ${fillerBatch} cards · 1 guaranteed SR+`,
-            odds: `Batch ${fillerBatch} · Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.5% UR bonus · favors Batch ${fillerBatch} 4:1`,
-        };
-        const batchLabelHtml = `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#065f46,#047857);color:white;border-radius:8px;font-weight:800;font-size:11px;letter-spacing:0.5px;">📦 BATCH ${fillerBatch} PACK</div>`;
-        flexSlotHtml = packCard(fillerDisplay, false, batchLabelHtml, false, '', '');
     } else {
-        flexSlotHtml = packCard(genericComingSoonPack, true, '', false);
+        // Neon 2026 pack always occupies slot 4 — coming soon until admin starts the event
+        const neonSoonLabel = `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#ff3fe3,#7B2FBE,#01F9C6);color:#050514;border-radius:8px;font-weight:800;font-size:11px;letter-spacing:0.5px;">✦ COMING SOON</div>`;
+        flexSlotHtml = packCard(TCG_PACKS.find(p => p.prismatic), true, neonSoonLabel, false, 'prismatic-pack-glow');
     }
 
     const curBatchLabelHtml = `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#92400e,#b45309);color:white;border-radius:8px;font-weight:800;font-size:11px;letter-spacing:0.5px;">📦 BATCH ${TCG_CURRENT_BATCH} PACK</div>`;
@@ -13994,6 +13890,7 @@ window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
 
         await deleteDoc(cardRef);
         await _awardAmber(amount, 'tcg:dismantle');
+        _incrementUserStats({ cardsDismantled: 1 }).catch(() => {});
 
         // Return the serial number to the pool so it can be pulled again
         if (cardData.serial != null && !cardData.founder && !cardData.monthlyUr && !cardData.tradedMonthlyUr) {
@@ -14880,6 +14777,7 @@ window._tcgSmartDismantleModal = async function(uid) {
                 await deleteDoc(doc(db, 'card_collections', uid, 'cards', c.id));
             }
             if (total > 0) await _awardAmber(total, 'tcg:dismantle');
+            _incrementUserStats({ cardsDismantled: toDismantle.length }).catch(() => {});
             window._tcgCollectionCache.delete(uid);
             document.getElementById('smart-dismantle-modal')?.remove();
             window._tcgRenderMyCollection('mycards', true);
@@ -14926,7 +14824,9 @@ window._tcgBulkDismantle = async function(uid, profileUid) {
         if (total > 0) {
             await updateDoc(doc(db, 'profiles', uid), { amber: increment(total) });
             addDoc(collection(db, 'amber_log'), { uid, amount: total, reason: 'tcg:dismantle', timestamp: new Date() }).catch(() => {});
+            _incrementUserStats({ amberEarned: total }).catch(() => {});
         }
+        _incrementUserStats({ cardsDismantled: selectedCards.length }).catch(() => {});
         // Batch delete cards. Firestore batches cap at 500 ops; split if needed.
         const BATCH_SIZE = 499;
         for (let i = 0; i < selectedCards.length; i += BATCH_SIZE) {
@@ -23778,8 +23678,8 @@ window.checkBwNrtAchievements = async function(guessCount, streak, totalWins) {
         if (opLb.exists() && (opLb.data().totalWins || 0) >= 1) ids.push('bw_multiverse');
     } catch(e) {}
     const unlocked = await window.awardAchievements(ids).catch(() => new Set());
-    if (unlocked.has('bwnrt_1guess')) _awardAmberDaily('game_bwnrt_mastery', 25);
-    _awardAmberDaily('game_bwnrt', 25);
+    if (unlocked.has('bwnrt_1guess')) _awardAmberDaily('game_bwnrt_mastery', 50);
+    _awardAmberDaily('game_bwnrt', 50);
 };
 
 window.bwNrtShare = function() {
@@ -24627,8 +24527,8 @@ window.checkBwOpAchievements = async function(guessCount, streak, totalWins) {
         if (nrtLb.exists() && (nrtLb.data().totalWins || 0) >= 1) ids.push('bw_multiverse');
     } catch(e) {}
     const unlocked = await window.awardAchievements(ids).catch(() => new Set());
-    if (unlocked.has('bwop_1guess')) _awardAmberDaily('game_bwop_mastery', 25);
-    _awardAmberDaily('game_bwop', 25);
+    if (unlocked.has('bwop_1guess')) _awardAmberDaily('game_bwop_mastery', 50);
+    _awardAmberDaily('game_bwop', 50);
 };
 
 window.bwOpShare = function() {
@@ -25166,8 +25066,8 @@ window.checkBwBlcAchievements = async function(guessCount, streak, totalWins) {
     if (streak >= 7) ids.push('bwblc_streak_7');
     if (totalWins >= 30) ids.push('bwblc_total_30');
     const unlocked = await window.awardAchievements(ids).catch(() => new Set());
-    if (unlocked.has('bwblc_1guess')) _awardAmberDaily('game_bwblc_mastery', 25);
-    _awardAmberDaily('game_bwblc', 25);
+    if (unlocked.has('bwblc_1guess')) _awardAmberDaily('game_bwblc_mastery', 50);
+    _awardAmberDaily('game_bwblc', 50);
 };
 
 window.bwBlcShare = function() {
@@ -25591,8 +25491,8 @@ window.checkBwDbAchievements = async function(guessCount, streak, totalWins) {
     if (streak >= 7) ids.push('bwdb_streak_7');
     if (totalWins >= 30) ids.push('bwdb_total_30');
     const unlocked = await window.awardAchievements(ids).catch(() => new Set());
-    if (unlocked.has('bwdb_1guess')) _awardAmberDaily('game_bwdb_mastery', 25);
-    _awardAmberDaily('game_bwdb', 25);
+    if (unlocked.has('bwdb_1guess')) _awardAmberDaily('game_bwdb_mastery', 50);
+    _awardAmberDaily('game_bwdb', 50);
 };
 
 window.bwDbShare = function() {
@@ -26558,7 +26458,7 @@ function _triviaShowResult(score, alreadyDone) {
         if (totalPlays >= 7) toAward.push('trivia_7');
         if (totalPlays >= 30) toAward.push('trivia_30');
         window.awardAchievements(toAward).catch(() => {});
-        _awardAmberDaily('game_trivia', 25);
+        _awardAmberDaily('game_trivia', 100);
     }
 }
 
@@ -27108,7 +27008,7 @@ window._obSubmitGuess = function() {
             if (mbStats.streak >= 7) toAward.push('mb_streak_7');
             if (mbStats.totalWins >= 30) toAward.push('mb_total_30');
             window.awardAchievements(toAward).catch(() => {});
-            _awardAmberDaily('game_melobee', 25);
+            _awardAmberDaily('game_melobee', 100);
         }
     } else if (st.guesses.length >= OB_CLIPS.length) {
         st.failed = true;

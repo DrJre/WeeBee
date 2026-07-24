@@ -770,6 +770,18 @@ async function assignSerial(db, card) {
 }
 
 // ── Purchase Packs (1x/5x/10x) — rolls + freezes contents into inventory ──────
+async function incrementUserStats(db, uid, fields) {
+    const year = new Date().getFullYear().toString();
+    const updates = {};
+    for (const [k, v] of Object.entries(fields)) updates[k] = FieldValue.increment(v);
+    const statsRef = db.collection('user_stats').doc(uid);
+    const yearRef  = statsRef.collection('years').doc(year);
+    await Promise.all([
+        statsRef.set(updates, { merge: true }),
+        yearRef.set(updates, { merge: true }),
+    ]);
+}
+
 exports.purchasePacks = onRequest({ invoker: 'public' }, async (req, res) => {
     setCORS(res);
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
@@ -829,6 +841,7 @@ exports.purchasePacks = onRequest({ invoker: 'public' }, async (req, res) => {
     try {
         await db.collection('amber_log').add({ uid: callerUid, amount: -totalCost, reason: `pack:${packId}x${quantity}`, timestamp: new Date() });
     } catch(e) {}
+    incrementUserStats(db, callerUid, { amberSpent: totalCost }).catch(() => {});
 
     // Load filler batch for filler packs
     let fillerBatch = null;
@@ -958,6 +971,23 @@ exports.openInventoryItems = onRequest({ invoker: 'public' }, async (req, res) =
         for (const f of pityFieldsChanged) pityUpdate[f] = pityCounters[f];
         try { await profileRef.update(pityUpdate); } catch(e) { console.error('openInventoryItems pity write error:', e); }
     }
+
+    // Track stats for packs opened this batch
+    try {
+        const statFields = {};
+        for (const pack of revealed) {
+            const isStandard = pack.packId === 'standard';
+            const isPremium  = pack.packId === 'premium' || pack.packId === 'current_premium' || pack.packId === 'filler';
+            const statKey = isStandard ? 'packsOpenedStandard' : isPremium ? 'packsOpenedPremium' : 'packsOpenedEvent';
+            statFields[statKey] = (statFields[statKey] || 0) + 1;
+            if (pack.godPackTheme) statFields.godPacksOpened = (statFields.godPacksOpened || 0) + 1;
+            for (const card of (pack.cards || [])) {
+                if (card.rarity === 'ssr') statFields.ssrsPulled = (statFields.ssrsPulled || 0) + 1;
+                if (card.rarity === 'ur')  statFields.ursPulled  = (statFields.ursPulled  || 0) + 1;
+            }
+        }
+        await incrementUserStats(db, callerUid, statFields);
+    } catch(e) { console.error('openInventoryItems stats error:', e); }
 
     res.json({ result: { success: true, packs: revealed } });
 });

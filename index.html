@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=152">
+    <link rel="stylesheet" href="styles.css?v=154">
 </head>
 <body>
     <div class="app-container">
@@ -1202,17 +1202,6 @@
                                 <span id="tcg-filler-status" style="font-size:13px; color:var(--text-muted); width:100%;"></span>
                             </div>
 
-                            <!-- Stripe Pity Backfill -->
-                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
-                                <div style="font-size:14px; font-weight:800; margin-bottom:4px;">✨ Stripe Pity Backfill</div>
-                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Grant retroactive Pity UR inventory items for users who crossed the $30 spend threshold before pity tracking was added. Run Dry Run first to preview, then Commit to apply.</div>
-                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                    <button onclick="window._adminBackfillStripePity(true)" style="padding:8px 16px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-primary); font-weight:700; font-size:13px; cursor:pointer;">🔍 Dry Run</button>
-                                    <button onclick="window._adminBackfillStripePity(false)" style="padding:8px 16px; border-radius:8px; border:none; background:#7c3aed; color:white; font-weight:700; font-size:13px; cursor:pointer;">⚡ Commit</button>
-                                </div>
-                                <pre id="tcg-pity-backfill-result" style="margin-top:12px; font-size:11px; color:var(--text-muted); white-space:pre-wrap; word-break:break-all; display:none;"></pre>
-                            </div>
-
                             <!-- Amber Wallet -->
                             <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
                                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
@@ -1367,18 +1356,6 @@
                                     <button onclick="window._tcgScanCrossUserDupes()" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Scan</button>
                                 </div>
                                 <div id="tcg-crossdupe-results"></div>
-                            </div>
-
-                            <!-- Event Card Serial Cleanup -->
-                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
-                                <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:8px;">
-                                    <div style="flex:1; min-width:200px;">
-                                        <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🧹 Event Card Serial Cleanup</div>
-                                        <div style="font-size:12px; color:var(--text-muted);">Nulls out serial/edition on all PR / event cards that were accidentally assigned version numbers.</div>
-                                        <span id="tcg-event-cleanup-status" style="font-size:12px; color:var(--text-muted);"></span>
-                                    </div>
-                                    <button onclick="window._tcgCleanEventCardSerials()" style="padding:10px 20px; border-radius:8px; border:1px solid #f59e0b; background:transparent; color:#f59e0b; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Run Cleanup</button>
-                                </div>
                             </div>
 
                             <!-- Pack Odds Simulator -->
@@ -1551,17 +1528,6 @@
                                     <button onclick="window._tcgAdminSearchUsersForPackGift()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
                                 </div>
                                 <div id="pack-gift-results" style="margin-top:10px;"></div>
-                            </div>
-
-                            <!-- Fix Pack Batch -->
-                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
-                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🔧 Fix Pack Batch Label</div>
-                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">View and correct the batch number on a user's unopened inventory packs.</div>
-                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                                    <input type="text" id="pack-batch-search" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsersForBatchFix();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
-                                    <button onclick="window._tcgAdminSearchUsersForBatchFix()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
-                                </div>
-                                <div id="pack-batch-results" style="margin-top:10px;"></div>
                             </div>
 
                         </div>
@@ -2857,6 +2823,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=647"></script>
+    <script type="module" src="app.js?v=658"></script>
 </body>
 </html>

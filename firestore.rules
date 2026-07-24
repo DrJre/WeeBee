@@ -395,6 +395,18 @@ service cloud.firestore {
       allow create: if isAuth();
     }
 
+    // ── User stats (lifetime + yearly Wrapped counters) ───────────────────────
+    // Written by Cloud Functions (server) and _incrementUserStats (client).
+    // Only the owner can read their own stats.
+    match /user_stats/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isOwner(uid);
+      match /years/{year} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid);
+      }
+    }
+
     // ── TCG card collections (per-user subcollection) ─────────────────────────
     // collectionGroup('cards') — used by the public versions page and admin tools.
     match /{path=**}/cards/{card} {

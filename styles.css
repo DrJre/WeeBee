@@ -2217,16 +2217,21 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 
 /* ── Prismatic Pack image glow (store) ───────────────────────────────────── */
 .tcg-pack-card.prismatic-pack-glow img {
-    animation: prismatic-pack-img-glow 6s ease-in-out infinite;
+    animation: neon-pack-glow-flicker 5s steps(1,end) infinite;
 }
-@keyframes prismatic-pack-img-glow {
-    0%   { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(255,0,120,0.7)); }
-    17%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(255,140,0,0.7)); }
-    33%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(100,255,80,0.6)); }
-    50%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(0,200,255,0.7)); }
-    67%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(80,80,255,0.7)); }
-    83%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(200,0,255,0.7)); }
-    100% { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 18px rgba(255,0,120,0.7)); }
+@keyframes neon-pack-glow-flicker {
+    0%    { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 24px rgba(255,63,227,0.95)); }
+    3.9%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 0px transparent); }
+    4.6%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 24px rgba(1,249,198,0.95)); }
+    5.3%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 0px transparent); }
+    5.7%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 24px rgba(255,63,227,0.95)); }
+    70%   { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 0px transparent); }
+    70.6% { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 24px rgba(1,249,198,0.95)); }
+    71.2% { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 0px transparent); }
+    72%   { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 24px rgba(255,63,227,0.95)); }
+    72.6% { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 0px transparent); }
+    73.2% { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 24px rgba(1,249,198,0.95)); }
+    100%  { filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) drop-shadow(0 0 24px rgba(1,249,198,0.95)); }
 }
 
 /* ── Discord Promo Banner (home page) ─────────────────────────────────────── */
