@@ -2106,6 +2106,12 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     background: linear-gradient(135deg, var(--neon-a) 0%, var(--neon-a) 30%, var(--neon-b) 58%, var(--neon-a) 80%, var(--neon-a) 100%);
     background-size: 300% 300%;
 }
+/* tri: A brief intro, B brief bridge, C dominant */
+.neon-event-frame.neon-tri::after,
+.neon-event-frame.neon-tri::before {
+    background: linear-gradient(135deg, var(--neon-a) 0%, var(--neon-b) 25%, var(--neon-c) 45%, var(--neon-c) 75%, var(--neon-a) 100%);
+    background-size: 300% 300%;
+}
 /* Use real card classes inside the frame; override prismatic styles with neon vars */
 .neon-event-frame .wb-card-inner { background: #0b0b1c; }
 /* Remove extra prismatic stamp padding — neon cards don't have the stamp */

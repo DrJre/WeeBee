@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=154">
+    <link rel="stylesheet" href="styles.css?v=155">
 </head>
 <body>
     <div class="app-container">
@@ -1312,6 +1312,16 @@
                                 <button onclick="window._tcgPurgeStaleSRSSR()" style="padding:10px 20px; border-radius:8px; border:1px solid #ef4444; background:transparent; color:#ef4444; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;" title="Removes stale SR/SSR/UR entries inflating pull rates">Remove Stale</button>
                             </div>
 
+                            <!-- Neon Card Pool Seed -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                                <div style="flex:1; min-width:200px;">
+                                    <div style="font-size:14px; font-weight:800; margin-bottom:2px;">✦ Seed Neon 2026 Cards (NR)</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Writes TCG_EVENT_PREVIEW_CARDS to Firestore as rarityTier:nr with neon color metadata. Run before starting the event. Safe to re-run.</div>
+                                    <span id="tcg-neon-migrate-status" style="font-size:12px; color:var(--text-muted);"></span>
+                                </div>
+                                <button onclick="window._tcgMigrateNeonToPool()" style="padding:10px 20px; border-radius:8px; border:none; background:linear-gradient(135deg,#ff3fe3,#7B2FBE,#01F9C6); color:#fff; font-weight:700; font-size:13px; cursor:pointer; flex-shrink:0;">Seed Neon Cards</button>
+                            </div>
+
                             <!-- Pool Capacity -->
                             <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
                                 <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:12px;">
@@ -1528,6 +1538,24 @@
                                     <button onclick="window._tcgAdminSearchUsersForPackGift()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
                                 </div>
                                 <div id="pack-gift-results" style="margin-top:10px;"></div>
+                            </div>
+
+                            <!-- Gift God Pack (5 cards directly to collection) -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="font-size:14px; font-weight:800; margin-bottom:2px;">⚡ Gift God Pack (Cards)</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Writes 5 cards of the chosen rarity directly into a user's collection — no inventory step. Use to compensate users who received the wrong cards.</div>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px;">
+                                    <select id="god-pack-gift-type" style="padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                        <option value="nr">Neon God Pack (5× NR)</option>
+                                        <option value="ur">UR God Pack (5× UR)</option>
+                                        <option value="pr">Prismatic God Pack (5× PR)</option>
+                                    </select>
+                                </div>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                                    <input type="text" id="god-pack-gift-search" placeholder="Search by display name…" onkeydown="if(event.key==='Enter'){event.preventDefault();window._tcgAdminSearchUsersForGodPackGift();}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-white); color:var(--text-dark); font-size:13px;">
+                                    <button onclick="window._tcgAdminSearchUsersForGodPackGift()" style="padding:9px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:700; font-size:13px; cursor:pointer;">Search</button>
+                                </div>
+                                <div id="god-pack-gift-results" style="margin-top:10px;"></div>
                             </div>
 
                         </div>
@@ -2823,6 +2851,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=658"></script>
+    <script type="module" src="app.js?v=673"></script>
 </body>
 </html>

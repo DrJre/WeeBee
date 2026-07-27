@@ -2,7 +2,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const { onRequest } = require('firebase-functions/v2/https');
-const { TCG_SR_CARDS, TCG_SSR_CARDS, TCG_UR_CARDS, TCG_PR_CARDS } = require('./tcg-card-pools');
+const { TCG_SR_CARDS, TCG_SSR_CARDS, TCG_UR_CARDS, TCG_PR_CARDS, TCG_NR_CARDS } = require('./tcg-card-pools');
 
 initializeApp();
 
@@ -508,13 +508,14 @@ async function ensureCardPool(db) {
     const now = Date.now();
     if (_cardPoolCache && (now - _cardPoolCacheAt) < CARD_POOL_TTL_MS) return _cardPoolCache;
     const charsRef = db.collection('characters');
-    const [rareSnap, commonSnap, srSnap, ssrSnap, urSnap, prSnap] = await Promise.all([
+    const [rareSnap, commonSnap, srSnap, ssrSnap, urSnap, prSnap, nrSnap] = await Promise.all([
         charsRef.where('rarityTier', '==', 'rare').limit(2000).get(),
         charsRef.where('rarityTier', '==', 'common').limit(2000).get(),
         charsRef.where('rarityTier', '==', 'sr').limit(500).get(),
         charsRef.where('rarityTier', '==', 'ssr').limit(500).get(),
         charsRef.where('rarityTier', '==', 'ur').limit(100).get(),
         charsRef.where('rarityTier', '==', 'pr').limit(200).get(),
+        charsRef.where('rarityTier', '==', 'nr').limit(200).get(),
     ]);
     const filterDocs = (snap, requireSeries) => {
         const out = [];
@@ -531,6 +532,7 @@ async function ensureCardPool(db) {
         ssr: filterDocs(ssrSnap, false),
         ur: filterDocs(urSnap, false),
         pr: filterDocs(prSnap, false),
+        nr: filterDocs(nrSnap, false),
     };
     _cardPoolCacheAt = now;
     return _cardPoolCache;
@@ -553,6 +555,14 @@ function pickCard(pool, rarity) {
         if (!arr.length) return pickCard(pool, 'sr');
         const src = arr[Math.floor(Math.random() * arr.length)];
         return { name: src.name, anime: normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity: 'pr' };
+    }
+    if (rarity === 'nr') {
+        const arr = (pool.nr && pool.nr.length) ? pool.nr : TCG_NR_CARDS;
+        if (!arr.length) return pickCard(pool, 'sr');
+        const src = arr[Math.floor(Math.random() * arr.length)];
+        return { name: src.name, anime: normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity: 'nr',
+                 neonA: src.neonA || null, neonB: src.neonB || null, neonC: src.neonC || null,
+                 neonClass: src.neonClass || '', flickerDelay: src.flickerDelay || '0s' };
     }
     if (rarity === 'ur') {
         const arr = pool.ur.length ? pool.ur : TCG_UR_CARDS;
@@ -698,7 +708,7 @@ function rollPrismaticPackCards(pool) {
     for (let i = 0; i < 5; i++) {
         const r = Math.random();
         let rarity;
-        if      (r < 0.04) rarity = 'pr';
+        if      (r < 0.04) rarity = 'nr';
         else if (r < 0.30) rarity = 'sr';
         else                rarity = 'rare';
         cards.push(pickCard(pool, rarity));
@@ -715,7 +725,7 @@ function rollOnePack(pool, pack, fillerBatch = null) {
         const isPrismaticGodPack = Math.random() < 0.01;
         godPackTheme = isPrismaticGodPack ? 'neon' : null;
         cards = isPrismaticGodPack
-            ? [pickCard(pool,'pr'), pickCard(pool,'pr'), pickCard(pool,'pr'), pickCard(pool,'pr'), pickCard(pool,'pr')]
+            ? [pickCard(pool,'nr'), pickCard(pool,'nr'), pickCard(pool,'nr'), pickCard(pool,'nr'), pickCard(pool,'nr')]
             : rollPrismaticPackCards(pool);
     } else if (pack.currentBatch || pack.filler) {
         const targetBatch = pack.filler ? (fillerBatch || 1) : computeCurrentBatch(pool);
@@ -954,7 +964,9 @@ exports.openInventoryItems = onRequest({ invoker: 'public' }, async (req, res) =
             const batch = db.batch();
             const pulledAt = new Date();
             finishedCards.forEach(c => {
-                batch.set(cardCol.doc(), { name: c.name, anime: c.anime, rarity: c.rarity, image: c.image, serial: c.serial, edition: c.edition, pulledAt, acquiredVia: 'pack', acquiredAt: pulledAt });
+                const cardDoc = { name: c.name, anime: c.anime, rarity: c.rarity, image: c.image, serial: c.serial, edition: c.edition, pulledAt, acquiredVia: 'pack', acquiredAt: pulledAt };
+                if (c.rarity === 'nr') { cardDoc.neonA = c.neonA || null; cardDoc.neonB = c.neonB || null; cardDoc.neonC = c.neonC || null; cardDoc.neonClass = c.neonClass || ''; cardDoc.flickerDelay = c.flickerDelay || '0s'; }
+                batch.set(cardCol.doc(), cardDoc);
             });
             batch.delete(invCol.doc(item.id));
             await batch.commit();
@@ -1264,6 +1276,51 @@ exports.adminGiftPack = onRequest({ invoker: 'public' }, async (req, res) => {
         res.json({ result: { success: true, itemIds } });
     } catch(e) {
         console.error('adminGiftPack error:', e);
+        return sendErr(res, 500, 'INTERNAL', 'Gift failed: ' + e.message);
+    }
+});
+
+// ── Admin: Gift God Pack Cards Directly to a User's Collection ───────────────
+// Writes 5 cards of the specified rarity straight into card_collections — no
+// inventory step. Used to compensate users who received the wrong rarity during
+// the PR→NR bug window. godPackType: 'ur' | 'nr' | 'pr'
+exports.adminGiftGodPack = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+
+    const callerUid = await getCallerUid(req);
+    if (!callerUid) return sendErr(res, 401, 'UNAUTHENTICATED', 'Must be signed in.');
+    if (callerUid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
+
+    const { targetUid, godPackType } = req.body?.data || {};
+    if (!targetUid) return sendErr(res, 400, 'INVALID_ARGUMENT', 'targetUid is required.');
+    if (!['ur', 'nr', 'pr'].includes(godPackType)) return sendErr(res, 400, 'INVALID_ARGUMENT', 'godPackType must be ur, nr, or pr.');
+
+    const db = getFirestore();
+    try {
+        const pool = await ensureCardPool(db);
+        const isEvent = godPackType === 'nr' || godPackType === 'pr';
+        const cardCol = db.collection('card_collections').doc(targetUid).collection('cards');
+        const batch = db.batch();
+        const giftedAt = new Date();
+        const cards = [];
+        for (let i = 0; i < 5; i++) {
+            const c = pickCard(pool, godPackType);
+            let serial = null, edition = null;
+            if (!isEvent) {
+                const assigned = await assignSerial(db, c);
+                serial = assigned.version;
+                edition = assigned.edition;
+            }
+            const cardDoc = { name: c.name, anime: c.anime, rarity: c.rarity, image: c.image, serial, edition, pulledAt: giftedAt, acquiredVia: 'gift', acquiredAt: giftedAt };
+            if (c.rarity === 'nr') { cardDoc.neonA = c.neonA || null; cardDoc.neonB = c.neonB || null; cardDoc.neonC = c.neonC || null; cardDoc.neonClass = c.neonClass || ''; cardDoc.flickerDelay = c.flickerDelay || '0s'; }
+            batch.set(cardCol.doc(), cardDoc);
+            cards.push({ name: c.name, rarity: c.rarity });
+        }
+        await batch.commit();
+        res.json({ result: { success: true, cards } });
+    } catch(e) {
+        console.error('adminGiftGodPack error:', e);
         return sendErr(res, 500, 'INTERNAL', 'Gift failed: ' + e.message);
     }
 });
