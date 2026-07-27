@@ -1,7 +1,6 @@
 ﻿﻿﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getFirestore, collection, collectionGroup, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch, waitForPendingWrites, deleteField } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-storage.js";
 import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-analytics.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-functions.js";
 
@@ -48,8 +47,55 @@ const _initialUrlParams = new URLSearchParams(window.location.search);
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const storage = getStorage(app);
 const functions = getFunctions(app);
+
+function _toR2Url(url) {
+    if (!url || !url.includes('firebasestorage.googleapis.com')) return url;
+    const m = url.match(/\/o\/([^?]+)/);
+    return m ? `https://pub-b241667abcf649f48658584322a083c1.r2.dev/${decodeURIComponent(m[1])}` : url;
+}
+
+const _R2_UPLOAD_URL = 'https://weebee-upload.weebee.workers.dev';
+const _R2_UPLOAD_SECRET = 'FqRdyyngrq9g4dg5Q3gkLY7bmFRvfk';
+const _R2_PUBLIC_BASE = 'https://pub-b241667abcf649f48658584322a083c1.r2.dev';
+
+function _r2SanitizePath(s) {
+    return (s || '').replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim();
+}
+
+const _tcgCharImgCacheInFlight = new Set();
+async function _tcgLazyCacheCharacterImage(name, anime, sourceUrl) {
+    const cacheKey = `${name}|${anime}`;
+    if (_tcgCharImgCacheInFlight.has(cacheKey)) return;
+    _tcgCharImgCacheInFlight.add(cacheKey);
+    try {
+        const r2Key = `tcg-art/characters/${_r2SanitizePath(anime)}/${_r2SanitizePath(name)}.jpg`;
+        const resp = await fetch(`${_R2_UPLOAD_URL}/fetch-and-cache`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_R2_UPLOAD_SECRET}` },
+            body: JSON.stringify({ key: r2Key, sourceUrl }),
+        });
+        if (!resp.ok) { _tcgCharImgCacheInFlight.delete(cacheKey); return; }
+        const { url } = await resp.json();
+        // Update Firestore so future loads use R2 directly
+        const snap = await getDocs(query(collection(db, 'characters'), where('name', '==', name), where('anime', '==', anime), limit(1)));
+        if (!snap.empty) updateDoc(snap.docs[0].ref, { image: url });
+        // Swap any visible card images to R2 immediately
+        document.querySelectorAll(`img[data-char-cache="${CSS.escape(cacheKey)}"]`).forEach(img => { img.src = url; });
+    } catch { _tcgCharImgCacheInFlight.delete(cacheKey); }
+}
+window._tcgLazyCacheCharacterImage = _tcgLazyCacheCharacterImage;
+
+async function _uploadToR2(blob, key, contentType = 'image/jpeg') {
+    const resp = await fetch(`${_R2_UPLOAD_URL}?key=${encodeURIComponent(key)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType, 'Authorization': `Bearer ${_R2_UPLOAD_SECRET}` },
+        body: blob,
+    });
+    if (!resp.ok) throw new Error(`R2 upload failed: ${resp.status}`);
+    const { url } = await resp.json();
+    return url;
+}
 
 async function _callFn(name, data) {
     const token = await auth.currentUser?.getIdToken();
@@ -1599,7 +1645,7 @@ window.toggleDarkMode = function() {
 })();
 
 // --- CUSTOM CURSORS ---
-const BASE = 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/cursors%2F';
+const BASE = 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/cursors/';
 const cu = name => `${BASE}${name}.png?alt=media`;
 
 const CURSOR_SETS = [
@@ -2150,7 +2196,7 @@ window.malBadgeHTML = function(score, size, extraStyle) {
     if (!isNaN(s) && s >= 6 && s <= 10) {
         const key = Math.round(s * 10) / 10;
         const filename = key % 1 === 0 ? String(Math.floor(key)) : key.toFixed(1);
-        const url = `https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/mal-badges%2F${filename}.png?alt=media`;
+        const url = `https://pub-b241667abcf649f48658584322a083c1.r2.dev/mal-badges/${filename}.png`;
         return `<img src="${url}" style="width:${px}px;height:${px}px;object-fit:contain;${extraStyle || ''}" alt="${score}" draggable="false">`;
     }
     const display = !isNaN(s) ? (s % 1 === 0 ? String(s) : s.toFixed(1)) : (score || '—');
@@ -3853,9 +3899,7 @@ window.saveEditProfile = async function() {
         if (fileInput.files[0]) {
             saveBtn.innerText = 'Uploading avatar...';
             const compressed = await compressAvatar(fileInput.files[0]);
-            const sRef = storageRef(storage, `avatars/${uid}/profile.jpg`);
-            await uploadBytes(sRef, compressed);
-            avatar = await getDownloadURL(sRef);
+            avatar = await _uploadToR2(compressed, `avatars/${uid}/profile.jpg`);
         }
 
         // Upload banner if one was selected
@@ -3864,9 +3908,7 @@ window.saveEditProfile = async function() {
         if (bannerFileInput?.files[0]) {
             saveBtn.innerText = 'Uploading banner...';
             const compressed = await compressBanner(bannerFileInput.files[0]);
-            const sRef = storageRef(storage, `banners/${uid}/banner.jpg`);
-            await uploadBytes(sRef, compressed);
-            uploadedBannerUrl = `url(${await getDownloadURL(sRef)})`;
+            uploadedBannerUrl = `url(${await _uploadToR2(compressed, `banners/${uid}/banner.jpg`)})`;
         }
 
         if (newNorm !== oldNorm) {
@@ -6337,9 +6379,7 @@ window.tlUploadPoolImage = async function(input) {
     try {
         const compressed = await compressTierImage(file);
         const uid = auth.currentUser.uid;
-        const sRef = storageRef(storage, `post_images/${uid}/tierlist_${Date.now()}.jpg`);
-        await uploadBytes(sRef, compressed);
-        const image = await getDownloadURL(sRef);
+        const image = await _uploadToR2(compressed, `post_images/${uid}/tierlist_${Date.now()}.jpg`);
         const title = (prompt('Add a title for this image (optional):', '') || '').trim();
         window.addToTierPool({ id: `custom_${Date.now()}`, title, image, animeTitle: '', custom: true });
     } catch(e) {
@@ -6994,359 +7034,359 @@ window._tcgRenderCards = function(cards) {
 
 // Hand-curated SR art — sourced manually and stored in Firebase Storage (tcg-art/)
 const TCG_SR_CARDS = [
-    { name: 'Byakuya Kuchiki', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FByakuya%20Kuchiki.jpg?alt=media&token=a718a9d9-6304-45fe-8123-63ddab5a66ac' },
-    { name: 'Grimmjow', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FGrimmjow.jpg?alt=media&token=1608c635-853b-4d58-a9aa-2b804a2363f9' },
-    { name: 'Ichigo Kurosaki', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FIchigo%20Kurosaki.jpg?alt=media&token=26e5f62d-3e0e-4658-96c0-0f9679816019' },
-    { name: 'Kenpachi Zaraki', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FKenpachi%20Zaraki.jpg?alt=media&token=c53cc130-d53a-4d14-81df-51a8c70455a1' },
-    { name: 'Kisuke Urahara', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FKisuke%20Urahara.jpg?alt=media&token=ea636647-5a36-4ef4-97e1-ddf8a337756c' },
-    { name: 'Nelliel', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FNelliel.jpg?alt=media&token=288de78e-a2a9-470d-ba40-3dbb6dc5335a' },
-    { name: 'Orihime', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOrihime.jpg?alt=media&token=0134562c-1dc4-4db7-8166-221806097f02' },
-    { name: 'Rangiku Matsumoto', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FRangiku%20Matsumoto.jpg?alt=media&token=e242ec64-13c9-4cc3-ad81-2ac1cb1c8813' },
-    { name: 'Renji Abarai', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FRenji%20Abarai.jpg?alt=media&token=a79bbdb6-0ccb-4660-be64-0ca2848e8a82' },
-    { name: 'Rukia Kuchiki', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FRukia%20Kichiki.jpg?alt=media&token=3d7a6d34-adfe-487e-be80-f5ede65f891c' },
-    { name: 'Shunsui Kyoraku', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FShunsui%20Kyoraku.jpg?alt=media&token=bda5809f-f943-481f-8e5f-02d86b18cbf0' },
-    { name: 'Sosuke Aizen', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FSosuke%20Aizen.jpg?alt=media&token=ea63230c-8825-4594-92af-8646747ce5a6' },
-    { name: 'Tier Halibel', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FTier%20Halibel.jpg?alt=media&token=bc1b50fb-fa02-403d-848a-f4f00c7be960' },
-    { name: 'Toshiro Hitsugaya', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FToshiro%20Hitsugaya.jpg?alt=media&token=a4e031be-a858-458e-8228-6766827bbd91' },
-    { name: 'Uryu Ishida', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FUryu%20Ishida.jpg?alt=media&token=361b5299-2e9f-455d-ac7e-44f2aac5fc54' },
-    { name: 'Yasutora Sado (Chad)', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FYasutora%20Sado%20(Chad).jpg?alt=media&token=8021cf3e-4d6c-4e7a-9342-d6cfe71d93ab' },
-    { name: 'Yoruichi Shihoin', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FFirst%20Batch%2FYoruichi%20Shihoin.jpg?alt=media&token=af78f1e9-c3d6-4bad-bf01-5ff8d7f54552' },
-    { name: 'Monkey D. Luffy', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_luffy.avif?alt=media&token=7d379fbf-5984-4a41-b62c-4068d06f43cd' },
-    { name: 'Nami', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_nami.avif?alt=media&token=a7d7912f-e758-4285-879a-5729dd64abe7' },
-    { name: 'Robin', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_robin.avif?alt=media&token=b987319c-c47e-4137-99c4-af9a3a826dd0' },
-    { name: 'Sanji', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_sanji.avif?alt=media&token=975cc211-46b3-4ea1-a0f0-630b27b51d03' },
-    { name: 'Usopp', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_usopp.avif?alt=media&token=133cfc8e-d160-4c8b-97fe-e0e4b94ad00f' },
-    { name: 'Zoro', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_zoro.avif?alt=media&token=232c431a-09f3-4467-b54e-37130e367f2c' },
-    { name: 'Jinbe', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_23wa_jinbe.avif?alt=media&token=6db14e64-94cf-4269-b93b-94eec88f3460' },
-    { name: 'Brook', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_brook.avif?alt=media&token=38ca74e2-3e4c-44db-8bbb-dc57b28cd5c3' },
-    { name: 'Chopper', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_chopper.avif?alt=media&token=05c00e1b-9a5c-4285-a9b0-1cd684f8ad1e' },
-    { name: 'Franky', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2Fopms_w_17fi_franky.avif?alt=media&token=511168ad-8067-4e9c-afde-dd06e3327b4c' },
-    { name: 'Mitsuri Kanroji', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FMitsuri%20Kanroji.jpg?alt=media&token=3d8250f3-f1ca-4886-a4ff-d8d3470e1f53' },
-    { name: 'Muichiro Tokito', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FMuichiro%20Tokito.webp?alt=media&token=c61e844d-b7f8-4f3f-9138-a2f4539d704b' },
-    { name: 'Obanai Iguro', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FObanai%20Iguro.webp?alt=media&token=3b79b0fd-cc97-4656-bbf2-e2791e2fe8e5' },
-    { name: 'Shinazugawa Sanemi', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FShinazugawa%20Sanemi.jpg?alt=media&token=e3be9ce2-7d80-4989-a97e-f9a957283612' },
-    { name: 'Shinobu Kocho', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FShinobu%20Kocho.jpg?alt=media&token=7ba06ddf-3e5c-4494-a846-905f2b357d9f' },
-    { name: 'Annie Leonhart', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSR%2FAnnie%20Leonhart.jpg?alt=media&token=a0d7bff0-99aa-4639-b573-b10803c4b182' },
-    { name: 'Erwin Smith', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSR%2FErwin.jpg?alt=media&token=3ac93734-4076-4733-96d5-1068b246b746' },
-    { name: 'Hange Zoe', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSR%2FHange%20Zoe.webp?alt=media&token=6c132998-9e52-47f7-8a76-f4cb03a01a1c' },
-    { name: 'Reiner Braun', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSR%2FReiner%20Braun.jpg?alt=media&token=b9b297ed-c424-4cbf-a888-adf721e51cc9' },
-    { name: 'Sasha Braus', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSR%2FSasha%20Braus.jpg?alt=media&token=5512cce8-94d0-4dff-9492-616e7b0440e9' },
-    { name: 'Choji Akimichi', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FChoji%20Akimichi.jpg?alt=media&token=7777551f-1052-4db5-bd4a-06ba051f69c5' },
-    { name: 'Gaara', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FGaara.jpg?alt=media&token=00c39565-b769-458c-8f7f-1f5ba6f2638e' },
-    { name: 'Hinata Hyuga', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FHinata.jpg?alt=media&token=1f91f8ce-c969-4c34-8fc9-b349fef36bc7' },
-    { name: 'Ino Yamanaka', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FIno.jpg?alt=media&token=5434306f-3687-4e75-b72e-09b9df614595' },
-    { name: 'Jiraiya', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FJiraiya.webp?alt=media&token=9037126c-da4b-419d-8abb-2051645047ca' },
-    { name: 'Kurama', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FKurama.png?alt=media&token=8b813a81-2682-4d3f-92f0-a3cd4dc4a7b4' },
-    { name: 'Madara Uchiha', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FMadara%20Uchiha.jpg?alt=media&token=e598906f-0a82-4fae-90c9-66ab0e370c35' },
-    { name: 'Sakura Haruno', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FSakura.jpg?alt=media&token=24d308fb-4f3a-4efd-ae90-766ab6a42964' },
-    { name: 'Shikamaru Nara', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FShikamaru.webp?alt=media&token=0307d0dc-05db-4125-8370-85f6fde8872a' },
-    { name: 'Tsunade', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FTsunade.jpg?alt=media&token=6b09848a-3aaf-4f08-84e1-2b3f72442bd0' },
-    { name: 'Fern', anime: 'Frieren', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFrieren%2FSR%2FFern.jpg?alt=media&token=c3dab217-2aa6-4c2d-8e77-15aa4c7b7c11' },
-    { name: 'Frieren', anime: 'Frieren', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFrieren%2FSR%2FFrieren.jpg?alt=media&token=68824569-b83a-4dc8-97e0-4cec4e4cc5e5' },
-    { name: 'Stark', anime: 'Frieren', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFrieren%2FSR%2FStark.webp?alt=media&token=a165be35-86ae-426f-9047-9865a3092972' },
-    { name: 'Hajime Iwaizumi', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FHajime%20Iwaizumi.jpg?alt=media&token=b6c806c1-d623-425a-9604-e5ef62ee031c' },
-    { name: 'Shoyo Hinata', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FShoyo%20Hinata.jpg?alt=media&token=a836c0f5-eb4e-4739-9258-9e5985389c72' },
-    { name: 'Tobio Kageyama', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FKageyama.jpg?alt=media&token=4cf18e22-3273-4298-8b3a-66eec4847c2a' },
-    { name: 'Kiyoko Shimizu', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FKiyoko%20Shimizu.jpg?alt=media&token=40070ca2-19f7-4b9b-993e-7416781571e2' },
-    { name: 'Oikawa', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FOikawa.jpg?alt=media&token=b99fd9ce-e3a3-46f5-896e-0bea24b9a806' },
-    { name: 'Vladilena Milizé', anime: '86', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2F86%2FVladilena%20Miliz%C3%A9.jpg?alt=media&token=78a20390-094f-4365-a7e8-6537201987f0' },
-    { name: 'Jinshi', anime: 'Apothecary Diaries', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FApothecary%20Diaries%2FJinshi.jpg?alt=media&token=e11077f0-2cd2-43e9-bb4c-ae6a0d3ed19b' },
-    { name: 'Maomao', anime: 'Apothecary Diaries', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FApothecary%20Diaries%2FMaomao.jpg?alt=media&token=2c254213-d3c2-487e-9278-7e07c1817030' },
-    { name: 'Yuno', anime: 'Black Clover', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlack%20Clover%2FYuno.jpg?alt=media&token=adc7dfc8-e9ae-4585-afe0-dd5e4c26854c' },
-    { name: 'Asta', anime: 'Black Clover', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlack%20Clover%2FAsta.jpg?alt=media&token=fc576583-1fad-4e75-a133-6102dc2d84b1' },
-    { name: 'Mimosa Vermillion', anime: 'Black Clover', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlack%20Clover%2FMimosa%20Vermillion.jpg?alt=media&token=cdebb309-2c2d-4b02-b32c-2b4cf50711e5' },
-    { name: 'Denji', anime: 'Chainsaw Man', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FChainsaw%20Man%2FDenji.jpg?alt=media&token=6750cc82-30ad-4455-a957-34747127504e' },
-    { name: 'Makima', anime: 'Chainsaw Man', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FChainsaw%20Man%2FMakima.webp?alt=media&token=e5df43dd-b642-4ae6-8f09-95390f89ffc8' },
-    { name: 'Power', anime: 'Chainsaw Man', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FChainsaw%20Man%2FPower.jpg?alt=media&token=6511cc94-de31-40af-b64b-b1073d4274c1' },
-    { name: 'Edward Elric', anime: 'Fullmetal Alchemist', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFullmetal%20Alchemist%2FSR%2FEdward%20Elric.jpg?alt=media&token=3771578f-cf98-475f-b477-ce0216387880' },
-    { name: 'Gon Freecs', anime: 'Hunter x Hunter', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHunter%20x%20Hunter%2FSR%2FGon%20Freecs.jpg?alt=media&token=14482f46-9afb-4fa1-b69f-5af74db556f2' },
-    { name: 'Hisoka', anime: 'Hunter x Hunter', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHunter%20x%20Hunter%2FSR%2FHisoka.jpg?alt=media&token=1b4b819e-0067-499e-a20b-2de04b3b2473' },
-    { name: 'Killua', anime: 'Hunter x Hunter', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHunter%20x%20Hunter%2FSR%2FKillua.webp?alt=media&token=6b91b1c2-cd8b-43c4-ad36-cb601dde14a3' },
-    { name: 'Kurapika', anime: 'Hunter x Hunter', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHunter%20x%20Hunter%2FSR%2FKurapika.jpg?alt=media&token=e84f89a0-4082-463c-bf32-18a2d5a8d794' },
-    { name: 'Gojo', anime: 'Jujutsu Kaisen', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJJK%2FSR%2FGojo.jpg?alt=media&token=cf1e85e0-d372-4524-81c5-58d122127f1b' },
-    { name: 'Toge Inumaki', anime: 'Jujutsu Kaisen', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJJK%2FSR%2FToge%20Inumaki.jpg?alt=media&token=314cab42-c9a5-4a5a-974e-859b580e49b8' },
-    { name: 'Izuku Midoriya', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSR%2FIzuku%20Midoriya.jpg?alt=media&token=5743569a-f05c-45b8-8e2c-349a963ee21b' },
-    { name: 'Himiko Toga', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSR%2FToga.jpg?alt=media&token=1140a85c-0e10-45e1-acb0-a805ba9bd0d0' },
-    { name: 'Anya Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSR%2FAnya%20Forger.jpg?alt=media&token=25bfa3ba-d056-4725-a3c2-7e899050b197' },
-    { name: 'Yor Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSR%2FYor%20Forger.jpg?alt=media&token=e7efce79-67b7-46a4-8ca8-497336badb36' },
-    { name: 'Future Trunks', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FFuture%20Trunks.jpg?alt=media&token=b35e17da-7291-41e1-85e3-010edc16565c' },
-    { name: 'Gohan', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FGohan.jpg?alt=media&token=777ed92d-9dd7-4cee-b4f8-a7e880d0fbb7' },
-    { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FGoku_SR.webp?alt=media&token=c364fcb6-419b-4df5-9d83-346665bfa0ae' },
-    { name: 'Piccolo', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FPiccolo.jpg?alt=media&token=7cb85d13-e9cb-451e-9ae3-3744cc23a5d9' },
-    { name: 'Vegeta', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSR%2FVegeta.jpg?alt=media&token=11b1e828-8e8e-4e22-a0b7-c15f2b868cc8' },
-    { name: 'Zenitsu', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FZenitsu.jpg?alt=media&token=a20ecab2-d516-4dc6-b530-2e6e54cfc17f' },
-    { name: 'Muzan', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FMuzan.jpg?alt=media&token=9249c475-e135-41a2-8e49-9fd3f8d12a6e' },
-    { name: 'Tanjiro', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FTanjiro.jpg?alt=media&token=6a233273-2bb3-4fe5-aa54-74a14c579654' },
-    { name: 'Tengen Uzui', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSR%2FTengen%20Uzui.jpg?alt=media&token=c18001ec-c5f8-4ac6-a726-2406e83779d6' },
-    { name: 'Sung Jin-Woo', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSR%2FSung%20Jin-Woo.webp?alt=media&token=ace45778-8d98-411b-807c-39a04e62c03e' },
-    { name: 'Gabimaru', anime: "Hell's Paradise", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHell\'s%20Paradise%2FSR%2FGabimaru.webp?alt=media&token=dbd97df1-28f5-4237-a832-d7aa79de6276' },
-    { name: 'Luck Voltia', anime: 'Black Clover', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlack%20Clover%2FLuck%20Voltia.jpg?alt=media&token=f94e904e-8394-49ca-869e-72e4b5c73c50' },
-    { name: 'Baek Yoon-ho', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSR%2FBaek%20Yoon-ho.jpg?alt=media&token=44008747-3a71-49a9-97c0-5f2c2c8392b3' },
-    { name: 'Cha Hae-in', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSR%2FCha%20Hae-in.jpg?alt=media&token=a2a9d158-f00d-43ab-84b9-157c29df6bb8' },
-    { name: 'Choi Jong-in', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSR%2FChoi%20Jong-in.jpg?alt=media&token=f5ea5399-a698-4532-8f54-ad06726161f9' },
-    { name: 'Elinalise Dragonroad', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSR%2FElinalise%20Dragonroad.jpg?alt=media&token=827cf456-7a87-48d7-8430-078705e24267' },
-    { name: 'Eris Greyrat', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSR%2FEris%20Greyrat.webp?alt=media&token=ae615846-c2b4-4f2b-bd0a-93ff2a716240' },
-    { name: 'Roxy', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSR%2FRoxy.jpg?alt=media&token=8fe22ce8-a1a2-41ad-ba21-9a7bc38a2c80' },
-    { name: 'Rudeus Greyrat', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSR%2FRudeus%20Greyrat.jpg?alt=media&token=60cda122-1d16-4f2a-9e0d-946b313450e1' },
-    { name: 'Ruijerd Superdia', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSR%2FRuijerd%20Superdia.jpg?alt=media&token=81cbda42-200c-4d21-9d19-20e08130e461' },
-    { name: 'Sylphiette', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSR%2FSylphiette.jpg?alt=media&token=280889cf-9004-4f2a-9ada-9e7446a64c5b' },
-    { name: 'Chrome', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FChrome.jpg?alt=media&token=242446a2-582c-460d-b963-481e3b5a9e74' },
-    { name: 'Homura Momiji', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FHomura%20Momiji.jpg?alt=media&token=0baaa2b7-09bb-4bfe-bca1-6989f1ab470a' },
-    { name: 'Hyoga', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FHyoga.jpg?alt=media&token=93488a7c-6ffe-42fd-bb6e-eef85e5e5044' },
-    { name: 'Kohaku', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FKohaku.jpg?alt=media&token=9f6c3fc1-2def-4a25-ab27-33a919c219f6' },
-    { name: 'Minami Hokutozai', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FMinami%20Hokutozai.jpg?alt=media&token=3374004a-4bac-4839-830e-189313041b86' },
-    { name: 'Senku', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FSenku.jpg?alt=media&token=09e3473c-aa25-4324-ab1a-8e462c3e2b25' },
-    { name: 'Tsukasa Shishio', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSR%2FTsukasa%20Shishio.jpg?alt=media&token=75b67840-b565-48ba-93e5-571b26815d15' },
-    { name: 'Nirei Akihiko', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2FNirei%20Akihiko.jpg?alt=media&token=0ce2797a-1ca0-4fef-af47-6141723d9979' },
-    { name: 'Suo Hayato', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2FSuo%20Hayato.jpg?alt=media&token=f6241155-e0c0-4151-99c1-4adc49968a71' },
-    { name: 'Taiga Tsugeura', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2FTaiga%20Tsugeura.jpg?alt=media&token=970b5329-ccf6-4828-9b97-70b1d45fba8a' },
-    { name: 'Hiiragi Touma', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2F%F0%9D%97%9B%F0%9D%97%B6%F0%9D%97%B6%F0%9D%97%BF%F0%9D%97%AE%F0%9D%97%B4%F0%9D%97%B6%20%F0%9D%97%A7%F0%9D%97%BC%F0%9D%98%82%F0%9D%97%BA%F0%9D%97%AE.jpg?alt=media&token=a372b2ed-177c-48b9-83aa-51cd9ecfcd07' },
-    { name: 'Kaji Ren', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2F%F0%9D%97%9E%F0%9D%97%AE%F0%9D%97%B7%F0%9D%97%B6%20%F0%9D%97%A5%F0%9D%97%B2%F0%9D%97%BB.jpg?alt=media&token=dd72c175-6b96-4d71-a134-75cb859a824f' },
-    { name: 'Kiryu Mitsuki', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2F%F0%9D%97%9E%F0%9D%97%B6%F0%9D%97%BF%F0%9D%98%86%F0%9D%98%82%20%F0%9D%97%A0%F0%9D%97%B6%F0%9D%98%81%F0%9D%98%80%F0%9D%98%82%F0%9D%97%B8%F0%9D%97%B6.jpg?alt=media&token=2bffa679-e80e-4045-b4a8-c32ca4534497' },
-    { name: 'Sakura Haruka', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2F%F0%9D%97%A6%F0%9D%97%AE%F0%9D%97%B8%F0%9D%98%82%F0%9D%97%BF%F0%9D%97%AE%20%F0%9D%97%9B%F0%9D%97%AE%F0%9D%97%BF%F0%9D%98%82%F0%9D%97%B8%F0%9D%97%AE.jpg?alt=media&token=fdd73aff-3651-4388-ac89-d8350b4b1a8d' },
-    { name: 'Sugishita Kyotarou', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2F%F0%9D%97%A6%F0%9D%98%82%F0%9D%97%B4%F0%9D%97%B6%F0%9D%98%80%F0%9D%97%B5%F0%9D%97%B6%F0%9D%98%81%F0%9D%97%AE%20%F0%9D%97%9E%F0%9D%98%86%F0%9D%97%BC%F0%9D%98%81%F0%9D%97%AE%F0%9D%97%BF%F0%9D%97%BC%F0%9D%98%82.jpg?alt=media&token=b54fec38-0138-44b7-98fb-f0be74cbf683' },
-    { name: 'Umemiya Hajime', anime: 'Wind Breaker', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FWind%20Breaker%2FSR%2F%F0%9D%97%A8%F0%9D%97%BA%F0%9D%97%B2%F0%9D%97%BA%F0%9D%97%B6%F0%9D%98%86%F0%9D%97%AE%20%F0%9D%97%9B%F0%9D%97%AE%F0%9D%97%B7%F0%9D%97%B6%F0%9D%97%BA%F0%9D%97%B2.jpg?alt=media&token=45570967-4760-44e7-85ef-0f8ef55147ac' },
-    { name: 'Asui Tsuyu', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSR%2FAsui%20Tsuyu.jpg?alt=media&token=36c498ba-e937-4cc7-965d-f7c254fd6446' },
-    { name: 'Ochaco Uraraka', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSR%2FOchaco%20Uraraka.jpg?alt=media&token=512b5433-d07c-4a38-b4fe-4bea3933cf89' },
-    { name: 'Aizawa Shota', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSR%2FAizawa.jpg?alt=media&token=250c2317-ef48-4169-b2cf-83236f651a32' },
-    { name: 'Sailor Jupiter', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSR%2FSailor%20Jupiter.jpg?alt=media&token=1a3e52f4-14bd-42bf-886d-014fb6fd3fcb' },
-    { name: 'Sailor Mars', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSR%2FSailor%20Mars.jpg?alt=media&token=7043214c-2cd3-4eb6-a8a4-560db5e1726a' },
-    { name: 'Sailor Mercury', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSR%2FSailor%20Mercury.jpg?alt=media&token=93f8cfdf-886b-4234-8d7f-a5a2095ddd41' },
-    { name: 'Sailor Moon', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSR%2FSailor%20Moon.jpg?alt=media&token=af8698ef-bb57-49e9-961b-5d473437d5e5' },
-    { name: 'Sailor Pluto', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSR%2FSailor%20Pluto.jpg?alt=media&token=ec40d72c-72fa-479d-873d-d0bf5fcca760' },
-    { name: 'Sailor Saturn', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSR%2FSailor%20Saturn.jpg?alt=media&token=adfdb34f-225c-40a2-b1b8-133ad50538b6' },
-    { name: 'Bojji', anime: 'Ranking of Kings', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FRanking%20of%20Kings%2FSR%2FBojji.jpg?alt=media&token=f8cb0e31-b348-4ecb-a629-b536902f97f8' },
-    { name: 'Chigiri Hyoma', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FChigiri%20Hyoma.jpg?alt=media&token=3f855e42-37f3-49e4-b163-bd29a4573150' },
-    { name: 'Itoshi Rin', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FItoshi%20Rin.jpg?alt=media&token=b012af8d-d1cf-4320-bd71-f92b71e0d397' },
-    { name: 'Karasu Tabito', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FKarasu%20Tabito.jpg?alt=media&token=fbdc3e31-b0a0-4b18-bd94-81261a7a8d80' },
-    { name: 'Meguru Bachira', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FMeguru%20Bachira.jpg?alt=media&token=519ea599-522a-47dc-874d-ad35595ea938' },
-    { name: 'Reo Mikage', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FReo%20Mikage.jpg?alt=media&token=838284a7-9ba3-4e35-8c95-17b86010aaa8' },
-    { name: 'Sae Itoshi', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FSae%20itoshi.jpg?alt=media&token=7a86abb8-b095-409c-b2af-19d537b847dc' },
-    { name: 'Seishiro Nagi', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FSeishiro%20Nagi.jpg?alt=media&token=501e74c4-940c-4f0d-a777-05b89540379e' },
+    { name: 'Byakuya Kuchiki', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Byakuya%20Kuchiki.jpg' },
+    { name: 'Grimmjow', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Grimmjow.jpg' },
+    { name: 'Ichigo Kurosaki', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Ichigo%20Kurosaki.jpg' },
+    { name: 'Kenpachi Zaraki', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Kenpachi%20Zaraki.jpg' },
+    { name: 'Kisuke Urahara', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Kisuke%20Urahara.jpg' },
+    { name: 'Nelliel', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Nelliel.jpg' },
+    { name: 'Orihime', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Orihime.jpg' },
+    { name: 'Rangiku Matsumoto', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Rangiku%20Matsumoto.jpg' },
+    { name: 'Renji Abarai', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Renji%20Abarai.jpg' },
+    { name: 'Rukia Kuchiki', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Rukia%20Kichiki.jpg' },
+    { name: 'Shunsui Kyoraku', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Shunsui%20Kyoraku.jpg' },
+    { name: 'Sosuke Aizen', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Sosuke%20Aizen.jpg' },
+    { name: 'Tier Halibel', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Tier%20Halibel.jpg' },
+    { name: 'Toshiro Hitsugaya', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Toshiro%20Hitsugaya.jpg' },
+    { name: 'Uryu Ishida', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Uryu%20Ishida.jpg' },
+    { name: 'Yasutora Sado (Chad)', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Yasutora%20Sado%20(Chad).jpg' },
+    { name: 'Yoruichi Shihoin', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/First%20Batch/Yoruichi%20Shihoin.jpg' },
+    { name: 'Monkey D. Luffy', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/opms_w_17fi_luffy.avif' },
+    { name: 'Nami', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/opms_w_17fi_nami.avif' },
+    { name: 'Robin', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/opms_w_17fi_robin.avif' },
+    { name: 'Sanji', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/opms_w_17fi_sanji.avif' },
+    { name: 'Usopp', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/opms_w_17fi_usopp.avif' },
+    { name: 'Zoro', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/opms_w_17fi_zoro.avif' },
+    { name: 'Jinbe', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/opms_w_23wa_jinbe.avif' },
+    { name: 'Brook', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/opms_w_17fi_brook.avif' },
+    { name: 'Chopper', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/opms_w_17fi_chopper.avif' },
+    { name: 'Franky', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/opms_w_17fi_franky.avif' },
+    { name: 'Mitsuri Kanroji', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SR/Mitsuri%20Kanroji.jpg' },
+    { name: 'Muichiro Tokito', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SR/Muichiro%20Tokito.webp' },
+    { name: 'Obanai Iguro', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SR/Obanai%20Iguro.webp' },
+    { name: 'Shinazugawa Sanemi', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SR/Shinazugawa%20Sanemi.jpg' },
+    { name: 'Shinobu Kocho', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SR/Shinobu%20Kocho.jpg' },
+    { name: 'Annie Leonhart', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/SR/Annie%20Leonhart.jpg' },
+    { name: 'Erwin Smith', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/SR/Erwin.jpg' },
+    { name: 'Hange Zoe', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/SR/Hange%20Zoe.webp' },
+    { name: 'Reiner Braun', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/SR/Reiner%20Braun.jpg' },
+    { name: 'Sasha Braus', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/SR/Sasha%20Braus.jpg' },
+    { name: 'Choji Akimichi', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SR/Choji%20Akimichi.jpg' },
+    { name: 'Gaara', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SR/Gaara.jpg' },
+    { name: 'Hinata Hyuga', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SR/Hinata.jpg' },
+    { name: 'Ino Yamanaka', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SR/Ino.jpg' },
+    { name: 'Jiraiya', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SR/Jiraiya.webp' },
+    { name: 'Kurama', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SR/Kurama.png' },
+    { name: 'Madara Uchiha', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SR/Madara%20Uchiha.jpg' },
+    { name: 'Sakura Haruno', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SR/Sakura.jpg' },
+    { name: 'Shikamaru Nara', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SR/Shikamaru.webp' },
+    { name: 'Tsunade', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SR/Tsunade.jpg' },
+    { name: 'Fern', anime: 'Frieren', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Frieren/SR/Fern.jpg' },
+    { name: 'Frieren', anime: 'Frieren', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Frieren/SR/Frieren.jpg' },
+    { name: 'Stark', anime: 'Frieren', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Frieren/SR/Stark.webp' },
+    { name: 'Hajime Iwaizumi', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Hajime%20Iwaizumi.jpg' },
+    { name: 'Shoyo Hinata', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Shoyo%20Hinata.jpg' },
+    { name: 'Tobio Kageyama', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Kageyama.jpg' },
+    { name: 'Kiyoko Shimizu', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Kiyoko%20Shimizu.jpg' },
+    { name: 'Oikawa', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Oikawa.jpg' },
+    { name: 'Vladilena Milizé', anime: '86', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/86/Vladilena%20Miliz%C3%A9.jpg' },
+    { name: 'Jinshi', anime: 'Apothecary Diaries', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Apothecary%20Diaries/Jinshi.jpg' },
+    { name: 'Maomao', anime: 'Apothecary Diaries', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Apothecary%20Diaries/Maomao.jpg' },
+    { name: 'Yuno', anime: 'Black Clover', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Black%20Clover/Yuno.jpg' },
+    { name: 'Asta', anime: 'Black Clover', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Black%20Clover/Asta.jpg' },
+    { name: 'Mimosa Vermillion', anime: 'Black Clover', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Black%20Clover/Mimosa%20Vermillion.jpg' },
+    { name: 'Denji', anime: 'Chainsaw Man', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Chainsaw%20Man/Denji.jpg' },
+    { name: 'Makima', anime: 'Chainsaw Man', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Chainsaw%20Man/Makima.webp' },
+    { name: 'Power', anime: 'Chainsaw Man', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Chainsaw%20Man/Power.jpg' },
+    { name: 'Edward Elric', anime: 'Fullmetal Alchemist', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fullmetal%20Alchemist/SR/Edward%20Elric.jpg' },
+    { name: 'Gon Freecs', anime: 'Hunter x Hunter', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hunter%20x%20Hunter/SR/Gon%20Freecs.jpg' },
+    { name: 'Hisoka', anime: 'Hunter x Hunter', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hunter%20x%20Hunter/SR/Hisoka.jpg' },
+    { name: 'Killua', anime: 'Hunter x Hunter', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hunter%20x%20Hunter/SR/Killua.webp' },
+    { name: 'Kurapika', anime: 'Hunter x Hunter', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hunter%20x%20Hunter/SR/Kurapika.jpg' },
+    { name: 'Gojo', anime: 'Jujutsu Kaisen', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/JJK/SR/Gojo.jpg' },
+    { name: 'Toge Inumaki', anime: 'Jujutsu Kaisen', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/JJK/SR/Toge%20Inumaki.jpg' },
+    { name: 'Izuku Midoriya', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SR/Izuku%20Midoriya.jpg' },
+    { name: 'Himiko Toga', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SR/Toga.jpg' },
+    { name: 'Anya Forger', anime: 'Spy x Family', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Spy%20Family/SR/Anya%20Forger.jpg' },
+    { name: 'Yor Forger', anime: 'Spy x Family', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Spy%20Family/SR/Yor%20Forger.jpg' },
+    { name: 'Future Trunks', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Future%20Trunks.jpg' },
+    { name: 'Gohan', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Gohan.jpg' },
+    { name: 'Goku', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Goku_SR.webp' },
+    { name: 'Piccolo', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Piccolo.jpg' },
+    { name: 'Vegeta', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Vegeta.jpg' },
+    { name: 'Zenitsu', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SR/Zenitsu.jpg' },
+    { name: 'Muzan', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SR/Muzan.jpg' },
+    { name: 'Tanjiro', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SR/Tanjiro.jpg' },
+    { name: 'Tengen Uzui', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SR/Tengen%20Uzui.jpg' },
+    { name: 'Sung Jin-Woo', anime: 'Solo Leveling', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Solo%20Leveling/SR/Sung%20Jin-Woo.webp' },
+    { name: 'Gabimaru', anime: "Hell's Paradise", image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hell\'s%20Paradise%2FSR%2FGabimaru.webp?alt=media&token=dbd97df1-28f5-4237-a832-d7aa79de6276' },
+    { name: 'Luck Voltia', anime: 'Black Clover', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Black%20Clover/Luck%20Voltia.jpg' },
+    { name: 'Baek Yoon-ho', anime: 'Solo Leveling', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Solo%20Leveling/SR/Baek%20Yoon-ho.jpg' },
+    { name: 'Cha Hae-in', anime: 'Solo Leveling', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Solo%20Leveling/SR/Cha%20Hae-in.jpg' },
+    { name: 'Choi Jong-in', anime: 'Solo Leveling', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Solo%20Leveling/SR/Choi%20Jong-in.jpg' },
+    { name: 'Elinalise Dragonroad', anime: 'Jobless Reincarnation', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jobless%20Reincarnation/SR/Elinalise%20Dragonroad.jpg' },
+    { name: 'Eris Greyrat', anime: 'Jobless Reincarnation', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jobless%20Reincarnation/SR/Eris%20Greyrat.webp' },
+    { name: 'Roxy', anime: 'Jobless Reincarnation', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jobless%20Reincarnation/SR/Roxy.jpg' },
+    { name: 'Rudeus Greyrat', anime: 'Jobless Reincarnation', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jobless%20Reincarnation/SR/Rudeus%20Greyrat.jpg' },
+    { name: 'Ruijerd Superdia', anime: 'Jobless Reincarnation', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jobless%20Reincarnation/SR/Ruijerd%20Superdia.jpg' },
+    { name: 'Sylphiette', anime: 'Jobless Reincarnation', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jobless%20Reincarnation/SR/Sylphiette.jpg' },
+    { name: 'Chrome', anime: 'Dr. Stone', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dr%20Stone/SR/Chrome.jpg' },
+    { name: 'Homura Momiji', anime: 'Dr. Stone', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dr%20Stone/SR/Homura%20Momiji.jpg' },
+    { name: 'Hyoga', anime: 'Dr. Stone', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dr%20Stone/SR/Hyoga.jpg' },
+    { name: 'Kohaku', anime: 'Dr. Stone', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dr%20Stone/SR/Kohaku.jpg' },
+    { name: 'Minami Hokutozai', anime: 'Dr. Stone', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dr%20Stone/SR/Minami%20Hokutozai.jpg' },
+    { name: 'Senku', anime: 'Dr. Stone', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dr%20Stone/SR/Senku.jpg' },
+    { name: 'Tsukasa Shishio', anime: 'Dr. Stone', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dr%20Stone/SR/Tsukasa%20Shishio.jpg' },
+    { name: 'Nirei Akihiko', anime: 'Wind Breaker', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Wind%20Breaker/SR/Nirei%20Akihiko.jpg' },
+    { name: 'Suo Hayato', anime: 'Wind Breaker', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Wind%20Breaker/SR/Suo%20Hayato.jpg' },
+    { name: 'Taiga Tsugeura', anime: 'Wind Breaker', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Wind%20Breaker/SR/Taiga%20Tsugeura.jpg' },
+    { name: 'Hiiragi Touma', anime: 'Wind Breaker', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Wind%20Breaker/SR/%F0%9D%97%9B%F0%9D%97%B6%F0%9D%97%B6%F0%9D%97%BF%F0%9D%97%AE%F0%9D%97%B4%F0%9D%97%B6%20%F0%9D%97%A7%F0%9D%97%BC%F0%9D%98%82%F0%9D%97%BA%F0%9D%97%AE.jpg' },
+    { name: 'Kaji Ren', anime: 'Wind Breaker', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Wind%20Breaker/SR/%F0%9D%97%9E%F0%9D%97%AE%F0%9D%97%B7%F0%9D%97%B6%20%F0%9D%97%A5%F0%9D%97%B2%F0%9D%97%BB.jpg' },
+    { name: 'Kiryu Mitsuki', anime: 'Wind Breaker', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Wind%20Breaker/SR/%F0%9D%97%9E%F0%9D%97%B6%F0%9D%97%BF%F0%9D%98%86%F0%9D%98%82%20%F0%9D%97%A0%F0%9D%97%B6%F0%9D%98%81%F0%9D%98%80%F0%9D%98%82%F0%9D%97%B8%F0%9D%97%B6.jpg' },
+    { name: 'Sakura Haruka', anime: 'Wind Breaker', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Wind%20Breaker/SR/%F0%9D%97%A6%F0%9D%97%AE%F0%9D%97%B8%F0%9D%98%82%F0%9D%97%BF%F0%9D%97%AE%20%F0%9D%97%9B%F0%9D%97%AE%F0%9D%97%BF%F0%9D%98%82%F0%9D%97%B8%F0%9D%97%AE.jpg' },
+    { name: 'Sugishita Kyotarou', anime: 'Wind Breaker', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Wind%20Breaker/SR/%F0%9D%97%A6%F0%9D%98%82%F0%9D%97%B4%F0%9D%97%B6%F0%9D%98%80%F0%9D%97%B5%F0%9D%97%B6%F0%9D%98%81%F0%9D%97%AE%20%F0%9D%97%9E%F0%9D%98%86%F0%9D%97%BC%F0%9D%98%81%F0%9D%97%AE%F0%9D%97%BF%F0%9D%97%BC%F0%9D%98%82.jpg' },
+    { name: 'Umemiya Hajime', anime: 'Wind Breaker', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Wind%20Breaker/SR/%F0%9D%97%A8%F0%9D%97%BA%F0%9D%97%B2%F0%9D%97%BA%F0%9D%97%B6%F0%9D%98%86%F0%9D%97%AE%20%F0%9D%97%9B%F0%9D%97%AE%F0%9D%97%B7%F0%9D%97%B6%F0%9D%97%BA%F0%9D%97%B2.jpg' },
+    { name: 'Asui Tsuyu', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SR/Asui%20Tsuyu.jpg' },
+    { name: 'Ochaco Uraraka', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SR/Ochaco%20Uraraka.jpg' },
+    { name: 'Aizawa Shota', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SR/Aizawa.jpg' },
+    { name: 'Sailor Jupiter', anime: 'Sailor Moon', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sailor%20Moon/SR/Sailor%20Jupiter.jpg' },
+    { name: 'Sailor Mars', anime: 'Sailor Moon', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sailor%20Moon/SR/Sailor%20Mars.jpg' },
+    { name: 'Sailor Mercury', anime: 'Sailor Moon', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sailor%20Moon/SR/Sailor%20Mercury.jpg' },
+    { name: 'Sailor Moon', anime: 'Sailor Moon', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sailor%20Moon/SR/Sailor%20Moon.jpg' },
+    { name: 'Sailor Pluto', anime: 'Sailor Moon', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sailor%20Moon/SR/Sailor%20Pluto.jpg' },
+    { name: 'Sailor Saturn', anime: 'Sailor Moon', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sailor%20Moon/SR/Sailor%20Saturn.jpg' },
+    { name: 'Bojji', anime: 'Ranking of Kings', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Ranking%20of%20Kings/SR/Bojji.jpg' },
+    { name: 'Chigiri Hyoma', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SR/Chigiri%20Hyoma.jpg' },
+    { name: 'Itoshi Rin', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SR/Itoshi%20Rin.jpg' },
+    { name: 'Karasu Tabito', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SR/Karasu%20Tabito.jpg' },
+    { name: 'Meguru Bachira', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SR/Meguru%20Bachira.jpg' },
+    { name: 'Reo Mikage', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SR/Reo%20Mikage.jpg' },
+    { name: 'Sae Itoshi', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SR/Sae%20itoshi.jpg' },
+    { name: 'Seishiro Nagi', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SR/Seishiro%20Nagi.jpg' },
     // ── Batch 2 ──────────────────────────────────────────────────────────────────
-    { name: 'Shinei Nouzen', anime: '86', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2F86%2FSR%2FShinei%20Nouzen.jpg?alt=media&token=882b6e88-6e8a-4034-b35d-379ab8a95b2d', batch: 2 },
-    { name: 'Baki Hanma', anime: 'Baki', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBaki%2FSR%2FBaki%20Hanma.png?alt=media&token=6fccf71a-359e-4975-8fdc-3f75d7764620', batch: 2 },
-    { name: 'Doppo Orochi', anime: 'Baki', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBaki%2FSR%2FDoppo%20Orochi.png?alt=media&token=22892acd-019d-46b5-be0a-dc8e323829e5', batch: 2 },
-    { name: 'Musashi Miyamoto', anime: 'Baki', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBaki%2FSR%2FMusashi%20Miyamoto.png?alt=media&token=d4ac0905-fd3c-42f0-a2b3-635359bd86e2', batch: 2 },
-    { name: 'Retsu Kaioh', anime: 'Baki', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBaki%2FSR%2FRetsu%20Kaioh.png?alt=media&token=1fe3a15e-0ac2-446d-9bce-893d5ccedf76', batch: 2 },
-    { name: 'Yujiro Hanma', anime: 'Baki', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBaki%2FSR%2FYujiro%20Hanma.png?alt=media&token=7d04c759-4407-4193-a560-3aaac4b456f2', batch: 2 },
-    { name: 'Guts', anime: 'Berserk', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBerserk%2FSR%2FGuts.jpg?alt=media&token=493947ed-54a4-4330-8d10-3cf503c081e1', batch: 2 },
-    { name: 'Coyote Starrk', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FCoyote%20Stark.jpg?alt=media&token=132abf60-529f-4b8a-b809-c3984a2cc5e4', batch: 2 },
-    { name: 'Gin Ichimaru', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FGin%20Ichimaru.jpg?alt=media&token=a519cb19-6259-4a9c-a9ad-48c459f589d5', batch: 2 },
-    { name: 'Ikkaku Madarame', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FIkkaku%20Madarame.jpg?alt=media&token=38f523db-9284-44e5-bed8-5eb0ef4ed4b7', batch: 2 },
-    { name: 'Izuru Kira', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FIzuru%20Kira.jpg?alt=media&token=1a7ef7ea-eb49-4887-b8fe-ed8c26f24825', batch: 2 },
-    { name: 'Kaien Shiba', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FKaien%20Shiba.jpg?alt=media&token=ba32d003-82ec-42e3-8429-53bd19b56c29', batch: 2 },
-    { name: 'Kaname Tosen', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FKaname%20Tosen.jpg?alt=media&token=24febe61-c221-42c0-b3e2-cdd1bf1fd05f', batch: 2 },
-    { name: 'Mayuri Kurotsuchi', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FMayuri%20Kurotsuchi.jpg?alt=media&token=75501449-5ec9-4a77-be27-7d97ce7b0b32', batch: 2 },
-    { name: 'Nnoitra Gilga', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FNnoitora%20Gilga.jpg?alt=media&token=b92d8aad-ad13-4bef-a3f9-dc461bbe5e7d', batch: 2 },
-    { name: 'Sajin Komamura', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FSajin%20Komamura.jpg?alt=media&token=76d256d8-35f4-441b-812d-d2d047db352c', batch: 2 },
-    { name: 'Shigekuni Yamamoto', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FShigekuni%20Genryusai%20Yamamoto.jpg?alt=media&token=08689438-757b-471e-874c-0542053c1871', batch: 2 },
-    { name: 'Shinji Hirako', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FShinji%20Hirako.jpg?alt=media&token=a949b482-77dc-429a-b8c3-199babe440bf', batch: 2 },
-    { name: 'Shuhei Hisagi', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FShuhei%20Hisagi.jpg?alt=media&token=a2dfb08e-7897-42ff-8634-0afb786169d1', batch: 2 },
-    { name: 'Soi Fon', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FSoi%20Fon.jpg?alt=media&token=596fdeb1-8ed5-4d18-a895-fa61cc96b37c', batch: 2 },
-    { name: 'Szayelaporro Grantz', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FSzayelaporro%20Grantz.jpg?alt=media&token=9e5a9d74-b5b1-48d4-bc13-e9493fd2f254', batch: 2 },
-    { name: 'Ulquiorra Cifer', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSR%2FSecond%20Batch%2FUlquiorra%20Shifar.jpg?alt=media&token=aa3d7783-3020-4965-aa1c-9f5603359e9e', batch: 2 },
-    { name: 'Yoichi Isagi', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSR%2FYoichi%20Isagi.jpg?alt=media&token=162910c5-57d7-43eb-bdcb-1305b51cbe62', batch: 2 },
-    { name: 'David Martinez', anime: 'Cyberpunk: Edgerunners', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FCyberpunk%20Edgerunners%2FSR%2FDavid%20Martinez.jpg?alt=media&token=b81c26db-58ee-4cff-974f-03e9af1aaf62', batch: 2 },
-    { name: 'Kiwi', anime: 'Cyberpunk: Edgerunners', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FCyberpunk%20Edgerunners%2FSR%2FKiwi.webp?alt=media&token=ff809091-7883-4fe3-a64c-f42d39ebda86', batch: 2 },
-    { name: 'Lucy', anime: 'Cyberpunk: Edgerunners', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FCyberpunk%20Edgerunners%2FSR%2FLucy.jpg?alt=media&token=893e1b55-4226-4bfc-a890-e7278ff214de', batch: 2 },
-    { name: 'Rebecca', anime: 'Cyberpunk: Edgerunners', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FCyberpunk%20Edgerunners%2FSR%2FRebecca.jpg?alt=media&token=0050e2a6-a137-4c33-9861-00931d684d50', batch: 2 },
-    { name: 'Aira', anime: 'Dandadan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDandadan%2FSR%2FAira.jpg?alt=media&token=cff31937-d591-45ae-ad26-abe6a4b91d16', batch: 2 },
-    { name: 'Momo Ayase', anime: 'Dandadan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDandadan%2FSR%2FMomo.jpg?alt=media&token=2c169e85-487a-4e50-a72c-bb17f4d343fd', batch: 2 },
-    { name: 'Erza Scarlet', anime: 'Fairy Tail', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFairytail%2FSR%2FErza%20Scarlet.jpg?alt=media&token=10d6ef33-4242-44d5-bc81-f26272d509c5', batch: 2 },
-    { name: 'Natsu Dragneel', anime: 'Fairy Tail', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFairytail%2FSR%2FNatsu%20Dragneel.jpg?alt=media&token=b9fffe04-6338-425a-922a-6a824cd8e9cc', batch: 2 },
-    { name: 'Enjin', anime: 'Gachiakuta', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FGachiakuta%2FSR%2FEnjin.jpg?alt=media&token=6333a975-a0d4-41d2-8947-0c2403aa008a', batch: 2 },
-    { name: 'Riyo', anime: 'Gachiakuta', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FGachiakuta%2FSR%2FRiyo.jpg?alt=media&token=d0a64414-93ac-4eb4-b2f6-b8eee1d67e04', batch: 2 },
-    { name: 'Rudo', anime: 'Gachiakuta', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FGachiakuta%2FSR%2FRudo.jpg?alt=media&token=ca9bb922-6eae-4082-97f7-661adb948338', batch: 2 },
-    { name: 'Kamina', anime: 'Gurren Lagann', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FGurren%20Legan%2FSR%2FKamina.png?alt=media&token=2dd1bf92-82f2-4c4d-89e1-c3c9e84fb963', batch: 2 },
-    { name: 'Lordgenome', anime: 'Gurren Lagann', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FGurren%20Legan%2FSR%2FLordgenome.png?alt=media&token=369f999a-c2e2-4f12-b240-8c9dd3aa29e0', batch: 2 },
-    { name: 'Simon', anime: 'Gurren Lagann', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FGurren%20Legan%2FSR%2FSimon.png?alt=media&token=1cd42a3c-d052-462f-9a58-d2e1a240258c', batch: 2 },
-    { name: 'Yoko Littner', anime: 'Gurren Lagann', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FGurren%20Legan%2FSR%2FYoko%20Littner.png?alt=media&token=d18ac1e5-7d59-4105-880d-6db19bb1984f', batch: 2 },
-    { name: 'Asahi Azumane', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FAsahi%20Azumane.jpg?alt=media&token=69f253ab-747e-4b4f-9f48-7d29cc9f089c', batch: 2 },
-    { name: 'Daichi Sawamura', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FDaichi%20Sawamura.jpg?alt=media&token=a6ed9439-a555-42b8-8931-0b0a038f7b3a', batch: 2 },
-    { name: 'Kei Tsukishima', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FKei%20Tsukishima.jpg?alt=media&token=258ff6ff-7620-4677-af56-6d3613f8d975', batch: 2 },
-    { name: 'Keiji Akaashi', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FKeiji%20Akaashi.jpg?alt=media&token=47c10126-3eeb-44c3-bc22-aef6799123cd', batch: 2 },
-    { name: 'Keishin Ukai', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FKeishin%20Ukai.jpg?alt=media&token=b64c1d0b-4661-493f-9937-d95665256a37', batch: 2 },
-    { name: 'Koushi Sugawara', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FKoushi%20Sugawara.jpg?alt=media&token=f77be3e9-0dfc-4faf-9d15-717ac29190f5', batch: 2 },
-    { name: 'Nishinoya', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FNishinoya.jpg?alt=media&token=406864ca-8cbc-412b-81d1-ded0171488b1', batch: 2 },
-    { name: 'Ryuunosuke Tanaka', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FRyuunosuke%20Tanaka.jpg?alt=media&token=ec11c932-bd75-4c74-b09e-84e9c2a6410b', batch: 2 },
-    { name: 'Tetsurou Kuroo', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSR%2FTetsurou%20Kuroo.jpg?alt=media&token=d6d88481-137f-4900-8cbc-afba23a45893', batch: 2 },
-    { name: 'Maki', anime: 'Jujutsu Kaisen', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJJK%2FSR%2FMaki.jpg?alt=media&token=36e8142c-52c0-4d21-9482-2bd7676dec80', batch: 2 },
-    { name: 'Atsushi Murasakibara', anime: "Kuroko's Basketball", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FKuroko\'s%20Basketball%2FSR%2FAtsushi%20Murasakibara.jpg?alt=media&token=60b94480-0909-4c70-9079-961a24b750f3', batch: 2 },
-    { name: 'Daiki Aomine', anime: "Kuroko's Basketball", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FKuroko\'s%20Basketball%2FSR%2FDaiki%20Aomine.jpg?alt=media&token=f8d2c2a1-d433-4f88-bdbc-3c037c9b8377', batch: 2 },
-    { name: 'Ryota Kise', anime: "Kuroko's Basketball", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FKuroko\'s%20Basketball%2FSR%2FRyouta%20Kise.jpg?alt=media&token=fde96c93-9b4f-4c7f-aa9a-fc981bdf6870', batch: 2 },
-    { name: 'Shintaro Midorima', anime: "Kuroko's Basketball", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FKuroko\'s%20Basketball%2FSR%2FShintarou%20Midorima.jpg?alt=media&token=6d194560-435c-4ecd-b731-07a999b0b3b8', batch: 2 },
-    { name: 'Taiga Kagami', anime: "Kuroko's Basketball", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FKuroko\'s%20Basketball%2FSR%2FTaiga%20Kagami.jpg?alt=media&token=866215c4-0a47-4296-b095-e5f842c7736a', batch: 2 },
-    { name: 'Dot Barrett', anime: 'Mashle', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMashle%2FSR%2FDot%20Barrett.jpg?alt=media&token=166f6a42-8646-4ac7-8028-66c7368888dd', batch: 2 },
-    { name: 'Finn Ames', anime: 'Mashle', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMashle%2FSR%2FFinn%20Ames.jpg?alt=media&token=70514b4a-87e4-4329-bbb7-8a7ffb61ad06', batch: 2 },
-    { name: 'Kaldo Gehenna', anime: 'Mashle', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMashle%2FSR%2FKaldo%20Gehenna.jpg?alt=media&token=2f745a92-186f-426f-b6fe-121644739b8f', batch: 2 },
-    { name: 'Lance Crown', anime: 'Mashle', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMashle%2FSR%2FLance%20Crown.jpg?alt=media&token=1cbc1aa1-1901-4a27-a655-61eebb7dd111', batch: 2 },
-    { name: 'Mash', anime: 'Mashle', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMashle%2FSR%2FMash.jpg?alt=media&token=2ef15b77-5483-4307-9345-e60b5dd9ed49', batch: 2 },
-    { name: 'Orter Mádl', anime: 'Mashle', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMashle%2FSR%2FOrter%20M%C3%A1dl.jpg?alt=media&token=54fe4a99-4b40-43c0-9bf2-aa205448c321', batch: 2 },
-    { name: 'Rayne Ames', anime: 'Mashle', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMashle%2FSR%2FRayne%20Ames.jpg?alt=media&token=c509e1ef-f5f8-420b-b5c1-15ea5d7db845', batch: 2 },
-    { name: 'Crocodile', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSR%2FCrocodile.jpg?alt=media&token=99a21f27-d481-4b36-be4e-ca311542000c', batch: 2 },
-    { name: 'Donquixote Doflamingo', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSR%2FDonquixote%20Doflamingo.jpg?alt=media&token=50a7004a-2b3b-4d45-a7ec-5d6e206c120c', batch: 2 },
-    { name: 'Katakuri', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSR%2FKatakuri.jpg?alt=media&token=929f02f4-6d26-47d5-bbb0-edc409e651a3', batch: 2 },
-    { name: 'Dracule Mihawk', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSR%2FMihawk.jpg?alt=media&token=44c7d3de-86d3-48e2-8dde-acd3a3a35538', batch: 2 },
-    { name: 'Queen', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSR%2FQueen.jpg?alt=media&token=b9c99756-0b21-4090-81eb-39ade5b9f1fa', batch: 2 },
-    { name: 'Asuna Yuuki', anime: 'Sword Art Online', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSword%20Art%20Online%2FSR%2FAsuna%20Yuuki.jpg?alt=media&token=302efa6b-6a84-4d04-9100-d9fd7f352552', batch: 2 },
-    { name: 'Kirito', anime: 'Sword Art Online', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSword%20Art%20Online%2FSR%2FKirito.jpg?alt=media&token=fb369a1a-f6b8-47c8-bcc1-d490df79dffa', batch: 2 },
-    { name: 'Igris', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSR%2FIgris.jpg?alt=media&token=f4310e36-606d-4159-8cdb-4a2b6b9d4263', batch: 2 },
-    { name: 'Loid Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSR%2FLoid%20Forger.jpg?alt=media&token=5ace245c-97c7-47c1-9e72-768d1a570597', batch: 2 },
-    { name: 'Agnes Tachyon', anime: 'Umamusume Pretty Derby', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FSR%2FAgnes%20Tachyon.jpg?alt=media&token=df16bcc9-89f9-42b9-9b8e-82db07c888d8', batch: 2 },
-    { name: 'El Condor Pasa', anime: 'Umamusume Pretty Derby', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FSR%2FEl%20Condor%20Pasa.jpg?alt=media&token=3ace3c60-e86b-4104-acb3-85456dee8fa6', batch: 2 },
-    { name: 'Forever Young', anime: 'Umamusume Pretty Derby', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FSR%2FForever%20Young.jpg?alt=media&token=51d4812b-b56a-4ac9-b1b4-d1a639bb5e28', batch: 2 },
-    { name: 'Gold Ship', anime: 'Umamusume Pretty Derby', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FSR%2FGold%20Ship.png?alt=media&token=eab9fc88-ee7f-48c4-9240-00bfcbba621b', batch: 2 },
-    { name: 'Oguri Cap', anime: 'Umamusume Pretty Derby', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FSR%2FOguri%20Cap.png?alt=media&token=fb20d11e-afe5-4bc3-8d03-15fe5b69687c', batch: 2 },
-    { name: 'Silence Suzuka', anime: 'Umamusume Pretty Derby', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FSR%2FSilence%20Suzuka.png?alt=media&token=88f64088-086b-4b27-b4d2-9764b71aae57', batch: 2 },
-    { name: 'Tokai Teio', anime: 'Umamusume Pretty Derby', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FSR%2FTokai%20Teio.png?alt=media&token=7966f41b-6e4f-44b6-a71b-bc9a2989245a', batch: 2 },
-    { name: 'Vodka', anime: 'Umamusume Pretty Derby', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FSR%2FVodka.jpg?alt=media&token=97797317-8490-4d04-b72a-6e6e77a579c7', batch: 2 },
-    { name: 'Arthur Boyle', anime: 'Fire Force', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFire%20Force%2FSR%2FArthur%20Boyle.jpg?alt=media&token=a17df604-3e1a-4332-bace-b6f1072a94ca', batch: 2 },
-    { name: 'Shinra Kusakabe', anime: 'Fire Force', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFire%20Force%2FSR%2FShinra%20Kusakabe.jpg?alt=media&token=34cbc8f6-f14b-4c17-94a9-b189b43839d0', batch: 2 },
-    { name: 'Maka Alban', anime: 'Soul Eater', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSoul%20Eater%2FSR%2FMaka%20Alban.jpg?alt=media&token=32731b3b-c9fa-4eca-9b3c-aeabbcbcfb54', batch: 2 },
-    { name: 'Soul Evans', anime: 'Soul Eater', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSoul%20Eater%2FSR%2FSoul%20Evans.jpg?alt=media&token=a5cff134-993c-4e1e-823b-7b2de9465a93', batch: 2 },
-    { name: 'Alucard', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSR%2FAlucard.jpg?alt=media&token=042018df-c46c-476d-8136-50e490dad216', batch: 2 },
-    { name: 'Anderson', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSR%2FAnderson.jpg?alt=media&token=e9e49877-70de-4a99-a9b4-5c1907f63636', batch: 2 },
-    { name: 'Integra', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSR%2FIntegra.jpg?alt=media&token=018596a4-9091-47ff-a6f9-6cddbc9687b1', batch: 2 },
-    { name: 'Rip Van Winkle', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSR%2FRip%20Van%20Winkle.jpg?alt=media&token=72c84207-dcdf-4512-9d3d-4cd43612fed5', batch: 2 },
-    { name: 'Schrodinger', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSR%2FSchrodinger.webp?alt=media&token=7be320de-5392-4b22-b978-1ab86588a761', batch: 2 },
-    { name: 'Seras Victoria', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSR%2FSeras%20Victoria.jpg?alt=media&token=be9f8426-c701-49c0-832c-56ae7747da59', batch: 2 },
-    { name: 'The Captain', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSR%2FThe%20Captain.jpg?alt=media&token=2322af67-4a37-487e-a28e-b6aaa62e356b', batch: 2 },
-    { name: 'The Major', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSR%2FThe%20Major.webp?alt=media&token=e3e69829-ba16-4ab3-86f2-fb8e92732b19', batch: 2 },
-    { name: 'Walter C Durnez', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSR%2FWalter%20C%20Durnez.jpg?alt=media&token=ed67f204-2281-4202-acd2-c5b10e9b98e1', batch: 2 },
-    { name: 'Zorin Blitz', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSR%2FZorin%20Blitz.jpg?alt=media&token=6b564f39-e2aa-4a97-87b9-ef6025463121', batch: 2 },
+    { name: 'Shinei Nouzen', anime: '86', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/86/SR/Shinei%20Nouzen.jpg', batch: 2 },
+    { name: 'Baki Hanma', anime: 'Baki', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Baki/SR/Baki%20Hanma.png', batch: 2 },
+    { name: 'Doppo Orochi', anime: 'Baki', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Baki/SR/Doppo%20Orochi.png', batch: 2 },
+    { name: 'Musashi Miyamoto', anime: 'Baki', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Baki/SR/Musashi%20Miyamoto.png', batch: 2 },
+    { name: 'Retsu Kaioh', anime: 'Baki', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Baki/SR/Retsu%20Kaioh.png', batch: 2 },
+    { name: 'Yujiro Hanma', anime: 'Baki', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Baki/SR/Yujiro%20Hanma.png', batch: 2 },
+    { name: 'Guts', anime: 'Berserk', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Berserk/SR/Guts.jpg', batch: 2 },
+    { name: 'Coyote Starrk', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Coyote%20Stark.jpg', batch: 2 },
+    { name: 'Gin Ichimaru', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Gin%20Ichimaru.jpg', batch: 2 },
+    { name: 'Ikkaku Madarame', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Ikkaku%20Madarame.jpg', batch: 2 },
+    { name: 'Izuru Kira', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Izuru%20Kira.jpg', batch: 2 },
+    { name: 'Kaien Shiba', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Kaien%20Shiba.jpg', batch: 2 },
+    { name: 'Kaname Tosen', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Kaname%20Tosen.jpg', batch: 2 },
+    { name: 'Mayuri Kurotsuchi', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Mayuri%20Kurotsuchi.jpg', batch: 2 },
+    { name: 'Nnoitra Gilga', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Nnoitora%20Gilga.jpg', batch: 2 },
+    { name: 'Sajin Komamura', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Sajin%20Komamura.jpg', batch: 2 },
+    { name: 'Shigekuni Yamamoto', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Shigekuni%20Genryusai%20Yamamoto.jpg', batch: 2 },
+    { name: 'Shinji Hirako', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Shinji%20Hirako.jpg', batch: 2 },
+    { name: 'Shuhei Hisagi', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Shuhei%20Hisagi.jpg', batch: 2 },
+    { name: 'Soi Fon', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Soi%20Fon.jpg', batch: 2 },
+    { name: 'Szayelaporro Grantz', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Szayelaporro%20Grantz.jpg', batch: 2 },
+    { name: 'Ulquiorra Cifer', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SR/Second%20Batch/Ulquiorra%20Shifar.jpg', batch: 2 },
+    { name: 'Yoichi Isagi', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SR/Yoichi%20Isagi.jpg', batch: 2 },
+    { name: 'David Martinez', anime: 'Cyberpunk: Edgerunners', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Cyberpunk%20Edgerunners/SR/David%20Martinez.jpg', batch: 2 },
+    { name: 'Kiwi', anime: 'Cyberpunk: Edgerunners', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Cyberpunk%20Edgerunners/SR/Kiwi.webp', batch: 2 },
+    { name: 'Lucy', anime: 'Cyberpunk: Edgerunners', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Cyberpunk%20Edgerunners/SR/Lucy.jpg', batch: 2 },
+    { name: 'Rebecca', anime: 'Cyberpunk: Edgerunners', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Cyberpunk%20Edgerunners/SR/Rebecca.jpg', batch: 2 },
+    { name: 'Aira', anime: 'Dandadan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dandadan/SR/Aira.jpg', batch: 2 },
+    { name: 'Momo Ayase', anime: 'Dandadan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dandadan/SR/Momo.jpg', batch: 2 },
+    { name: 'Erza Scarlet', anime: 'Fairy Tail', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fairytail/SR/Erza%20Scarlet.jpg', batch: 2 },
+    { name: 'Natsu Dragneel', anime: 'Fairy Tail', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fairytail/SR/Natsu%20Dragneel.jpg', batch: 2 },
+    { name: 'Enjin', anime: 'Gachiakuta', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Gachiakuta/SR/Enjin.jpg', batch: 2 },
+    { name: 'Riyo', anime: 'Gachiakuta', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Gachiakuta/SR/Riyo.jpg', batch: 2 },
+    { name: 'Rudo', anime: 'Gachiakuta', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Gachiakuta/SR/Rudo.jpg', batch: 2 },
+    { name: 'Kamina', anime: 'Gurren Lagann', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Gurren%20Legan/SR/Kamina.png', batch: 2 },
+    { name: 'Lordgenome', anime: 'Gurren Lagann', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Gurren%20Legan/SR/Lordgenome.png', batch: 2 },
+    { name: 'Simon', anime: 'Gurren Lagann', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Gurren%20Legan/SR/Simon.png', batch: 2 },
+    { name: 'Yoko Littner', anime: 'Gurren Lagann', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Gurren%20Legan/SR/Yoko%20Littner.png', batch: 2 },
+    { name: 'Asahi Azumane', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Asahi%20Azumane.jpg', batch: 2 },
+    { name: 'Daichi Sawamura', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Daichi%20Sawamura.jpg', batch: 2 },
+    { name: 'Kei Tsukishima', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Kei%20Tsukishima.jpg', batch: 2 },
+    { name: 'Keiji Akaashi', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Keiji%20Akaashi.jpg', batch: 2 },
+    { name: 'Keishin Ukai', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Keishin%20Ukai.jpg', batch: 2 },
+    { name: 'Koushi Sugawara', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Koushi%20Sugawara.jpg', batch: 2 },
+    { name: 'Nishinoya', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Nishinoya.jpg', batch: 2 },
+    { name: 'Ryuunosuke Tanaka', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Ryuunosuke%20Tanaka.jpg', batch: 2 },
+    { name: 'Tetsurou Kuroo', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SR/Tetsurou%20Kuroo.jpg', batch: 2 },
+    { name: 'Maki', anime: 'Jujutsu Kaisen', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/JJK/SR/Maki.jpg', batch: 2 },
+    { name: 'Atsushi Murasakibara', anime: "Kuroko's Basketball", image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Kuroko\'s%20Basketball%2FSR%2FAtsushi%20Murasakibara.jpg?alt=media&token=60b94480-0909-4c70-9079-961a24b750f3', batch: 2 },
+    { name: 'Daiki Aomine', anime: "Kuroko's Basketball", image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Kuroko\'s%20Basketball%2FSR%2FDaiki%20Aomine.jpg?alt=media&token=f8d2c2a1-d433-4f88-bdbc-3c037c9b8377', batch: 2 },
+    { name: 'Ryota Kise', anime: "Kuroko's Basketball", image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Kuroko\'s%20Basketball%2FSR%2FRyouta%20Kise.jpg?alt=media&token=fde96c93-9b4f-4c7f-aa9a-fc981bdf6870', batch: 2 },
+    { name: 'Shintaro Midorima', anime: "Kuroko's Basketball", image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Kuroko\'s%20Basketball%2FSR%2FShintarou%20Midorima.jpg?alt=media&token=6d194560-435c-4ecd-b731-07a999b0b3b8', batch: 2 },
+    { name: 'Taiga Kagami', anime: "Kuroko's Basketball", image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Kuroko\'s%20Basketball%2FSR%2FTaiga%20Kagami.jpg?alt=media&token=866215c4-0a47-4296-b095-e5f842c7736a', batch: 2 },
+    { name: 'Dot Barrett', anime: 'Mashle', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Mashle/SR/Dot%20Barrett.jpg', batch: 2 },
+    { name: 'Finn Ames', anime: 'Mashle', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Mashle/SR/Finn%20Ames.jpg', batch: 2 },
+    { name: 'Kaldo Gehenna', anime: 'Mashle', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Mashle/SR/Kaldo%20Gehenna.jpg', batch: 2 },
+    { name: 'Lance Crown', anime: 'Mashle', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Mashle/SR/Lance%20Crown.jpg', batch: 2 },
+    { name: 'Mash', anime: 'Mashle', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Mashle/SR/Mash.jpg', batch: 2 },
+    { name: 'Orter Mádl', anime: 'Mashle', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Mashle/SR/Orter%20M%C3%A1dl.jpg', batch: 2 },
+    { name: 'Rayne Ames', anime: 'Mashle', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Mashle/SR/Rayne%20Ames.jpg', batch: 2 },
+    { name: 'Crocodile', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SR/Crocodile.jpg', batch: 2 },
+    { name: 'Donquixote Doflamingo', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SR/Donquixote%20Doflamingo.jpg', batch: 2 },
+    { name: 'Katakuri', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SR/Katakuri.jpg', batch: 2 },
+    { name: 'Dracule Mihawk', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SR/Mihawk.jpg', batch: 2 },
+    { name: 'Queen', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SR/Queen.jpg', batch: 2 },
+    { name: 'Asuna Yuuki', anime: 'Sword Art Online', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sword%20Art%20Online/SR/Asuna%20Yuuki.jpg', batch: 2 },
+    { name: 'Kirito', anime: 'Sword Art Online', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sword%20Art%20Online/SR/Kirito.jpg', batch: 2 },
+    { name: 'Igris', anime: 'Solo Leveling', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Solo%20Leveling/SR/Igris.jpg', batch: 2 },
+    { name: 'Loid Forger', anime: 'Spy x Family', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Spy%20Family/SR/Loid%20Forger.jpg', batch: 2 },
+    { name: 'Agnes Tachyon', anime: 'Umamusume Pretty Derby', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Umamusame/SR/Agnes%20Tachyon.jpg', batch: 2 },
+    { name: 'El Condor Pasa', anime: 'Umamusume Pretty Derby', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Umamusame/SR/El%20Condor%20Pasa.jpg', batch: 2 },
+    { name: 'Forever Young', anime: 'Umamusume Pretty Derby', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Umamusame/SR/Forever%20Young.jpg', batch: 2 },
+    { name: 'Gold Ship', anime: 'Umamusume Pretty Derby', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Umamusame/SR/Gold%20Ship.png', batch: 2 },
+    { name: 'Oguri Cap', anime: 'Umamusume Pretty Derby', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Umamusame/SR/Oguri%20Cap.png', batch: 2 },
+    { name: 'Silence Suzuka', anime: 'Umamusume Pretty Derby', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Umamusame/SR/Silence%20Suzuka.png', batch: 2 },
+    { name: 'Tokai Teio', anime: 'Umamusume Pretty Derby', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Umamusame/SR/Tokai%20Teio.png', batch: 2 },
+    { name: 'Vodka', anime: 'Umamusume Pretty Derby', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Umamusame/SR/Vodka.jpg', batch: 2 },
+    { name: 'Arthur Boyle', anime: 'Fire Force', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fire%20Force/SR/Arthur%20Boyle.jpg', batch: 2 },
+    { name: 'Shinra Kusakabe', anime: 'Fire Force', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fire%20Force/SR/Shinra%20Kusakabe.jpg', batch: 2 },
+    { name: 'Maka Alban', anime: 'Soul Eater', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Soul%20Eater/SR/Maka%20Alban.jpg', batch: 2 },
+    { name: 'Soul Evans', anime: 'Soul Eater', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Soul%20Eater/SR/Soul%20Evans.jpg', batch: 2 },
+    { name: 'Alucard', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/Alucard.jpg', batch: 2 },
+    { name: 'Anderson', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/Anderson.jpg', batch: 2 },
+    { name: 'Integra', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/Integra.jpg', batch: 2 },
+    { name: 'Rip Van Winkle', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/Rip%20Van%20Winkle.jpg', batch: 2 },
+    { name: 'Schrodinger', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/Schrodinger.webp', batch: 2 },
+    { name: 'Seras Victoria', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/Seras%20Victoria.jpg', batch: 2 },
+    { name: 'The Captain', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/The%20Captain.jpg', batch: 2 },
+    { name: 'The Major', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/The%20Major.webp', batch: 2 },
+    { name: 'Walter C Durnez', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/Walter%20C%20Durnez.jpg', batch: 2 },
+    { name: 'Zorin Blitz', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/Zorin%20Blitz.jpg', batch: 2 },
 ];
 
 // SSR art — hand-curated, prismatic rainbow border + holographic hover shimmer
 const TCG_SSR_CARDS = [
-    { name: 'Giyu Tomioka', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FGiyu%20Tomioka.jpg?alt=media&token=13f67e57-3f13-456d-90b2-8a7334190f5f' },
-    { name: 'Gyomei Himejima', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FGyomei%20Himejima.jpg?alt=media&token=b75994e0-ce87-4277-9a3c-d5833e822ce3' },
-    { name: 'Inosuke Hashibira', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FInosuke.jpg?alt=media&token=da40f235-12ec-46d0-b1a7-c7bac1de61e5' },
-    { name: 'Kyojuro Rengoku', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FKyojuro%20Rengoku.jpg?alt=media&token=aa39e0c3-2b53-4686-8af2-64d50c1ec6c7' },
-    { name: 'Tanjiro Kamado', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FTanjiro%20Kamado.png?alt=media&token=b59e5e9b-f637-4910-91bc-15af1f46dc9e' },
-    { name: 'Tengen Uzui', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FTengen%20Uzui.jpg?alt=media&token=747f178f-ca86-4037-8a7f-4ca277fcc4a0' },
-    { name: 'Zenitsu Agatsuma', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FSSR%2FZenitsu.jpg?alt=media&token=1603d1fa-b954-4351-b000-592cdcf66dc7' },
-    { name: 'Brook', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FBrook.jpg?alt=media&token=31fb4f42-ee6d-4604-9069-e784bfbb2af7' },
-    { name: 'Franky', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FFranky.jpg?alt=media&token=242f865e-fce9-4e0d-83be-0295a0275702' },
-    { name: 'Dracule Mihawk', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FDracul%20Mihawk.jpg?alt=media&token=73f48c02-c11e-4802-94e2-a7d891fe60eb' },
-    { name: 'Jinbe', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FJinbe.png?alt=media&token=aadef010-7cf5-4e6e-bf7d-aba627bf05ae' },
-    { name: 'Marco', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FMarco.jpg?alt=media&token=9135bf32-2aab-43af-a5b2-935b4810cf94' },
-    { name: 'Monkey D. Garp', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FMonkey%20D%20Garp.webp?alt=media&token=581d0b72-c8a1-4a9d-8e7b-3e657059a302' },
-    { name: 'Monkey D. Luffy', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FMonkey%20D%20Luffy.png?alt=media&token=3b87b7ad-8081-4ba6-ae46-c73368c07aad' },
-    { name: 'Nami', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FNami.jpg?alt=media&token=4a31cee7-4b33-4fb7-8bf4-5ed7ee454d49' },
-    { name: 'Nico Robin', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FNico%20Robin.jpg?alt=media&token=70927948-1913-49e7-aa87-2648100a864e' },
-    { name: 'Portgas D. Ace', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FPortgas%20D%20Ace.jpg?alt=media&token=2e07f391-d811-4cdc-84f4-e4be226b67d4' },
-    { name: 'Roronoa Zoro', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FRoranora%20Zoro.jpg?alt=media&token=1c204a55-427b-4f45-8c07-fd9da90b67d9' },
-    { name: 'Sabo', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FSabo.webp?alt=media&token=943253fe-bfb0-45a6-a0ca-e41426a1a7e7' },
-    { name: 'Shanks', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FShanks.webp?alt=media&token=5fe5bc95-4efd-4699-8f6c-8f7711158156' },
-    { name: 'Tony Tony Chopper', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FTony%20Chopper.webp?alt=media&token=26095214-aa23-4e44-b4b7-8e87e5beb5bc' },
-    { name: 'Trafalgar Law', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FTrafalgar%20D%20Law.webp?alt=media&token=f2bce9d6-912f-40a6-86dd-142575f845f8' },
-    { name: 'Usopp', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FUsopp.webp?alt=media&token=31ac136b-e5cb-4cee-83d2-4cf51355c3fd' },
-    { name: 'Vinsmoke Sanji', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FVinsmoke%20Sanji.jpg?alt=media&token=022738ef-7ab2-404c-9e16-fb409b31f646' },
-    { name: 'Eren Yeager', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSSR%2FEren%20Yeager.jpg?alt=media&token=0976d27d-1750-4bdd-a3e6-15adcf8709c6' },
-    { name: 'Founding Titan', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSSR%2FFounding%20Titan.webp?alt=media&token=5f5cb23a-84e4-44cc-bc18-a59af0c6d552' },
-    { name: 'Levi Ackerman', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSSR%2FLevi%20Ackerman.jpg?alt=media&token=0287298f-32de-4e5f-82b7-93f8446da4c0' },
-    { name: 'Mikasa Ackerman', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FSSR%2FMikasa%20Ackerman.jpg?alt=media&token=f25aff94-bad9-4599-aace-0f29915febc2' },
-    { name: 'Itachi Uchiha', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FItatchi%20Uchiha.jpg?alt=media&token=a3e72963-73a5-4867-8693-4a484b2093e9' },
-    { name: 'Jiraiya', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FJiraiya.webp?alt=media&token=add55e6c-772d-42d8-84c0-73b0a1f07ef4' },
-    { name: 'Kakashi Hatake', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FKakashi.png?alt=media&token=2f8247d6-7b28-4050-9177-82b9546748de' },
-    { name: 'Minato Namikaze', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FMinato%20Namikaze.jpg?alt=media&token=bc3f6fb4-cc96-4ec5-a41a-4c404a7bd652' },
-    { name: 'Naruto Uzumaki', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FNaruto%20Uzumaki.jpg?alt=media&token=6b03be5c-1d70-45f4-92ae-a51469f76106' },
-    { name: 'Rock Lee', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FRock%20Lee.webp?alt=media&token=56c25c09-0453-4780-8400-c752e6550147' },
-    { name: 'Sasuke Uchiha', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FSasuke%20Uchiha.webp?alt=media&token=d3d46732-3e5e-48bf-bcdb-b4d0b4b36f87' },
-    { name: 'Tobi', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSSR%2FToby.png?alt=media&token=9f23f657-8d1a-4582-af36-6d747a8cb0e3' },
-    { name: 'Might Guy', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FSR%2FMight%20Guy.jpg?alt=media&token=9b8ee44d-28d8-4ec2-a976-51abfc53da4d' },
-    { name: 'Frieren', anime: 'Frieren', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFrieren%2FSSR%2FFrieren.jpg?alt=media&token=58584d0d-19c2-4ff7-9b42-aa373f2bb4de' },
-    { name: 'Shoyo Hinata', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSSR%2FShoyo%20Hinata.jpg?alt=media&token=eb7d141d-ef05-40d9-ba43-e99ae49a1173' },
-    { name: 'Tobio Kageyama', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSSR%2FTobio%20Kageyama.jpg?alt=media&token=21e375e0-a510-4bb1-8290-eaaf8bc0e9b9' },
-    { name: 'Vladilena Milizé', anime: '86', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2F86%2FVladilena%20Miliz%C3%A9.webp?alt=media&token=d9f7a9e9-a252-4ff4-841f-31c32edd6c15' },
-    { name: 'Reze', anime: 'Chainsaw Man', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FChainsaw%20Man%2FReze.webp?alt=media&token=b79b6c92-77d6-4374-9b26-a268b1cc0ba8' },
-    { name: 'Killua', anime: 'Hunter x Hunter', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHunter%20x%20Hunter%2FSSR%2FKillua.jpg?alt=media&token=d6bbc68e-0763-4af3-b4fc-47c0cd42524e' },
-    { name: 'Kurapika', anime: 'Hunter x Hunter', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHunter%20x%20Hunter%2FSSR%2FKurapika.webp?alt=media&token=33ebd5cc-d06a-4064-9df6-5756e0a42ed1' },
-    { name: 'Gojo', anime: 'Jujutsu Kaisen', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJJK%2FSSR%2FGojo.webp?alt=media&token=7de91a3a-bd9d-4248-85e0-c37ab78c3067' },
-    { name: 'Izuku Midoriya', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FIzuku%20Midoriya.jpg?alt=media&token=3fe565ae-28a3-407e-8be1-be7cb7d4b22e' },
-    { name: 'Yor Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSSR%2FYor%20Forger.webp?alt=media&token=84fead07-4f1a-4b87-afa0-c20ab3314bef' },
-    { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FGoku_SSR.jpg?alt=media&token=2275c03f-022b-4fa6-aecd-a973e47bf938' },
-    { name: 'Kid Gohan', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FKid%20Gohan.webp?alt=media&token=1aec64a8-66b7-45d6-a063-1729d41951de' },
-    { name: 'Vegeta', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FSSR%2FVegeta.jpg?alt=media&token=4e68f056-5150-4cb0-a0b2-cf2bc3103e3a' },
-    { name: 'Sung Jin-woo', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSSR%2FSung%20Jin-woo.jpg?alt=media&token=848623b2-bea0-4deb-a78d-cd179913ee1a' },
-    { name: 'Rudeus Greyrat', anime: 'Jobless Reincarnation', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJobless%20Reincarnation%2FSSR%2FRudeus%20Greyrat.jpg?alt=media&token=16331065-9096-45a9-aa6f-8e4da1266299' },
-    { name: 'Senku', anime: 'Dr. Stone', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDr%20Stone%2FSSR%2FSenku.jpg?alt=media&token=53d7f68d-fd6a-4ac8-a930-eb775d74eba4' },
-    { name: 'Asui Tsuyu', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FAsui%20Tsuyu.jpg?alt=media&token=0d3d24e3-ebb0-47fc-9b92-84c953f9145f' },
-    { name: 'Mina Ashido', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FMina%20Aishido.jpg?alt=media&token=28f8c2ba-b0e6-4702-99a0-f238a8ed7e85' },
-    { name: 'Ochaco Uraraka', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FOchaco%20Uraraka.jpg?alt=media&token=52e54d86-6548-47b5-bbc2-bdcb8152a4c5' },
-    { name: 'Bakugo', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FBakugo.jpg?alt=media&token=6d4f28e8-cc30-4d60-ba32-368b9ce03522' },
-    { name: 'Todoroki', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FTodoroki.jpg?alt=media&token=cd8b60b5-d087-4bfb-97e5-299c0130819f' },
-    { name: 'Stain', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FStain.jpg?alt=media&token=a2c10146-57cd-4801-91a2-107024dabeab' },
-    { name: 'Dabi', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FDabi.jpg?alt=media&token=dbbb0381-b65b-4856-abeb-57ebe2e5f277' },
-    { name: 'Aizawa Shota', anime: 'My Hero Academia', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMHA%2FSSR%2FAizawa%20Shota.jpg?alt=media&token=787a4c67-efd3-425c-a327-bbf859ebed41' },
-    { name: 'Sailor Moon', anime: 'Sailor Moon', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSailor%20Moon%2FSSR%2FSailor%20Moon.jpg?alt=media&token=13497778-0659-4f23-9cd4-4fcc4401c799' },
-    { name: 'Bojji', anime: 'Ranking of Kings', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FRanking%20of%20Kings%2FSSR%2FBojji.jpg?alt=media&token=fd74df4a-cc32-4834-8420-48f6bd592020' },
-    { name: 'Chigiri Hyoma', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSSR%2FChigiri%20Hyoma.jpg?alt=media&token=abdb5d8b-c5ba-4a30-8363-004965916732' },
-    { name: 'Kunigami Rensuke', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSSR%2FKunigami%20Rensuke.jpg?alt=media&token=bc35559e-ee4b-455a-8e9b-1065b351e0aa' },
-    { name: 'Seishiro Nagi', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSSR%2FNagi.jpg?alt=media&token=ff302357-82cd-48fa-8d1d-74d2d4608c67' },
-    { name: 'Rin Itoshi', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSSR%2FRin%20Itoshi.jpg?alt=media&token=5924e019-90d6-427e-b56a-bd1de365565f' },
+    { name: 'Giyu Tomioka', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SSR/Giyu%20Tomioka.jpg' },
+    { name: 'Gyomei Himejima', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SSR/Gyomei%20Himejima.jpg' },
+    { name: 'Inosuke Hashibira', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SSR/Inosuke.jpg' },
+    { name: 'Kyojuro Rengoku', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SSR/Kyojuro%20Rengoku.jpg' },
+    { name: 'Tanjiro Kamado', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SSR/Tanjiro%20Kamado.png' },
+    { name: 'Tengen Uzui', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SSR/Tengen%20Uzui.jpg' },
+    { name: 'Zenitsu Agatsuma', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/SSR/Zenitsu.jpg' },
+    { name: 'Brook', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Brook.jpg' },
+    { name: 'Franky', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Franky.jpg' },
+    { name: 'Dracule Mihawk', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Dracul%20Mihawk.jpg' },
+    { name: 'Jinbe', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Jinbe.png' },
+    { name: 'Marco', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Marco.jpg' },
+    { name: 'Monkey D. Garp', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Monkey%20D%20Garp.webp' },
+    { name: 'Monkey D. Luffy', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Monkey%20D%20Luffy.png' },
+    { name: 'Nami', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Nami.jpg' },
+    { name: 'Nico Robin', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Nico%20Robin.jpg' },
+    { name: 'Portgas D. Ace', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Portgas%20D%20Ace.jpg' },
+    { name: 'Roronoa Zoro', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Roranora%20Zoro.jpg' },
+    { name: 'Sabo', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Sabo.webp' },
+    { name: 'Shanks', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Shanks.webp' },
+    { name: 'Tony Tony Chopper', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Tony%20Chopper.webp' },
+    { name: 'Trafalgar Law', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Trafalgar%20D%20Law.webp' },
+    { name: 'Usopp', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Usopp.webp' },
+    { name: 'Vinsmoke Sanji', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Vinsmoke%20Sanji.jpg' },
+    { name: 'Eren Yeager', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/SSR/Eren%20Yeager.jpg' },
+    { name: 'Founding Titan', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/SSR/Founding%20Titan.webp' },
+    { name: 'Levi Ackerman', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/SSR/Levi%20Ackerman.jpg' },
+    { name: 'Mikasa Ackerman', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/SSR/Mikasa%20Ackerman.jpg' },
+    { name: 'Itachi Uchiha', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SSR/Itatchi%20Uchiha.jpg' },
+    { name: 'Jiraiya', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SSR/Jiraiya.webp' },
+    { name: 'Kakashi Hatake', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SSR/Kakashi.png' },
+    { name: 'Minato Namikaze', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SSR/Minato%20Namikaze.jpg' },
+    { name: 'Naruto Uzumaki', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SSR/Naruto%20Uzumaki.jpg' },
+    { name: 'Rock Lee', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SSR/Rock%20Lee.webp' },
+    { name: 'Sasuke Uchiha', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SSR/Sasuke%20Uchiha.webp' },
+    { name: 'Tobi', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SSR/Toby.png' },
+    { name: 'Might Guy', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/SR/Might%20Guy.jpg' },
+    { name: 'Frieren', anime: 'Frieren', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Frieren/SSR/Frieren.jpg' },
+    { name: 'Shoyo Hinata', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SSR/Shoyo%20Hinata.jpg' },
+    { name: 'Tobio Kageyama', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SSR/Tobio%20Kageyama.jpg' },
+    { name: 'Vladilena Milizé', anime: '86', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/86/Vladilena%20Miliz%C3%A9.webp' },
+    { name: 'Reze', anime: 'Chainsaw Man', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Chainsaw%20Man/Reze.webp' },
+    { name: 'Killua', anime: 'Hunter x Hunter', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hunter%20x%20Hunter/SSR/Killua.jpg' },
+    { name: 'Kurapika', anime: 'Hunter x Hunter', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hunter%20x%20Hunter/SSR/Kurapika.webp' },
+    { name: 'Gojo', anime: 'Jujutsu Kaisen', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/JJK/SSR/Gojo.webp' },
+    { name: 'Izuku Midoriya', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SSR/Izuku%20Midoriya.jpg' },
+    { name: 'Yor Forger', anime: 'Spy x Family', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Spy%20Family/SSR/Yor%20Forger.webp' },
+    { name: 'Goku', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Goku_SSR.jpg' },
+    { name: 'Kid Gohan', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Kid%20Gohan.webp' },
+    { name: 'Vegeta', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Vegeta.jpg' },
+    { name: 'Sung Jin-woo', anime: 'Solo Leveling', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Solo%20Leveling/SSR/Sung%20Jin-woo.jpg' },
+    { name: 'Rudeus Greyrat', anime: 'Jobless Reincarnation', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jobless%20Reincarnation/SSR/Rudeus%20Greyrat.jpg' },
+    { name: 'Senku', anime: 'Dr. Stone', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dr%20Stone/SSR/Senku.jpg' },
+    { name: 'Asui Tsuyu', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SSR/Asui%20Tsuyu.jpg' },
+    { name: 'Mina Ashido', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SSR/Mina%20Aishido.jpg' },
+    { name: 'Ochaco Uraraka', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SSR/Ochaco%20Uraraka.jpg' },
+    { name: 'Bakugo', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SSR/Bakugo.jpg' },
+    { name: 'Todoroki', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SSR/Todoroki.jpg' },
+    { name: 'Stain', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SSR/Stain.jpg' },
+    { name: 'Dabi', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SSR/Dabi.jpg' },
+    { name: 'Aizawa Shota', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/SSR/Aizawa%20Shota.jpg' },
+    { name: 'Sailor Moon', anime: 'Sailor Moon', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sailor%20Moon/SSR/Sailor%20Moon.jpg' },
+    { name: 'Bojji', anime: 'Ranking of Kings', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Ranking%20of%20Kings/SSR/Bojji.jpg' },
+    { name: 'Chigiri Hyoma', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SSR/Chigiri%20Hyoma.jpg' },
+    { name: 'Kunigami Rensuke', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SSR/Kunigami%20Rensuke.jpg' },
+    { name: 'Seishiro Nagi', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SSR/Nagi.jpg' },
+    { name: 'Rin Itoshi', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SSR/Rin%20Itoshi.jpg' },
     // ── Batch 2 ──────────────────────────────────────────────────────────────────
-    { name: 'Shinei Nouzen', anime: '86', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2F86%2FSSR%2FShinei%20Nouzen.jpg?alt=media&token=4955f2d9-1bcc-4b63-9946-47683c3800dd', batch: 2 },
-    { name: 'Yujiro Hanma', anime: 'Baki', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBaki%2FSSR%2FYujiro%20Hanma.jpg?alt=media&token=c530a207-711a-47dc-bca7-33aa270caa07', batch: 2 },
-    { name: 'Grimmjow', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSSR%2FGrimmjow.jpg?alt=media&token=b73c405d-f578-432a-bbf0-0957cb87a803', batch: 2 },
-    { name: 'Rangiku Matsumoto', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSSR%2FRangiku.jpg?alt=media&token=e6b7eda6-0819-4f4e-ac93-294252de1549', batch: 2 },
-    { name: 'Sosuke Aizen', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSSR%2FAizen.jpg?alt=media&token=cc6e03d6-bdb6-42da-ae83-5e1d589ddfbc', batch: 2 },
-    { name: 'Ulquiorra Cifer', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FSSR%2FUlquiorra%20Shifar.jpg?alt=media&token=27986424-57da-4d23-a20f-4ac6644b109d', batch: 2 },
-    { name: 'Meguru Bachira', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSSR%2FMeguru%20Bachira.jpg?alt=media&token=7f018bfa-c8b4-4e9c-ab8a-00841fd146f0', batch: 2 },
-    { name: 'Yoichi Isagi', anime: 'Blue Lock', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlue%20Lock%2FSSR%2FYoichi%20Isagi.jpg?alt=media&token=92fe9205-45ce-48d5-ba66-9e7de1e2640b', batch: 2 },
-    { name: 'Aki', anime: 'Chainsaw Man', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FChainsaw%20Man%2FSSR%2FAki.jpg?alt=media&token=74a52a41-7152-4f19-a9a7-c441021716fb', batch: 2 },
-    { name: 'Denji', anime: 'Chainsaw Man', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FChainsaw%20Man%2FSSR%2FDenji.jpg?alt=media&token=d19d9df8-37ed-4f36-856e-d14affae01c3', batch: 2 },
-    { name: 'Power', anime: 'Chainsaw Man', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FChainsaw%20Man%2FSSR%2FPower.jpg?alt=media&token=c67af7f0-d216-4c8f-8ed8-9ec54a088a58', batch: 2 },
-    { name: 'Lucy', anime: 'Cyberpunk: Edgerunners', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FCyberpunk%20Edgerunners%2FSSR%2FLucy.jpg?alt=media&token=d9f2e91e-9cca-42c8-92fd-34cbc08ba4d3', batch: 2 },
-    { name: 'Rebecca', anime: 'Cyberpunk: Edgerunners', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FCyberpunk%20Edgerunners%2FSSR%2FRebecca.png?alt=media&token=66e88aa5-890a-428a-83ed-349783cab23b', batch: 2 },
-    { name: 'Aira', anime: 'Dandadan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDandadan%2FSSR%2FAira.jpg?alt=media&token=573a1cb1-e65f-4ee6-9948-d7f4bf28f2ec', batch: 2 },
-    { name: 'Jiji', anime: 'Dandadan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDandadan%2FSSR%2FJiji.jpg?alt=media&token=d22ca79a-a8a4-4864-b0c7-d2e408773344', batch: 2 },
-    { name: 'Momo Ayase', anime: 'Dandadan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDandadan%2FSSR%2FMomo%20Ayase.jpg?alt=media&token=f9661919-d9c7-4bf7-b99b-a14a992dc1d6', batch: 2 },
-    { name: 'Okarun', anime: 'Dandadan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDandadan%2FSSR%2FOkarun.jpg?alt=media&token=eab0a5e3-baf8-4460-acf8-dae3ca069a8c', batch: 2 },
-    { name: 'Erza Scarlet', anime: 'Fairy Tail', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFairytail%2FSSR%2FErza%20Scarlet.jpg?alt=media&token=aa68e99e-c077-45ab-a71a-f3ae37baf0f6', batch: 2 },
-    { name: 'Natsu Dragneel', anime: 'Fairy Tail', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFairytail%2FSSR%2FNatsu%20Dragneel.jpg?alt=media&token=f9b0bd04-9294-4f2e-b1f9-3feaefba8dd6', batch: 2 },
-    { name: 'Edward Elric', anime: 'Fullmetal Alchemist', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFullmetal%20Alchemist%2FSSR%2FEdward%20Elric.jpg?alt=media&token=abd46ba4-7333-4ed0-b41f-fc9070f8ed7b', batch: 2 },
-    { name: 'Riyo', anime: 'Gachiakuta', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FGachiakuta%2FSSR%2FRiyo.jpg?alt=media&token=b1a8a7c7-3e91-41cb-978b-afc4eb347194', batch: 2 },
-    { name: 'Rudo', anime: 'Gachiakuta', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FGachiakuta%2FSSR%2FRudo.jpg?alt=media&token=2f3c4db3-4beb-4bdd-b83b-169e14075788', batch: 2 },
-    { name: 'Kenma Kozume', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSSR%2FKenma%20Kozume.jpg?alt=media&token=9ca06e4a-1799-4ab3-8857-ef2d63415313', batch: 2 },
-    { name: 'Koutarou Bokuto', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSSR%2FKoutarou%20Bokuto.jpg?alt=media&token=724c1b2f-6d40-4b0d-9eff-1cd8f9ba7393', batch: 2 },
-    { name: 'Nishinoya', anime: 'Haikyu!', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FSSR%2FNishinoya.jpg?alt=media&token=9a2f1bf1-82f2-4cbf-8210-e8ea941273d6', batch: 2 },
-    { name: 'Kento Nanami', anime: 'Jujutsu Kaisen', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJJK%2FSSR%2FKento%20Nanami.jpg?alt=media&token=e4970376-2386-494a-ac8f-ec6f9370c893', batch: 2 },
-    { name: 'Maki', anime: 'Jujutsu Kaisen', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJJK%2FSSR%2FMaki.jpg?alt=media&token=a7d3d16b-f64e-4f55-aa7b-92de95861e22', batch: 2 },
-    { name: 'Toji Fushiguro', anime: 'Jujutsu Kaisen', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJJK%2FSSR%2FToji%20Fushiguro.jpg?alt=media&token=876f1383-7080-4b6f-92b4-7427f9efd509', batch: 2 },
-    { name: 'Yuta Okkotsu', anime: 'Jujutsu Kaisen', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FJJK%2FSSR%2FYuta%20Okkotsu.jpg?alt=media&token=7c9d3c61-9da9-43bf-81f3-3f089a923673', batch: 2 },
-    { name: 'Atsushi Murasakibara', anime: "Kuroko's Basketball", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FKuroko\'s%20Basketball%2FSSR%2FAtsushi%20Murasakibara.jpg?alt=media&token=d984cca5-1618-481b-9593-ae962bf42806', batch: 2 },
-    { name: 'Daiki Aomine', anime: "Kuroko's Basketball", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FKuroko\'s%20Basketball%2FSSR%2FDaiki%20Aomine.jpg?alt=media&token=55900a3e-1e8c-4c32-adc6-d0bf88ca9a43', batch: 2 },
-    { name: 'Ryota Kise', anime: "Kuroko's Basketball", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FKuroko\'s%20Basketball%2FSSR%2FRyota%20Kise.jpg?alt=media&token=f6253ba7-481a-4c22-885f-ce1d932e6e85', batch: 2 },
-    { name: 'Shintaro Midorima', anime: "Kuroko's Basketball", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FKuroko\'s%20Basketball%2FSSR%2FShintaro%20Midorima.jpg?alt=media&token=daed4e7b-5581-4d17-abfc-9291aa1768e6', batch: 2 },
-    { name: 'Taiga Kagami', anime: "Kuroko's Basketball", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FKuroko\'s%20Basketball%2FSSR%2FTaiga%20Kagami.jpg?alt=media&token=1804d8f3-3896-4dae-91af-8235cdc0a049', batch: 2 },
-    { name: 'Tetsuya Kuroko', anime: "Kuroko's Basketball", image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FKuroko\'s%20Basketball%2FSSR%2FIMG_2710.jpg?alt=media&token=2a92f386-0840-4ec5-8744-90e5ba732862', batch: 2 },
-    { name: 'Finn Ames', anime: 'Mashle', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMashle%2FSSR%2FFinn%20Ames.jpg?alt=media&token=d0acf007-d001-4929-8c59-711e0332fabb', batch: 2 },
-    { name: 'Lance Crown', anime: 'Mashle', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMashle%2FSSR%2FLance%20Crown.jpg?alt=media&token=c6596712-597d-42e7-8141-030f464d84e9', batch: 2 },
-    { name: 'Lemon Irvine', anime: 'Mashle', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMashle%2FSSR%2FLemon%20Irvine.jpg?alt=media&token=d337d6b5-90ba-4789-b11b-454855e65c2d', batch: 2 },
-    { name: 'Mash', anime: 'Mashle', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FMashle%2FSSR%2FMash.jpg?alt=media&token=7109b397-ed25-4ae1-abac-3a4dc19c8358', batch: 2 },
-    { name: 'Enel', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FEnel.jpg?alt=media&token=0956621e-10df-4bc8-af6e-215017689f0e', batch: 2 },
-    { name: 'Gol D. Roger', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FGol%20D%20Roger.jpg?alt=media&token=c5f01af7-b2c2-4797-9c28-218296fced3a', batch: 2 },
-    { name: 'Katakuri', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FKatakuri.jpg?alt=media&token=9bc65a90-c810-4308-8cf6-0fb677a5271e', batch: 2 },
-    { name: 'King', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FKing%202.jpg?alt=media&token=907adbee-e158-4c4c-9b47-597328ebfa9d', batch: 2 },
-    { name: 'Queen', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FQueen.jpg?alt=media&token=2cc20681-3721-4398-a770-bb3bc77ee7d6', batch: 2 },
-    { name: 'Vivi', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FSSR%2FVivi.jpg?alt=media&token=adbf9f55-ccc9-436d-8ce5-49585914d8b6', batch: 2 },
-    { name: 'Asuna Yuuki', anime: 'Sword Art Online', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSword%20Art%20Online%2FSSR%2FAsuna%20Yuuki.jpg?alt=media&token=9c3aed92-2666-4a72-af21-0578195df400', batch: 2 },
-    { name: 'Igris', anime: 'Solo Leveling', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FSSR%2FIgris.jpg?alt=media&token=ab8af865-b43e-4f84-ade2-04c789e12ada', batch: 2 },
-    { name: 'Anya Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSSR%2FAnya%20Forger.jpg?alt=media&token=13e883ad-3f86-4851-82bd-14d1066cfbc4', batch: 2 },
-    { name: 'Loid Forger', anime: 'Spy x Family', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpy%20Family%2FSSR%2FLoid%20Forger.jpg?alt=media&token=4b862f64-c9b8-45a0-a916-3acf2eee104f', batch: 2 },
-    { name: 'Daiwa Scarlet', anime: 'Umamusume Pretty Derby', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FSSR%2FDaiwa%20Scarlet.jpg?alt=media&token=8e6a443d-8328-4370-9495-eed1eea6c5ba', batch: 2 },
-    { name: 'Oguri Cap', anime: 'Umamusume Pretty Derby', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FSSR%2FOguri%20Cap.jpg?alt=media&token=c66a1dca-a902-482c-92d1-f2aebed347b4', batch: 2 },
-    { name: 'Tokai Teio', anime: 'Umamusume Pretty Derby', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FSSR%2FTokai%20Teio.jpg?alt=media&token=73938362-0f61-4d83-98a3-ae0596b3f13b', batch: 2 },
-    { name: 'Hisoka', anime: 'Hunter x Hunter', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHunter%20x%20Hunter%2FSSR%2FHisoka.jpg?alt=media&token=b983d0d0-fbd4-481c-934a-438a8b6ab50b', batch: 2 },
-    { name: 'Alucard', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSSR%2FAlucard.jpg?alt=media&token=b328363f-20c5-4f4e-96ab-4873ebf66e93', batch: 2 },
-    { name: 'Anderson', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSSR%2FAnderson.png?alt=media&token=fcaefbc3-d0c7-436b-87a9-db10a475f827', batch: 2 },
-    { name: 'Girlycard', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSSR%2FGirlyCard.jpg?alt=media&token=708f8ca2-bf42-42e8-b05d-bdea585a73d1', batch: 2 },
-    { name: 'Pip Bernadotte', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSSR%2FPip.jpg?alt=media&token=5c4d7fc4-ff2d-49dc-934f-6ad84a046c3e', batch: 2 },
-    { name: 'Seras Victoria', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSSR%2FSeras.jpg?alt=media&token=9a2c2cfc-7d73-464c-a2b7-64368a4031af', batch: 2 },
-    { name: 'The Captain', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSSR%2FThe%20Captain.jpg?alt=media&token=476a0bec-4c6a-4845-aaf0-a1f3ab45c7de', batch: 2 },
-    { name: 'Walter C Durnez', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FSSR%2FWalter.jpg?alt=media&token=cbc5ecdc-f38f-40e0-8ec0-c2c48626ab42', batch: 2 },
+    { name: 'Shinei Nouzen', anime: '86', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/86/SSR/Shinei%20Nouzen.jpg', batch: 2 },
+    { name: 'Yujiro Hanma', anime: 'Baki', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Baki/SSR/Yujiro%20Hanma.jpg', batch: 2 },
+    { name: 'Grimmjow', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SSR/Grimmjow.jpg', batch: 2 },
+    { name: 'Rangiku Matsumoto', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SSR/Rangiku.jpg', batch: 2 },
+    { name: 'Sosuke Aizen', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SSR/Aizen.jpg', batch: 2 },
+    { name: 'Ulquiorra Cifer', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SSR/Ulquiorra%20Shifar.jpg', batch: 2 },
+    { name: 'Meguru Bachira', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SSR/Meguru%20Bachira.jpg', batch: 2 },
+    { name: 'Yoichi Isagi', anime: 'Blue Lock', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Blue%20Lock/SSR/Yoichi%20Isagi.jpg', batch: 2 },
+    { name: 'Aki', anime: 'Chainsaw Man', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Chainsaw%20Man/SSR/Aki.jpg', batch: 2 },
+    { name: 'Denji', anime: 'Chainsaw Man', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Chainsaw%20Man/SSR/Denji.jpg', batch: 2 },
+    { name: 'Power', anime: 'Chainsaw Man', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Chainsaw%20Man/SSR/Power.jpg', batch: 2 },
+    { name: 'Lucy', anime: 'Cyberpunk: Edgerunners', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Cyberpunk%20Edgerunners/SSR/Lucy.jpg', batch: 2 },
+    { name: 'Rebecca', anime: 'Cyberpunk: Edgerunners', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Cyberpunk%20Edgerunners/SSR/Rebecca.png', batch: 2 },
+    { name: 'Aira', anime: 'Dandadan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dandadan/SSR/Aira.jpg', batch: 2 },
+    { name: 'Jiji', anime: 'Dandadan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dandadan/SSR/Jiji.jpg', batch: 2 },
+    { name: 'Momo Ayase', anime: 'Dandadan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dandadan/SSR/Momo%20Ayase.jpg', batch: 2 },
+    { name: 'Okarun', anime: 'Dandadan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dandadan/SSR/Okarun.jpg', batch: 2 },
+    { name: 'Erza Scarlet', anime: 'Fairy Tail', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fairytail/SSR/Erza%20Scarlet.jpg', batch: 2 },
+    { name: 'Natsu Dragneel', anime: 'Fairy Tail', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fairytail/SSR/Natsu%20Dragneel.jpg', batch: 2 },
+    { name: 'Edward Elric', anime: 'Fullmetal Alchemist', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fullmetal%20Alchemist/SSR/Edward%20Elric.jpg', batch: 2 },
+    { name: 'Riyo', anime: 'Gachiakuta', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Gachiakuta/SSR/Riyo.jpg', batch: 2 },
+    { name: 'Rudo', anime: 'Gachiakuta', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Gachiakuta/SSR/Rudo.jpg', batch: 2 },
+    { name: 'Kenma Kozume', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SSR/Kenma%20Kozume.jpg', batch: 2 },
+    { name: 'Koutarou Bokuto', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SSR/Koutarou%20Bokuto.jpg', batch: 2 },
+    { name: 'Nishinoya', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SSR/Nishinoya.jpg', batch: 2 },
+    { name: 'Kento Nanami', anime: 'Jujutsu Kaisen', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/JJK/SSR/Kento%20Nanami.jpg', batch: 2 },
+    { name: 'Maki', anime: 'Jujutsu Kaisen', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/JJK/SSR/Maki.jpg', batch: 2 },
+    { name: 'Toji Fushiguro', anime: 'Jujutsu Kaisen', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/JJK/SSR/Toji%20Fushiguro.jpg', batch: 2 },
+    { name: 'Yuta Okkotsu', anime: 'Jujutsu Kaisen', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/JJK/SSR/Yuta%20Okkotsu.jpg', batch: 2 },
+    { name: 'Atsushi Murasakibara', anime: "Kuroko's Basketball", image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Kuroko\'s%20Basketball%2FSSR%2FAtsushi%20Murasakibara.jpg?alt=media&token=d984cca5-1618-481b-9593-ae962bf42806', batch: 2 },
+    { name: 'Daiki Aomine', anime: "Kuroko's Basketball", image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Kuroko\'s%20Basketball%2FSSR%2FDaiki%20Aomine.jpg?alt=media&token=55900a3e-1e8c-4c32-adc6-d0bf88ca9a43', batch: 2 },
+    { name: 'Ryota Kise', anime: "Kuroko's Basketball", image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Kuroko\'s%20Basketball%2FSSR%2FRyota%20Kise.jpg?alt=media&token=f6253ba7-481a-4c22-885f-ce1d932e6e85', batch: 2 },
+    { name: 'Shintaro Midorima', anime: "Kuroko's Basketball", image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Kuroko\'s%20Basketball%2FSSR%2FShintaro%20Midorima.jpg?alt=media&token=daed4e7b-5581-4d17-abfc-9291aa1768e6', batch: 2 },
+    { name: 'Taiga Kagami', anime: "Kuroko's Basketball", image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Kuroko\'s%20Basketball%2FSSR%2FTaiga%20Kagami.jpg?alt=media&token=1804d8f3-3896-4dae-91af-8235cdc0a049', batch: 2 },
+    { name: 'Tetsuya Kuroko', anime: "Kuroko's Basketball", image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Kuroko\'s%20Basketball%2FSSR%2FIMG_2710.jpg?alt=media&token=2a92f386-0840-4ec5-8744-90e5ba732862', batch: 2 },
+    { name: 'Finn Ames', anime: 'Mashle', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Mashle/SSR/Finn%20Ames.jpg', batch: 2 },
+    { name: 'Lance Crown', anime: 'Mashle', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Mashle/SSR/Lance%20Crown.jpg', batch: 2 },
+    { name: 'Lemon Irvine', anime: 'Mashle', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Mashle/SSR/Lemon%20Irvine.jpg', batch: 2 },
+    { name: 'Mash', anime: 'Mashle', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Mashle/SSR/Mash.jpg', batch: 2 },
+    { name: 'Enel', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Enel.jpg', batch: 2 },
+    { name: 'Gol D. Roger', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Gol%20D%20Roger.jpg', batch: 2 },
+    { name: 'Katakuri', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Katakuri.jpg', batch: 2 },
+    { name: 'King', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/King%202.jpg', batch: 2 },
+    { name: 'Queen', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Queen.jpg', batch: 2 },
+    { name: 'Vivi', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/SSR/Vivi.jpg', batch: 2 },
+    { name: 'Asuna Yuuki', anime: 'Sword Art Online', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sword%20Art%20Online/SSR/Asuna%20Yuuki.jpg', batch: 2 },
+    { name: 'Igris', anime: 'Solo Leveling', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Solo%20Leveling/SSR/Igris.jpg', batch: 2 },
+    { name: 'Anya Forger', anime: 'Spy x Family', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Spy%20Family/SSR/Anya%20Forger.jpg', batch: 2 },
+    { name: 'Loid Forger', anime: 'Spy x Family', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Spy%20Family/SSR/Loid%20Forger.jpg', batch: 2 },
+    { name: 'Daiwa Scarlet', anime: 'Umamusume Pretty Derby', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Umamusame/SSR/Daiwa%20Scarlet.jpg', batch: 2 },
+    { name: 'Oguri Cap', anime: 'Umamusume Pretty Derby', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Umamusame/SSR/Oguri%20Cap.jpg', batch: 2 },
+    { name: 'Tokai Teio', anime: 'Umamusume Pretty Derby', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Umamusame/SSR/Tokai%20Teio.jpg', batch: 2 },
+    { name: 'Hisoka', anime: 'Hunter x Hunter', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hunter%20x%20Hunter/SSR/Hisoka.jpg', batch: 2 },
+    { name: 'Alucard', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SSR/Alucard.jpg', batch: 2 },
+    { name: 'Anderson', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SSR/Anderson.png', batch: 2 },
+    { name: 'Girlycard', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SSR/GirlyCard.jpg', batch: 2 },
+    { name: 'Pip Bernadotte', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SSR/Pip.jpg', batch: 2 },
+    { name: 'Seras Victoria', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SSR/Seras.jpg', batch: 2 },
+    { name: 'The Captain', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SSR/The%20Captain.jpg', batch: 2 },
+    { name: 'Walter C Durnez', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SSR/Walter.jpg', batch: 2 },
 ];
 
 // Batch membership set — keyed "anime|name" for every batch 2 card.
@@ -7364,62 +7404,62 @@ function _tcgCardBatch(card) {
 
 // UR art — top rarity, hand-curated. Animated art (e.g. animated WebP) encouraged.
 const TCG_UR_CARDS = [
-    { name: 'Attack Titan', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FUR%2FAttack%20Titan.gif?alt=media&token=81ffe62b-a017-4bdf-9b12-6cbb33ec0fd7' },
-    { name: 'Eren Yeager', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FUR%2FEren%20Yeager.gif?alt=media&token=cdf9c22f-58f6-4565-b20a-1b2adf97dda7' },
-    { name: 'Mikasa Ackerman', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FUR%2FMikasa%20Ackerman.gif?alt=media&token=5c30fbf6-fa88-4fd9-a395-f65917041041' },
-    { name: 'Nezuko', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FUR%2FNezuko.gif?alt=media&token=75ea4144-0d0f-4d1c-b6f0-bf55398519a9' },
-    { name: 'Tanjiro', anime: 'Demon Slayer', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FUR%2FTanjiro.gif?alt=media&token=ab3d4402-7d1a-4756-b420-71fa7c46a501' },
-    { name: 'Frieren', anime: 'Frieren', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFrieren%2FUR%2FFrieren%20UR.gif?alt=media&token=211e8ef5-eebc-440a-be1f-5565e83ddc5e' },
-    { name: 'Monkey D. Luffy', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FMonkey%20D%20Luffy.gif?alt=media&token=6fd4a67c-08fd-46f4-a38e-877ae65f934b' },
-    { name: 'Tony Chopper', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FChopper.gif?alt=media&token=97e02889-3cd5-4007-a26c-6f3c4bdb38f7' },
-    { name: 'Byakuya', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FUR%2FByakuya.gif?alt=media&token=0a078e68-cc6d-4377-84d3-6e95b928113a' },
-    { name: 'Ichigo', anime: 'Bleach', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBleach%2FUR%2FIchigo.gif?alt=media&token=04fef526-df17-4a25-941a-a5c35cc3add1' },
-    { name: 'Levi Ackerman', anime: 'Attack on Titan', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAttack%20on%20Titan%2FUR%2FLevi%20Ackerman.gif?alt=media&token=be445e89-10ac-420d-b314-58364db4588f' },
-    { name: 'Goku', anime: 'Dragon Ball', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FUR%2FGoku_UR.gif?alt=media&token=ac0ef55d-d237-40a2-8212-c512bfdefadd' },
-    { name: 'Alucard', anime: 'Hellsing Ultimate', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FUR%2FAlucard_UR.gif?alt=media&token=0b2b575e-be21-4264-801d-acecde367605', batch: 2 },
-    { name: 'Simon', anime: 'Gurren Lagann', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FGurren%20Legan%2FUR%2FSimon_UR.gif?alt=media&token=d505a155-95b9-4ad4-b8cb-71d1b9449ca1', batch: 2 },
-    { name: 'Shinra Kusakabe', anime: 'Fire Force', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFire%20Force%2FUR%2FShinra_UR.gif?alt=media&token=6a3b16b6-9f7f-4ac8-97f3-528e584e857b', batch: 2 },
-    { name: 'Killua', anime: 'Hunter x Hunter', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHunter%20x%20Hunter%2FUR%2FKillua.gif?alt=media&token=8dc63595-459e-488d-9198-af45d071523d', batch: 2 },
-    { name: 'Asta', anime: 'Black Clover', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBlack%20Clover%2FUR%2FAsta_Ur.gif?alt=media&token=53073f68-1e87-45d4-a79c-75299dd6a3d0', batch: 2 },
+    { name: 'Attack Titan', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/UR/Attack%20Titan.gif' },
+    { name: 'Eren Yeager', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/UR/Eren%20Yeager.gif' },
+    { name: 'Mikasa Ackerman', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/UR/Mikasa%20Ackerman.gif' },
+    { name: 'Nezuko', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/UR/Nezuko.gif' },
+    { name: 'Tanjiro', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/UR/Tanjiro.gif' },
+    { name: 'Frieren', anime: 'Frieren', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Frieren/UR/Frieren%20UR.gif' },
+    { name: 'Monkey D. Luffy', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/UR/Monkey%20D%20Luffy.gif' },
+    { name: 'Tony Chopper', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/UR/Chopper.gif' },
+    { name: 'Byakuya', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/UR/Byakuya.gif' },
+    { name: 'Ichigo', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/UR/Ichigo.gif' },
+    { name: 'Levi Ackerman', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack%20on%20Titan/UR/Levi%20Ackerman.gif' },
+    { name: 'Goku', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/UR/Goku_UR.gif' },
+    { name: 'Alucard', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/UR/Alucard_UR.gif', batch: 2 },
+    { name: 'Simon', anime: 'Gurren Lagann', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Gurren%20Legan/UR/Simon_UR.gif', batch: 2 },
+    { name: 'Shinra Kusakabe', anime: 'Fire Force', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fire%20Force/UR/Shinra_UR.gif', batch: 2 },
+    { name: 'Killua', anime: 'Hunter x Hunter', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hunter%20x%20Hunter/UR/Killua.gif', batch: 2 },
+    { name: 'Asta', anime: 'Black Clover', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Black%20Clover/UR/Asta_Ur.gif', batch: 2 },
 ];
 
 // PR (Prismatic) art — 2026 Prismatic event set, exclusive to Prismatic Packs.
 const TCG_PR_CARDS = [
-    { name: 'Choso',            anime: 'Jujutsu Kaisen',     image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FChoso.jpg?alt=media&token=aea1fcba-35e0-4ae9-a241-e78c41642ad0' },
-    { name: 'Gaara',            anime: 'Naruto',             image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FGaara.jpg?alt=media&token=71ea7cdb-1601-4514-b7fa-889a42d48de6' },
-    { name: 'Garou',            anime: 'One Punch Man',      image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FGarou.jpg?alt=media&token=5e49c37d-618b-445c-8749-8fed867118ed' },
-    { name: 'Gon Freecs',       anime: 'Hunter x Hunter',    image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FGon%20Freecs.png?alt=media&token=ffd50de4-596a-4c30-bfb7-d1f909ae6070' },
-    { name: 'Guts',             anime: 'Berserk',            image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FGuts.png?alt=media&token=24a1bc4a-5732-45cb-9a9e-4f34deee4a19' },
-    { name: 'Kakashi',          anime: 'Naruto',             image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FKakashi.png?alt=media&token=b81c57b4-99b0-4a2f-940c-158e3c3044fa' },
-    { name: 'Ken Kaneki',       anime: 'Tokyo Ghoul',        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FTokyo%20Ghoul%20Guy.jpg?alt=media&token=4a0313b0-65dc-40a4-9301-391ac703f47e' },
-    { name: 'Killua',           anime: 'Hunter x Hunter',    image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FKillua.jpg?alt=media&token=e5d611b9-81f0-4231-a939-4ee0c60e386a' },
-    { name: 'Maki Zenin',       anime: 'Jujutsu Kaisen',     image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FMaki%20Zenin.webp?alt=media&token=24de3fd0-1f5d-42db-9ff1-50d043bb8966' },
-    { name: 'Makima',           anime: 'Chainsaw Man',       image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FMakima.jpg?alt=media&token=44775650-f700-40b0-a7d9-50e02ccf0b27' },
-    { name: 'Okarun',           anime: 'Dandadan',           image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FOkarun.jpg?alt=media&token=8f18af4c-785b-49da-9282-f5959b9926ce' },
-    { name: 'Pain',             anime: 'Naruto',             image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FPain.jpg?alt=media&token=39635694-a782-40a7-b260-1727301780ed' },
-    { name: 'Saitama',          anime: 'One Punch Man',      image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FSaitama.jpg?alt=media&token=71ff815d-6f1c-4296-b003-d2df4233bd7e' },
-    { name: 'Takamura',         anime: 'Sakamoto Days',      image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FTakamura.jpg?alt=media&token=55dccfd3-c994-40df-8fcc-37c314d0519a' },
-    { name: 'Tomura Shigaraki', anime: 'My Hero Academia',   image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FPrismatic%20Cards%2F2026%20Prismatic%2FTomura%20Shigaraki.webp?alt=media&token=7448fbbb-e2f4-4eb6-ba11-46ca641806e1' },
+    { name: 'Choso',            anime: 'Jujutsu Kaisen',     image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Choso.jpg' },
+    { name: 'Gaara',            anime: 'Naruto',             image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Gaara.jpg' },
+    { name: 'Garou',            anime: 'One Punch Man',      image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Garou.jpg' },
+    { name: 'Gon Freecs',       anime: 'Hunter x Hunter',    image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Gon%20Freecs.png' },
+    { name: 'Guts',             anime: 'Berserk',            image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Guts.png' },
+    { name: 'Kakashi',          anime: 'Naruto',             image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Kakashi.png' },
+    { name: 'Ken Kaneki',       anime: 'Tokyo Ghoul',        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Tokyo%20Ghoul%20Guy.jpg' },
+    { name: 'Killua',           anime: 'Hunter x Hunter',    image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Killua.jpg' },
+    { name: 'Maki Zenin',       anime: 'Jujutsu Kaisen',     image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Maki%20Zenin.webp' },
+    { name: 'Makima',           anime: 'Chainsaw Man',       image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Makima.jpg' },
+    { name: 'Okarun',           anime: 'Dandadan',           image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Okarun.jpg' },
+    { name: 'Pain',             anime: 'Naruto',             image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Pain.jpg' },
+    { name: 'Saitama',          anime: 'One Punch Man',      image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Saitama.jpg' },
+    { name: 'Takamura',         anime: 'Sakamoto Days',      image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Takamura.jpg' },
+    { name: 'Tomura Shigaraki', anime: 'My Hero Academia',   image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Tomura%20Shigaraki.webp' },
 ];
 
 // Neon 2026 event card preview — shown in TCG admin tab for design review.
 // Replace this array each event; neonA/B/C drive the border color via CSS vars.
 const TCG_EVENT_PREVIEW_CARDS = [
-    { name: 'Lucy',             anime: 'Cyberpunk: Edgerunners',      neonClass: '',       neonA: '#ff3fe3', neonB: '#01F9C6',                    flickerDelay: '0s',   image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FLucy.png?alt=media&token=724ec011-0948-45f6-a3b6-67afcda756bc' },
-    { name: 'Shinra Kusakabe', anime: 'Fire Force',                   neonClass: 'custom', neonA: '#FF2F09', neonB: '#FA9F2D', neonC: '#ECDCB9', flickerDelay: '1.8s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FFire%20Force%20Guy.png?alt=media&token=27e93126-dc14-4f23-a898-1c57f05d2e9b' },
-    { name: 'Koby',             anime: 'One Piece',                   neonClass: 'custom', neonA: '#EF7EF7', neonB: '#54FF1C', neonC: '#40B8FA', flickerDelay: '3.5s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FKoby.png?alt=media&token=32fcec7b-4c7c-49ed-aa38-1032b2206f06' },
-    { name: 'Sylphiette',       anime: 'Jobless Reincarnation',       neonClass: '2col',   neonA: '#5AF3C3', neonB: '#ffffff',                    flickerDelay: '5.2s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FSylphiette.png?alt=media&token=96397553-9423-4ec0-893e-632389077670' },
-    { name: 'Jotaro Kujo',      anime: "JoJo's Bizarre Adventure",    neonClass: 'custom', neonA: '#7B00D4', neonB: '#E2E207', neonC: '#3EFF05', flickerDelay: '7.0s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FJotaro%20Kujo.png?alt=media&token=5531c090-9a6b-409c-bc66-e5363c7948e6' },
-    { name: 'Fern',             anime: 'Frieren',                     neonClass: '2col',   neonA: '#7B00D4', neonB: '#ffffff',                    flickerDelay: '8.8s',  image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FFern.png?alt=media&token=6688dd12-da25-4d81-ad5f-a754899238b5' },
-    { name: 'Cell',             anime: 'Dragon Ball Z',               neonClass: '2col',   neonA: '#3EFF05', neonB: '#7B00D4',                    flickerDelay: '10.5s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FCell.png?alt=media&token=0a52e3c6-3927-446f-9d34-e8fb7dae7e52' },
-    { name: 'Kaiju No. 8',     anime: 'Kaiju No. 8',                 neonClass: '2col',   neonA: '#3DDFFF', neonB: '#ffffff',                    flickerDelay: '12.2s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FKaiju%20No.%208.png?alt=media&token=806a4d93-1663-405b-979f-8a320a2b0ec5' },
-    { name: 'Rei Ayanami',     anime: 'Neon Genesis Evangelion',     neonClass: '2col',   neonA: '#E99FB6', neonB: '#B2EDF7',                    flickerDelay: '13.9s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FRei%20Ayanami.png?alt=media&token=a3228a43-4208-4284-b808-0d683d513199' },
-    { name: 'Taro Sakamoto',   anime: 'Sakamoto Days',               neonClass: '2col',   neonA: '#3EFF05', neonB: '#E2E207',                    flickerDelay: '15.6s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FSakamoto.png?alt=media&token=0b201476-518a-4649-9ec3-8d936250b01b' },
-    { name: 'Akaza',           anime: 'Demon Slayer',                neonClass: '2col',   neonA: '#F902AD', neonB: '#00A3FF',                    flickerDelay: '17.3s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FAkaza.png?alt=media&token=5813a742-2c0f-45eb-8059-97f8e89caf0c' },
-    { name: 'Armored Titan',  anime: 'Attack on Titan',             neonClass: '2col',   neonA: '#FF1A1A', neonB: '#ffffff',                    flickerDelay: '19.0s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FArmored%20Titan.png?alt=media&token=a4f9db3c-955e-4f80-9108-64d088b30c6f' },
-    { name: 'Caiman',         anime: 'Dorohedoro',                  neonClass: '2col',   neonA: '#AAFF00', neonB: '#FF1A1A',                    flickerDelay: '20.7s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FCaiman-%20Dorohedoro.png?alt=media&token=f471d3eb-0b9b-4222-9612-789170d87b89' },
-    { name: 'Alphonse Elric', anime: 'Fullmetal Alchemist',         neonClass: '2col',   neonA: '#FF1A1A', neonB: '#ffffff',                    flickerDelay: '22.4s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FAlphonse%20Elric.png?alt=media&token=c8b66220-568c-445f-97a0-2bffb761f438' },
-    { name: 'Yami Sukehiro', anime: 'Black Clover',                neonClass: '2col',   neonA: '#3DDFFF', neonB: '#7B00D4',                    flickerDelay: '24.1s', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FEvents%2FNeon%2F2026%2FYami.png?alt=media&token=5a8bc348-cbe3-4d06-ae78-33a3f54c86d2' },
+    { name: 'Lucy',             anime: 'Cyberpunk: Edgerunners',      neonClass: '',       neonA: '#ff3fe3', neonB: '#01F9C6',                    flickerDelay: '0s',   image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Lucy.png' },
+    { name: 'Shinra Kusakabe', anime: 'Fire Force',                   neonClass: 'custom', neonA: '#FF2F09', neonB: '#FA9F2D', neonC: '#ECDCB9', flickerDelay: '1.8s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Fire%20Force%20Guy.png' },
+    { name: 'Koby',             anime: 'One Piece',                   neonClass: 'custom', neonA: '#EF7EF7', neonB: '#54FF1C', neonC: '#40B8FA', flickerDelay: '3.5s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Koby.png' },
+    { name: 'Sylphiette',       anime: 'Jobless Reincarnation',       neonClass: '2col',   neonA: '#5AF3C3', neonB: '#ffffff',                    flickerDelay: '5.2s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Sylphiette.png' },
+    { name: 'Jotaro Kujo',      anime: "JoJo's Bizarre Adventure",    neonClass: 'custom', neonA: '#7B00D4', neonB: '#E2E207', neonC: '#3EFF05', flickerDelay: '7.0s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Jotaro%20Kujo.png' },
+    { name: 'Fern',             anime: 'Frieren',                     neonClass: '2col',   neonA: '#7B00D4', neonB: '#ffffff',                    flickerDelay: '8.8s',  image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Fern.png' },
+    { name: 'Cell',             anime: 'Dragon Ball Z',               neonClass: '2col',   neonA: '#3EFF05', neonB: '#7B00D4',                    flickerDelay: '10.5s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Cell.png' },
+    { name: 'Kaiju No. 8',     anime: 'Kaiju No. 8',                 neonClass: '2col',   neonA: '#3DDFFF', neonB: '#ffffff',                    flickerDelay: '12.2s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Kaiju%20No.%208.png' },
+    { name: 'Rei Ayanami',     anime: 'Neon Genesis Evangelion',     neonClass: '2col',   neonA: '#E99FB6', neonB: '#B2EDF7',                    flickerDelay: '13.9s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Rei%20Ayanami.png' },
+    { name: 'Taro Sakamoto',   anime: 'Sakamoto Days',               neonClass: '2col',   neonA: '#3EFF05', neonB: '#E2E207',                    flickerDelay: '15.6s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Sakamoto.png' },
+    { name: 'Akaza',           anime: 'Demon Slayer',                neonClass: '2col',   neonA: '#F902AD', neonB: '#00A3FF',                    flickerDelay: '17.3s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Akaza.png' },
+    { name: 'Armored Titan',  anime: 'Attack on Titan',             neonClass: '2col',   neonA: '#FF1A1A', neonB: '#ffffff',                    flickerDelay: '19.0s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Armored%20Titan.png' },
+    { name: 'Caiman',         anime: 'Dorohedoro',                  neonClass: '2col',   neonA: '#AAFF00', neonB: '#FF1A1A',                    flickerDelay: '20.7s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Caiman-%20Dorohedoro.png' },
+    { name: 'Alphonse Elric', anime: 'Fullmetal Alchemist',         neonClass: '2col',   neonA: '#FF1A1A', neonB: '#ffffff',                    flickerDelay: '22.4s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Alphonse%20Elric.png' },
+    { name: 'Yami Sukehiro', anime: 'Black Clover',                neonClass: '2col',   neonA: '#3DDFFF', neonB: '#7B00D4',                    flickerDelay: '24.1s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Yami.png' },
 ];
 
 window._tcgRenderEventCardPreview = function() {
@@ -7437,7 +7477,7 @@ window._tcgRenderEventCardPreview = function() {
         <div style="isolation:isolate;">
           <div class="neon-event-frame rarity-pr wb-card--prismatic tcg-anim-in-view${extraClass}" style="${vars}">
             <div class="wb-card-inner">
-              <div class="wb-card-art"><img src="${card.image}" alt="${card.name}" loading="lazy"></div>
+              <div class="wb-card-art"><img src="${_toR2Url(card.image)}" alt="${card.name}" loading="lazy"></div>
               <div class="wb-card-header"><span class="wb-mark">WEEBEE</span><span class="wb-rarity-gem wb-rarity-gem--star">★</span></div>
               <div class="wb-card-footer">
                 <div class="wb-card-name">${card.name}</div>
@@ -7458,97 +7498,97 @@ window._tcgRenderEventCardPreview = function() {
 const TCG_FOUNDER_CARDS = [
     {
         id: 'oguri_cap', name: 'Oguri Cap', anime: 'Uma Musume Pretty Derby', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FUmamusame%2FUR%2FOguri%20Cap.gif?alt=media&token=647bece7-34a2-4a89-a021-ad2e54447c49',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Umamusame/UR/Oguri%20Cap.gif',
         founder: true,
     },
     {
         id: 'naruto', name: 'Naruto Uzumaki', anime: 'Naruto', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FNaruto.gif?alt=media&token=193d6d16-8d2e-46e1-92b9-7adfd776105e',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/UR/Naruto.gif',
         founder: true,
     },
     {
         id: 'choji', name: 'Choji Akimichi', anime: 'Naruto', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FChoji%202.gif?alt=media&token=0a6229cb-18a8-4830-913f-ae1844561d62',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/UR/Choji%202.gif',
         founder: true,
     },
     {
         id: 'brook', name: 'Brook', anime: 'One Piece', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FBrook%20Final.gif?alt=media&token=4ae1b6b5-aa68-4532-bdf3-8eb379afcf3e',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/UR/Brook%20Final.gif',
         founder: true,
     },
     {
         id: 'rengoku', name: 'Rengoku', anime: 'Demon Slayer', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDemon%20Slayer%2FUR%2FRengoku.gif?alt=media&token=1de76f06-87c5-4308-87ef-c589db038bea',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/UR/Rengoku.gif',
         founder: true,
     },
     {
         id: 'shoyo_hinata', name: 'Shoyo Hinata', anime: 'Haikyu', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHaikyuu%2FUR%2FShoyo%20Hinata.gif?alt=media&token=e59f3adf-76dc-49aa-97b2-fb6dc1f5d612',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/UR/Shoyo%20Hinata.gif',
         founder: true,
     },
     {
         id: 'alphonse_elric', name: 'Alphonse Elric', anime: 'Fullmetal Alchemist', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFullmetal%20Alchemist%2FUR%2FAlphonse%20Elric.gif?alt=media&token=cc3b3904-f07d-427a-867d-1e09ba20818b',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fullmetal%20Alchemist/UR/Alphonse%20Elric.gif',
         founder: true,
     },
     {
         id: 'makima', name: 'Makima', anime: 'Chainsaw Man', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FChainsaw%20Man%2FUR%2FMakima.gif?alt=media&token=ab92eb07-fbe0-4a92-9733-caf606be7e4c',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Chainsaw%20Man/UR/Makima.gif',
         founder: true,
     },
     {
         id: 'dreaded', name: 'Dreaded', anime: 'WeeBee Original', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDreaded%2Funnamed.jpg?alt=media&token=7c7e085e-d137-430b-8166-60594a3c866e',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dreaded/unnamed.jpg',
         founder: true,
     },
     {
         id: 'zoro', name: 'Zoro', anime: 'One Piece', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FZoro.gif?alt=media&token=710bba4f-247f-41a6-bb05-99275f98370a',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/UR/Zoro.gif',
         founder: true,
     },
     {
         id: 'luffy', name: 'Luffy', anime: 'One Piece', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FLuffy%20UR.gif?alt=media&token=1c145ceb-0a03-434b-9cb7-bb95cf257ae9',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/UR/Luffy%20UR.gif',
         founder: true,
     },
     {
         id: 'no_face', name: 'No Face', anime: 'Spirited Away', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSpirited%20Away%2FNo%20Face.gif?alt=media&token=bc7e49e4-c46d-4b80-8f14-8b718cb17e7b',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Spirited%20Away/No%20Face.gif',
         founder: true,
     },
     {
         id: 'sung_jinwoo', name: 'Sung Jinwoo', anime: 'Solo Leveling', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FSolo%20Leveling%2FUR%2FSung%20Jinwoo.gif?alt=media&token=b50514ce-3ebe-4d71-a692-eec8bdb89bd2',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Solo%20Leveling/UR/Sung%20Jinwoo.gif',
         founder: true,
     },
     {
         id: 'astro_boy', name: 'Astro Boy', anime: 'Astro Boy', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FAstro%20Boy%2FUR%2FAstro%20Boy.jpg?alt=media&token=3b5ca35a-ba28-434a-8deb-ea3131f87a6f',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Astro%20Boy/UR/Astro%20Boy.jpg',
         founder: true,
     },
     {
         id: 'arthur_boyle', name: 'Arthur Boyle', anime: 'Fire Force', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FFire%20Force%2FUR%2FArthur%20Boyle.gif?alt=media&token=470e5553-a04b-491e-a05b-c2e74a5e25c5',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fire%20Force/UR/Arthur%20Boyle.gif',
         founder: true,
     },
     {
         id: 'alucard', name: 'Alucard', anime: 'Hellsing Ultimate', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FHellsing%20Ultimate%2FUR%2FAlucard%202.gif?alt=media&token=d0419e6c-00ad-40ed-ad41-42501ff35ca4',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/UR/Alucard%202.gif',
         founder: true,
     },
     {
         id: 'gohan', name: 'Gohan', anime: 'Dragon Ball', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FUR%2FURGOHAN2-ezgif.com-crop.gif?alt=media&token=4c57b457-a91e-4dc8-af24-1eef3f09dca6',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/UR/URGOHAN2-ezgif.com-crop.gif',
         founder: true,
     },
     {
         id: 'hak', name: 'Hak', anime: 'Yona of the Dawn', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FYona%20of%20the%20Dawn%2FUR%2FHak.gif?alt=media&token=722fd585-e981-42d9-a259-6b2ce940d343',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Yona%20of%20the%20Dawn/UR/Hak.gif',
         founder: true,
     },
     {
         id: 'broly', name: 'Broly', anime: 'Dragon Ball Z', rarity: 'ur',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FDragon%20Ball%2FUR%2FBroly%20UR.gif?alt=media&token=80c0a30f-eba9-4f57-b402-366f79da335f',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/UR/Broly%20UR.gif',
         founder: true,
     },
 ];
@@ -8660,7 +8700,7 @@ const TCG_PACKS = [
         cost: 150,
         salePrice: 100,
         gradient: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FStandard%20Pack.png?alt=media&token=8db206cf-8f57-4c64-b3cf-d2b8316d7364',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Standard%20Pack.png',
         description: '5 cards · 1 guaranteed Rare+',
         odds: 'Common 90% · Rare 9.5%\nSR 0.4% · SSR 0.1%\nGuar slot: Rare 95% · SR 4.6% · SSR 0.4%\n+0.25% bonus UR chance per pack',
         guaranteedSR: false,
@@ -8671,7 +8711,7 @@ const TCG_PACKS = [
         cost: 750,
         salePrice: null,
         gradient: 'linear-gradient(135deg,#b45309,#f59e0b)',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Premium%20Pack.png',
         description: '5 cards · 1 guaranteed SR+',
         odds: 'Common 75% · Rare 21%\nSR 3.5% · SSR 0.5%\nGuaranteed: SR 96.5% · SSR 3.5%\n+0.5% bonus UR chance per pack',
         guaranteedSR: true,
@@ -8682,7 +8722,7 @@ const TCG_PACKS = [
         cost: 800,
         salePrice: null,
         gradient: 'linear-gradient(135deg,#92400e,#b45309)',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FBatch%202%20Premium%20Pack.png?alt=media&token=024ce78a-03a9-4de9-9d0e-ca1fd36c0dd3',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%202%20Premium%20Pack.png',
         description: '5 cards · 1 guaranteed SR+',
         odds: 'Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.5% UR bonus · 4:1 current batch',
         guaranteedSR: true,
@@ -8694,7 +8734,7 @@ const TCG_PACKS = [
         cost: 800,
         salePrice: null,
         gradient: 'linear-gradient(135deg,#065f46,#047857)',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FBatch%201%20Premium%20Pack.png?alt=media&token=00bbda25-324a-4a52-82b6-2c835fba84b6',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%201%20Premium%20Pack.png',
         description: 'Previous batch · 1 guaranteed SR+',
         odds: '',
         guaranteedSR: true,
@@ -8706,7 +8746,7 @@ const TCG_PACKS = [
         cost: 800,
         salePrice: null,
         gradient: 'linear-gradient(135deg,#ff3fe3,#7B2FBE,#01F9C6)',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FNeon%202026%20Pack.png?alt=media&token=e467dc4c-e687-4818-ae37-a19e0282f49c',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Neon%202026%20Pack.png',
         description: '5 cards · Rare/SR only · chance of Neon card',
         odds: 'Rare 70% · SR 26% · Neon 4%\n~1-in-5 chance of at least one Neon card per pack\nNo Common/SSR/UR · 1-in-100 chance for a Neon God Pack (5 Neon cards)',
         guaranteedSR: false,
@@ -8735,8 +8775,8 @@ const WHEEL_BASELINE_NON_UR = 33;
 // The card for a given calendar month is picked automatically based on how
 // many months have passed since the epoch below, cycling once the list ends.
 const WHEEL_MONTHLY_UR_BACKLOG = [
-    { name: 'Rock Lee', anime: 'Naruto', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FNaruto%2FUR%2FRock%20Lee.gif?alt=media&token=bb34d915-5b99-4f94-8d2c-9348ca1b2442' },
-    { name: 'Yamato', anime: 'One Piece', image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FOne%20Piece%2FUR%2FYamato%20Monthly%20UR.gif?alt=media&token=106c15ba-d550-4721-bbb4-b6b88b5204eb' },
+    { name: 'Rock Lee', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/UR/Rock%20Lee.gif' },
+    { name: 'Yamato', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/UR/Yamato%20Monthly%20UR.gif' },
 ];
 const WHEEL_UR_BACKLOG_EPOCH = { year: 2026, month: 6 }; // June 2026 = backlog[0]
 
@@ -12366,7 +12406,7 @@ window._tcgRenderStore = async function() {
         id: 'flex_soon',
         name: 'Mystery Event Pack',
         description: 'A new limited-time pack is on the way',
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FComing%20Soon%20Pack.png?alt=media&token=3bb755b3-a7f9-494d-852c-a0105bebd308',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Coming%20Soon%20Pack.png',
         odds: '',
         cost: 0,
         comingSoonLabel: 'Coming Soon',
@@ -12931,7 +12971,7 @@ function _tcgRenderBulkGridReveal(cards) {
         const back = document.createElement('div');
         back.className = 'tcg-flip-back';
         back.style.cssText = 'overflow:hidden;';
-        back.innerHTML = `<img src="https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FCard%20Back.png?alt=media&token=a9d2788e-cf42-4403-b757-26b1aa9ad7da" style="width:100%;height:100%;object-fit:cover;" draggable="false">`;
+        back.innerHTML = `<img src="https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Card%20Back.png" style="width:100%;height:100%;object-fit:cover;" draggable="false">`;
 
         const front = document.createElement('div');
         front.className = 'tcg-flip-front';
@@ -13125,7 +13165,7 @@ function _tcgShowPackSliceIntro(pack, onDone) {
     const cardFanY = [-140, -158, -168, -158, -140];  // reduced so cards stay on screen
     const cardFanR = [-14, -6, 0, 6, 14];
 
-    const cardBackImg = 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FCard%20Back.png?alt=media&token=a9d2788e-cf42-4403-b757-26b1aa9ad7da';
+    const cardBackImg = 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Card%20Back.png';
     const cardBacksHtml = cardFanX.map((_, i) => `
         <div class="psi-card" style="position:absolute;left:calc(50% - 44px);top:calc(50% - 175px);width:88px;height:123px;border-radius:7px;overflow:hidden;opacity:0;transform:translateX(0) translateY(0) rotate(0deg);z-index:10003;box-shadow:0 8px 24px rgba(0,0,0,0.7);pointer-events:none;">
             <img src="${cardBackImg}" style="width:100%;height:100%;object-fit:cover;" draggable="false">
@@ -13299,7 +13339,7 @@ window._tcgShowPackOpening = function(pack, cards, godPackTheme = null) {
                 back.innerHTML = `<div style="text-align:center;pointer-events:none;"><div style="font-size:30px;">⚜️</div><div style="font-size:9px;font-weight:900;letter-spacing:2px;color:#ffd700;margin-top:10px;font-family:Georgia,serif;text-shadow:0 0 8px rgba(251,191,36,0.8);">GOD PACK</div></div>`;
             } else {
                 back.style.cssText = 'overflow:hidden;';
-                back.innerHTML = `<img src="https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FCard%20Back.png?alt=media&token=a9d2788e-cf42-4403-b757-26b1aa9ad7da" style="width:100%;height:100%;object-fit:cover;" draggable="false">`;
+                back.innerHTML = `<img src="https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Card%20Back.png" style="width:100%;height:100%;object-fit:cover;" draggable="false">`;
             }
 
             const front = document.createElement('div');
@@ -13415,7 +13455,7 @@ function _tcgBuildCardFace(card) {
             card.neonC ? `--neon-c:${card.neonC}` : '',
             `--flicker-delay:${card.flickerDelay || '0s'}`,
         ].filter(Boolean).join(';');
-        const art = card.image ? `<img src="${card.image}" alt="${card.name}" onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
+        const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
         return `<div style="isolation:isolate;"><div class="neon-event-frame rarity-pr wb-card--prismatic tcg-anim-in-view${extraClass}" style="${vars}">
             <div class="wb-card-inner">
                 <div class="wb-card-header"><span class="wb-mark">WEEBEE</span><span class="wb-rarity-gem wb-rarity-gem--star">★</span></div>
@@ -13433,7 +13473,9 @@ function _tcgBuildCardFace(card) {
     const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'PR' }[rarity] || 'Common';
     const eName = (card.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const eAnime = (card.anime || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    const art = card.image ? `<img src="${card.image}" alt="${card.name}" onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
+    const _needsCache = card.image && !card.image.startsWith(_R2_PUBLIC_BASE) && !card.image.includes('firebasestorage.googleapis.com');
+    const _cacheAttrs = _needsCache ? ` data-char-cache="${(card.name+'|'+card.anime).replace(/"/g,'&quot;')}" onload="window._tcgLazyCacheCharacterImage('${eName}','${eAnime}',this.src)"` : '';
+    const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}"${_cacheAttrs} onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
     const gem = (rarity === 'sr' || rarity === 'ssr' || rarity === 'ur') ? `<span class="wb-rarity-gem"><span>⬡</span></span>` : (rarity === 'pr' ? `<span class="wb-rarity-gem wb-rarity-gem--star">★</span>` : `<span class="wb-rarity-gem">⬡</span>`);
     const maxV = card.maxVersions || RARITY_MAX_VERSIONS[rarity] || 5000;
     const serialInner = card.founder
@@ -14456,10 +14498,16 @@ window._tcgRenderMyMissingCards = async function(uid, filter) {
     }
 
     grid.innerHTML = filtered.map(card =>
-        `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;opacity:0.45;filter:grayscale(40%);">
-            <div class="tcg-card-scale-wrap" style="cursor:default;"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>
-            <div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">Not owned</div>
-        </div>`
+        (() => {
+            const safeName = (card.name||'').replace(/"/g,'&quot;');
+            const safeAnime = (card.anime||'').replace(/"/g,'&quot;');
+            const label = card.rarity === 'pr' ? '👥 See owners' : '🔢 View versions';
+            const tip   = card.rarity === 'pr' ? 'See who owns this card' : 'See who owns each version';
+            return `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;opacity:0.45;filter:grayscale(30%);">
+                <div class="tcg-card-scale-wrap" onclick="window._tcgOpenVersionsView(this.dataset.name,this.dataset.anime,this.dataset.rarity)" data-name="${safeName}" data-anime="${safeAnime}" data-rarity="${card.rarity}" style="cursor:pointer;" title="${tip}"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>
+                <div class="tcg-card-caption" style="font-size:11px;color:#3b82f6;font-weight:700;">${label}</div>
+            </div>`;
+        })()
     ).join('');
     _tcgObserveSSRCards(grid);
 };
@@ -14625,10 +14673,16 @@ window._tcgRenderMissingCards = async function(uid) {
     }
 
     grid.innerHTML = filtered.map(card =>
-        `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;opacity:0.45;filter:grayscale(40%);">
-            <div class="tcg-card-scale-wrap" style="cursor:default;"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>
-            <div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">Not owned</div>
-        </div>`
+        (() => {
+            const safeName = (card.name||'').replace(/"/g,'&quot;');
+            const safeAnime = (card.anime||'').replace(/"/g,'&quot;');
+            const label = card.rarity === 'pr' ? '👥 See owners' : '🔢 View versions';
+            const tip   = card.rarity === 'pr' ? 'See who owns this card' : 'See who owns each version';
+            return `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;opacity:0.45;filter:grayscale(30%);">
+                <div class="tcg-card-scale-wrap" onclick="window._tcgOpenVersionsView(this.dataset.name,this.dataset.anime,this.dataset.rarity)" data-name="${safeName}" data-anime="${safeAnime}" data-rarity="${card.rarity}" style="cursor:pointer;" title="${tip}"><div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div></div>
+                <div class="tcg-card-caption" style="font-size:11px;color:#3b82f6;font-weight:700;">${label}</div>
+            </div>`;
+        })()
     ).join('');
     _tcgObserveSSRCards(grid);
 };
@@ -18049,7 +18103,7 @@ window._tcgSelectWantedCard = function(snapId) {
     selectedEl.style.alignItems = 'center';
     selectedEl.style.gap = '12px';
     selectedEl.innerHTML = `
-        ${card.image ? `<img src="${card.image}" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:2px solid #0d9488;flex-shrink:0;" onerror="this.style.display='none'">` : '<div style="width:52px;height:52px;border-radius:8px;background:var(--bg-gray);flex-shrink:0;"></div>'}
+        ${card.image ? `<img src="${_toR2Url(card.image)}" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:2px solid #0d9488;flex-shrink:0;" onerror="this.style.display='none'">` : '<div style="width:52px;height:52px;border-radius:8px;background:var(--bg-gray);flex-shrink:0;"></div>'}
         <div style="flex:1;">
             <div style="font-size:11px;font-weight:800;color:#0d9488;margin-bottom:2px;">Selected card</div>
             <div style="font-size:14px;font-weight:800;color:var(--text-dark);">${card.name}</div>
@@ -19796,9 +19850,7 @@ window.submitGeneralPost = async function() {
         if (fileInput?.files[0]) {
             if (submitBtn) submitBtn.textContent = 'Uploading...';
             const compressed = await compressBanner(fileInput.files[0], 1200, 0.88);
-            const sRef = storageRef(storage, `post_images/${auth.currentUser.uid}/${Date.now()}.jpg`);
-            await uploadBytes(sRef, compressed);
-            imageUrl = await getDownloadURL(sRef);
+            imageUrl = await _uploadToR2(compressed, `post_images/${auth.currentUser.uid}/${Date.now()}.jpg`);
         }
         const _gpSpoiler = !!(document.getElementById('general-post-spoiler')?.checked);
         const _gpSpoilerHint = _gpSpoiler ? (document.getElementById('gp-spoiler-hint')?.value.trim() || '') : '';
@@ -29747,7 +29799,7 @@ function _pvpRecentBattleHTML(c, myUid) {
     const theirScore = iAmChallenger ? c.result?.defenderScore : c.result?.challengerScore;
     const myParty = _pvpSortParty(iAmChallenger ? (c.challengerParty || []) : (c.defenderParty || []));
     const theirParty = _pvpSortParty(iAmChallenger ? (c.defenderParty || []) : (c.challengerParty || []));
-    const cardThumb = card => `<img src="${card.image||''}" title="${card.name}" style="width:38px;height:52px;object-fit:cover;object-position:top;border-radius:5px;border:2px solid ${rarityBorderColor(card.rarity)};flex-shrink:0;" onerror="this.style.display='none'">`;
+    const cardThumb = card => `<img src="${_toR2Url(card.image||'')}" title="${card.name}" style="width:38px;height:52px;object-fit:cover;object-position:top;border-radius:5px;border:2px solid ${rarityBorderColor(card.rarity)};flex-shrink:0;" onerror="this.style.display='none'">`;
     const wagerNote = c.battleType === 'amber' && c.amberWager
         ? ` · <span style="color:${iWon?'#4caf50':'#f44336'};font-weight:700;">${iWon?'+':'-'}${c.amberWager} 🟡</span>` : '';
     return `<div onclick="window._pvpReplayBattle('${c.id}')" style="background:var(--bg-gray);border-radius:14px;padding:14px 16px;margin-bottom:8px;cursor:pointer;border-left:4px solid ${iWon?'#4caf50':'#f44336'};">
@@ -30161,7 +30213,7 @@ window._pvpShowAcceptWagerCards = async function _pvpShowAcceptWagerCards(contai
                     const rc = rarityBorderColor(card.rarity);
                     const border = isSel ? '#a855f7' : rc;
                     const ver = card.rarity !== 'pr' && card.serial != null ? `<div style="color:rgba(255,255,255,0.45);font-size:8px;">#${card.serial}${(card.edition||1)>1?` · Ed.${card.edition}`:''}</div>` : '';
-                    return `<div onclick="window._pvpToggleAcceptWagerCard('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;"><div style="height:100%;position:relative;"><img src="${card.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager"><div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div><div style="color:${rc};">${rarityLabels[card.rarity]||card.rarity}</div>${ver}</div>${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:#a855f7;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}</div></div>`;
+                    return `<div onclick="window._pvpToggleAcceptWagerCard('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;"><div style="height:100%;position:relative;"><img src="${_toR2Url(card.image||'')}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager"><div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div><div style="color:${rc};">${rarityLabels[card.rarity]||card.rarity}</div>${ver}</div>${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:#a855f7;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}</div></div>`;
                 }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">No cards match your search.</div>`}
             </div>
             <div style="display:flex;gap:8px;">
@@ -30224,7 +30276,7 @@ async function _pvpShowAcceptParty(container, c) {
                     const isCombo = isSel && selCards.filter(x => x.id !== card.id && x.anime === card.anime && card.anime).length > 0;
                     const rc = rarityBorderColor(card.rarity);
                     const border = isCombo ? '#a855f7' : isSel ? 'var(--accent-yellow)' : rc;
-                    return `<div onclick="window._pvpToggleAcceptParty('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;"><div style="height:100%;position:relative;"><img src="${card.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager"><div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div><div style="color:${isCombo?'#d8a4ff':rc};">${rarityLabels[card.rarity]||card.rarity} · ⚡${_pvpCardPower(card)}</div></div>${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:${isCombo?'#a855f7':'var(--accent-yellow)'};color:${isCombo?'#fff':'#222'};font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}${isCombo?`<div style="position:absolute;top:4px;left:4px;background:#a855f7;color:#fff;font-size:8px;font-weight:900;padding:2px 4px;border-radius:3px;">COMBO</div>`:''}</div></div>`;
+                    return `<div onclick="window._pvpToggleAcceptParty('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:3px solid ${border};background:var(--bg-gray);position:relative;height:100%;"><div style="height:100%;position:relative;"><img src="${_toR2Url(card.image||'')}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="eager"><div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.78);color:#fff;font-size:9px;padding:3px 5px;text-align:center;"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div><div style="color:${isCombo?'#d8a4ff':rc};">${rarityLabels[card.rarity]||card.rarity} · ⚡${_pvpCardPower(card)}</div></div>${isSel?`<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:${isCombo?'#a855f7':'var(--accent-yellow)'};color:${isCombo?'#fff':'#222'};font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>`:''}${isCombo?`<div style="position:absolute;top:4px;left:4px;background:#a855f7;color:#fff;font-size:8px;font-weight:900;padding:2px 4px;border-radius:3px;">COMBO</div>`:''}</div></div>`;
                 }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">No cards match your search.</div>`}
             </div>
             <div style="display:flex;gap:8px;">
@@ -30385,7 +30437,7 @@ window._pvpPlayBattleAnimation = function(challenge, viewerUid) {
 
     const cardThumb = (card, dim = false) => `
         <div class="pvp-card-thumb" style="width:72px;flex-shrink:0;">
-            <img src="${card.image||''}" class="pvp-card-thumb-img" style="width:72px;height:98px;object-fit:cover;border-radius:8px;border:2px solid rgba(255,255,255,0.15);display:block;${dim?'opacity:0.35;filter:grayscale(0.6);':''}">
+            <img src="${_toR2Url(card.image||'')}" class="pvp-card-thumb-img" style="width:72px;height:98px;object-fit:cover;border-radius:8px;border:2px solid rgba(255,255,255,0.15);display:block;${dim?'opacity:0.35;filter:grayscale(0.6);':''}">
             <div style="font-size:9px;color:rgba(255,255,255,0.6);text-align:center;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name}</div>
         </div>`;
 
@@ -30468,7 +30520,7 @@ window._pvpRunCloudAnimation = function() {
         const py = (Math.random()-0.5)*200;
         const pr = (Math.random()-0.5)*40;
         peek.style.cssText = `position:absolute;left:50%;top:50%;width:54px;height:74px;margin-left:-27px;margin-top:-37px;border-radius:6px;overflow:hidden;pointer-events:none;--px:${px}px;--py:${py}px;--pr:${pr}deg;animation:pvp-card-peek 1s ease-in-out forwards;border:2px solid rgba(255,255,255,0.6);`;
-        peek.innerHTML = `<img src="${card.image||''}" style="width:100%;height:100%;object-fit:cover;">`;
+        peek.innerHTML = `<img src="${_toR2Url(card.image||'')}" style="width:100%;height:100%;object-fit:cover;">`;
         stage.appendChild(peek);
         setTimeout(() => peek.remove(), 1100);
     }, 600);
@@ -30579,3 +30631,4 @@ window._pvpChallengeFromProfile = function(targetUid, targetName, targetAvatar) 
         const { score } = JSON.parse(saved);
     }
 })();
+

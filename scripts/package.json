@@ -4,6 +4,7 @@
   "description": "One-time admin scripts for WeeBee",
   "main": "scrape-filler.js",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1096.0",
     "cheerio": "^1.0.0",
     "firebase-admin": "^12.0.0"
   }
