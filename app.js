@@ -56,7 +56,7 @@ function _toR2Url(url) {
 }
 
 const _R2_UPLOAD_URL = 'https://weebee-upload.weebee.workers.dev';
-const _R2_UPLOAD_SECRET = 'FqRdyyngrq9g4dg5Q3gkLY7bmFRvfk';
+const _R2_UPLOAD_SECRET = 'iosdjuvdn86787sdvkiojsnsxios67scsccse';
 const _R2_PUBLIC_BASE = 'https://pub-b241667abcf649f48658584322a083c1.r2.dev';
 
 function _r2SanitizePath(s) {
