@@ -9197,7 +9197,7 @@ window._wheelAdminGrantUR = async function() {
             name: ur.name, anime: ur.anime, rarity: 'ur', image: ur.image,
             monthlyUr: true, stampText, serial: null, edition: null, pulledAt: serverTimestamp(),
         });
-        window._tcgCollectionCache.delete(uid);
+        window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
         alert(`Granted ${ur.name} (${stampText}) to your collection.`);
     } catch(e) { alert('Grant failed: ' + e.message); }
 };
@@ -9255,7 +9255,7 @@ window._wheelAdminRemoveLastUR = async function() {
         if (!snap.empty) {
             const sorted = snap.docs.slice().sort((a, b) => (b.data().pulledAt?.toMillis?.() ?? 0) - (a.data().pulledAt?.toMillis?.() ?? 0));
             await deleteDoc(sorted[0].ref);
-            window._tcgCollectionCache.delete(uid);
+            window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
         }
 
         // Step 2: always restore the UR slot in wheel_state
@@ -10126,7 +10126,7 @@ window._tcgDeduplicateCollections = async function(dryRun = true) {
                 report.push(`${uid}: ${toDelete.length} dupe(s) — ${toDelete.map(c => `${c.name} (${c.rarity} #${c.serial ?? '?'})`).join(', ')}`);
                 if (!dryRun) {
                     await Promise.all(toDelete.map(c => deleteDoc(c.ref)));
-                    window._tcgCollectionCache.delete(uid);
+                    window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
                     totalDeleted += toDelete.length;
                 }
             }
@@ -10236,7 +10236,7 @@ window._tcgDeleteDupeCopy = async function(refPath, uid, rowIndex) {
     if (!confirm(`Delete this copy from ${uid}? This cannot be undone.`)) return;
     try {
         await deleteDoc(doc(db, refPath));
-        window._tcgCollectionCache?.delete(uid);
+        window._tcgCollectionCache?.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
         const row = document.getElementById(`crossdupe-row-${rowIndex}`);
         if (row) row.innerHTML = `<div style="font-size:12px;color:#22c55e;font-weight:700;padding:4px 0;">✅ Deleted — dupe resolved.</div>`;
     } catch(e) { alert('Failed to delete: ' + e.message); }
@@ -10448,7 +10448,7 @@ async function _wheelGrantReward(uid, section) {
                 await _tcgEnsureCardPool();
                 const cards = _tcgRollPackCards(pack);
                 const enriched = await _withTimeout(_tcgSavePackToCollection(uid, cards), 15000, 'Pack save');
-                window._tcgCollectionCache.delete(uid);
+                window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
                 window._wheelPendingPackReveal = { pack, cards: enriched };
                 return true;
             } catch(e) {
@@ -10468,7 +10468,7 @@ async function _wheelGrantReward(uid, section) {
                     name: ur.name || 'Monthly UR', anime: ur.anime || '', rarity: 'ur', image: ur.image || '',
                     monthlyUr: true, stampText, serial: null, edition: null, pulledAt: serverTimestamp(),
                 });
-                window._tcgCollectionCache.delete(uid);
+                window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
                 await updateDoc(doc(db, 'wheel_state', uid), { pendingUrClaim: false }).catch(() => {});
                 return true;
             } catch(e) { console.error('Monthly UR grant failed:', e); return false; }
@@ -11387,8 +11387,30 @@ window._tcgSRPool = null;
 window._tcgSSRPool = null;
 window._tcgURPool = null;
 
+const _TCG_POOL_CACHE_KEY = 'tcg_card_pool_v1';
+const _TCG_POOL_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
+
 async function _tcgEnsureCardPool() {
     if (window._tcgRarePool && window._tcgCommonPool && window._tcgSRPool && window._tcgSSRPool && window._tcgURPool && window._tcgPrismaticPool && window._tcgNeonPool) return;
+
+    // Try localStorage cache first
+    try {
+        const raw = localStorage.getItem(_TCG_POOL_CACHE_KEY);
+        if (raw) {
+            const { ts, data } = JSON.parse(raw);
+            if (Date.now() - ts < _TCG_POOL_CACHE_TTL) {
+                window._tcgRarePool      = data.rare;
+                window._tcgCommonPool    = data.common;
+                window._tcgSRPool        = data.sr;
+                window._tcgSSRPool       = data.ssr;
+                window._tcgURPool        = data.ur;
+                window._tcgPrismaticPool = data.pr;
+                window._tcgNeonPool      = data.nr;
+                return;
+            }
+        }
+    } catch {}
+
     try {
         const [rareSnap, commonSnap, srSnap, ssrSnap, urSnap, prSnap, nrSnap] = await Promise.all([
             getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'rare'),   limit(2000))),
@@ -11413,6 +11435,14 @@ async function _tcgEnsureCardPool() {
         urSnap.forEach(d  => { const c = d.data(); if (c.name && c.image && !c.imageBroken) window._tcgURPool.push(c); });
         prSnap.forEach(d  => { const c = d.data(); if (c.name && c.image && !c.imageBroken) window._tcgPrismaticPool.push(c); });
         nrSnap.forEach(d  => { const c = d.data(); if (c.name && c.image && !c.imageBroken) window._tcgNeonPool.push(c); });
+
+        // Persist to localStorage so refreshes don't re-read Firestore
+        try {
+            localStorage.setItem(_TCG_POOL_CACHE_KEY, JSON.stringify({
+                ts: Date.now(),
+                data: { rare: window._tcgRarePool, common: window._tcgCommonPool, sr: window._tcgSRPool, ssr: window._tcgSSRPool, ur: window._tcgURPool, pr: window._tcgPrismaticPool, nr: window._tcgNeonPool }
+            }));
+        } catch {}
     } catch(e) { window._tcgRarePool = []; window._tcgCommonPool = []; window._tcgSRPool = []; window._tcgSSRPool = []; window._tcgURPool = []; window._tcgPrismaticPool = []; window._tcgNeonPool = []; }
 }
 
@@ -14055,7 +14085,7 @@ window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
             });
         }
 
-        window._tcgCollectionCache.delete(uid);
+        window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
         if (profileUid) {
             const el = document.getElementById('user-tcg-binders-container');
             if (el) await window._tcgRenderProfileBindersList(el, profileUid);
@@ -14942,7 +14972,7 @@ window._tcgSmartDismantleModal = async function(uid) {
             }
             if (total > 0) await _awardAmber(total, 'tcg:dismantle');
             _incrementUserStats({ cardsDismantled: toDismantle.length }).catch(() => {});
-            window._tcgCollectionCache.delete(uid);
+            window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
             document.getElementById('smart-dismantle-modal')?.remove();
             window._tcgRenderMyCollection('mycards', true);
         } catch(e) {
@@ -15000,7 +15030,7 @@ window._tcgBulkDismantle = async function(uid, profileUid) {
             });
             await batch.commit();
         }
-        window._tcgCollectionCache.delete(uid);
+        window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
         window._tcgMultiSelect.active = false;
         window._tcgMultiSelect.selected.clear();
         if (profileUid) {
@@ -15051,13 +15081,35 @@ window._tcgBulkPin = async function(uid, profileUid) {
 };
 
 window._tcgCollectionCache = new Map();
+const _TCG_COLL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 async function _tcgLoadCollection(uid, forceRefresh = false) {
-    if (window._tcgCollectionCache.has(uid) && !forceRefresh) return window._tcgCollectionCache.get(uid);
+    if (!forceRefresh && window._tcgCollectionCache.has(uid)) return window._tcgCollectionCache.get(uid);
+
+    // localStorage cache for the logged-in user's own collection only
+    if (!forceRefresh && auth.currentUser?.uid === uid) {
+        try {
+            const raw = localStorage.getItem(`tcg_coll_${uid}`);
+            if (raw) {
+                const { ts, cards } = JSON.parse(raw);
+                if (Date.now() - ts < _TCG_COLL_CACHE_TTL) {
+                    window._tcgCollectionCache.set(uid, cards);
+                    return cards;
+                }
+            }
+        } catch {}
+    }
+
     const snap = await getDocs(collection(db, 'card_collections', uid, 'cards'));
     const cards = [];
     snap.forEach(d => cards.push({ ...d.data(), id: d.id }));
     window._tcgCollectionCache.set(uid, cards);
+
+    // Persist own collection to localStorage
+    if (auth.currentUser?.uid === uid) {
+        try { localStorage.setItem(`tcg_coll_${uid}`, JSON.stringify({ ts: Date.now(), cards })); } catch {}
+    }
+
     return cards;
 }
 
@@ -15080,7 +15132,7 @@ window._tcgSyncCollectionArt = async function() {
                 updated++;
             }
         }
-        window._tcgCollectionCache.delete(uid);
+        window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
         if (btn) { btn.disabled = false; btn.textContent = 'Sync Card Art'; }
         alert(updated ? `Updated art for ${updated} card${updated === 1 ? '' : 's'}.` : 'All card art is already up to date.');
         window._tcgRenderMyCollection('mycards', true);
@@ -15884,7 +15936,7 @@ window._tcgUpdateTradeSummary = function() {
 
 // Filter/sort controls for each side of the trade picker (mirrors the
 // collection page's rarity filters + sort dropdown).
-const TCG_TRADE_RARITY_ORDER = { ur:-2, pr:-1, ssr:0, sr:1, rare:2, common:3 };
+const TCG_TRADE_RARITY_ORDER = { ur:-2, pr:-1, nr:-1, ssr:0, sr:1, rare:2, common:3 };
 
 function _tcgTradeSideFilteredCards(side) {
     const ctx = window._tcgTradeContext;
@@ -15897,7 +15949,7 @@ function _tcgTradeSideFilteredCards(side) {
     const showDupes = !!state[`${side}Dupes`];
     const dupeIdSet = showDupes ? _tcgDupeIds(cards) : null;
     const batchF = state[`${side}Batch`] || 'all';
-    return (filter === 'all' ? [...cards] : cards.filter(c => c.rarity === filter))
+    return (filter === 'all' ? [...cards] : cards.filter(c => filter === 'pr' ? (c.rarity === 'pr' || c.rarity === 'nr') : c.rarity === filter))
         .filter(c => batchF === 'all' || _tcgCardBatch(c) === (batchF === 'b2' ? 2 : 1))
         .filter(c => !search || (c.name||'').toLowerCase().includes(search) || (c.anime||'').toLowerCase().includes(search))
         .filter(c => !dupeIdSet || dupeIdSet.has(c.id))
@@ -15973,7 +16025,7 @@ function _tcgTradeSideHTML(side) {
     const sort = state[`${side}Sort`];
     const search = state[`${side}Search`] || '';
 
-    const counts = { ur:0, ssr:0, sr:0, rare:0, common:0, pr:0 };
+    const counts = { ur:0, ssr:0, sr:0, rare:0, common:0, pr:0, nr:0 };
     cards.forEach(c => { if (c.rarity in counts) counts[c.rarity]++; });
 
     return `
@@ -16377,7 +16429,7 @@ async function _tcgApplyTradeSide(uid, removeIds, addCards) {
             await addDoc(collection(db,'card_collections',uid,'cards'), cardToWrite);
         } catch(e) {}
     }
-    window._tcgCollectionCache.delete(uid);
+    window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
 }
 
 // Confirms every card id in `cardIds` still exists in `uid`'s collection
@@ -16737,7 +16789,7 @@ window._auctionProcessPendingDeliveries = async function() {
                 await deleteDoc(d.ref);
             } catch(e) { console.warn('[AuctionDelivery] Failed to deliver', d.id, e.message); }
         }
-        window._tcgCollectionCache.delete(uid);
+        window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
     } catch(e) { console.warn('[AuctionDelivery]', e.message); }
 };
 
@@ -29136,7 +29188,7 @@ window._dungeonClaim = async function() {
             await _awardAmber(state.reward, `dungeon:${state.gateId}:${state.success?'success':'fail'}`);
             if (state.bonusCards?.length) {
                 await _tcgSavePackToCollection(uid, state.bonusCards);
-                window._tcgCollectionCache.delete(uid);
+                window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
             }
             if (state.success) {
                 const droppedItem = _dungeonRollItemDrop(state.gateId);
@@ -30345,7 +30397,7 @@ window._pvpSubmitAccept = async function() {
         await _pvpUpdateStats(uid, myProfile.displayName || auth.currentUser.displayName, myProfile.avatar || auth.currentUser.photoURL, winner === 'defender', dScore, cScore, c, rounds, 'defender');
 
         // Invalidate card collection cache for card battles
-        if (c.battleType === 'card') window._tcgCollectionCache?.delete(uid);
+        if (c.battleType === 'card') window._tcgCollectionCache?.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
 
         document.getElementById('pvp-accept-modal')?.remove();
 
