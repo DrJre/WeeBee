@@ -67,6 +67,8 @@ const _tcgCharImgCacheInFlight = new Set();
 async function _tcgLazyCacheCharacterImage(name, anime, sourceUrl) {
     const cacheKey = `${name}|${anime}`;
     if (_tcgCharImgCacheInFlight.has(cacheKey)) return;
+    // Skip if we've already confirmed this source can't be fetched server-side
+    try { if (localStorage.getItem(`tcg_img_skip_${cacheKey}`)) return; } catch {}
     _tcgCharImgCacheInFlight.add(cacheKey);
     try {
         const r2Key = `tcg-art/characters/${_r2SanitizePath(anime)}/${_r2SanitizePath(name)}.jpg`;
@@ -75,14 +77,18 @@ async function _tcgLazyCacheCharacterImage(name, anime, sourceUrl) {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_R2_UPLOAD_SECRET}` },
             body: JSON.stringify({ key: r2Key, sourceUrl }),
         });
-        if (!resp.ok) { _tcgCharImgCacheInFlight.delete(cacheKey); return; }
+        if (!resp.ok) {
+            // Mark as unfetchable so we never retry this card
+            try { localStorage.setItem(`tcg_img_skip_${cacheKey}`, '1'); } catch {}
+            return;
+        }
         const { url } = await resp.json();
         // Update Firestore so future loads use R2 directly
         const snap = await getDocs(query(collection(db, 'characters'), where('name', '==', name), where('anime', '==', anime), limit(1)));
         if (!snap.empty) updateDoc(snap.docs[0].ref, { image: url });
         // Swap any visible card images to R2 immediately
         document.querySelectorAll(`img[data-char-cache="${CSS.escape(cacheKey)}"]`).forEach(img => { img.src = url; });
-    } catch { _tcgCharImgCacheInFlight.delete(cacheKey); }
+    } catch {}
 }
 window._tcgLazyCacheCharacterImage = _tcgLazyCacheCharacterImage;
 
@@ -8777,6 +8783,7 @@ const WHEEL_BASELINE_NON_UR = 33;
 const WHEEL_MONTHLY_UR_BACKLOG = [
     { name: 'Rock Lee', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/UR/Rock%20Lee.gif' },
     { name: 'Yamato', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/UR/Yamato%20Monthly%20UR.gif' },
+    { name: 'Zenitsu', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/UR/Zenitsu.gif' },
 ];
 const WHEEL_UR_BACKLOG_EPOCH = { year: 2026, month: 6 }; // June 2026 = backlog[0]
 
@@ -13757,7 +13764,7 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
             ${!isPR ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                 <div><strong>Version:</strong> ${versionText}</div>
                 ${!(card.monthlyUr||card.tradedMonthlyUr) && !card.founder && card.serial != null ? `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="${card.rarity||''}" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">🔢 View All Versions</button>` : ''}
-            </div>` : `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="pr" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">👑 View All Owners</button>`}
+            </div>` : `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="${card.rarity||'pr'}" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">👑 View All Owners</button>`}
             <div><strong>Owner:</strong> <span onclick="document.getElementById('tcg-card-viewer-modal').remove();viewUserProfile('${safeOwnerUid}')" style="cursor:pointer;color:#f59e0b;font-weight:700;">${ownerName}</span></div>
         </div>
         <button onclick="navigator.clipboard.writeText('${shareUrl}').then(()=>alert('Link copied! Anyone you send it to can view this card.')).catch(()=>alert('Could not copy link'))" style="width:100%;padding:10px 22px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">🔗 Copy Share Link</button>`;
@@ -13779,8 +13786,8 @@ window._tcgOpenVersionsView = function(name, anime, rarity) {
 
 window._tcgLoadVersionsView = async function(el, name, anime, rarity) {
     const maxSerial = _VERSIONS_MAX[rarity] || 500;
-    const rarityLabel = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' }[rarity] || rarity.toUpperCase();
-    const rarityColor = { ur:'#ff4dff', ssr:'#00d4ff', sr:'#8b5cf6', rare:'#f59e0b', common:'#9aa1a8', pr:'#e879f9' }[rarity] || '#aaa';
+    const rarityLabel = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event', nr:'Event' }[rarity] || rarity.toUpperCase();
+    const rarityColor = { ur:'#ff4dff', ssr:'#00d4ff', sr:'#8b5cf6', rare:'#f59e0b', common:'#9aa1a8', pr:'#e879f9', nr:'#e879f9' }[rarity] || '#aaa';
 
     el.innerHTML = `<div style="padding:24px 16px;max-width:960px;margin:0 auto;">
         <button onclick="switchView('tcg-view')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:24px;">← TCG Store</button>
@@ -13854,8 +13861,8 @@ window._tcgLoadVersionsView = async function(el, name, anime, rarity) {
             sampleCard = _tcgFullCardPool().find(c => c.name === name && c.anime === anime && c.rarity === rarity) || null;
         }
 
-        // Event (PR) cards — no serial limit, no serial numbers; show all collectors in pull order
-        if (rarity === 'pr') {
+        // Event (PR/NR) cards — no serial limit, no serial numbers; show all collectors in pull order
+        if (rarity === 'pr' || rarity === 'nr') {
             const eventOwners = [];
             snap.forEach(d => {
                 const data = d.data();
