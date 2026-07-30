@@ -1328,6 +1328,8 @@ exports.adminGiftGodPack = onRequest({ invoker: 'public' }, async (req, res) => 
 // ── TCG Community Boss ─────────────────────────────────────────────────────
 
 const BOSS_CARD_DAMAGE_CF = { common: 10, rare: 30, sr: 150, ssr: 500, ur: 2000, pr: 800 };
+const BOSS_CRIT_RATES    = { ssr: 0.20, ur: 0.25 }; // 20% SSR, 25% UR → 2× damage on crit
+const BOSS_ANIME_MATCH_MULT = 1.5;                   // +50% if card anime matches the boss
 
 exports.attackBoss = onRequest({ invoker: 'public' }, async (req, res) => {
     setCORS(res);
@@ -1362,11 +1364,21 @@ exports.attackBoss = onRequest({ invoker: 'public' }, async (req, res) => {
     const cardSnaps = await Promise.all(cardRefs.map(r => r.get()));
     if (cardSnaps.some(s => !s.exists)) return sendErr(res, 400, 'FAILED_PRECONDITION', 'One or more selected cards were not found.');
 
-    const totalDamage = cardSnaps.reduce((sum, s) => sum + (BOSS_CARD_DAMAGE_CF[s.data().rarity] || 0), 0);
-    const attackedCards = cardSnaps.map(s => ({
-        id: s.id, name: s.data().name, rarity: s.data().rarity, image: s.data().image,
-        damage: BOSS_CARD_DAMAGE_CF[s.data().rarity] || 0,
-    }));
+    const attackedCards = cardSnaps.map(s => {
+        const data = s.data();
+        const baseDamage = BOSS_CARD_DAMAGE_CF[data.rarity] || 0;
+        const critRate = BOSS_CRIT_RATES[data.rarity] || 0;
+        const isCrit = critRate > 0 && Math.random() < critRate;
+        const isAnimeMatch = !!(boss.anime && data.anime &&
+            data.anime.trim().toLowerCase() === boss.anime.trim().toLowerCase());
+        let finalDamage = isCrit ? baseDamage * 2 : baseDamage;
+        if (isAnimeMatch) finalDamage = Math.round(finalDamage * BOSS_ANIME_MATCH_MULT);
+        return {
+            id: s.id, name: data.name, rarity: data.rarity, image: data.image, anime: data.anime,
+            baseDamage, isCrit, isAnimeMatch, damage: finalDamage,
+        };
+    });
+    const totalDamage = attackedCards.reduce((sum, c) => sum + c.damage, 0);
 
     let newHp = 0, bossDefeated = false, userError = null;
 
@@ -1395,7 +1407,7 @@ exports.attackBoss = onRequest({ invoker: 'public' }, async (req, res) => {
     }
 
     if (userError) return sendErr(res, ...userError);
-    res.json({ result: { success: true, damage: totalDamage, hpRemaining: newHp, bossDefeated } });
+    res.json({ result: { success: true, damage: totalDamage, hpRemaining: newHp, bossDefeated, cards: attackedCards } });
 });
 
 exports.claimBossReward = onRequest({ invoker: 'public' }, async (req, res) => {

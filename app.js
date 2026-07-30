@@ -27922,11 +27922,13 @@ function _bossRender(el, boss, userAttacks, leaderboard, lbMode) {
 
     el.innerHTML = `
         <div style="margin-bottom:24px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
-            <!-- Boss Banner -->
-            <div style="position:relative;min-height:220px;background:linear-gradient(135deg,rgba(15,0,30,0.95) 0%,rgba(40,0,60,0.9) 100%);">
-                <img src="${boss.image}" alt="${boss.name}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;opacity:0.35;" onerror="this.style.display='none'">
-                <div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,0.85) 100%);pointer-events:none;"></div>
-                <div style="position:relative;z-index:1;padding:24px 24px 20px;display:flex;flex-direction:column;justify-content:flex-end;min-height:220px;">
+            <!-- Boss Banner: portrait on right, text on left -->
+            <div style="position:relative;min-height:200px;background:linear-gradient(135deg,rgba(15,0,30,0.97) 0%,rgba(40,0,60,0.92) 100%);display:flex;overflow:hidden;">
+                ${boss.image ? `<div style="position:absolute;right:0;top:0;bottom:0;width:min(240px,52%);overflow:hidden;pointer-events:none;">
+                    <img src="${boss.image}" alt="${boss.name}" style="width:100%;height:100%;object-fit:cover;object-position:top center;" onerror="this.style.display='none'">
+                    <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(15,0,30,1) 0%,rgba(15,0,30,0.55) 30%,rgba(15,0,30,0.1) 65%,transparent 100%);"></div>
+                </div>` : ''}
+                <div style="position:relative;z-index:1;padding:24px 24px 20px;display:flex;flex-direction:column;justify-content:flex-end;min-height:200px;flex:1;max-width:65%;">
                     <div style="font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:4px;">⚔️ Community Boss</div>
                     <div style="font-size:28px;font-weight:900;color:white;line-height:1.1;margin-bottom:2px;">${boss.name}</div>
                     <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:12px;">${boss.anime}</div>
@@ -28045,18 +28047,22 @@ function _bossRenderPicker(modal) {
     const RARITY_COLORS = { ur:'#c084fc', ssr:'#f59e0b', sr:'#60a5fa', rare:'#4ade80', common:'#9ca3af', pr:'#f97316' };
 
     const cardGrid = sorted.map(c => {
-        const isSel  = selected.has(c.id);
-        const dmg    = _bossCardDamage(c);
+        const isSel      = selected.has(c.id);
+        const dmg        = _bossCardDamage(c);
+        const hasCrit    = c.rarity === 'ssr' || c.rarity === 'ur';
+        const hasMatch   = boss?.anime && c.anime && c.anime.trim() === boss.anime.trim();
         const border = isSel ? '2px solid #FFD700' : '1px solid transparent';
         const bg     = isSel ? 'rgba(255,215,0,0.12)' : 'transparent';
         return `<div onclick="window._bossToggleCard('${c.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:${border};background:${bg};padding:4px;transition:border .12s,background .12s;">
             <div style="position:relative;aspect-ratio:3/4;overflow:hidden;border-radius:8px;margin-bottom:4px;">
                 <img src="${c.image}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
                 <div style="position:absolute;top:4px;right:4px;padding:2px 6px;border-radius:6px;background:rgba(0,0,0,0.7);font-size:10px;font-weight:900;color:${RARITY_COLORS[c.rarity]||'#fff'};">${_bossRarityLabel(c.rarity)}</div>
+                ${hasCrit ? `<div style="position:absolute;top:4px;left:4px;padding:2px 5px;border-radius:5px;background:rgba(0,0,0,0.75);font-size:9px;font-weight:900;color:#f59e0b;">⚡ CRIT?</div>` : ''}
+                ${hasMatch ? `<div style="position:absolute;bottom:4px;left:4px;padding:2px 5px;border-radius:5px;background:rgba(0,0,0,0.75);font-size:9px;font-weight:900;color:#22c55e;">🎯 MATCH</div>` : ''}
                 ${isSel ? `<div style="position:absolute;inset:0;background:rgba(255,215,0,0.18);display:flex;align-items:center;justify-content:center;"><span style="font-size:28px;">✅</span></div>` : ''}
             </div>
             <div style="font-size:10px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.name}</div>
-            <div style="font-size:10px;color:var(--text-muted);">⚔️ ${dmg.toLocaleString()} dmg</div>
+            <div style="font-size:10px;color:var(--text-muted);">⚔️ ${dmg.toLocaleString()}${hasMatch ? ' <span style="color:#22c55e;">+50%</span>' : ''}${hasCrit ? ' <span style="color:#f59e0b;">⚡</span>' : ''}</div>
         </div>`;
     }).join('');
 
@@ -28066,13 +28072,13 @@ function _bossRenderPicker(modal) {
             <div style="font-size:18px;font-weight:900;">⚔️ Choose Attack Cards</div>
             <button onclick="document.getElementById('boss-attack-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
         </div>
-        <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Select up to 5 cards to attack <strong>${boss?.name || 'the boss'}</strong> with. Higher rarity = more damage.</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Select up to 5 cards to attack <strong>${boss?.name || 'the boss'}</strong>. Higher rarity = more damage. ${boss?.anime ? `<span style="color:#22c55e;">🎯 ${boss.anime} cards deal +50% bonus damage.</span> ` : ''}<span style="color:#f59e0b;">⚡ SSR &amp; UR can crit for 2× damage.</span></div>
 
         <!-- Selection summary -->
         <div style="padding:12px 16px;border-radius:10px;background:var(--bg-gray);margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
             <div>
                 <span style="font-size:14px;font-weight:900;">${selected.size}/5 cards selected</span>
-                ${totalDmg ? `<span style="font-size:13px;color:var(--text-muted);margin-left:10px;">Total damage: ⚔️ <strong>${totalDmg.toLocaleString()}</strong></span>` : ''}
+                ${totalDmg ? `<span style="font-size:13px;color:var(--text-muted);margin-left:10px;">Base: ⚔️ <strong>${totalDmg.toLocaleString()}</strong> <span style="font-size:11px;color:#f59e0b;">(+crits &amp; bonuses)</span></span>` : ''}
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
                 <select onchange="window._bossPickState.sort=this.value;_bossRenderPicker(document.getElementById('boss-attack-modal'))" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:12px;">
@@ -28116,23 +28122,146 @@ window._bossSubmitAttack = async function() {
     if (btn) { btn.disabled = true; btn.textContent = 'Attacking...'; }
 
     try {
-        const { damage, hpRemaining, bossDefeated } = await _callFn('attackBoss', { cardIds: [...ps.selected] });
+        const result = await _callFn('attackBoss', { cardIds: [...ps.selected] });
         modal?.remove();
-
-        // Refresh the boss section
-        await window.loadCommunityBossSection();
-
-        // Toast
-        const msg = bossDefeated
-            ? `💀 You dealt the killing blow! +${damage.toLocaleString()} damage — Boss Defeated!`
-            : `⚔️ Attack successful! Dealt ${damage.toLocaleString()} damage — Boss HP: ${_bossFormatHP(hpRemaining)}`;
-        if (window.showToast) window.showToast(msg);
-        else alert(msg);
+        _bossPlayAttackAnimation(boss, result.cards || [], result.damage, async () => {
+            await window.loadCommunityBossSection();
+            if (result.bossDefeated && window.showToast) window.showToast('💀 You dealt the killing blow! Boss Defeated!');
+        });
     } catch(e) {
         if (btn) { btn.disabled = false; btn.textContent = 'Attack!'; }
         alert('Attack failed: ' + e.message);
     }
 };
+
+function _bossPlayAttackAnimation(boss, attackCards, totalDamage, onComplete) {
+    const overlay = document.createElement('div');
+    overlay.id = 'boss-attack-anim';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.94);overflow:hidden;';
+    document.body.appendChild(overlay);
+
+    // Random attack order
+    const shuffled = [...attackCards].sort(() => Math.random() - 0.5);
+    const n = shuffled.length;
+
+    // U-shape slots: ends high, center lowest
+    const ALL_SLOTS = [
+        { l:'5%',  b:70, r:-9 },
+        { l:'22%', b:35, r:-4 },
+        { l:'41%', b:10, r: 0 },
+        { l:'59%', b:35, r: 4 },
+        { l:'76%', b:70, r: 9 },
+    ];
+    const SLOT_IDX = { 1:[2], 2:[1,3], 3:[0,2,4], 4:[0,1,3,4], 5:[0,1,2,3,4] };
+    const slots = (SLOT_IDX[n] || [2]).map(i => ALL_SLOTS[i]);
+
+    const RCOL = { ur:'#c084fc', ssr:'#f59e0b', sr:'#60a5fa', rare:'#4ade80', common:'#9ca3af', pr:'#f97316', nr:'#f97316' };
+
+    overlay.innerHTML = `
+        <div id="baa-boss" style="position:absolute;top:0;left:0;right:0;height:54%;pointer-events:none;">
+            <img src="${boss.image||''}" style="width:100%;height:100%;object-fit:contain;object-position:center top;" onerror="this.style.display='none'">
+            <div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 35%,rgba(0,0,0,0.94) 100%);"></div>
+            <div style="position:absolute;bottom:10px;left:0;right:0;text-align:center;pointer-events:none;">
+                <div style="font-size:18px;font-weight:900;color:#fff;">${boss.name}</div>
+                <div style="font-size:11px;color:rgba(255,255,255,0.45);">${boss.anime}</div>
+            </div>
+            <div id="baa-dmg" style="position:absolute;top:10%;left:0;right:0;height:65%;pointer-events:none;"></div>
+        </div>
+        <div id="baa-cards" style="position:absolute;bottom:0;left:0;right:0;height:50%;pointer-events:none;"></div>
+    `;
+
+    const cardsArea = document.getElementById('baa-cards');
+    const dmgZone   = document.getElementById('baa-dmg');
+    const bossEl    = document.getElementById('baa-boss');
+
+    // Build card elements in U-shape
+    const cardData = shuffled.map((card, i) => {
+        const slot = slots[i];
+        const col  = RCOL[card.rarity] || '#aaa';
+        const el   = document.createElement('div');
+        el.style.cssText = `position:absolute;left:calc(${slot.l} - 40px);bottom:${slot.b}px;width:80px;transform:rotate(${slot.r}deg);`;
+        el.innerHTML = `
+            <div style="width:80px;height:112px;border-radius:8px;overflow:hidden;border:2px solid ${col};box-shadow:0 0 14px ${col}66;">
+                <img src="${card.image||''}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.background='${col}'">
+            </div>
+            <div style="font-size:9px;font-weight:800;color:${col};text-align:center;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${card.name}</div>
+        `;
+        cardsArea.appendChild(el);
+        return { el, card, slot };
+    });
+
+    // Build random attack groups (1–3 cards per group)
+    const groups = [];
+    let ci = 0;
+    while (ci < cardData.length) {
+        const rem  = cardData.length - ci;
+        const size = rem === 1 ? 1 : rem === 2 ? (Math.random() < 0.45 ? 2 : 1) : Math.min(Math.floor(Math.random() * 3) + 1, rem);
+        groups.push(cardData.slice(ci, ci + size));
+        ci += size;
+    }
+
+    const shakeBoss = () => {
+        if (!bossEl) return;
+        const dx = Math.random() > 0.5 ? 8 : -8;
+        bossEl.style.transition = 'transform 0.07s';
+        bossEl.style.transform  = `translateX(${dx}px)`;
+        setTimeout(() => { bossEl.style.transition = 'transform 0.1s'; bossEl.style.transform = ''; }, 110);
+    };
+
+    const popDmg = (card) => {
+        if (!dmgZone) return;
+        const el  = document.createElement('div');
+        const col = card.isCrit ? '#f59e0b' : card.isAnimeMatch ? '#22c55e' : '#ffffff';
+        const sz  = card.isCrit ? '28px' : '20px';
+        const lbl = `-${card.damage.toLocaleString()}${card.isCrit ? ' CRIT!' : card.isAnimeMatch ? ' ⚡' : ''}`;
+        el.style.cssText = `position:absolute;left:${15+Math.random()*60}%;top:${10+Math.random()*55}%;font-size:${sz};font-weight:900;color:${col};text-shadow:0 0 12px ${col}99;white-space:nowrap;transition:transform 0.9s ease-out,opacity 0.9s ease-out;`;
+        el.textContent = lbl;
+        dmgZone.appendChild(el);
+        setTimeout(() => { el.style.transform = 'translateY(-50px) scale(1.18)'; el.style.opacity = '0'; }, 30);
+        setTimeout(() => el.remove(), 1000);
+        shakeBoss();
+    };
+
+    // Animate groups sequentially
+    let t = 500;
+    groups.forEach(group => {
+        setTimeout(() => {
+            group.forEach(({ el, card, slot }) => {
+                // Quick lunge
+                el.style.transition = 'transform 0.12s ease-in';
+                el.style.transform  = `rotate(${slot.r}deg) scale(1.13)`;
+                setTimeout(() => {
+                    el.style.transition = 'transform 0.32s ease-in, opacity 0.32s ease-in';
+                    el.style.transform  = `rotate(${slot.r * 0.4}deg) translateY(-190vh)`;
+                    el.style.opacity    = '0';
+                    setTimeout(() => popDmg(card), 230);
+                }, 130);
+            });
+        }, t);
+        t += 520 + group.length * 90;
+    });
+
+    // Total damage reveal
+    setTimeout(() => {
+        const panel = document.createElement('div');
+        panel.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;';
+        const inner = document.createElement('div');
+        inner.style.cssText = 'text-align:center;padding:28px 36px;background:rgba(8,0,18,0.9);border-radius:20px;border:1px solid rgba(255,255,255,0.1);min-width:220px;';
+        inner.innerHTML = `
+            <div style="font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:8px;">Total Damage Dealt</div>
+            <div style="font-size:52px;font-weight:900;color:#f59e0b;line-height:1;">${_bossFormatHP(totalDamage)}</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.35);margin-top:4px;">${totalDamage.toLocaleString()}</div>
+        `;
+        const btn = document.createElement('button');
+        btn.className = 'action-btn';
+        btn.textContent = 'Continue';
+        btn.style.cssText = 'margin-top:20px;font-weight:800;width:100%;';
+        btn.onclick = () => { overlay.remove(); onComplete?.(); };
+        inner.appendChild(btn);
+        panel.appendChild(inner);
+        overlay.appendChild(panel);
+    }, t + 300);
+}
 
 // ── Claim Reward ──────────────────────────────────────────────────────────────
 
