@@ -8611,10 +8611,13 @@ window._tcgLoadPrismaticEventUI = async function() {
     const status = document.getElementById('tcg-prismatic-event-status');
     const btn = document.getElementById('tcg-prismatic-event-start-btn');
     const extendBtn = document.getElementById('tcg-prismatic-event-extend-btn');
+    const extendBtn24 = document.getElementById('tcg-prismatic-event-extend-btn-24');
     const endAt = _tcgPrismaticEventEndAt(config);
     const active = endAt && endAt > new Date();
+    const hasRun = !!config.startAt;
     if (btn) { btn.disabled = !!active; btn.textContent = active ? 'Event Running' : 'Start Neon Event'; }
-    if (extendBtn) extendBtn.style.display = active ? 'inline-flex' : 'none';
+    if (extendBtn) extendBtn.style.display = (active || hasRun) ? 'inline-flex' : 'none';
+    if (extendBtn24) extendBtn24.style.display = (active || hasRun) ? 'inline-flex' : 'none';
     if (status) status.textContent = active
         ? `Live — ends ${endAt.toLocaleString()}`
         : (config.startAt ? `Last event ended ${endAt ? endAt.toLocaleString() : ''}` : 'Not started yet.');
@@ -8638,7 +8641,8 @@ window._tcgExtendPrismaticEvent = async function(hours = 24) {
     if (!confirm(`Extend the Neon Event by ${hours} hour${hours !== 1 ? 's' : ''}?`)) return;
     try {
         const currentEnd = _tcgPrismaticEventEndAt(config);
-        const newEnd = new Date(currentEnd.getTime() + hours * 60 * 60 * 1000);
+        const base = (currentEnd && currentEnd > new Date()) ? currentEnd : new Date();
+        const newEnd = new Date(base.getTime() + hours * 60 * 60 * 1000);
         await setDoc(doc(db, 'tcg_event_config', 'prismatic'), { endAt: newEnd.toISOString() }, { merge: true });
         window._tcgPrismaticEventConfig = null;
         await _tcgLoadPrismaticEventUI();
@@ -12618,10 +12622,12 @@ window._tcgRenderInventory = async function() {
         return;
     }
 
-    // Group by bulkBatchId — items with no batchId are their own lone group.
+    // Group by bulkBatchId when present; otherwise stack by packId+cardBatch so
+    // single-pack purchases of the same type accumulate into one row like bulk buys.
+    // God packs stay as individual items since they have a unique reveal.
     const groups = {};
     items.forEach(it => {
-        const key = it.bulkBatchId || it.id;
+        const key = it.bulkBatchId || (it.godPackTheme ? it.id : `${it.packId}_${it.cardBatch || 'default'}`);
         (groups[key] = groups[key] || []).push(it);
     });
     const groupList = Object.values(groups).sort((a, b) => {

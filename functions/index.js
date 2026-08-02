@@ -449,9 +449,9 @@ const TCG_PACKS = {
         image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
     },
     prismatic: {
-        id: 'prismatic', name: '2026 Prismatic Pack', cost: 800, salePrice: null,
+        id: 'prismatic', name: 'Neon 2026 Pack', cost: 800, salePrice: null,
         guaranteedSR: false, prismatic: true,
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2F2026%20Prismatic%20Pack.png?alt=media&token=0fd87cb6-3811-443b-a75c-e87c2513366f',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Neon%202026%20Pack.png',
     },
 };
 
