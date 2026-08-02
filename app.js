@@ -27822,15 +27822,22 @@ function _bossRender(el, boss, userAttacks, leaderboard, lbMode) {
     const start = boss.startDate?.toDate ? boss.startDate.toDate() : new Date(boss.startDate);
     const end   = boss.endDate?.toDate   ? boss.endDate.toDate()   : new Date(boss.endDate);
     const hpPct = Math.max(0, Math.min(100, Math.round((boss.hpRemaining / boss.hp) * 100)));
+    const notStartedYet = boss.status === 'active' && start > now;
     const isOver = boss.status === 'defeated' || boss.status === 'expired' || (boss.status === 'active' && end < now);
-    const isActive = boss.status === 'active' && end >= now;
+    const isActive = boss.status === 'active' && !notStartedYet && end >= now;
 
     // HP bar color
     const hpColor = hpPct > 50 ? '#22c55e' : hpPct > 25 ? '#f59e0b' : '#ef4444';
 
     // Countdown
     let timerStr = '';
-    if (isActive) {
+    if (notStartedYet) {
+        const msLeft = start - now;
+        const days   = Math.floor(msLeft / 86400000);
+        const hrs    = Math.floor((msLeft % 86400000) / 3600000);
+        const mins   = Math.floor((msLeft % 3600000) / 60000);
+        timerStr = `Starts in ${days > 0 ? `${days}d ${hrs}h` : hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`}`;
+    } else if (isActive) {
         const msLeft = end - now;
         const days   = Math.floor(msLeft / 86400000);
         const hrs    = Math.floor((msLeft % 86400000) / 3600000);
@@ -27908,6 +27915,15 @@ function _bossRender(el, boss, userAttacks, leaderboard, lbMode) {
                     <button class="action-btn" onclick="window._bossOpenAttackPicker()" style="font-weight:800;">⚔️ Attack Boss</button>
                 </div>`;
         }
+    } else if (notStartedYet && auth.currentUser) {
+        attackHTML = `
+            <div style="padding:14px 16px;border-radius:10px;background:var(--bg-gray);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                <span style="font-size:22px;">⏳</span>
+                <div style="flex:1;">
+                    <div style="font-size:13px;font-weight:800;">Battle hasn't started yet</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${timerStr} — prepare your deck!</div>
+                </div>
+            </div>`;
     } else if (!auth.currentUser) {
         attackHTML = `<div style="text-align:center;font-size:13px;color:var(--text-muted);padding:12px;">Sign in to join the fight!</div>`;
     }
@@ -27917,6 +27933,8 @@ function _bossRender(el, boss, userAttacks, leaderboard, lbMode) {
         ? `<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:rgba(34,197,94,0.15);color:#22c55e;font-size:11px;font-weight:800;">DEFEATED</span>`
         : boss.status === 'expired' || (!isActive && isOver)
         ? `<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:rgba(239,68,68,0.15);color:#ef4444;font-size:11px;font-weight:800;">ESCAPED</span>`
+        : notStartedYet
+        ? `<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:rgba(99,102,241,0.15);color:#818cf8;font-size:11px;font-weight:800;">UPCOMING · ${timerStr}</span>`
         : `<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:rgba(255,215,0,0.15);color:var(--accent-yellow);font-size:11px;font-weight:800;">ACTIVE · ${timerStr}</span>`;
 
     // Admin tools
@@ -28293,8 +28311,9 @@ window._bossAdminSpawnForm = function() {
     modal.id = 'boss-admin-spawn-modal';
     modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;padding:16px;';
 
-    // Default end date = this Friday at midnight ET
+    // Default start = now; default end = this Friday at midnight ET
     const now = new Date();
+    const nowStr = now.toISOString().slice(0, 16);
     const daysToFriday = (5 - now.getDay() + 7) % 7 || 7;
     const friday = new Date(now);
     friday.setDate(friday.getDate() + daysToFriday);
@@ -28334,8 +28353,13 @@ window._bossAdminSpawnForm = function() {
                 <input id="bs-weekid" value="${defaultWeekId}" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;"></div>
             </div>
 
-            <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">End Date / Time</label>
-            <input id="bs-end" type="datetime-local" value="${fridayStr}" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Start Date / Time</label>
+                <input id="bs-start" type="datetime-local" value="${nowStr}" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;"></div>
+
+                <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">End Date / Time</label>
+                <input id="bs-end" type="datetime-local" value="${fridayStr}" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:14px;box-sizing:border-box;"></div>
+            </div>
 
             <button onclick="window._bossAdminSpawn()" class="action-btn" style="font-weight:800;margin-top:4px;">🐉 Spawn Boss</button>
         </div>
@@ -28350,8 +28374,9 @@ window._bossAdminSpawn = async function() {
     const hp      = parseInt(document.getElementById('bs-hp')?.value);
     const reward  = parseInt(document.getElementById('bs-reward')?.value) || 150;
     const partial = parseFloat(document.getElementById('bs-partial')?.value) || 0.5;
-    const weekId  = document.getElementById('bs-weekid')?.value?.trim();
-    const endDate = document.getElementById('bs-end')?.value;
+    const weekId    = document.getElementById('bs-weekid')?.value?.trim();
+    const startDate = document.getElementById('bs-start')?.value;
+    const endDate   = document.getElementById('bs-end')?.value;
 
     if (!name || !anime || !image || !hp || !weekId) return alert('Fill in all required fields.');
 
@@ -28359,7 +28384,7 @@ window._bossAdminSpawn = async function() {
     if (btn) { btn.disabled = true; btn.textContent = 'Spawning...'; }
 
     try {
-        await _callFn('adminSpawnBoss', { name, anime, image, hp, rewardPerDay: reward, partialMultiplier: partial, weekId, endDate });
+        await _callFn('adminSpawnBoss', { name, anime, image, hp, rewardPerDay: reward, partialMultiplier: partial, weekId, startDate, endDate });
         document.getElementById('boss-admin-spawn-modal')?.remove();
         window._bossProfileCache = {};
         await window.loadCommunityBossSection();

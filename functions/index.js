@@ -431,22 +431,22 @@ const TCG_PACKS = {
     standard: {
         id: 'standard', name: 'Standard Pack', cost: 150, salePrice: 100,
         guaranteedSR: false, prismatic: false,
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FStandard%20Pack.png?alt=media&token=8db206cf-8f57-4c64-b3cf-d2b8316d7364',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Standard%20Pack.png',
     },
     premium: {
         id: 'premium', name: 'Premium Pack', cost: 750, salePrice: null,
         guaranteedSR: true, prismatic: false,
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Premium%20Pack.png',
     },
     current_premium: {
         id: 'current_premium', name: 'Current Batch Premium', cost: 800, salePrice: null,
         guaranteedSR: true, currentBatch: true,
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Premium%20Pack.png',
     },
     filler: {
         id: 'filler', name: 'Filler Pack', cost: 800, salePrice: null,
         guaranteedSR: true, filler: true,
-        image: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Premium%20Pack.png',
     },
     prismatic: {
         id: 'prismatic', name: 'Neon 2026 Pack', cost: 800, salePrice: null,
@@ -1064,7 +1064,7 @@ exports.adminBackfillStripePity = onRequest({ invoker: 'public', timeoutSeconds:
                 const itemRef = invCol.doc();
                 batch.set(itemRef, {
                     type: 'pack', packId: 'bonus_ur', packName: 'Pity UR',
-                    packImage: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+                    packImage: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Premium%20Pack.png',
                     rolledCards: [urCard], godPackTheme: null, source: 'stripe_pity_backfill', bulkBatchId: null, grantedAt: new Date(),
                 });
                 granted.push(urCard.name);
@@ -1352,6 +1352,7 @@ exports.attackBoss = onRequest({ invoker: 'public' }, async (req, res) => {
     if (boss.status !== 'active') return sendErr(res, 400, 'FAILED_PRECONDITION', boss.status === 'defeated' ? 'The boss has already been defeated!' : 'The boss battle has ended.');
 
     const now = new Date();
+    if (boss.startDate && boss.startDate.toDate() > now) return sendErr(res, 400, 'FAILED_PRECONDITION', 'The boss battle hasn\'t started yet.');
     if (boss.endDate.toDate() < now) return sendErr(res, 400, 'FAILED_PRECONDITION', 'The boss battle has ended.');
 
     const todayStr = now.toISOString().slice(0, 10);
@@ -1468,17 +1469,18 @@ exports.adminSpawnBoss = onRequest({ invoker: 'public' }, async (req, res) => {
     const callerUid = await getCallerUid(req);
     if (!callerUid || callerUid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
 
-    const { name, anime, image, hp, rewardPerDay, partialMultiplier, weekId, endDate } = req.body?.data || {};
+    const { name, anime, image, hp, rewardPerDay, partialMultiplier, weekId, startDate, endDate } = req.body?.data || {};
     if (!name || !anime || !image || !hp || !weekId) {
         return sendErr(res, 400, 'INVALID_ARGUMENT', 'name, anime, image, hp, weekId required.');
     }
 
     const db = getFirestore();
+    const start = startDate ? new Date(startDate) : new Date();
     const end = endDate ? new Date(endDate) : new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
     await db.collection('dungeon_boss').doc('current').set({
         name, anime, image,
         hp: Number(hp), hpRemaining: Number(hp),
-        weekId, startDate: new Date(), endDate: end,
+        weekId, startDate: start, endDate: end,
         status: 'active',
         rewardPerDay: Number(rewardPerDay) || 150,
         partialMultiplier: Number(partialMultiplier) || 0.5,

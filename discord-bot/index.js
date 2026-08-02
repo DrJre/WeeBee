@@ -97,7 +97,7 @@ async function grantUrInventoryItem(uid, source) {
       type: 'pack',
       packId: 'bonus_ur',
       packName,
-      packImage: 'https://firebasestorage.googleapis.com/v0/b/weebee-fbbd8.firebasestorage.app/o/tcg-art%2FBooster%20Packs%2FPremium%20Pack.png?alt=media&token=3c1f22b2-655b-479f-9be8-d8ee448f4b38',
+      packImage: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Premium%20Pack.png',
       rolledCards: [urCard],
       godPackTheme: null,
       source,
