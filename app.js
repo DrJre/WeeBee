@@ -12456,8 +12456,10 @@ window._tcgRenderStore = async function() {
     if (prismaticActive) {
         const countdownHtml = `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#ff3fe3,#7B2FBE,#01F9C6);color:#050514;border-radius:8px;font-weight:800;font-size:11px;letter-spacing:0.5px;">✦ Event ends in <span id="prismatic-countdown-timer">…</span></div>`;
         flexSlotHtml = packCard(TCG_PACKS.find(p => p.prismatic), false, countdownHtml, false, 'prismatic-pack-glow');
+    } else if (fillerBatch) {
+        flexSlotHtml = packCard(TCG_PACKS.find(p => p.filler));
     } else {
-        // Neon 2026 pack always occupies slot 4 — coming soon until admin starts the event
+        // No event active and no filler configured — show Neon pack as coming soon
         const neonSoonLabel = `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#ff3fe3,#7B2FBE,#01F9C6);color:#050514;border-radius:8px;font-weight:800;font-size:11px;letter-spacing:0.5px;">✦ COMING SOON</div>`;
         flexSlotHtml = packCard(TCG_PACKS.find(p => p.prismatic), true, neonSoonLabel, false, 'prismatic-pack-glow');
     }
