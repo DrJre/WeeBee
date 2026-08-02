@@ -28081,7 +28081,7 @@ function _bossRenderPicker(modal) {
         const bg     = isSel ? 'rgba(255,215,0,0.12)' : 'transparent';
         return `<div onclick="window._bossToggleCard('${c.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:${border};background:${bg};padding:4px;transition:border .12s,background .12s;">
             <div style="position:relative;aspect-ratio:3/4;overflow:hidden;border-radius:8px;margin-bottom:4px;">
-                <img src="${c.image}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
+                <img src="${_toR2Url(c.image)}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
                 <div style="position:absolute;top:4px;right:4px;padding:2px 6px;border-radius:6px;background:rgba(0,0,0,0.7);font-size:10px;font-weight:900;color:${RARITY_COLORS[c.rarity]||'#fff'};">${_bossRarityLabel(c.rarity)}</div>
                 ${hasCrit ? `<div style="position:absolute;top:4px;left:4px;padding:2px 5px;border-radius:5px;background:rgba(0,0,0,0.75);font-size:9px;font-weight:900;color:#f59e0b;">⚡ CRIT?</div>` : ''}
                 ${hasMatch ? `<div style="position:absolute;bottom:4px;left:4px;padding:2px 5px;border-radius:5px;background:rgba(0,0,0,0.75);font-size:9px;font-weight:900;color:#22c55e;">🎯 MATCH</div>` : ''}
@@ -28208,7 +28208,7 @@ function _bossPlayAttackAnimation(boss, attackCards, totalDamage, onComplete) {
         el.style.cssText = `position:absolute;left:calc(${slot.l} - 40px);bottom:${slot.b}px;width:80px;transform:rotate(${slot.r}deg);`;
         el.innerHTML = `
             <div style="width:80px;height:112px;border-radius:8px;overflow:hidden;border:2px solid ${col};box-shadow:0 0 14px ${col}66;">
-                <img src="${card.image||''}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.background='${col}'">
+                <img src="${_toR2Url(card.image)||''}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.background='${col}'">
             </div>
             <div style="font-size:9px;font-weight:800;color:${col};text-align:center;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${card.name}</div>
         `;
@@ -28851,7 +28851,7 @@ function _dungeonRenderPartySelect(panel) {
         const inCombo = isSel && (selectedAnimeCounts[c.anime || ''] || 0) > 1;
         return `
         <div onclick="${fatigued?'':`window._dungeonTogglePick('${c.id}')`}" style="cursor:${fatigued?'not-allowed':'pointer'};border-radius:10px;overflow:hidden;border:3px solid ${inCombo?'#a855f7':isSel?'var(--accent-yellow)':'transparent'};position:relative;background:var(--bg-gray);aspect-ratio:2/3;${fatigued?'opacity:0.45;':''}">
-            <img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;${fatigued?'filter:grayscale(0.6);':''}" loading="eager">
+            <img src="${_toR2Url(c.image)||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;${fatigued?'filter:grayscale(0.6);':''}" loading="eager">
             <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);color:#fff;font-size:10px;padding:4px 6px;text-align:center;">
                 <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
                 <div style="color:${inCombo?'#d8a4ff':'#FFD700'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${rarityLabels[c.rarity]||c.rarity} · ⚡${_dungeonCardPower(c)}${inCombo?' +'+comboBonusPerCard:''}</div>
@@ -29255,7 +29255,7 @@ function _dungeonBonusCardsHTML(state) {
             <div style="display:flex;justify-content:center;gap:14px;flex-wrap:wrap;">
                 ${bonus.map(c => `
                     <div style="width:90px;">
-                        <img src="${c.image}" style="width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:8px;display:block;margin-bottom:4px;">
+                        <img src="${_toR2Url(c.image)}" style="width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:8px;display:block;margin-bottom:4px;">
                         <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
                         <div style="font-size:10px;color:var(--text-muted);">${rarityLabels[c.rarity]||c.rarity}</div>
                     </div>`).join('')}
@@ -29578,7 +29578,7 @@ function _dungeonGenerateSummaryPostHTML(post) {
             const bc = rarityBorderColor(c.rarity);
             return `
             <div style="width:38px;text-align:center;">
-                <img src="${c.image||''}" title="${c.name||''}" style="width:38px;height:51px;object-fit:cover;border-radius:5px;display:block;border:2px solid ${bc};box-shadow:0 0 6px ${bc}55;">
+                <img src="${_toR2Url(c.image)||''}" title="${c.name||''}" style="width:38px;height:51px;object-fit:cover;border-radius:5px;display:block;border:2px solid ${bc};box-shadow:0 0 6px ${bc}55;">
                 <div style="font-size:9px;font-weight:700;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">${c.name||''}</div>
             </div>`;
         }).join('');
@@ -29601,7 +29601,7 @@ function _dungeonGenerateSummaryPostHTML(post) {
                     const bc = rarityBorderColor(c.rarity);
                     return `
                     <div style="width:52px;text-align:center;">
-                        <img src="${c.image||''}" title="${c.name||''}" style="width:52px;height:70px;object-fit:cover;border-radius:6px;display:block;border:2px solid ${bc};box-shadow:0 0 8px ${bc}66;">
+                        <img src="${_toR2Url(c.image)||''}" title="${c.name||''}" style="width:52px;height:70px;object-fit:cover;border-radius:6px;display:block;border:2px solid ${bc};box-shadow:0 0 8px ${bc}66;">
                         <div style="font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">${c.name||''}</div>
                     </div>`;
                 }).join('')}
@@ -29677,7 +29677,7 @@ window.generateDungeonPostCardHTML = function(post) {
 
     const tokens = (post.party||[]).map(c => `
         <div style="width:50px;height:68px;border-radius:50%/35%;overflow:hidden;border:2px solid var(--accent-yellow);box-shadow:0 0 6px rgba(0,0,0,0.4);">
-            <img src="${c.image}" style="width:100%;height:100%;object-fit:cover;display:block;">
+            <img src="${_toR2Url(c.image)}" style="width:100%;height:100%;object-fit:cover;display:block;">
         </div>`).join('');
 
     return `<div class="review-card feed-post-card" style="position:relative;background:rgba(142,68,173,0.06);border:1px solid rgba(142,68,173,0.25);border-radius:14px;">
