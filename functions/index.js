@@ -802,7 +802,7 @@ exports.purchasePacks = onRequest({ invoker: 'public' }, async (req, res) => {
     const { packId, quantity } = req.body?.data || {};
     const pack = TCG_PACKS[packId];
     if (!pack) return sendErr(res, 400, 'INVALID_ARGUMENT', 'Unknown pack.');
-    if (![1, 5, 10].includes(quantity)) return sendErr(res, 400, 'INVALID_ARGUMENT', 'Quantity must be 1, 5, or 10.');
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) return sendErr(res, 400, 'INVALID_ARGUMENT', 'Quantity must be between 1 and 10.');
 
     const db = getFirestore();
 
@@ -1245,7 +1245,7 @@ exports.adminGiftPack = onRequest({ invoker: 'public' }, async (req, res) => {
     const pack = TCG_PACKS[packId];
     if (!targetUid) return sendErr(res, 400, 'INVALID_ARGUMENT', 'targetUid is required.');
     if (!pack) return sendErr(res, 400, 'INVALID_ARGUMENT', 'Unknown pack.');
-    const qty = [1, 5, 10].includes(quantity) ? quantity : 1;
+    const qty = (Number.isInteger(quantity) && quantity >= 1 && quantity <= 10) ? quantity : 1;
 
     const db = getFirestore();
     let fillerBatch = null;

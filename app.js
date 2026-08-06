@@ -12416,8 +12416,13 @@ window._tcgRenderStore = async function() {
             ? `<span style="text-decoration:line-through;text-decoration-color:#ef4444;color:var(--text-muted);font-weight:700;margin-right:8px;">🟡 ${(pack.cost * qty).toLocaleString()}</span><span style="color:#f59e0b;">🟡 ${totalCost.toLocaleString()}</span>`
             : `🟡 ${totalCost.toLocaleString()}`;
         const qtyPills = !isComingSoon ? `
-            <div id="tcg-qty-pills-${pack.id}" style="display:flex;gap:6px;justify-content:center;margin:8px 0;">
-                ${[1, 5, 10].map(n => `<button onclick="window._tcgSetPackQty('${pack.id}',${n})" style="padding:5px 14px;border-radius:20px;border:1px solid ${qty === n ? 'var(--accent-yellow)' : 'var(--border-color)'};background:${qty === n ? 'rgba(245,158,11,0.12)' : 'transparent'};color:${qty === n ? '#f59e0b' : 'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${n}×</button>`).join('')}
+            <div id="tcg-qty-pills-${pack.id}" style="margin:8px 0 4px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                    <span style="font-size:11px;color:var(--text-muted);">Quantity</span>
+                    <span id="tcg-qty-label-${pack.id}" style="font-size:13px;font-weight:800;color:#f59e0b;">${qty}×</span>
+                </div>
+                <input type="range" min="1" max="10" value="${qty}" oninput="window._tcgSetPackQty('${pack.id}',+this.value)" style="width:100%;accent-color:#f59e0b;cursor:pointer;">
+                <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:1px;"><span>1</span><span>10</span></div>
             </div>` : '';
         const wiBatch = pack.filler ? (fillerBatch || 1) : pack.currentBatch ? TCG_CURRENT_BATCH : 0;
         const wiBtn = !isComingSoon ? `<button onclick="window._tcgShowWhatsInside('${pack.id}'${wiBatch ? `,${wiBatch}` : ''})" style="padding:4px 12px;border-radius:20px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:600;cursor:pointer;margin-top:8px;">What's inside</button>` : '';
@@ -12518,6 +12523,12 @@ window._tcgRenderStore = async function() {
             const idx = Math.round(_carousel.scrollLeft / (_carousel.offsetWidth || 1));
             document.querySelectorAll('.tcg-carousel-dot').forEach((d, i) => d.classList.toggle('active', i === idx));
         }, { passive: true });
+        // Restore position after a pack purchase re-render
+        if (window._tcgCarouselRestoreIdx) {
+            const restoreIdx = window._tcgCarouselRestoreIdx;
+            window._tcgCarouselRestoreIdx = 0;
+            requestAnimationFrame(() => _carousel.scrollTo({ left: restoreIdx * _carousel.offsetWidth, behavior: 'instant' }));
+        }
     }
 
     if (window._prismaticCountdownInterval) { clearInterval(window._prismaticCountdownInterval); window._prismaticCountdownInterval = null; }
@@ -12562,12 +12573,8 @@ window._tcgSetPackQty = function(packId, qty) {
     const totalCost = unitCost * qty;
     const canAfford = amber >= totalCost;
 
-    const pillsEl = document.getElementById(`tcg-qty-pills-${packId}`);
-    if (pillsEl) {
-        pillsEl.innerHTML = [1, 5, 10].map(n =>
-            `<button onclick="window._tcgSetPackQty('${packId}',${n})" style="padding:5px 14px;border-radius:20px;border:1px solid ${qty === n ? 'var(--accent-yellow)' : 'var(--border-color)'};background:${qty === n ? 'rgba(245,158,11,0.12)' : 'transparent'};color:${qty === n ? '#f59e0b' : 'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${n}×</button>`
-        ).join('');
-    }
+    const labelEl = document.getElementById(`tcg-qty-label-${packId}`);
+    if (labelEl) labelEl.textContent = `${qty}×`;
 
     const priceEl = document.getElementById(`tcg-price-${packId}`);
     if (priceEl) {
@@ -12827,7 +12834,7 @@ window._tcgBuyPacks = async function(packId, quantity) {
     if (navigator.onLine === false) return alert("You appear to be offline — please check your connection and try again.");
     const pack = TCG_PACKS.find(p => p.id === packId);
     if (!pack) return;
-    const qty = [1, 5, 10].includes(quantity) ? quantity : 1;
+    const qty = (Number.isInteger(quantity) && quantity >= 1 && quantity <= 10) ? quantity : 1;
 
     window._tcgBuyInProgress = true;
     _tcgShowPackLoading(qty > 1 ? { name: `${qty}× ${pack.name}` } : pack);
@@ -12845,6 +12852,9 @@ window._tcgBuyPacks = async function(packId, quantity) {
     }
 
     window._tcgBuyInProgress = false;
+    // Save carousel position so mobile users land back on the same pack after buying
+    const _carousel = document.getElementById('tcg-pack-carousel');
+    window._tcgCarouselRestoreIdx = _carousel ? Math.round(_carousel.scrollLeft / (_carousel.offsetWidth || 1)) : 0;
     window._tcgRenderStore();
 
     const itemIds = result.itemIds || [];
@@ -23624,7 +23634,7 @@ const BW_NRT_CHARS = [
     {id:'karin',      name:'Karin',              img:'https://s4.anilist.co/file/anilistcdn/character/large/b35252-DY9TW6pusqeh.png',   gender:'Female', affiliation:['Missing-nin'],                           jutsuType:['Ninjutsu','Medical Ninjutsu','Fuinjutsu'],                                    nature:['Fire'],                                         kekkeiGenkai:false, attribute:['Sensor'],            debutArc:'Tenchi Bridge Reconnaissance'},
     {id:'mei',        name:'Mei Terumi',          img:'https://s4.anilist.co/file/anilistcdn/character/large/b23478-U7n8YUe2gFDW.png',   gender:'Female', affiliation:['Mist'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu'],                                             nature:['Earth','Fire','Water'],                          kekkeiGenkai:true,  attribute:['Kage'],              debutArc:'Five Kage Summit'},
     {id:'onoki',      name:'Onoki',              img:'https://s4.anilist.co/file/anilistcdn/character/large/b23475-OXJU3W3rmDQZ.png',   gender:'Male',   affiliation:['Stone'],                                 jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Earth','Fire','Wind'],                           kekkeiGenkai:true,  attribute:['Kage'],              debutArc:'Five Kage Summit'},
-    {id:'darui',      name:'Darui',              img:'https://s4.anilist.co/file/anilistcdn/character/large/b23476-f71q8pESrKjk.png',   gender:'Male',   affiliation:['Cloud'],                                 jutsuType:['Ninjutsu','Taijutsu','Kenjutsu'],                                             nature:['Lightning','Wind','Water'],                      kekkeiGenkai:true,  attribute:['Kage'],              debutArc:'Five Kage Summit'},
+    {id:'darui',      name:'Darui',              img:'https://s4.anilist.co/file/anilistcdn/character/large/b23476-f71q8pESrKjk.png',   gender:'Male',   affiliation:['Cloud'],                                 jutsuType:['Ninjutsu','Taijutsu','Kenjutsu'],                                             nature:['Lightning','Wind','Water'],                      kekkeiGenkai:true,  attribute:[],                    debutArc:'Five Kage Summit'},
     {id:'konohamaru', name:'Konohamaru Sarutobi', img:'https://s4.anilist.co/file/anilistcdn/character/large/n3889-gCUewPsRY2kD.png',   gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu','Senjutsu'],                                 nature:['Fire','Lightning','Earth','Wind'],               kekkeiGenkai:false, attribute:['Sage'],              debutArc:'Introduction'},
     {id:'yugito',     name:'Yugito Nii',          img:'https://s4.anilist.co/file/anilistcdn/character/large/15362.jpg',                 gender:'Female', affiliation:['Cloud'],                                 jutsuType:['Ninjutsu','Taijutsu','Kenjutsu','Fuinjutsu'],                                 nature:['Fire','Lightning'],                              kekkeiGenkai:false, attribute:['Jinchuriki'],        debutArc:'Akatsuki Suppression'},
     {id:'utakata',    name:'Utakata',            img:'https://s4.anilist.co/file/anilistcdn/character/large/b23219-eEWDh3idJwit.jpg',   gender:'Male',   affiliation:['Mist','Missing-nin'],                    jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Water'],                                         kekkeiGenkai:false, attribute:['Jinchuriki'],        debutArc:'Akatsuki Suppression'},
@@ -29114,7 +29124,7 @@ function _dungeonRenderActive(el, state) {
     const tokens = state.party.map((c, i) => {
         const offsetX = (i - (state.party.length-1)/2) * 4;
         return `<div style="position:absolute;left:${pt.x+offsetX}%;top:${pt.y}%;transform:translate(-50%,-50%);width:34px;height:46px;border-radius:50%/35%;overflow:hidden;border:2px solid var(--accent-yellow);box-shadow:0 0 8px rgba(0,0,0,0.5);">
-            <img src="${c.image}" style="width:100%;height:100%;object-fit:cover;display:block;">
+            <img src="${_toR2Url(c.image)}" style="width:100%;height:100%;object-fit:cover;display:block;">
         </div>`;
     }).join('');
 
