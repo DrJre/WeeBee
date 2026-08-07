@@ -12889,6 +12889,7 @@ window._tcgOpenInventoryItem = async function(itemId) {
         return;
     }
     window._tcgCollectionCache.delete(auth.currentUser.uid);
+    try { localStorage.removeItem(`tcg_coll_${auth.currentUser.uid}`); } catch {}
     window._tcgRenderInventory?.();
     const pack = TCG_PACKS.find(p => p.id === revealed.packId) || { id: revealed.packId, name: revealed.packName, image: revealed.packImage };
     window._tcgOpeningBatchPackName = revealed.packName;
@@ -12978,6 +12979,7 @@ window._tcgShowBulkRevealAnimation = async function(itemIds) {
         return;
     }
     window._tcgCollectionCache.delete(auth.currentUser.uid);
+    try { localStorage.removeItem(`tcg_coll_${auth.currentUser.uid}`); } catch {}
     window._tcgRenderInventory?.();
 
     const packs = result.packs || [];
