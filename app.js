@@ -14075,7 +14075,7 @@ const RARITY_MAX_VERSIONS = { common: 5000, rare: 2500, sr: 500, ssr: 250, ur: 5
 function _tcgIsEventCard(card) { return card.rarity === 'pr' || card.rarity === 'nr' || !!card.event; }
 
 // Flat amber refund for breaking down a card you no longer want
-const TCG_DISMANTLE_RATES = { common: 5, rare: 20, sr: 100, ssr: 400, ur: 1500, pr: 250 };
+const TCG_DISMANTLE_RATES = { common: 5, rare: 20, sr: 100, ssr: 400, ur: 1500, pr: 250, nr: 250 };
 
 // Dismantles an owned card for a flat amber payout based on rarity
 window._tcgDismantling = false;
@@ -14083,7 +14083,7 @@ window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
     if (!auth.currentUser || window._tcgDismantling) return;
     if (window._tcgFavoriteIds?.has(cardId)) { alert(`"${name}" is favorited. Unfavorite it first to dismantle.`); return; }
     const amount = TCG_DISMANTLE_RATES[rarity] || 0;
-    const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'Event' }[rarity] || rarity;
+    const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'Event', nr: 'Neon' }[rarity] || rarity;
     if (!confirm(`Dismantle ${name} (${label}) for 🟡 ${amount.toLocaleString()} Amber? This cannot be undone.`)) return;
     window._tcgDismantling = true;
     try {
