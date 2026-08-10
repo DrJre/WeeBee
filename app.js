@@ -7261,6 +7261,27 @@ const TCG_SR_CARDS = [
     { name: 'The Major', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/The%20Major.webp', batch: 2 },
     { name: 'Walter C Durnez', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/Walter%20C%20Durnez.jpg', batch: 2 },
     { name: 'Zorin Blitz', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SR/Zorin%20Blitz.jpg', batch: 2 },
+    // ── Batch 3 ──────────────────────────────────────────────────────────────────
+    { name: 'Fuu', anime: 'Samurai Champloo', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Samurai%20Champloo/Fuu%20-%20Samurai%20Champloo%20-%20SR.jpg', batch: 3 },
+    { name: 'Jin', anime: 'Samurai Champloo', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Samurai%20Champloo/Jin%20-%20Samurai%20Champloo%20-%20SR.jpg', batch: 3 },
+    { name: 'Mugen', anime: 'Samurai Champloo', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Samurai%20Champloo/Mugen%20-%20Samurai%20Champloo%20-%20SR.jpg', batch: 3 },
+    { name: 'Anko', anime: 'Call of the Night', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Call%20of%20the%20Night/Anko%20-%20Call%20of%20the%20Night%20-%20SR.png', batch: 3 },
+    { name: 'Griffith', anime: 'Berserk', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Berserk/SR/Griffith%20-%20Berserk%20-%20SR.jpg', batch: 3 },
+    { name: 'Motoko', anime: 'Ghost in the Shell', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Ghost%20in%20the%20Shell/Motoko%20-%20Ghost%20in%20the%20Shell%20-%20SR.png', batch: 3 },
+    { name: 'Bruno Bucciarati', anime: "JoJo's Bizarre Adventure", image: "https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jojo's%20Bizarre%20Adventure/Bruno%20Bucciarati%20-%20Jojos%20Bizarre%20Adventure%20-%20SR.png", batch: 3 },
+    { name: 'Diavolo', anime: "JoJo's Bizarre Adventure", image: "https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jojo's%20Bizarre%20Adventure/Diavolo%20-%20Jojos%20Bizarre%20Adventure%20-%20SR.jpg", batch: 3 },
+    { name: 'Giorno Giovanna', anime: "JoJo's Bizarre Adventure", image: "https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jojo's%20Bizarre%20Adventure/Giorno%20Giovanna%20-%20Jojos%20Bizarre%20Adventure%20-%20SR.jpg", batch: 3 },
+    { name: 'Guido Mista', anime: "JoJo's Bizarre Adventure", image: "https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jojo's%20Bizarre%20Adventure/Guido%20Mista%20-%20Jojos%20Bizarre%20Adventure%20-%20SR.webp", batch: 3 },
+    { name: 'Joseph Joestar', anime: "JoJo's Bizarre Adventure", image: "https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jojo's%20Bizarre%20Adventure/Joseph%20Joestar%20-%20Jojos%20Bizarre%20Adventure%20-%20SR.jpg", batch: 3 },
+    { name: 'Jotaro Kujo', anime: "JoJo's Bizarre Adventure", image: "https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jojo's%20Bizarre%20Adventure/Jotaro%20Kujo%20-%20Jojos%20Bizarre%20Adventure%20-%20SR.jpg", batch: 3 },
+    { name: 'Leone Abbacchio', anime: "JoJo's Bizarre Adventure", image: "https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jojo's%20Bizarre%20Adventure/Leone%20Abbacchio%20-%20Jojos%20Bizarre%20Adventure%20-%20SR.jpg", batch: 3 },
+    { name: 'Pannacotta Fugo', anime: "JoJo's Bizarre Adventure", image: "https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jojo's%20Bizarre%20Adventure/Pannacotta%20Fugo%20-%20Jojos%20Bizarre%20Adventure%20-%20SR.jpg", batch: 3 },
+    { name: 'Trish Una', anime: "JoJo's Bizarre Adventure", image: "https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jojo's%20Bizarre%20Adventure/Trish%20Una%20-%20Jojos%20Bizarre%20Adventure%20-%20SR.jpg", batch: 3 },
+    { name: 'Misato', anime: 'Neon Genesis', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Neon%20Genesis/Misato%20-%20Neon%20Genesis%20-%20SR.jpg', batch: 3 },
+    { name: 'Ayano Keiko', anime: 'Sword Art Online', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sword%20Art%20Online/SR/Ayano%20Keiko%20-%20Sword%20Art%20Online%20-%20SR.webp', batch: 3 },
+    { name: 'Kawori', anime: 'Your Lie in April', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Your%20Lie%20in%20April/Kawori%20-%20Your%20Lie%20in%20April%20-%20SR.jpg', batch: 3 },
+    { name: 'Kousei', anime: 'Your Lie in April', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Your%20Lie%20in%20April/Kousei%20-%20Your%20Lie%20in%20April%20-%20SR.png', batch: 3 },
+    { name: 'Ryouta', anime: 'Your Lie in April', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Your%20Lie%20in%20April/Ryouta%20-%20Your%20Lie%20in%20April%20-%20SR.png', batch: 3 },
 ];
 
 // SSR art — hand-curated, prismatic rainbow border + holographic hover shimmer
@@ -7393,18 +7414,37 @@ const TCG_SSR_CARDS = [
     { name: 'Seras Victoria', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SSR/Seras.jpg', batch: 2 },
     { name: 'The Captain', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SSR/The%20Captain.jpg', batch: 2 },
     { name: 'Walter C Durnez', anime: 'Hellsing Ultimate', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Hellsing%20Ultimate/SSR/Walter.jpg', batch: 2 },
+    // ── Batch 3 ──────────────────────────────────────────────────────────────────
+    { name: 'Jin', anime: 'Samurai Champloo', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Samurai%20Champloo/Jin%20-%20Samurai%20Champloo%20-%20SSR.jpg', batch: 3 },
+    { name: 'Anko', anime: 'Call of the Night', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Call%20of%20the%20Night/Anko%20-%20Call%20of%20the%20Night%20-%20SSR.jpg', batch: 3 },
+    { name: 'Griffith', anime: 'Berserk', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Berserk/SSR/Griffith%20-%20Berserk%20-%20SSR.jpg', batch: 3 },
+    { name: 'Guts', anime: 'Berserk', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Berserk/SSR/Guts%20-%20Berserk%20-%20SSR.jpg', batch: 3 },
+    { name: 'Motoko', anime: 'Ghost in the Shell', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Ghost%20in%20the%20Shell/Motoko%20-%20Ghost%20in%20the%20Shell%20-%20SSR.png', batch: 3 },
+    { name: 'Gurren Lagann', anime: 'Gurren Lagann', image: "https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Gurren%20Legan/SSR/Gurren%20Legann%20-%20Gurren%20Legann%20-%20SSR.jpg", batch: 3 },
+    { name: 'Jolyne Cujoh', anime: "JoJo's Bizarre Adventure", image: "https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jojo's%20Bizarre%20Adventure/Jolyne%20Cujoh%20-%20Jojos%20Bizarre%20Adventure%20-%20SSR.webp", batch: 3 },
+    { name: 'Jotaro Kujo', anime: "JoJo's Bizarre Adventure", image: "https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Jojo's%20Bizarre%20Adventure/Jotaro%20Kujo%20-%20Jojos%20Bizarre%20Adventure%20-%20SSR.jpg", batch: 3 },
+    { name: 'Asuka', anime: 'Neon Genesis', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Neon%20Genesis/Asuka%20-%20Neon%20Genesis%20-%20SSR.jpg', batch: 3 },
+    { name: 'Misato', anime: 'Neon Genesis', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Neon%20Genesis/Misato%20-%20Neon%20Genesis%20-%20SSR.jpg', batch: 3 },
+    { name: 'Rei Ayanami', anime: 'Neon Genesis', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Neon%20Genesis/Rei%20Ayanami%20-%20Neon%20Genesis%20-%20SSR.jpg', batch: 3 },
+    { name: 'Alice Schuberg', anime: 'Sword Art Online', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sword%20Art%20Online/SSR/Alice%20Schuberg%20-%20Sword%20Art%20Online%20-%20SSR.webp', batch: 3 },
+    { name: 'Kirito', anime: 'Sword Art Online', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sword%20Art%20Online/SSR/Kirito%20-%20Sword%20Art%20Online%20-%20SSR.webp', batch: 3 },
+    { name: 'Konno Yuuki', anime: 'Sword Art Online', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Sword%20Art%20Online/SSR/Konno%20Yuuki%20-%20Sword%20Art%20Online%20-%20SSR.webp', batch: 3 },
+    { name: 'Kawori', anime: 'Your Lie in April', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Your%20Lie%20in%20April/Kawori%20-%20Your%20Lie%20in%20April%20-%20SSR.png', batch: 3 },
 ];
 
-// Batch membership set — keyed "anime|name" for every batch 2 card.
-// Batch 1 = everything not in this set. Used by _tcgCardBatch() for collection filtering.
+// Batch membership sets — keyed "anime|name". Used by _tcgCardBatch() for collection filtering.
 const TCG_BATCH2_KEYS = new Set(
     [...TCG_SR_CARDS, ...TCG_SSR_CARDS].filter(c => c.batch === 2).map(c => `${c.anime}|${c.name}`)
+);
+const TCG_BATCH3_KEYS = new Set(
+    [...TCG_SR_CARDS, ...TCG_SSR_CARDS].filter(c => c.batch === 3).map(c => `${c.anime}|${c.name}`)
 );
 function _tcgCardBatch(card) {
     if (card.batch) return card.batch;
     // Batch 1 had no Rare/Common cards — any without a saved batch field is batch 2
     if (card.rarity === 'rare' || card.rarity === 'common') return 2;
     const key = `${card.anime || card.series}|${card.name}`;
+    if (TCG_BATCH3_KEYS.has(key)) return 3;
     return TCG_BATCH2_KEYS.has(key) ? 2 : 1;
 }
 
@@ -7459,7 +7499,7 @@ const TCG_EVENT_PREVIEW_CARDS = [
     { name: 'Fern',             anime: 'Frieren',                     neonClass: '2col',   neonA: '#7B00D4', neonB: '#ffffff',                    flickerDelay: '8.8s',  image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Fern.png' },
     { name: 'Cell',             anime: 'Dragon Ball Z',               neonClass: '2col',   neonA: '#3EFF05', neonB: '#7B00D4',                    flickerDelay: '10.5s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Cell.png' },
     { name: 'Kaiju No. 8',     anime: 'Kaiju No. 8',                 neonClass: '2col',   neonA: '#3DDFFF', neonB: '#ffffff',                    flickerDelay: '12.2s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Kaiju%20No.%208.png' },
-    { name: 'Rei Ayanami',     anime: 'Neon Genesis Evangelion',     neonClass: '2col',   neonA: '#E99FB6', neonB: '#B2EDF7',                    flickerDelay: '13.9s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Rei%20Ayanami.png' },
+    { name: 'Rei Ayanami',     anime: 'Neon Genesis',                neonClass: '2col',   neonA: '#E99FB6', neonB: '#B2EDF7',                    flickerDelay: '13.9s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Rei%20Ayanami.png' },
     { name: 'Taro Sakamoto',   anime: 'Sakamoto Days',               neonClass: '2col',   neonA: '#3EFF05', neonB: '#E2E207',                    flickerDelay: '15.6s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Sakamoto.png' },
     { name: 'Akaza',           anime: 'Demon Slayer',                neonClass: '2col',   neonA: '#F902AD', neonB: '#00A3FF',                    flickerDelay: '17.3s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Akaza.png' },
     { name: 'Armored Titan',  anime: 'Attack on Titan',             neonClass: '2col',   neonA: '#FF1A1A', neonB: '#ffffff',                    flickerDelay: '19.0s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Armored%20Titan.png' },
