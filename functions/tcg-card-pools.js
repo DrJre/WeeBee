@@ -196,6 +196,8 @@ const TCG_SR_CARDS = [
     { name: 'Frieza', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Frieza%20-%20Dragon%20Ball%20Z%20-%20SR.jpg', batch: 3 },
     { name: 'Majin Buu', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Majin%20Buu%20-%20Dragon%20Ball%20Z%20-%20SR.jpg', batch: 3 },
     { name: 'Tien', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Tien%20-%20Dragon%20Ball%20Z%20-%20SR.jpg', batch: 3 },
+    { name: 'Winry Rockbell', anime: 'Fullmetal Alchemist', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fullmetal%20Alchemist/SR/Winry%20Rockbell%20-%20Fullmetal%20Alchemist%20-%20SR.jpg', batch: 3 },
+    { name: 'Scar', anime: 'Fullmetal Alchemist', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fullmetal%20Alchemist/SR/Scar%20-%20Fullmetal%20Alchemist%20-%20SR.jpg', batch: 3 },
 ];
 
 const TCG_SSR_CARDS = [
@@ -295,6 +297,8 @@ const TCG_SSR_CARDS = [
     { name: 'Lust', anime: 'Fullmetal Alchemist', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fullmetal%20Alchemist/SSR/Lust%20-%20Fullmetal%20Alchemist%20-%20SSR.jpg', batch: 3 },
     { name: 'Broly', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Broly%20-%20Dragon%20Ball%20Z%20-%20SSR.jpg', batch: 3 },
     { name: 'Frieza', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Frieza%20-%20Dragon%20Ball%20Z%20-%20SSR.jpg', batch: 3 },
+    { name: 'Kenpachi', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SSR/Kenpachi%20-%20Bleach%20-%20SSR.jpg', batch: 3 },
+    { name: 'Shunsui', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SSR/Shunsui%20-%20Bleach%20-%20SSR.jpg', batch: 3 },
 ];
 
 const TCG_UR_CARDS = [

@@ -7320,6 +7320,8 @@ const TCG_SR_CARDS = [
     { name: 'Frieza', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Frieza%20-%20Dragon%20Ball%20Z%20-%20SR.jpg', batch: 3 },
     { name: 'Majin Buu', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Majin%20Buu%20-%20Dragon%20Ball%20Z%20-%20SR.jpg', batch: 3 },
     { name: 'Tien', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Tien%20-%20Dragon%20Ball%20Z%20-%20SR.jpg', batch: 3 },
+    { name: 'Winry Rockbell', anime: 'Fullmetal Alchemist', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fullmetal%20Alchemist/SR/Winry%20Rockbell%20-%20Fullmetal%20Alchemist%20-%20SR.jpg', batch: 3 },
+    { name: 'Scar', anime: 'Fullmetal Alchemist', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fullmetal%20Alchemist/SR/Scar%20-%20Fullmetal%20Alchemist%20-%20SR.jpg', batch: 3 },
 ];
 
 // SSR art — hand-curated, prismatic rainbow border + holographic hover shimmer
@@ -7481,6 +7483,8 @@ const TCG_SSR_CARDS = [
     { name: 'Lust', anime: 'Fullmetal Alchemist', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fullmetal%20Alchemist/SSR/Lust%20-%20Fullmetal%20Alchemist%20-%20SSR.jpg', batch: 3 },
     { name: 'Broly', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Broly%20-%20Dragon%20Ball%20Z%20-%20SSR.jpg', batch: 3 },
     { name: 'Frieza', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Frieza%20-%20Dragon%20Ball%20Z%20-%20SSR.jpg', batch: 3 },
+    { name: 'Kenpachi', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SSR/Kenpachi%20-%20Bleach%20-%20SSR.jpg', batch: 3 },
+    { name: 'Shunsui', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SSR/Shunsui%20-%20Bleach%20-%20SSR.jpg', batch: 3 },
 ];
 
 // Batch membership sets — keyed "anime|name". Used by _tcgCardBatch() for collection filtering.
@@ -8787,7 +8791,7 @@ window._renderPrismaticEventBanner = function() {
                 <div style="font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#7289DA;margin-bottom:6px;">Join the Community</div>
                 <div class="discord-promo-heading" style="font-size:20px;font-weight:900;color:#fff;line-height:1.2;margin-bottom:8px;">🐝 WeeBee Discord Server</div>
                 <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:14px;">🃏 Free card drops &nbsp;·&nbsp; 🎉 Events &nbsp;·&nbsp; 🎁 Giveaways</div>
-                <button onclick="window.open('https://discord.gg/AVB8ZAXace','_blank')" style="padding:10px 24px;border-radius:8px;border:none;background:#5865F2;color:#fff;font-weight:800;font-size:13px;cursor:pointer;letter-spacing:0.3px;" onmouseover="this.style.background='#4752c4'" onmouseout="this.style.background='#5865F2'">Join Discord Server →</button>
+                <button onclick="window.open('https://discord.gg/qAqqvg7ARX','_blank')" style="padding:10px 24px;border-radius:8px;border:none;background:#5865F2;color:#fff;font-weight:800;font-size:13px;cursor:pointer;letter-spacing:0.3px;" onmouseover="this.style.background='#4752c4'" onmouseout="this.style.background='#5865F2'">Join Discord Server →</button>
             </div>
             <div class="discord-promo-deco">${discordSvg}</div>
         </div>
@@ -8837,7 +8841,7 @@ const TCG_PACKS = [
         gradient: 'linear-gradient(135deg,#065f46,#047857)',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%201%20Premium%20Pack.png',
         description: 'Previous batch · 1 guaranteed SR+',
-        odds: '',
+        odds: 'Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.5% UR bonus',
         guaranteedSR: true,
         filler: true,
     },
@@ -12122,6 +12126,8 @@ window._tcgPurgeOrphans = async function() {
 
 // ── TCG Add Anime to Pool (admin) ────────────────────────────────────────────
 const TCG_CURRENT_BATCH = Math.max(1, ...[...TCG_SR_CARDS, ...TCG_SSR_CARDS, ...TCG_UR_CARDS].map(c => c.batch || 1));
+// Bump this to 3 when Batch 3 is released to Firestore via _tcgMigrateSRSSRToPool()
+const TCG_RELEASED_BATCH = 2;
 
 const TCG_POOL_PRESETS = [
     // Baki excluded — search for it manually to confirm the right MAL entry
@@ -12161,7 +12167,7 @@ async function _tcgAddAnimeToPool(malId, title, log) {
             anilist_id: ch.id,
             rank:       rank + 1,
             rarityTier: rank < 15 ? 'rare' : 'common',
-            batch:      TCG_CURRENT_BATCH,
+            batch:      TCG_RELEASED_BATCH,
             series,
         }, { merge: true });
         saved++;
@@ -12515,7 +12521,7 @@ window._tcgRenderStore = async function() {
                 <input type="range" min="1" max="10" value="${qty}" oninput="window._tcgSetPackQty('${pack.id}',+this.value)" style="width:100%;accent-color:#f59e0b;cursor:pointer;">
                 <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:1px;"><span>1</span><span>10</span></div>
             </div>` : '';
-        const wiBatch = pack.filler ? (fillerBatch || 1) : pack.currentBatch ? TCG_CURRENT_BATCH : 0;
+        const wiBatch = pack.filler ? (fillerBatch || 1) : pack.currentBatch ? TCG_RELEASED_BATCH : 0;
         const wiBtn = !isComingSoon ? `<button onclick="window._tcgShowWhatsInside('${pack.id}'${wiBatch ? `,${wiBatch}` : ''})" style="padding:4px 12px;border-radius:20px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:600;cursor:pointer;margin-top:8px;">What's inside</button>` : '';
         return `
         <div class="wb-card-wrap tcg-pack-card${extraClass ? ' ' + extraClass : ''}">
@@ -12560,9 +12566,9 @@ window._tcgRenderStore = async function() {
         flexSlotHtml = packCard(TCG_PACKS.find(p => p.prismatic), true, neonSoonLabel, false, 'prismatic-pack-glow');
     }
 
-    const curBatchLabelHtml = `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#92400e,#b45309);color:white;border-radius:8px;font-weight:800;font-size:11px;letter-spacing:0.5px;">📦 BATCH ${TCG_CURRENT_BATCH} PACK</div>`;
+    const curBatchLabelHtml = `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#92400e,#b45309);color:white;border-radius:8px;font-weight:800;font-size:11px;letter-spacing:0.5px;">📦 BATCH ${TCG_RELEASED_BATCH} PACK</div>`;
 
-    const curBatchPool = _tcgFullCardPool().filter(c => (c.batch || 1) === TCG_CURRENT_BATCH);
+    const curBatchPool = _tcgFullCardPool().filter(c => (c.batch || 1) === TCG_RELEASED_BATCH);
     const curBatchCards = curBatchPool.length ? [...curBatchPool].sort(() => Math.random() - 0.5) : [];
     const curBatchCarouselHtml = curBatchCards.map(c => `
         <div style="width:160px;height:224px;overflow:hidden;flex-shrink:0;">
@@ -12599,7 +12605,7 @@ window._tcgRenderStore = async function() {
         ${curBatchCards.length ? `
         <div style="margin-top:36px;">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-                <h3 style="margin:0;">✨ Batch ${TCG_CURRENT_BATCH} — New Cards</h3>
+                <h3 style="margin:0;">✨ Batch ${TCG_RELEASED_BATCH} — New Cards</h3>
                 <span style="font-size:12px;color:var(--text-muted);font-weight:600;">${curBatchCards.length} cards</span>
             </div>
             <div class="tcg-carousel-viewport">
@@ -27830,33 +27836,43 @@ window.loadDungeonTab = async function() {
     }
     el.innerHTML = `<div class="loading">Loading TCG Dungeon...</div>`;
     const uid = auth.currentUser.uid;
-    const [state, progressRaw, items] = await Promise.all([_dungeonLoadState(uid), _dungeonLoadProgress(uid), _dungeonLoadItems(uid)]);
-    window._dungeonState = state;
-    // Merge Firestore items with the current in-memory state so a write-then-read
-    // race can never wipe items that were just awarded in _dungeonClaim.
-    const _fsItems = items || {};
-    const _memItems = window._dungeonItems || {};
-    const _mergedKeys = new Set([...Object.keys(_fsItems), ...Object.keys(_memItems)]);
-    const _merged = {};
-    for (const _k of _mergedKeys) { _merged[_k] = Math.max(_fsItems[_k] || 0, _memItems[_k] || 0); }
-    window._dungeonItems = _merged;
-    const todayKey = _dungeonTodayKey();
-    let progress = progressRaw;
-    if (!progress) {
-        progress = { date: todayKey, poolIndex: 0, results: [] };
-        if (!state) await _dungeonSaveProgress(uid, progress);
-    } else if (!state && progress.date !== todayKey) {
-        // Safe to roll over to the new day's pool — no active raid to disturb.
-        progress = _dungeonResetForNewDay(progress, todayKey);
-        await _dungeonSaveProgress(uid, progress);
-    }
-    window._dungeonProgress = progress;
-    if (state) {
-        _dungeonRenderActive(el, state);
-    } else if (!progress.difficulty) {
-        _dungeonRenderDifficultyPicker(el);
-    } else {
-        _dungeonRenderGateSelect(el);
+    try {
+        const [state, progressRaw, items] = await Promise.all([_dungeonLoadState(uid), _dungeonLoadProgress(uid), _dungeonLoadItems(uid)]);
+        window._dungeonState = state;
+        // Merge Firestore items with the current in-memory state so a write-then-read
+        // race can never wipe items that were just awarded in _dungeonClaim.
+        const _fsItems = items || {};
+        const _memItems = window._dungeonItems || {};
+        const _mergedKeys = new Set([...Object.keys(_fsItems), ...Object.keys(_memItems)]);
+        const _merged = {};
+        for (const _k of _mergedKeys) { _merged[_k] = Math.max(_fsItems[_k] || 0, _memItems[_k] || 0); }
+        window._dungeonItems = _merged;
+        const todayKey = _dungeonTodayKey();
+        let progress = progressRaw;
+        if (!progress) {
+            progress = { date: todayKey, poolIndex: 0, results: [] };
+            if (!state) await _dungeonSaveProgress(uid, progress);
+        } else if (!state && progress.date !== todayKey) {
+            // Safe to roll over to the new day's pool — no active raid to disturb.
+            progress = _dungeonResetForNewDay(progress, todayKey);
+            await _dungeonSaveProgress(uid, progress);
+        }
+        window._dungeonProgress = progress;
+        if (state) {
+            _dungeonRenderActive(el, state);
+        } else if (!progress.difficulty) {
+            _dungeonRenderDifficultyPicker(el);
+        } else {
+            _dungeonRenderGateSelect(el);
+        }
+    } catch(e) {
+        console.error('[dungeon] loadDungeonTab error:', e);
+        el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">
+            <div style="font-size:24px;margin-bottom:12px;">⚠️</div>
+            <div style="font-weight:700;margin-bottom:8px;">Dungeon failed to load</div>
+            <div style="font-size:13px;margin-bottom:16px;">${e.message || 'Unknown error'}</div>
+            <button class="action-btn" onclick="window.loadDungeonTab()">Retry</button>
+        </div>`;
     }
 };
 
@@ -29207,15 +29223,28 @@ window._dungeonStartRaid = async function() {
 
 function _dungeonRenderActive(el, state) {
     const gate = DUNGEON_GATES[state.gateId];
+    if (!gate) {
+        // Stale/corrupt raid_state — gateId no longer valid. Wipe it and reload.
+        const uid = auth.currentUser?.uid;
+        if (uid) deleteDoc(doc(db, 'raid_state', uid)).catch(() => {});
+        window._dungeonState = null;
+        el.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-muted);">
+            <div style="font-size:20px;margin-bottom:10px;">⚔️</div>
+            <div style="font-weight:700;margin-bottom:6px;">Clearing stale raid data…</div>
+            <div style="font-size:13px;">Your previous raid couldn't be recovered. Starting fresh.</div>
+        </div>`;
+        setTimeout(() => window.loadDungeonTab(), 1200);
+        return;
+    }
     const now = Date.now();
     const progress = Math.min(1, (now - state.startTime) / (state.endTime - state.startTime));
     const remaining = Math.max(0, state.endTime - now);
     const ready = now >= state.endTime;
-    const path = DUNGEON_PATHS[state.pathIndex || 0];
+    const path = DUNGEON_PATHS[Math.min(state.pathIndex || 0, DUNGEON_PATHS.length - 1)];
     const pt = _dungeonPointAtProgress(path, progress);
 
-    const tokens = state.party.map((c, i) => {
-        const offsetX = (i - (state.party.length-1)/2) * 4;
+    const tokens = (state.party || []).map((c, i) => {
+        const offsetX = (i - ((state.party||[]).length-1)/2) * 4;
         return `<div style="position:absolute;left:${pt.x+offsetX}%;top:${pt.y}%;transform:translate(-50%,-50%);width:34px;height:46px;border-radius:50%/35%;overflow:hidden;border:2px solid var(--accent-yellow);box-shadow:0 0 8px rgba(0,0,0,0.5);">
             <img src="${_toR2Url(c.image)}" style="width:100%;height:100%;object-fit:cover;display:block;">
         </div>`;
