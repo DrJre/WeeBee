@@ -12,6 +12,7 @@
     ],
     "rewrites": [
       { "source": "/wb-admin", "destination": "/index.html" },
+      { "source": "/jikan/**", "run": { "serviceId": "jikanproxy", "region": "us-central1" } },
       { "source": "**", "destination": "/maintenance.html" }
     ]
   },

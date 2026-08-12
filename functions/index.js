@@ -8,6 +8,24 @@ initializeApp();
 
 const ADMIN_UID = 'XUD3ym2NcdWtrUiPLlFFaO5ufMh1';
 
+const JIKAN_UPSTREAM = 'https://jikan-railway-production.up.railway.app';
+
+// Thin proxy so the browser never makes cross-origin requests to Railway/Jikan.
+exports.jikanProxy = onRequest({ invoker: 'public' }, async (req, res) => {
+    const jikanPath = req.path.replace(/^\/jikan/, '');
+    const search = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    const targetUrl = `${JIKAN_UPSTREAM}${jikanPath}${search}`;
+    try {
+        const upstream = await fetch(targetUrl, { headers: { 'User-Agent': 'WeeBee/1.0' } });
+        const body = await upstream.text();
+        res.set('Content-Type', 'application/json');
+        res.set('Cache-Control', 'public, max-age=3600, s-maxage=86400');
+        res.status(upstream.status).send(body);
+    } catch (e) {
+        res.status(502).json({ error: e.message });
+    }
+});
+
 function setCORS(res) {
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');

@@ -49,6 +49,8 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const functions = getFunctions(app);
 
+const JIKAN_BASE = '/jikan';
+
 function _toR2Url(url) {
     if (!url || !url.includes('firebasestorage.googleapis.com')) return url;
     const m = url.match(/\/o\/([^?]+)/);
@@ -846,15 +848,25 @@ window.jikanFetch = async function(url, cacheKey, ttlMs = JIKAN_TTL_MS) {
             stalePayload = cached.payload;
         }
     } catch(_) {}
-    try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Jikan ${res.status}`);
-        const json = await res.json();
-        setDoc(doc(db, "anime_cache", cacheKey), { payload: json, fetchedAt: new Date() }).catch(() => {});
-        return json;
-    } catch(e) {
-        if (stalePayload) return stalePayload;
-        throw e;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 2000));
+            const res = await fetch(url);
+            if (res.status === 429) {
+                if (attempt < 2) continue;
+                if (stalePayload) return stalePayload;
+                throw new Error('Rate limited');
+            }
+            if (!res.ok) throw new Error(`Jikan ${res.status}`);
+            const json = await res.json();
+            setDoc(doc(db, "anime_cache", cacheKey), { payload: json, fetchedAt: new Date() }).catch(() => {});
+            return json;
+        } catch(e) {
+            if (attempt === 2) {
+                if (stalePayload) return stalePayload;
+                throw e;
+            }
+        }
     }
 };
 
@@ -2536,7 +2548,7 @@ window.searchListAnime = async function() {
     resContainer.innerHTML = '<div class="loading" style="font-size:12px;">Searching Jikan...</div>';
     
     try {
-        const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=5`);
+        const res = await fetch(`${JIKAN_BASE}/v4/anime?q=${encodeURIComponent(q)}&limit=5`);
         const { data } = await res.json();
         resContainer.innerHTML = '';
         if(data.length === 0) { resContainer.innerHTML = '<p style="font-size:12px;">No results found.</p>'; return; }
@@ -2857,7 +2869,7 @@ window.searchTopAnime = async function() {
     resContainer.innerHTML = '<div class="loading" style="font-size:12px;">Searching Jikan...</div>';
     
     try {
-        const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=5`);
+        const res = await fetch(`${JIKAN_BASE}/v4/anime?q=${encodeURIComponent(q)}&limit=5`);
         const { data } = await res.json();
         resContainer.innerHTML = '';
         if(data.length === 0) { resContainer.innerHTML = '<p style="font-size:12px;">No results found.</p>'; return; }
@@ -4457,14 +4469,18 @@ window.fetchUserProfile = async function(targetUid = null) {
     // Analytics / Lists
     const revQuery = query(collection(db, "reviews"), where("uid", "==", uidToFetch));
     const revSnap = await getDocs(revQuery);
-    let totalScore = 0; let reviewCount = 0; let myReviews = [];
+    let totalScore = 0; let localReviewCount = 0; let myReviews = [];
     revSnap.forEach(d => {
         const data = d.data();
-        if(data.type !== 'suggestion' && data.type !== 'series') { totalScore += parseFloat(data.score); reviewCount++; }
+        if(data.type !== 'suggestion' && data.type !== 'series') { totalScore += parseFloat(data.score); localReviewCount++; }
         myReviews.push({ ...data, id: d.id });
     });
     myReviews.sort((a,b) => b.timestamp - a.timestamp);
-    const avg = reviewCount > 0 ? (totalScore / reviewCount).toFixed(1) : "0.0";
+    const avg = localReviewCount > 0 ? (totalScore / localReviewCount).toFixed(1) : "0.0";
+    // Use the stored reviewCount from the profile doc — it's the authoritative count
+    // (includes in-depth + quick reviews). The live collection count can diverge from
+    // the profile counter and also varies by which review types are filtered.
+    const reviewCount = profileData.reviewCount || localReviewCount;
     window.userRankCache[uidToFetch] = reviewCount;
     const _ri = window.getRankInfo(reviewCount);
     const _rPct = _ri.next ? Math.min(100, Math.round((reviewCount - _ri.min) / (_ri.next - _ri.min) * 100)) : 100;
@@ -4641,7 +4657,7 @@ window.fetchUserProfile = async function(targetUid = null) {
         const { docId, mal_id } = missingAnimeData[i];
         if(i > 0) await new Promise(r => setTimeout(r, 400));
         try {
-            const res = await fetch(`https://api.jikan.moe/v4/anime/${mal_id}`);
+            const res = await fetch(`${JIKAN_BASE}/v4/anime/${mal_id}`);
             const { data: anime } = await res.json();
             if(!anime) continue;
             const newTitle = anime.title_english || anime.title;
@@ -5538,7 +5554,7 @@ window._addSeasonalNominee = async function() {
     }
     btn.disabled = true; btn.textContent = 'Fetching…'; statusEl.textContent = '';
     try {
-        const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}`);
+        const res = await fetch(`${JIKAN_BASE}/v4/anime/${malId}`);
         const { data } = await res.json();
         if (!data) throw new Error('Not found');
         window._seasonalNomineeDraft = window._seasonalNomineeDraft || [];
@@ -5564,7 +5580,7 @@ window._autoLoadSeasonalNominees = async function() {
     const statusEl = document.getElementById('nominee-add-status');
     if (btn) { btn.disabled = true; btn.textContent = 'Loading from Jikan…'; }
     try {
-        const res = await fetch('https://api.jikan.moe/v4/seasons/2026/spring?limit=25');
+        const res = await fetch(`${JIKAN_BASE}/v4/seasons/2026/spring?limit=25`);
         const { data } = await res.json();
         const seenIds = new Set(), seenTitles = new Set();
         const baseTitle = t => (t || '').toLowerCase().replace(/[\s:·\-]+(season|part|cour|s\d|p\d|\d+).*$/i, '').trim();
@@ -5654,7 +5670,7 @@ window.startSeasonalVote = async function(isTest) {
     if (btn) { btn.disabled = true; btn.innerText = 'Creating...'; }
     try {
         const { season, year } = isTest ? (() => { const m = new Date().getMonth(); const y = new Date().getFullYear(); const s = m < 3 ? 'winter' : m < 6 ? 'spring' : m < 9 ? 'summer' : 'fall'; return { season: s, year: y }; })() : window.getPreviousSeason();
-        const url = isTest ? `https://api.jikan.moe/v4/seasons/now?limit=25` : `https://api.jikan.moe/v4/seasons/${year}/${season}?limit=25`;
+        const url = isTest ? `${JIKAN_BASE}/v4/seasons/now?limit=25` : `${JIKAN_BASE}/v4/seasons/${year}/${season}?limit=25`;
         const res = await fetch(url);
         const { data } = await res.json();
         const seenIds = new Set();
@@ -6098,7 +6114,7 @@ window.searchTierSource = async function() {
     _tierSourceTimer = setTimeout(async () => {
         const reqId = ++_tierSourceReqId;
         try {
-            const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8&type=tv`);
+            const res = await fetch(`${JIKAN_BASE}/v4/anime?q=${encodeURIComponent(q)}&limit=8&type=tv`);
             const { data } = await res.json();
             if (reqId !== _tierSourceReqId) return;
             results.innerHTML = (data || []).map(a => `
@@ -6121,7 +6137,7 @@ window.selectTierSource = async function(malId, title, imageUrl) {
     const zone = document.getElementById('tl-unranked-zone');
     if (zone) zone.innerHTML = '<div class="loading" style="padding:10px;">Loading characters...</div>';
     try {
-        const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}/characters`);
+        const res = await fetch(`${JIKAN_BASE}/v4/anime/${malId}/characters`);
         const { data } = await res.json();
         const validChar = c => !/^(narrator|singer|announcer|voice actor)$/i.test(c.character.name.trim());
         const toItem = c => ({ id:`char_${c.character.mal_id}`, title:c.character.name, image:c.character.images?.jpg?.image_url||'', animeTitle:title });
@@ -6332,7 +6348,7 @@ window.searchTierPool = async function() {
                     </div>`;
                 }).join('');
             } else {
-                const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8`);
+                const res = await fetch(`${JIKAN_BASE}/v4/anime?q=${encodeURIComponent(q)}&limit=8`);
                 const { data } = await res.json();
                 if (reqId !== _tierPoolReqId) return;
                 if (!(data||[]).length) { results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">No results.</div>'; return; }
@@ -6417,7 +6433,7 @@ window.searchTierBulkAnime = async function() {
     _tierBulkAnimeTimer = setTimeout(async () => {
         const reqId = ++_tierBulkAnimeReqId;
         try {
-            const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8&type=tv`);
+            const res = await fetch(`${JIKAN_BASE}/v4/anime?q=${encodeURIComponent(q)}&limit=8&type=tv`);
             const { data } = await res.json();
             if (reqId !== _tierBulkAnimeReqId) return;
             if (!(data||[]).length) { results.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">No results.</div>'; return; }
@@ -6445,7 +6461,7 @@ window.selectTierBulkAnime = async function(malId, title, imageUrl) {
     label.textContent = `Characters from ${title}`;
     grid.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">Loading characters...</div>';
     try {
-        const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}/characters`);
+        const res = await fetch(`${JIKAN_BASE}/v4/anime/${malId}/characters`);
         const { data } = await res.json();
         const validChar = c => !/^(narrator|singer|announcer|voice actor)$/i.test(c.character.name.trim());
         const toItem = c => ({ id:`char_${c.character.mal_id}`, title:c.character.name, image:c.character.images?.jpg?.image_url||'', animeTitle: title });
@@ -12032,7 +12048,7 @@ window._tcgSeedCardPool = async function() {
         log('Fetching top 100 anime from MAL…');
         const animeList = [];
         for (let page = 1; page <= 4; page++) {
-            const res = await fetch(`https://api.jikan.moe/v4/top/anime?limit=25&page=${page}`);
+            const res = await fetch(`${JIKAN_BASE}/v4/top/anime?limit=25&page=${page}`);
             const json = await res.json();
             (json.data || []).forEach(a => animeList.push({ mal_id: a.mal_id, title: a.title_english || a.title }));
             log(`Fetched page ${page}/4 — ${animeList.length} anime so far…`);
@@ -20483,7 +20499,7 @@ window.searchAnimeForList = function(query) {
 
         // --- Jikan (primary) ---
         try {
-            const apiUrl = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=8&sfw=false`;
+            const apiUrl = `${JIKAN_BASE}/v4/anime?q=${encodeURIComponent(q)}&limit=8&sfw=false`;
             let res = await fetch(apiUrl);
             if (res.status >= 500) {
                 await new Promise(r => setTimeout(r, 800));
@@ -21858,7 +21874,7 @@ window.fetchGlobalNews = async function() {
     const container = document.getElementById('global-news-feed');
     container.innerHTML = '<div class="loading">Sourcing latest headlines...</div>';
     try {
-        const res = await fetch('https://api.jikan.moe/v4/seasons/now?limit=6');
+        const res = await fetch(`${JIKAN_BASE}/v4/seasons/now?limit=6`);
         const { data: seasonal } = await res.json();
         const topAnime = (seasonal || []).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 5);
         let allNews = [];
@@ -21866,7 +21882,7 @@ window.fetchGlobalNews = async function() {
         for (const anime of topAnime) {
             await new Promise(r => setTimeout(r, 420));
             try {
-                const newsRes = await fetch(`https://api.jikan.moe/v4/anime/${anime.mal_id}/news?limit=5`);
+                const newsRes = await fetch(`${JIKAN_BASE}/v4/anime/${anime.mal_id}/news?limit=5`);
                 const { data: news } = await newsRes.json();
                 (news || []).slice(0, 5).forEach(item => {
                     if (!seenTitles.has(item.title)) {
@@ -21958,7 +21974,7 @@ window.loadRecommendedForYou = async function() {
 
         // Fetch recommendations from Jikan (cached)
         const data = await window.jikanFetch(
-            `https://api.jikan.moe/v4/anime/${seed.mal_id}/recommendations`,
+            `${JIKAN_BASE}/v4/anime/${seed.mal_id}/recommendations`,
             `recs_${seed.mal_id}`
         );
         const recs = data?.data || [];
@@ -22103,6 +22119,15 @@ window.fetchDiscoverPage = async function() {
                 reviewerMap[data.uid].count++;
             }
         });
+        // Fetch profile docs for the top reviewers so we can show profiles.reviewCount
+        // (the authoritative counter) rather than the manually-counted collection total.
+        const topReviewerEntries = Object.values(reviewerMap).sort((a, b) => b.count - a.count).slice(0, 10);
+        await Promise.all(topReviewerEntries.map(async r => {
+            try {
+                const pd = await getDoc(doc(db, 'profiles', r.uid));
+                if (pd.exists() && pd.data().reviewCount) r.count = pd.data().reviewCount;
+            } catch(e) {}
+        }));
         Object.values(reviewerMap).forEach(r => { window.userRankCache[r.uid] = r.count; });
 
         // For entries still missing title, fetch from Jikan and patch the bad review docs
@@ -22110,7 +22135,7 @@ window.fetchDiscoverPage = async function() {
         for (const anime of missingMeta) {
             try {
                 await new Promise(r => setTimeout(r, 420));
-                const res = await fetch(`https://api.jikan.moe/v4/anime/${anime.mal_id}`);
+                const res = await fetch(`${JIKAN_BASE}/v4/anime/${anime.mal_id}`);
                 if (res.ok) {
                     const json = await res.json();
                     anime.title = json.data.title;
@@ -22392,7 +22417,7 @@ window.fetchDiscoverPage = async function() {
                 ;(async () => {
                     try {
                         await new Promise(r => setTimeout(r, 420));
-                        const res = await fetch(`https://api.jikan.moe/v4/anime/${s.mal_id}`);
+                        const res = await fetch(`${JIKAN_BASE}/v4/anime/${s.mal_id}`);
                         if (!res.ok) return;
                         const json = await res.json();
                         const genres = json.data.genres?.slice(0, 3).map(g => g.name).join(' · ') || '';
@@ -22469,18 +22494,18 @@ async function fetchAPI_CategoriesSequentially() {
     if (uTitle) uTitle.innerText = `Upcoming: ${next}`;
     if (uSub) uSub.innerText = `Announced anime airing in ${next}`;
 
-    const delay = () => new Promise(r => setTimeout(r, 800));
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/seasons/now?limit=15', 'discover-trending-carousel'); await delay();
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/seasons/upcoming?limit=15', 'discover-upcoming-carousel'); await delay();
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=1&order_by=score&sort=desc&limit=15', 'discover-action-carousel'); await delay();
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=22&order_by=score&sort=desc&limit=15', 'discover-romance-carousel'); await delay();
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=4&order_by=score&sort=desc&limit=15', 'discover-comedy-carousel'); await delay();
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=14&order_by=score&sort=desc&limit=15', 'discover-horror-carousel'); await delay();
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=24&order_by=score&sort=desc&limit=15', 'discover-scifi-carousel'); await delay();
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=10&order_by=score&sort=desc&limit=15', 'discover-fantasy-carousel'); await delay();
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=36&order_by=score&sort=desc&limit=15', 'discover-sol-carousel'); await delay();
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=30&order_by=score&sort=desc&limit=15', 'discover-sports-carousel'); await delay();
-    await fetchAndRenderCarousel('https://api.jikan.moe/v4/anime?genres=18&order_by=score&sort=desc&limit=15', 'discover-mecha-carousel');
+    const delay = () => new Promise(r => setTimeout(r, 1500));
+    await fetchAndRenderCarousel(`${JIKAN_BASE}/v4/seasons/now?limit=15`, 'discover-trending-carousel'); await delay();
+    await fetchAndRenderCarousel(`${JIKAN_BASE}/v4/seasons/upcoming?limit=15`, 'discover-upcoming-carousel'); await delay();
+    await fetchAndRenderCarousel(`${JIKAN_BASE}/v4/anime?genres=1&order_by=score&sort=desc&limit=15`, 'discover-action-carousel'); await delay();
+    await fetchAndRenderCarousel(`${JIKAN_BASE}/v4/anime?genres=22&order_by=score&sort=desc&limit=15`, 'discover-romance-carousel'); await delay();
+    await fetchAndRenderCarousel(`${JIKAN_BASE}/v4/anime?genres=4&order_by=score&sort=desc&limit=15`, 'discover-comedy-carousel'); await delay();
+    await fetchAndRenderCarousel(`${JIKAN_BASE}/v4/anime?genres=14&order_by=score&sort=desc&limit=15`, 'discover-horror-carousel'); await delay();
+    await fetchAndRenderCarousel(`${JIKAN_BASE}/v4/anime?genres=24&order_by=score&sort=desc&limit=15`, 'discover-scifi-carousel'); await delay();
+    await fetchAndRenderCarousel(`${JIKAN_BASE}/v4/anime?genres=10&order_by=score&sort=desc&limit=15`, 'discover-fantasy-carousel'); await delay();
+    await fetchAndRenderCarousel(`${JIKAN_BASE}/v4/anime?genres=36&order_by=score&sort=desc&limit=15`, 'discover-sol-carousel'); await delay();
+    await fetchAndRenderCarousel(`${JIKAN_BASE}/v4/anime?genres=30&order_by=score&sort=desc&limit=15`, 'discover-sports-carousel'); await delay();
+    await fetchAndRenderCarousel(`${JIKAN_BASE}/v4/anime?genres=18&order_by=score&sort=desc&limit=15`, 'discover-mecha-carousel');
 }
 
 async function fetchAndRenderCarousel(url, containerId) {
@@ -22519,7 +22544,7 @@ window.searchAnime = async function(queryStr) {
         // Run anime search and user search in parallel
         const normalized = queryStr.toLowerCase();
         const [json, userSnap] = await Promise.all([
-            window.jikanFetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(queryStr)}&limit=10`, `search_${normalized.replace(/\s+/g, '_').slice(0, 80)}`).catch(() => null),
+            window.jikanFetch(`${JIKAN_BASE}/v4/anime?q=${encodeURIComponent(queryStr)}&limit=10`, `search_${normalized.replace(/\s+/g, '_').slice(0, 80)}`).catch(() => null),
             getDocs(query(collection(db, "profiles"), where("displayNameLower", ">=", normalized), where("displayNameLower", "<=", normalized + ''), limit(8)))
                 .catch(() => ({ empty: true, docs: [] }))
         ]);
@@ -22753,7 +22778,7 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false, defaultTab
     if (!skipHistory) history.replaceState({}, '', `?anime=${mal_id}`);
     const detailEl = document.getElementById('anime-detail-content');
     if (detailEl) detailEl.innerHTML = '<div class="loading" style="padding:80px 0; text-align:center;">Loading...</div>';
-    const { data: anime } = await window.jikanFetch(`https://api.jikan.moe/v4/anime/${mal_id}/full`, `full_${mal_id}`);
+    const { data: anime } = await window.jikanFetch(`${JIKAN_BASE}/v4/anime/${mal_id}/full`, `full_${mal_id}`);
     window.currentAnime = anime;
 
     let fanServiceScores = new Map(); 
@@ -22947,7 +22972,7 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false, defaultTab
     if (defaultTab) window.switchDetailTabById(defaultTab);
 
     // Async Fetchers
-    window.jikanFetch(`https://api.jikan.moe/v4/anime/${mal_id}/characters`, `chars_${mal_id}`).then(d => {
+    window.jikanFetch(`${JIKAN_BASE}/v4/anime/${mal_id}/characters`, `chars_${mal_id}`).then(d => {
         const cContainer = document.getElementById('detail-chars-container'); if(!cContainer) return;
         if(d.data && d.data.length > 0) {
             cContainer.innerHTML = `<h3>Characters & Voice Actors</h3><div class="character-grid">${d.data.slice(0, 6).map(c => `<div class="character-card"><img src="${c.character.images.jpg.image_url}"><div class="info"><span class="name" title="${c.character.name}">${c.character.name}</span><span class="role">${c.role}</span>${c.voice_actors && c.voice_actors.length > 0 ? `<span style="font-size:11px; margin-top:5px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">VA: ${c.voice_actors[0].person.name}</span>` : ''}</div></div>`).join('')}</div>`;
@@ -22956,14 +22981,14 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false, defaultTab
 
     window.currentEpisodeList = [];
 
-    window.jikanFetch(`https://api.jikan.moe/v4/anime/${mal_id}/recommendations`, `recs_${mal_id}`).then(d => {
+    window.jikanFetch(`${JIKAN_BASE}/v4/anime/${mal_id}/recommendations`, `recs_${mal_id}`).then(d => {
         const rContainer = document.getElementById('detail-recs-container'); if(!rContainer) return;
         if(d.data && d.data.length > 0) {
             rContainer.innerHTML = `<h3>Similar Anime</h3><div class="carousel-container"><button class="carousel-arrow left" onclick="scrollCarousel('recs-carousel', -1)"><span class="material-symbols-outlined">chevron_left</span></button><div class="carousel" id="recs-carousel" style="margin-bottom:0; padding-bottom:10px;">${d.data.slice(0, 10).map(rec => `<div class="anime-card" onclick="loadAnimeDetails(${rec.entry.mal_id})" style="min-width: 140px;"><img src="${rec.entry.images.jpg.image_url}" style="width:120px; height:170px;"><p style="max-width:120px; font-size:12px;">${rec.entry.title}</p></div>`).join('')}</div><button class="carousel-arrow right" onclick="scrollCarousel('recs-carousel', 1)"><span class="material-symbols-outlined">chevron_right</span></button></div>`;
         } else { rContainer.style.display = 'none'; }
     }).catch(() => document.getElementById('detail-recs-container').style.display = 'none');
 
-    window.jikanFetch(`https://api.jikan.moe/v4/anime/${mal_id}/news`, `news_${mal_id}`, JIKAN_CAROUSEL_TTL_MS).then(d => {
+    window.jikanFetch(`${JIKAN_BASE}/v4/anime/${mal_id}/news`, `news_${mal_id}`, JIKAN_CAROUSEL_TTL_MS).then(d => {
         const nContainer = document.getElementById('detail-news-container'); if(!nContainer) return;
         if(d.data && d.data.length > 0) {
             nContainer.innerHTML = `<h3>Latest News</h3><div class="news-grid">${d.data.slice(0, 3).map(n => `<div class="news-card"><img src="${n.images?.jpg?.image_url || anime.images.jpg.image_url}"><div class="news-content"><h3>${n.title}</h3><p>${n.excerpt}</p><a href="${n.url}" target="_blank" class="news-link">Full Article</a></div></div>`).join('')}</div>`;
@@ -23028,7 +23053,7 @@ window.loadAnimeRelations = async function(mal_id) {
         // Fetch relations for a given id and collect entries
         async function fetchAndCollect(id) {
             const { data } = await window.jikanFetch(
-                `https://api.jikan.moe/v4/anime/${id}/relations`, `relations_${id}`
+                `${JIKAN_BASE}/v4/anime/${id}/relations`, `relations_${id}`
             );
             (data || []).forEach(rel => {
                 rel.entry.forEach(e => {
@@ -23080,7 +23105,7 @@ window.loadAnimeRelations = async function(mal_id) {
         for (const e of entries) {
             await new Promise(r => setTimeout(r, 420));
             try {
-                const { data: d } = await window.jikanFetch(`https://api.jikan.moe/v4/anime/${e.mal_id}`, `full_${e.mal_id}`);
+                const { data: d } = await window.jikanFetch(`${JIKAN_BASE}/v4/anime/${e.mal_id}`, `full_${e.mal_id}`);
                 const img = document.getElementById(`rel-img-${e.mal_id}`);
                 if (img && d?.images?.jpg?.image_url) { img.src = d.images.jpg.image_url; img.style.display = 'block'; }
             } catch(_) {}
@@ -23223,7 +23248,7 @@ async function fetchDetailEpisodes(mal_id, page = 1) {
     }
 
     try {
-        const json = await window.jikanFetch(`https://api.jikan.moe/v4/anime/${mal_id}/episodes?page=${page}`, `eps_${mal_id}_p${page}`, JIKAN_CAROUSEL_TTL_MS);
+        const json = await window.jikanFetch(`${JIKAN_BASE}/v4/anime/${mal_id}/episodes?page=${page}`, `eps_${mal_id}_p${page}`, JIKAN_CAROUSEL_TTL_MS);
         const episodes = json.data || [];
         const hasNext = json.pagination?.has_next_page;
         if (page === 1) window.currentEpisodeList = [];
@@ -23493,7 +23518,7 @@ window.onload = function() {
     history.replaceState({ view: 'home-view', profileUid: null, animeId: null }, '', window.location.pathname);
     const loadTrending = async () => {
         try {
-            const r = await fetch('https://api.jikan.moe/v4/seasons/now?limit=15'); const d = await r.json();
+            const r = await fetch(`${JIKAN_BASE}/v4/seasons/now?limit=15`); const d = await r.json();
             const c = document.getElementById('trending-carousel'); c.innerHTML = '';
             const seen = new Set();
             if(d.data) d.data.forEach(a => {
@@ -23593,7 +23618,7 @@ async function bwLoadBySearch(chars, cacheKey, mapRef, applyFn) {
     }
     for (const char of chars) {
         try {
-            const res = await fetch(`https://api.jikan.moe/v4/characters?q=${encodeURIComponent(char.name)}&limit=5`);
+            const res = await fetch(`${JIKAN_BASE}/v4/characters?q=${encodeURIComponent(char.name)}&limit=5`);
             if (res.ok) {
                 const { data } = await res.json();
                 if (data?.length) {
@@ -24962,7 +24987,7 @@ window.loadBwBannerImages = async function() {
         const el = document.getElementById(elId);
         if (!el || el.getAttribute('src')) continue;
         try {
-            const data = await window.jikanFetch(`https://api.jikan.moe/v4/characters/${charId}`, `bw_banner_char_${charId}`, 30 * 24 * 60 * 60 * 1000);
+            const data = await window.jikanFetch(`${JIKAN_BASE}/v4/characters/${charId}`, `bw_banner_char_${charId}`, 30 * 24 * 60 * 60 * 1000);
             const url = data?.data?.images?.jpg?.image_url;
             if (url) { el.src = url; el.style.display = 'block'; }
         } catch(e) {}
@@ -26122,7 +26147,7 @@ window.runAdvancedSearch = async function(loadMore = false) {
     urlParams.set('limit', '24');
     urlParams.set('page', _advPage);
 
-    const endpoint = `https://api.jikan.moe/v4/anime?${urlParams.toString()}&sfw=true`;
+    const endpoint = `${JIKAN_BASE}/v4/anime?${urlParams.toString()}&sfw=true`;
 
     try {
         const rawRes = await fetch(endpoint);
@@ -27296,7 +27321,7 @@ window._obSearch = function(q) {
         try {
             results.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px;">Searching...</div>';
             results.style.display = 'block';
-            const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=12&type=tv`, { signal: _obSearchController.signal });
+            const res = await fetch(`${JIKAN_BASE}/v4/anime?q=${encodeURIComponent(q)}&limit=12&type=tv`, { signal: _obSearchController.signal });
             const data = await res.json();
             const seen = new Set();
             const items = [];
