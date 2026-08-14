@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=155">
+    <link rel="stylesheet" href="styles.css?v=164">
 </head>
 <body>
     <div class="app-container">
@@ -1033,6 +1033,7 @@
                             <button id="admin-subtab-cards-btn" onclick="window.switchAdminSubtab('cards')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🎴 Card Pool</button>
                             <button id="admin-subtab-gifts-btn" onclick="window.switchAdminSubtab('gifts')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🎁 Gifts</button>
                             <button id="admin-subtab-feedback-btn" onclick="window.switchAdminSubtab('feedback')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">💡 Feedback</button>
+                            <button id="admin-subtab-setcards-btn" onclick="window.switchAdminSubtab('setcards')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🏆 Set Cards</button>
                         </div>
 
                         <!-- ── MODERATION ── -->
@@ -1559,6 +1560,53 @@
                                 <div id="god-pack-gift-results" style="margin-top:10px;"></div>
                             </div>
 
+                        </div>
+
+                        <!-- ── SET CARDS ── -->
+                        <div id="admin-subtab-setcards" style="display:none;">
+                            <!-- Eligibility Scanner -->
+                            <div style="background:var(--bg-gray);border-radius:12px;padding:18px 20px;margin-bottom:20px;">
+                                <div style="font-size:14px;font-weight:800;margin-bottom:4px;">🔍 Anime Eligibility Scanner</div>
+                                <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Scan the card pool to find anime with 50+ non-founder cards (eligible for a Set Card).</div>
+                                <button onclick="window._tcgAdminScanSetEligible()" style="padding:8px 18px;border-radius:8px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">Run Scanner</button>
+                                <div id="admin-set-scan-result" style="margin-top:12px;"></div>
+                            </div>
+                            <!-- Create Set Card -->
+                            <div style="background:var(--bg-gray);border-radius:12px;padding:18px 20px;">
+                                <div style="font-size:14px;font-weight:800;margin-bottom:4px;">✦ Create Set Card</div>
+                                <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Fill in the card info, pick exactly 50 required cards from the pool, then submit.</div>
+                                <div style="display:flex;flex-direction:column;gap:10px;max-width:480px;margin-bottom:16px;">
+                                    <div>
+                                        <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Anime Name</label>
+                                        <input id="admin-set-anime-name" type="text" placeholder="e.g. Dragon Ball Z" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;outline:none;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Card Character Name</label>
+                                        <input id="admin-set-card-name" type="text" placeholder="e.g. Goku" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;outline:none;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Card Art Image URL</label>
+                                        <input id="admin-set-card-image" type="text" placeholder="https://…" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;outline:none;">
+                                    </div>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                                    <div style="font-size:13px;font-weight:800;">Required Card Picker</div>
+                                    <button onclick="window._tcgAdminLoadSetPicker()" style="padding:6px 14px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray-darker);color:var(--text-dark);font-size:12px;font-weight:700;cursor:pointer;">Load Card Pool</button>
+                                </div>
+                                <div id="admin-set-picker-area" style="margin-bottom:14px;"></div>
+                                <button onclick="window._tcgAdminCreateSetCard()" style="padding:10px 24px;border-radius:10px;border:none;background:linear-gradient(135deg,#d4a200,#f5c842);color:#1a0800;font-weight:900;font-size:14px;cursor:pointer;">✦ Create Set Card</button>
+                                <div id="admin-set-create-result" style="margin-top:10px;font-size:13px;"></div>
+                            </div>
+                            <!-- Manage Set Cards -->
+                            <div style="background:var(--bg-gray);border-radius:12px;padding:18px 20px;">
+                                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                                    <div style="font-size:14px;font-weight:800;">✦ Manage Set Cards</div>
+                                    <button onclick="window._tcgAdminListSetCards()" style="padding:6px 14px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray-darker);color:var(--text-dark);font-size:12px;font-weight:700;cursor:pointer;">↻ Load</button>
+                                </div>
+                                <div id="admin-set-manage-list" style="display:flex;flex-direction:column;gap:8px;max-width:480px;">
+                                    <span style="font-size:13px;color:var(--text-muted);">Click Load to see existing Set Cards.</span>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- ── FEEDBACK ── -->
@@ -2852,6 +2900,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=708"></script>
+    <script type="module" src="app.js?v=720"></script>
 </body>
 </html>

@@ -349,6 +349,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── TCG SET card definitions (admin-only write, public read) ─────────────
+    match /set_cards/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ── Cache & character DB ──────────────────────────────────────────────────
     match /anime_cache/{doc} {
       allow read: if true;

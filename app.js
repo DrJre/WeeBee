@@ -1,4 +1,4 @@
-﻿﻿﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+﻿﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getFirestore, collection, collectionGroup, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch, waitForPendingWrites, deleteField } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-analytics.js";
@@ -1161,6 +1161,14 @@ document.addEventListener('visibilitychange', () => {
         _awardLoginBonus().catch(() => {});
     }
 });
+
+// Fallback for tabs that stay focused across midnight without ever being
+// backgrounded — visibilitychange never fires in that case, so the hourly
+// tick ensures the new day's streak entry is written. The localStorage guard
+// in _awardLoginBonus makes every same-day call a no-op after the first.
+setInterval(() => {
+    if (auth.currentUser) _awardLoginBonus().catch(() => {});
+}, 60 * 60 * 1000);
 
 // On mobile (no room for the chevron) tapping the avatar opens the account
 // dropdown; on desktop it goes straight to the user's profile.
@@ -9499,7 +9507,7 @@ window._tcgFindCard = async function(nameQuery, rarities) {
 
 // Admin sub-tab switcher
 window.switchAdminSubtab = function(tab) {
-    ['moderation','economy','cards','gifts','feedback'].forEach(t => {
+    ['moderation','economy','cards','gifts','feedback','setcards'].forEach(t => {
         const el = document.getElementById('admin-subtab-' + t);
         const btn = document.getElementById('admin-subtab-' + t + '-btn');
         if (el) el.style.display = t === tab ? '' : 'none';
@@ -12846,10 +12854,13 @@ window._tcgRenderSearchRarityFilters = function() {
     const selStyle = (isActive, color = 'var(--accent-yellow)', bg = 'rgba(245,158,11,0.12)') =>
         `padding:5px 10px;border-radius:20px;border:1px solid ${isActive ? color : 'var(--border-color)'};background:${isActive ? bg : 'transparent'};color:${isActive ? color : 'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;outline:none;`;
 
-    const rarityPills = ['all','ur','ssr','sr','rare','common'].map(f => {
+    const rarityPills = ['all','ur','ssr','sr','rare','common','set'].map(f => {
         const isActive = f === activeR;
-        const label = { all: 'All', ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common' }[f];
-        return `<button onclick="window._tcgSearchRarity='${f}';window._tcgRenderSearchRarityFilters();window._tcgSearchCards(document.getElementById('tcg-search-input').value)" style="${pillStyle(isActive)}">${label}</button>`;
+        const label = { all: 'All', ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', set: '★ Sets' }[f];
+        const goldColor = '#f5c842';
+        const goldBg = 'rgba(245,200,0,0.12)';
+        const pStyle = f === 'set' ? pillStyle(isActive, goldColor, goldBg) : pillStyle(isActive);
+        return `<button onclick="window._tcgSearchRarity='${f}';window._tcgRenderSearchRarityFilters();window._tcgSearchCards(document.getElementById('tcg-search-input').value)" style="${pStyle}">${label}</button>`;
     }).join('');
 
     const eventVal = eventActive ? activeR : '';
@@ -12869,6 +12880,370 @@ window._tcgRenderSearchRarityFilters = function() {
     el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">${rarityPills}${eventSel}${batchSel}</div>`;
 };
 
+// ── SET Card Helpers ──────────────────────────────────────────────────────────
+let _tcgSetCardsCache = null;
+async function _tcgLoadSetCards() {
+    if (_tcgSetCardsCache) return _tcgSetCardsCache;
+    const snap = await getDocs(collection(db, 'set_cards'));
+    _tcgSetCardsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return _tcgSetCardsCache;
+}
+
+window._tcgSetCompletionCount = function _tcgSetCompletionCount(setDef, myCards) {
+    const nonFounder = myCards.filter(c => !c.founder && c.rarity !== 'set');
+    const owned = new Set(nonFounder.map(c => `${c.name}|||${c.anime}|||${c.rarity}`));
+    return (setDef.requiredCards || []).filter(r => owned.has(`${r.name}|||${r.anime}|||${r.rarity}`)).length;
+}
+
+window._tcgPlaySetClaimAnimation = async function _tcgPlaySetClaimAnimation(setDef) {
+    return new Promise(resolve => {
+        if (!document.getElementById('set-claim-kf')) {
+            const s = document.createElement('style');
+            s.id = 'set-claim-kf';
+            s.textContent = '@keyframes setSparkFall{from{transform:translateY(0) rotate(0deg);opacity:1}to{transform:translateY(110vh) rotate(720deg);opacity:0}}';
+            document.head.appendChild(s);
+        }
+        const overlay = document.createElement('div');
+        overlay.id = 'tcg-set-claim-anim';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,0);display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:all;overflow:hidden;transition:background 0.6s;';
+        overlay.innerHTML = `
+            <div id="tcg-set-anim-card" style="position:relative;z-index:2;transform:translateY(-130vh) scale(1.05);transition:transform 2.2s cubic-bezier(0.22,1,0.36,1);filter:drop-shadow(0 0 60px rgba(245,200,0,0.8));">
+                <div class="tcg-card-scale">${_tcgBuildCardFace({ name: setDef.cardName, anime: setDef.animeName, rarity: 'set', image: setDef.image, setId: setDef.id })}</div>
+            </div>
+            <div id="tcg-set-anim-text" style="position:relative;z-index:2;font-size:26px;font-weight:900;color:#f5c842;text-shadow:0 0 30px rgba(245,200,0,0.8);letter-spacing:0.1em;text-transform:uppercase;opacity:0;transform:scale(0.7);transition:opacity 0.4s,transform 0.4s;margin-top:20px;">★ Set Collected! ★</div>
+            <div id="tcg-set-anim-particles" style="position:fixed;inset:0;pointer-events:none;z-index:1;"></div>`;
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => {
+            overlay.style.background = 'rgba(0,0,0,0.88)';
+            const cardEl = document.getElementById('tcg-set-anim-card');
+            const textEl = document.getElementById('tcg-set-anim-text');
+            const particlesEl = document.getElementById('tcg-set-anim-particles');
+            overlay.querySelectorAll('.wb-card--set').forEach(c => c.classList.add('tcg-anim-in-view'));
+            setTimeout(() => { if (cardEl) cardEl.style.transform = 'translateY(0) scale(1)'; }, 60);
+            setTimeout(() => {
+                if (textEl) { textEl.style.opacity = '1'; textEl.style.transform = 'scale(1)'; }
+                for (let i = 0; i < 28; i++) {
+                    setTimeout(() => {
+                        if (!particlesEl) return;
+                        const sp = document.createElement('div');
+                        const x = 15 + Math.random() * 70;
+                        const sz = 4 + Math.random() * 10;
+                        const dur = 1.2 + Math.random() * 1.4;
+                        sp.style.cssText = `position:absolute;left:${x}%;top:-30px;width:${sz}px;height:${sz}px;background:#f5c842;border-radius:50%;animation:setSparkFall ${dur}s ease-in forwards;box-shadow:0 0 ${sz*2}px rgba(245,200,0,0.7);`;
+                        particlesEl.appendChild(sp);
+                    }, i * 65);
+                }
+            }, 2400);
+            setTimeout(() => {
+                overlay.style.opacity = '0';
+                overlay.style.transition += ',opacity 0.5s';
+                setTimeout(() => { overlay.remove(); resolve(); }, 500);
+            }, 4700);
+        });
+    });
+}
+
+window._tcgOpenSetProgress = async function(setId) {
+    document.getElementById('tcg-set-progress-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'tcg-set-progress-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);display:flex;align-items:flex-start;justify-content:center;padding:20px;box-sizing:border-box;overflow-y:auto;';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+    modal.innerHTML = '<div style="background:var(--bg-white);border-radius:20px;padding:28px 24px;max-width:760px;width:100%;box-sizing:border-box;margin:auto;box-shadow:0 24px 80px rgba(0,0,0,0.5);"><div style="padding:40px;color:var(--text-muted);text-align:center;">Loading…</div></div>';
+    document.body.appendChild(modal);
+    const body = modal.querySelector('div');
+    try {
+        const [sets, myCards] = await Promise.all([
+            _tcgLoadSetCards(),
+            auth.currentUser ? _tcgLoadCollection(auth.currentUser.uid) : Promise.resolve([])
+        ]);
+        const s = sets.find(x => x.id === setId);
+        if (!s) { body.innerHTML = '<p style="color:var(--text-muted);padding:20px;">Set not found.</p>'; return; }
+        const uid = auth.currentUser?.uid;
+        const nonFounderMine = myCards.filter(c => !c.founder && c.rarity !== 'set');
+        const ownedSet = new Set(nonFounderMine.map(c => `${c.name}|||${c.anime}|||${c.rarity}`));
+        const alreadyClaimed = myCards.some(c => c.rarity === 'set' && c.setId === s.id);
+        const required = s.requiredCards || [];
+        const ownedCount = required.filter(r => ownedSet.has(`${r.name}|||${r.anime}|||${r.rarity}`)).length;
+        const complete = required.length >= 50 && ownedCount >= 50;
+        const pct = Math.min(100, Math.round((ownedCount / Math.max(required.length, 1)) * 100));
+        body.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <div style="font-size:18px;font-weight:900;color:var(--text-dark);">★ ${s.animeName} Set</div>
+                <button onclick="document.getElementById('tcg-set-progress-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin-bottom:24px;">
+                <div style="flex-shrink:0;text-align:center;">
+                    ${_tcgBuildCardFace({ name: s.cardName, anime: s.animeName, rarity: 'set', image: s.image, setId: s.id })}
+                    ${alreadyClaimed
+                        ? `<div style="margin-top:10px;font-size:12px;font-weight:800;color:#f5c842;">★ Collected</div>`
+                        : complete && uid
+                            ? `<button id="tcg-claim-set-btn" onclick="window._tcgClaimSetCard('${s.id}')" style="margin-top:12px;width:100%;padding:11px 0;border-radius:10px;border:none;background:linear-gradient(135deg,#d4a200,#f5c842);color:#1a0800;font-weight:900;font-size:13px;cursor:pointer;box-shadow:0 2px 14px rgba(245,200,0,0.4);">✦ Claim Set Card</button>`
+                            : ''}
+                </div>
+                <div style="flex:1;min-width:180px;">
+                    <div style="font-size:13px;font-weight:800;color:var(--text-dark);margin-bottom:8px;">Progress</div>
+                    <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:6px;">
+                        <span style="color:var(--text-dark);">${ownedCount} / ${required.length} cards</span>
+                        <span style="color:${complete ? '#f5c842' : 'var(--text-muted)'};">${pct}%</span>
+                    </div>
+                    <div style="height:8px;background:var(--border-color);border-radius:4px;overflow:hidden;margin-bottom:10px;">
+                        <div style="height:100%;width:${pct}%;background:${complete ? '#f5c842' : '#a78bfa'};border-radius:4px;transition:width .3s;"></div>
+                    </div>
+                    ${alreadyClaimed ? '<div style="font-size:12px;color:#f5c842;font-weight:700;">★ You already have this Set Card!</div>'
+                    : complete ? '<div style="font-size:12px;color:#22c55e;font-weight:700;">✓ Complete — claim your Set Card!</div>'
+                    : `<div style="font-size:12px;color:var(--text-muted);">${required.length - ownedCount} more card${required.length - ownedCount !== 1 ? 's' : ''} needed</div>`}
+                </div>
+            </div>
+            <div style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Required Cards (${ownedCount}/${required.length})</div>
+            <div data-hover-anim-only style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;">
+                ${required.map(r => {
+                    const owns = ownedSet.has(`${r.name}|||${r.anime}|||${r.rarity}`);
+                    const eName = r.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    const eAnime = (r.anime||'').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    return `<div onclick="window._tcgOpenVersionsView('${eName}','${eAnime}','${r.rarity}')" title="See who owns ${r.name}" style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;transition:transform .12s;${owns ? '' : 'opacity:0.35;filter:grayscale(55%);'}" onmouseenter="this.style.transform='scale(1.04)'" onmouseleave="this.style.transform=''">
+                        <div style="width:110px;height:154px;overflow:hidden;border-radius:8px;">
+                            <div style="transform:scale(0.5);transform-origin:top left;width:220px;">${_tcgBuildCardFace(r)}</div>
+                        </div>
+                        <div style="font-size:9px;font-weight:700;color:${owns ? '#22c55e' : 'var(--text-muted)'};text-align:center;line-height:1.2;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${owns ? '✓ ' : ''}${r.name}</div>
+                    </div>`;
+                }).join('')}
+            </div>`;
+        body.querySelectorAll('.wb-card--set').forEach(c => c.classList.add('tcg-anim-in-view'));
+        _tcgObserveSSRCards(body);
+    } catch(e) {
+        console.error('Set progress error:', e);
+        body.innerHTML = '<p style="color:var(--text-muted);padding:20px;">Error loading set progress.</p>';
+    }
+};
+
+window._tcgClaimSetCard = async function(setId) {
+    const uid = auth.currentUser?.uid;
+    if (!uid) { alert('Please sign in to claim.'); return; }
+    const btn = document.getElementById('tcg-claim-set-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
+    try {
+        const [sets, myCards] = await Promise.all([_tcgLoadSetCards(), _tcgLoadCollection(uid)]);
+        const s = sets.find(x => x.id === setId);
+        if (!s) throw new Error('Set not found');
+        if (myCards.some(c => c.rarity === 'set' && c.setId === s.id)) {
+            alert('You already have this Set Card!');
+            if (btn) { btn.disabled = false; btn.textContent = '✦ Claim Set Card'; }
+            return;
+        }
+        const ownedCount = _tcgSetCompletionCount(s, myCards);
+        if (ownedCount < 50) {
+            alert(`Only ${ownedCount}/50 required cards owned — cannot claim yet.`);
+            if (btn) { btn.disabled = false; btn.textContent = '✦ Claim Set Card'; }
+            return;
+        }
+        const cardId = `set_${setId}_${uid.slice(0, 6)}_${Date.now()}`;
+        const cardData = { name: s.cardName, anime: s.animeName, rarity: 'set', setId: s.id, image: s.image || '', pullTimestamp: new Date().toISOString() };
+        document.getElementById('tcg-set-progress-modal')?.remove();
+        const results = await Promise.allSettled([
+            setDoc(doc(db, 'card_collections', uid, 'cards', cardId), cardData),
+            _tcgPlaySetClaimAnimation(s)
+        ]);
+        if (results[0].status === 'rejected') throw results[0].reason;
+        if (window._tcgCollectionCache) window._tcgCollectionCache.delete(uid);
+    } catch(e) {
+        console.error('Claim SET error:', e);
+        document.getElementById('tcg-set-claim-anim')?.remove();
+        alert('Failed to claim Set Card. Please try again.');
+        if (btn) { btn.disabled = false; btn.textContent = '✦ Claim Set Card'; }
+    }
+};
+
+// ── Admin — SET Card Tools ────────────────────────────────────────────────────
+window._tcgAdminScanSetEligible = async function() {
+    const el = document.getElementById('admin-set-scan-result');
+    if (!el) return;
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Scanning card pool…</div>';
+    await _tcgEnsureCardPool();
+    const countByAnime = {};
+    const addPool = (pool, rarity) => {
+        (pool || []).forEach(c => {
+            if (c.founder) return;
+            const anime = _normalizeSeriesName(c.series || c.anime || '');
+            if (!anime) return;
+            if (!countByAnime[anime]) countByAnime[anime] = { total: 0, r: {} };
+            countByAnime[anime].total++;
+            countByAnime[anime].r[rarity] = (countByAnime[anime].r[rarity] || 0) + 1;
+        });
+    };
+    addPool(window._tcgURPool?.length ? window._tcgURPool : TCG_UR_CARDS, 'ur');
+    addPool(window._tcgSSRPool?.length ? window._tcgSSRPool : TCG_SSR_CARDS, 'ssr');
+    addPool(window._tcgSRPool?.length ? window._tcgSRPool : TCG_SR_CARDS, 'sr');
+    addPool(window._tcgRarePool, 'rare');
+    addPool(window._tcgCommonPool, 'common');
+    const totalCards = Object.values(countByAnime).reduce((s, v) => s + v.total, 0);
+    const allSorted = Object.entries(countByAnime).sort((a, b) => b[1].total - a[1].total);
+    const eligible = allSorted.filter(([, v]) => v.total >= 50);
+    el.innerHTML = `<div style="font-size:13px;font-weight:700;margin-bottom:6px;">${eligible.length} anime eligible (50+) — ${totalCards} total pool cards scanned</div>
+        <div style="display:flex;flex-direction:column;gap:5px;max-height:320px;overflow-y:auto;">
+            ${allSorted.filter(([, v]) => v.total >= 30).map(([anime, data]) => `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:${data.total>=50?'rgba(245,200,0,0.08)':'var(--bg-gray)'};border-radius:8px;font-size:12px;border:1px solid ${data.total>=50?'#f5c842':'transparent'};">
+                <span style="font-weight:700;color:${data.total>=50?'#f5c842':'var(--text-dark)'};">${data.total>=50?'★ ':''}${anime}</span>
+                <span style="color:var(--text-muted);">${data.total} — UR:${data.r.ur||0} SSR:${data.r.ssr||0} SR:${data.r.sr||0} Rare:${data.r.rare||0} Common:${data.r.common||0}</span>
+            </div>`).join('')}
+            ${allSorted.filter(([, v]) => v.total >= 30).length === 0 ? '<div style="color:var(--text-muted);font-size:12px;padding:8px;">No anime have 30+ cards in the pool yet.</div>' : ''}
+        </div>`;
+};
+
+window._tcgAdminToggleSetCard = function(keyEl) {
+    const key = keyEl.dataset.key;
+    const card = (window._adminSetPickerPool || []).find(c => `${c.name}|||${c.anime}|||${c.rarity}` === key);
+    if (!card) return;
+    if (window._adminSetPickerSelected[key]) delete window._adminSetPickerSelected[key];
+    else window._adminSetPickerSelected[key] = { name: card.name, anime: card.anime, rarity: card.rarity, image: card.image || '' };
+    window._tcgAdminRenderSetPickerGrid();
+};
+
+window._tcgAdminRenderSetPickerGrid = function() {
+    const headerEl = document.getElementById('admin-set-picker-header');
+    const cardsEl = document.getElementById('admin-set-picker-cards');
+    if (!headerEl || !cardsEl) return;
+    const sel = window._adminSetPickerSelected || {};
+    const selCount = Object.keys(sel).length;
+    const filter = window._adminSetPickerFilter || 'all';
+    const search = (window._adminSetPickerSearch || '').toLowerCase();
+    const animeFilter = (window._adminSetPickerAnime || '').toLowerCase();
+    const pool = (window._adminSetPickerPool || [])
+        .filter(c => filter === 'all' || c.rarity === filter)
+        .filter(c => !search || (c.name||'').toLowerCase().includes(search) || (c.anime||'').toLowerCase().includes(search))
+        .filter(c => !animeFilter || (c.anime||'').toLowerCase().includes(animeFilter));
+    const rarityColor = { ur:'#ff4dff', ssr:'#00d4ff', sr:'#8b5cf6', rare:'#f59e0b', common:'#9aa1a8' };
+    headerEl.innerHTML = `
+        <div style="margin-bottom:10px;padding:9px 14px;border-radius:10px;background:${selCount===50?'rgba(245,200,0,0.12)':selCount>50?'rgba(239,68,68,0.1)':'var(--bg-gray)'};border:1px solid ${selCount===50?'#f5c842':selCount>50?'#ef4444':'var(--border-color)'};">
+            <span style="font-weight:800;font-size:13px;color:${selCount===50?'#f5c842':selCount>50?'#ef4444':'var(--text-dark)'};">${selCount}/50 selected</span>
+            ${selCount > 0 ? `<button onclick="window._adminSetPickerSelected={};window._tcgAdminRenderSetPickerGrid()" style="margin-left:10px;padding:2px 8px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;">Clear all</button>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+            ${['all','ur','ssr','sr','rare','common'].map(f => `<button onclick="window._adminSetPickerFilter='${f}';window._tcgAdminRenderSetPickerGrid()" style="padding:4px 10px;border-radius:14px;border:1px solid ${filter===f?'var(--accent-yellow)':'var(--border-color)'};background:${filter===f?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${filter===f?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${f==='all'?'All':f.toUpperCase()}</button>`).join('')}
+        </div>`;
+    cardsEl.innerHTML = pool.map(c => {
+        const key = `${c.name}|||${c.anime}|||${c.rarity}`;
+        const selected = !!sel[key];
+        return `<div data-key="${key.replace(/"/g,'&quot;')}" onclick="window._tcgAdminToggleSetCard(this)" style="cursor:pointer;padding:6px;border-radius:8px;border:2px solid ${selected?'#f5c842':'var(--border-color)'};background:${selected?'rgba(245,200,0,0.1)':'var(--bg-gray)'};text-align:center;">
+            ${c.image ? `<img src="${_toR2Url(c.image)}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;margin-bottom:4px;" onerror="this.style.display='none'">` : '<div style="width:60px;height:60px;background:var(--bg-gray-darker);border-radius:6px;margin:0 auto 4px;"></div>'}
+            <div style="font-size:9px;font-weight:700;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-dark);">${c.name}</div>
+            <div style="font-size:8px;color:${rarityColor[c.rarity]||'#aaa'};font-weight:700;text-transform:uppercase;">${c.rarity}</div>
+            ${selected ? '<div style="font-size:9px;color:#f5c842;font-weight:900;">✓</div>' : ''}
+        </div>`;
+    }).join('');
+};
+
+window._tcgAdminLoadSetPicker = async function() {
+    const el = document.getElementById('admin-set-picker-area');
+    if (!el) return;
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Loading card pool…</div>';
+    await _tcgEnsureCardPool();
+    window._adminSetPickerSelected = {};
+    window._adminSetPickerFilter = 'all';
+    window._adminSetPickerSearch = '';
+    window._adminSetPickerAnime = '';
+    const allCards = [
+        ...(window._tcgURPool?.length ? window._tcgURPool : TCG_UR_CARDS).map(c => ({ ...c, rarity:'ur', anime: _normalizeSeriesName(c.series||c.anime||'') })),
+        ...(window._tcgSSRPool?.length ? window._tcgSSRPool : TCG_SSR_CARDS).map(c => ({ ...c, rarity:'ssr', anime: _normalizeSeriesName(c.series||c.anime||'') })),
+        ...(window._tcgSRPool?.length ? window._tcgSRPool : TCG_SR_CARDS).map(c => ({ ...c, rarity:'sr', anime: _normalizeSeriesName(c.series||c.anime||'') })),
+        ...(window._tcgRarePool||[]).map(c => ({ ...c, rarity:'rare', anime: _normalizeSeriesName(c.series||c.anime||'') })),
+        ...(window._tcgCommonPool||[]).map(c => ({ ...c, rarity:'common', anime: _normalizeSeriesName(c.series||c.anime||'') })),
+    ].filter(c => !c.founder);
+    window._adminSetPickerPool = allCards;
+    // Render static structure — search inputs are never replaced so focus is preserved
+    el.innerHTML = `
+        <div id="admin-set-picker-header"></div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+            <input oninput="window._adminSetPickerSearch=this.value;window._tcgAdminRenderSetPickerGrid()" placeholder="Search name or anime…" style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:12px;outline:none;">
+            <input oninput="window._adminSetPickerAnime=this.value;window._tcgAdminRenderSetPickerGrid()" placeholder="Filter by anime…" style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:12px;outline:none;">
+        </div>
+        <div id="admin-set-picker-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;max-height:380px;overflow-y:auto;padding-right:4px;"></div>`;
+    window._tcgAdminRenderSetPickerGrid();
+};
+
+window._tcgAdminCreateSetCard = async function() {
+    const animeName = document.getElementById('admin-set-anime-name')?.value?.trim();
+    const cardName = document.getElementById('admin-set-card-name')?.value?.trim();
+    const image = document.getElementById('admin-set-card-image')?.value?.trim() || '';
+    const sel = window._adminSetPickerSelected || {};
+    const selCount = Object.keys(sel).length;
+    const resultEl = document.getElementById('admin-set-create-result');
+    if (!animeName || !cardName) { if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444;">⚠ Anime name and card name are required.</span>'; return; }
+    if (selCount !== 50) { if (resultEl) resultEl.innerHTML = `<span style="color:#ef4444;">⚠ Select exactly 50 required cards (currently ${selCount}).</span>`; return; }
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--text-muted);">Creating…</span>';
+    try {
+        await addDoc(collection(db, 'set_cards'), {
+            animeName, cardName, image,
+            requiredCards: Object.values(sel),
+            createdAt: serverTimestamp(),
+        });
+        _tcgSetCardsCache = null;
+        if (resultEl) resultEl.innerHTML = `<span style="color:#22c55e;">✅ Set Card created for <strong>${animeName}</strong>!</span>`;
+        document.getElementById('admin-set-anime-name').value = '';
+        document.getElementById('admin-set-card-name').value = '';
+        document.getElementById('admin-set-card-image').value = '';
+        window._adminSetPickerSelected = {};
+        window._tcgAdminRenderSetPickerGrid();
+    } catch(e) {
+        console.error('Create set error:', e);
+        if (resultEl) resultEl.innerHTML = `<span style="color:#ef4444;">❌ Error: ${e.message}</span>`;
+    }
+};
+
+window._tcgAdminListSetCards = async function() {
+    const el = document.getElementById('admin-set-manage-list');
+    if (!el) return;
+    el.innerHTML = '<span style="color:var(--text-muted);font-size:13px;">Loading…</span>';
+    try {
+        const snap = await getDocs(collection(db, 'set_cards'));
+        if (snap.empty) { el.innerHTML = '<span style="color:var(--text-muted);font-size:13px;">No Set Cards yet.</span>'; return; }
+        el.innerHTML = snap.docs.map(d => {
+            const s = d.data();
+            return `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg-white);border-radius:10px;border:1px solid var(--border-color);">
+                <img src="${s.image || ''}" style="width:40px;height:56px;object-fit:cover;border-radius:6px;background:#222;flex-shrink:0;" onerror="this.style.background='#333'">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.cardName}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">${s.animeName}</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+                    <button onclick="window._tcgAdminReplaceSetArt('${d.id}')" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border-color);background:var(--bg-gray-darker);color:var(--text-dark);font-size:11px;font-weight:700;cursor:pointer;">Replace Art</button>
+                    <button onclick="window._tcgAdminDeleteSetCard('${d.id}','${s.cardName.replace(/'/g,"\\'")}','${s.animeName.replace(/'/g,"\\'")}');" style="padding:5px 12px;border-radius:7px;border:none;background:#ef4444;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">Delete</button>
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        el.innerHTML = `<span style="color:#ef4444;font-size:13px;">Error: ${e.message}</span>`;
+    }
+};
+
+window._tcgAdminDeleteSetCard = async function(id, cardName, animeName) {
+    if (!confirm(`Delete SET card "${cardName}" (${animeName})? This cannot be undone.`)) return;
+    try {
+        await deleteDoc(doc(db, 'set_cards', id));
+        _tcgSetCardsCache = null;
+        window._tcgAdminListSetCards();
+    } catch(e) {
+        alert('Delete failed: ' + e.message);
+    }
+};
+
+window._tcgAdminReplaceSetArt = async function(id) {
+    const newUrl = prompt('Paste new image URL:');
+    if (!newUrl || !newUrl.trim()) return;
+    try {
+        await updateDoc(doc(db, 'set_cards', id), { image: newUrl.trim() });
+        _tcgSetCardsCache = null;
+        window._tcgAdminListSetCards();
+    } catch(e) {
+        alert('Replace art failed: ' + e.message);
+    }
+};
+
+window._tcgTestSetAnim = async function() {
+    const sets = await _tcgLoadSetCards();
+    if (!sets.length) { alert('No Set Cards defined yet.'); return; }
+    await window._tcgPlaySetClaimAnimation(sets[0]);
+};
+
 window._tcgSearchCards = async function(queryStr) {
     const el = document.getElementById('tcg-search-results');
     if (!el) return;
@@ -12876,6 +13251,43 @@ window._tcgSearchCards = async function(queryStr) {
     const rarity = window._tcgSearchRarity || 'all';
     const sort = window._tcgStoreSort || 'default';
     const q = (queryStr || '').trim().toLowerCase();
+
+    // ── SET filter: show available set cards with user progress ──────────────
+    if (rarity === 'set') {
+        el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Loading Set Cards…</p>';
+        const sets = await _tcgLoadSetCards();
+        if (!sets.length) { el.innerHTML = '<p style="color:var(--text-muted);">No Set Cards have been created yet.</p>'; return; }
+        let myCards = [];
+        if (auth.currentUser) { try { myCards = await _tcgLoadCollection(auth.currentUser.uid); } catch(e) {} }
+        el.innerHTML = `
+            <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;">Complete all 50 required cards to earn the Set Card for each anime.</p>
+            <div class="tcg-card-grid" data-hover-anim-only="1" style="display:flex;flex-wrap:wrap;gap:18px;">
+                ${sets.map(s => {
+                    const owned = _tcgSetCompletionCount(s, myCards);
+                    const pct = Math.round((owned / 50) * 100);
+                    const alreadyClaimed = myCards.some(c => c.rarity === 'set' && c.setId === s.id);
+                    const complete = owned >= 50;
+                    return `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                        <div class="tcg-card-cell" onclick="window._tcgOpenSetProgress('${s.id}')" style="cursor:pointer;"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace({ name: s.cardName, anime: s.animeName, rarity: 'set', image: s.image, setId: s.id })}</div></div></div>
+                        <div style="width:220px;">
+                            <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-bottom:4px;">
+                                <span style="color:var(--text-dark);">${s.animeName}</span>
+                                <span style="color:${complete?'#f5c842':'var(--text-muted)'};">${owned}/50</span>
+                            </div>
+                            <div style="height:4px;background:var(--border-color);border-radius:2px;overflow:hidden;">
+                                <div style="height:100%;width:${pct}%;background:${complete?'#f5c842':'#a78bfa'};border-radius:2px;transition:width .3s;"></div>
+                            </div>
+                            ${alreadyClaimed ? `<div style="text-align:center;margin-top:6px;font-size:11px;font-weight:800;color:#f5c842;">★ Collected</div>`
+                              : complete ? `<div style="text-align:center;margin-top:6px;font-size:11px;font-weight:800;color:#22c55e;">✓ Claim Available!</div>`
+                              : ''}
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>`;
+        el.querySelectorAll('.wb-card--set').forEach(c => c.classList.add('tcg-anim-in-view'));
+        return;
+    }
+
     // Require a search term, a specific rarity, or "New" sort to show results —
     // "All" + empty query + default sort would dump the entire pool unhelpfully.
     if (!q && rarity === 'all' && sort !== 'new') { el.innerHTML = ''; return; }
@@ -12915,8 +13327,8 @@ window._tcgSearchCards = async function(queryStr) {
             ${shown.map(c => `<div class="tcg-card-cell" data-name="${(c.name||'').replace(/"/g,'&quot;')}" data-anime="${(c.anime||'').replace(/"/g,'&quot;')}" data-rarity="${c.rarity||''}" onclick="window._tcgOpenVersionsView(this.dataset.name,this.dataset.anime,this.dataset.rarity)" style="cursor:pointer;" title="View all versions of ${(c.name||'').replace(/"/g,'&quot;')}"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(c)}</div></div></div>`).join('')}
         </div>`;
     _tcgObserveSSRCardsHoverOnly(el);
-    // PR cards always show their sparkle animation — no hover needed
-    el.querySelectorAll('.wb-card--prismatic').forEach(c => c.classList.add('tcg-anim-in-view'));
+    // PR and SET cards always show their animation — no hover needed
+    el.querySelectorAll('.wb-card--prismatic, .wb-card--set').forEach(c => c.classList.add('tcg-anim-in-view'));
 };
 
 window._tcgGrantTestAmber = async function() {
@@ -13064,7 +13476,7 @@ window._tcgOpenAllRemaining = async function() {
 };
 
 function _tcgRarityOrder(r) {
-    return ({ common: 0, rare: 1, sr: 2, ssr: 3, ur: 4, pr: 4 })[r] ?? 0;
+    return ({ common: 0, rare: 1, sr: 2, ssr: 3, ur: 4, pr: 4, nr: 4, set: 5 })[r] ?? 0;
 }
 
 // Bulk "open everything" flow — opens all given inventory items in one Cloud Function
@@ -13639,6 +14051,25 @@ function _tcgBuildCardFace(card) {
             </div>
         </div></div>`;
     }
+    // SET — Celestial Gold collection-completion card
+    if (rarity === 'set') {
+        const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" onerror="this.style.display='none'">` : '';
+        return `<div class="wb-card rarity-set wb-card--set">
+            <div class="wb-card-inner">
+                <div class="wb-set-sparkles">${'<span class="wb-set-sparkle">✦</span>'.repeat(14)}</div>
+                <div class="wb-card-header">
+                    <span class="wb-mark">WEEBEE</span>
+                    <span class="wb-rarity-gem wb-rarity-gem--star">★</span>
+                </div>
+                <div class="wb-card-art">${art}</div>
+                <div class="wb-card-footer">
+                    <div class="wb-card-name">${card.name}</div>
+                    <div class="wb-card-series">${card.anime}</div>
+                    <div class="wb-card-rarity-label">SET</div>
+                </div>
+            </div>
+        </div>`;
+    }
     const isPrismatic = rarity === 'pr';
     const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'PR' }[rarity] || 'Common';
     const eName = (card.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -13682,7 +14113,7 @@ function _tcgBuildCardFace(card) {
 
 // Holographic shimmer — updates --mx/--my on SSR/UR/PR cards so the CSS overlay follows the cursor
 document.addEventListener('mousemove', function(e) {
-    const card = e.target.closest('.rarity-ssr, .rarity-ur, .rarity-pr');
+    const card = e.target.closest('.rarity-ssr, .rarity-ur, .rarity-pr, .rarity-set');
     if (!card) return;
     const r = card.getBoundingClientRect();
     card.style.setProperty('--mx', ((e.clientX - r.left) / r.width).toFixed(3));
@@ -13696,7 +14127,7 @@ const _ssrAnimObserver = new IntersectionObserver((entries) => {
 }, { rootMargin: '150px' });
 
 function _tcgObserveSSRCards(root = document) {
-    const cards = root.matches?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr') ? [root] : root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr') || [];
+    const cards = root.matches?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr, .wb-card.rarity-set') ? [root] : root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr, .wb-card.rarity-set') || [];
     cards.forEach(el => {
         if (el.dataset.ssrObserved || el.closest('[data-hover-anim-only]')) return;
         el.dataset.ssrObserved = '1';
@@ -13708,11 +14139,11 @@ function _tcgObserveSSRCards(root = document) {
 // GIFs play normally (they're low overhead compared to CSS repaints). The parent grid must have
 // data-hover-anim-only="1" so _tcgObserveSSRCards skips adding these cards to the IntersectionObserver.
 function _tcgObserveSSRCardsHoverOnly(root) {
-    const cards = root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr') || [];
+    const cards = root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr, .wb-card.rarity-set') || [];
     cards.forEach(card => {
         if (card.dataset.hoverOnly) return;
         card.dataset.hoverOnly = '1';
-        if (card.classList.contains('wb-card--prismatic')) return; // always-on, skip hover toggle
+        if (card.classList.contains('wb-card--prismatic') || card.classList.contains('wb-card--set')) return; // always-on, skip hover toggle
         card.addEventListener('mouseenter', () => card.classList.add('tcg-anim-in-view'));
         card.addEventListener('mouseleave', () => card.classList.remove('tcg-anim-in-view'));
     });
@@ -13859,9 +14290,10 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
     } catch(e) { body.innerHTML = '<p style="color:var(--text-muted);">Failed to load card.</p>'; return; }
 
     const maxV = card.maxVersions || RARITY_MAX_VERSIONS[card.rarity] || 5000;
-    const isPR = card.rarity === 'pr' || card.rarity === 'nr';
+    const isSet = card.rarity === 'set';
+    const isPR = card.rarity === 'pr' || card.rarity === 'nr' || isSet;
     const versionText = card.founder ? 'Founder Edition · 1 of 1' : ((card.monthlyUr||card.tradedMonthlyUr) ? card.stampText : ((!isPR && card.serial != null) ? `${card.serial} / ${maxV}${(card.edition||1)>1?` · Edition ${card.edition}`:''}` : '—'));
-    const rarityLabel = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event', nr:'Neon' }[card.rarity] || card.rarity;
+    const rarityLabel = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event', nr:'Neon', set:'SET' }[card.rarity] || card.rarity;
     const safeOwnerUid = ownerUid.replace(/'/g,"\\'");
     const shareUrl = `${window.location.origin}${window.location.pathname}?card=${encodeURIComponent(ownerUid)}~${encodeURIComponent(cardId)}`;
 
@@ -13894,7 +14326,8 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
             <div><strong>Series:</strong> ${card.anime}</div>
             <div><strong>Rarity:</strong> ${rarityLabel}</div>
             <div><strong>Power:</strong> ${_dungeonCardPower(card)}</div>
-            ${!isPR ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            ${isSet ? `<button onclick="document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenSetProgress('${card.setId||''}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:#f5c842;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">★ View Set Progress</button>`
+            : !isPR ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                 <div><strong>Version:</strong> ${versionText}</div>
                 ${!(card.monthlyUr||card.tradedMonthlyUr) && !card.founder && card.serial != null ? `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="${card.rarity||''}" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">🔢 View All Versions</button>` : ''}
             </div>` : `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="${card.rarity||'pr'}" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">👑 View All Owners</button>`}
@@ -14185,12 +14618,11 @@ window._tcgViewCardSnapshot = async function(snapId) {
 // ── TCG Collection System ─────────────────────────────────────────────────────
 
 const RARITY_MAX_VERSIONS = { common: 5000, rare: 2500, sr: 500, ssr: 250, ur: 50, pr: 100 };
-// Event cards (PR rarity or any card with event:true) never get serial numbers,
-// never show version text, and have flat dungeon power with no serial bonus.
-function _tcgIsEventCard(card) { return card.rarity === 'pr' || card.rarity === 'nr' || !!card.event; }
+// Event cards (PR/NR/SET) never get serial numbers, never show version text.
+function _tcgIsEventCard(card) { return card.rarity === 'pr' || card.rarity === 'nr' || card.rarity === 'set' || !!card.event; }
 
-// Flat amber refund for breaking down a card you no longer want
-const TCG_DISMANTLE_RATES = { common: 5, rare: 20, sr: 100, ssr: 400, ur: 1500, pr: 250, nr: 250 };
+// Flat amber refund for breaking down a card — SET cards cannot be dismantled (0)
+const TCG_DISMANTLE_RATES = { common: 5, rare: 20, sr: 100, ssr: 400, ur: 1500, pr: 250, nr: 250, set: 0 };
 
 // Dismantles an owned card for a flat amber payout based on rarity
 window._tcgDismantling = false;
@@ -15353,7 +15785,7 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
             if (sort === 'power-low') return _dungeonCardPower(a) - _dungeonCardPower(b);
             return (rarityOrder[a.rarity]??9) - (rarityOrder[b.rarity]??9);
         });
-    const counts = { ur:0, ssr:0, sr:0, rare:0, common:0, pr:0, nr:0 };
+    const counts = { ur:0, ssr:0, sr:0, rare:0, common:0, pr:0, nr:0, set:0 };
     cards.forEach(c => { if (c.rarity in counts) counts[c.rarity]++; });
 
     const ms = window._tcgMultiSelect;
@@ -15363,10 +15795,11 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
     el.innerHTML = `
         <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                    ${['all','ur','ssr','sr','rare','common'].map(f => {
-                        const labels = { all:`All (${cards.length})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
+                    ${['all','ur','ssr','sr','rare','common','set'].map(f => {
+                        const labels = { all:`All (${cards.length})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})`, set:`★ SET (${counts.set||0})` };
                         const active = f === filter;
-                        return `<button onclick="window._tcgCardSearch='';window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'),'${uid}','${f}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
+                        const isSet = f === 'set';
+                        return `<button onclick="window._tcgCardSearch='';window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'),'${uid}','${f}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?(isSet?'#f5c842':'var(--accent-yellow)'):'var(--border-color)'};background:${active?(isSet?'rgba(245,200,0,0.12)':'rgba(245,158,11,0.12)'):'var(--bg-gray)'};color:${active?(isSet?'#f5c842':'#f59e0b'):'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${labels[f]}</button>`;
                     }).join('')}
                     ${(()=>{
                         const eventActive = ['event_all','nr','pr'].includes(filter);
@@ -15796,7 +16229,7 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
     const profileSort = window._tcgProfileCardSort || 'rarity';
     const profileFilter = window._tcgProfileCardFilter || 'all';
     const profileSearchQ = (window._tcgProfileCardSearch || '').toLowerCase().trim();
-    const counts = { ur:0, ssr:0, sr:0, rare:0, common:0, pr:0, nr:0 };
+    const counts = { ur:0, ssr:0, sr:0, rare:0, common:0, pr:0, nr:0, set:0 };
     cards.forEach(c => { if (c.rarity in counts) counts[c.rarity]++; });
     const sortedCards = [...cards]
         .filter(c => profileFilter === 'all' || (profileFilter === 'pr' ? (c.rarity === 'pr' || c.rarity === 'nr') : c.rarity === profileFilter))
@@ -15828,7 +16261,7 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
 
         ${(() => {
             const isMob = window.innerWidth < 640;
-            const rLabels = { all:`All (${cards.length})`, pr:`Event (${counts.pr + counts.nr})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})` };
+            const rLabels = { all:`All (${cards.length})`, pr:`Event (${counts.pr + counts.nr})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})`, set:`★ SET (${counts.set||0})` };
             const bLabels = { all:'All Batches', b1:'Batch 1', b2:'Batch 2' };
             const bActive = window._tcgProfileBatchFilter || 'all';
             const dActive = !!window._tcgProfileShowDupes;
@@ -15837,11 +16270,11 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
             const missingBtn = isOwner ? `<button id="profile-tcg-missing-toggle" onclick="window._tcgProfileShowMissing=!window._tcgProfileShowMissing;window._tcgRefreshProfileCardGrid('${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${mActive?'#3b82f6':'var(--border-color)'};background:${mActive?'rgba(59,130,246,0.12)':'var(--bg-gray)'};color:${mActive?'#3b82f6':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">🔍 Missing</button>` : '';
             if (isMob) {
                 const selStyle = 'flex:1;min-width:0;padding:7px 10px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;font-weight:600;cursor:pointer;';
-                const rOpts = ['all','ur','pr','ssr','sr','rare','common'].map(f => `<option value="${f}"${f===profileFilter?' selected':''}>${rLabels[f]}</option>`).join('');
+                const rOpts = ['all','ur','pr','ssr','sr','rare','common','set'].map(f => `<option value="${f}"${f===profileFilter?' selected':''}>${rLabels[f]}</option>`).join('');
                 const bOpts = ['all','b1','b2'].map(f => `<option value="${f}"${f===bActive?' selected':''}>${bLabels[f]}</option>`).join('');
                 return `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"><div style="display:flex;gap:8px;"><select style="${selStyle}" onchange="window._tcgSetProfileCardFilter(this.value,'${uid}')">${rOpts}</select><select style="${selStyle}" onchange="window._tcgProfileBatchFilter=this.value;window._tcgRefreshProfileCardGrid('${uid}')">${bOpts}</select></div><div style="display:flex;gap:8px;">${dupesBtn}${missingBtn}</div></div>`;
             }
-            return `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${['all','ur','pr','ssr','sr','rare','common'].map(f => { const active = f === profileFilter; return `<button data-profile-filter="${f}" onclick="window._tcgSetProfileCardFilter('${f}','${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${rLabels[f]}</button>`; }).join('')}${dupesBtn}${missingBtn}</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${['all','b1','b2'].map(f => { const active = bActive === f; return `<button data-profile-batch="${f}" onclick="window._tcgProfileBatchFilter='${f}';window._tcgRefreshProfileCardGrid('${uid}')" style="padding:5px 12px;border-radius:20px;border:1px solid ${active?'#a78bfa':'var(--border-color)'};background:${active?'rgba(167,139,250,0.12)':'var(--bg-gray)'};color:${active?'#a78bfa':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${bLabels[f]}</button>`; }).join('')}</div></div>`;
+            return `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${['all','ur','pr','ssr','sr','rare','common','set'].map(f => { const active = f === profileFilter; return `<button data-profile-filter="${f}" onclick="window._tcgSetProfileCardFilter('${f}','${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${rLabels[f]}</button>`; }).join('')}${dupesBtn}${missingBtn}</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${['all','b1','b2'].map(f => { const active = bActive === f; return `<button data-profile-batch="${f}" onclick="window._tcgProfileBatchFilter='${f}';window._tcgRefreshProfileCardGrid('${uid}')" style="padding:5px 12px;border-radius:20px;border:1px solid ${active?'#a78bfa':'var(--border-color)'};background:${active?'rgba(167,139,250,0.12)':'var(--bg-gray)'};color:${active?'#a78bfa':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${bLabels[f]}</button>`; }).join('')}</div></div>`;
         })()}
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
             <div id="profile-tcg-card-count-header" style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">🃏 All Cards (${cards.length})</div>
@@ -27282,7 +27715,7 @@ window._obStopAudio = function() {
         const clipDur = OB_CLIPS[window._obState.clipIdx];
         playBtn.textContent = `▶ Play ${clipDur >= 30 ? '30s' : clipDur + 's'} clip`;
     }
-    if (progress) { progress.style.transition = 'none'; progress.style.width = '0%'; }
+if (progress) { progress.style.transition = 'none'; progress.style.width = '0%'; }
     const fullBtn = document.getElementById('ob-playfull-btn');
     if (fullBtn) fullBtn.innerHTML = '▶ Play Full Opening';
 };
@@ -27322,7 +27755,7 @@ window._obSearch = function(q) {
             results.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px;">Searching...</div>';
             results.style.display = 'block';
             const res = await fetch(`${JIKAN_BASE}/v4/anime?q=${encodeURIComponent(q)}&limit=12&type=tv`, { signal: _obSearchController.signal });
-            const data = await res.json();
+                const data = await res.json();
             const seen = new Set();
             const items = [];
             for (const a of (data.data || [])) {
@@ -28094,9 +28527,8 @@ function _bossRender(el, boss, userAttacks, leaderboard, lbMode) {
         <div style="margin-bottom:24px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
             <!-- Boss Banner: portrait on right, text on left -->
             <div style="position:relative;min-height:200px;background:linear-gradient(135deg,rgba(15,0,30,0.97) 0%,rgba(40,0,60,0.92) 100%);display:flex;overflow:hidden;">
-                ${boss.image ? `<div style="position:absolute;right:0;top:0;bottom:0;width:min(240px,52%);overflow:hidden;pointer-events:none;">
+                ${boss.image ? `<div style="position:absolute;right:0;top:0;bottom:0;width:min(240px,52%);pointer-events:none;-webkit-mask-image:linear-gradient(to right,transparent 0%,black 32%);mask-image:linear-gradient(to right,transparent 0%,black 32%);">
                     <img src="${boss.image}" alt="${boss.name}" style="width:100%;height:100%;object-fit:cover;object-position:top center;" onerror="this.style.display='none'">
-                    <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(15,0,30,1) 0%,rgba(15,0,30,0.55) 30%,rgba(15,0,30,0.1) 65%,transparent 100%);"></div>
                 </div>` : ''}
                 <div style="position:relative;z-index:1;padding:24px 24px 20px;display:flex;flex-direction:column;justify-content:flex-end;min-height:200px;flex:1;max-width:65%;">
                     <div style="font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:4px;">⚔️ Community Boss</div>
