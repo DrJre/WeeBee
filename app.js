@@ -8703,15 +8703,37 @@ window._tcgLoadSaleConfigUI = async function() {
     const config = await _tcgLoadSaleConfig();
     const checkbox = document.getElementById('tcg-sale-enabled');
     if (checkbox) checkbox.checked = !!config.enabled;
+    const container = document.getElementById('tcg-sale-prices');
+    if (!container) return;
+    const prices = config.prices || {};
+    container.innerHTML = TCG_PACKS.map(p => {
+        const saved = prices[p.id];
+        const val = saved != null ? saved : '';
+        return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border-color);">
+            <span style="font-size:13px;font-weight:700;flex:1;min-width:140px;">${p.name}</span>
+            <span style="font-size:12px;color:var(--text-muted);white-space:nowrap;">Normal: 🟡 ${p.cost.toLocaleString()}</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:12px;color:var(--text-muted);">Sale:</span>
+                <input type="number" id="tcg-sale-price-${p.id}" value="${val}" placeholder="no discount" min="1"
+                    style="width:100px;padding:6px 8px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-primary);font-size:13px;font-weight:700;">
+            </div>
+        </div>`;
+    }).join('');
 };
 window._tcgSaveSaleConfig = async function() {
     if (!window.isAdmin) return;
     const enabled = document.getElementById('tcg-sale-enabled')?.checked || false;
     const status = document.getElementById('tcg-sale-status');
+    const prices = {};
+    TCG_PACKS.forEach(p => {
+        const val = parseInt(document.getElementById(`tcg-sale-price-${p.id}`)?.value, 10);
+        if (val > 0) prices[p.id] = val;
+    });
     try {
-        await setDoc(doc(db, 'tcg_sale_config', 'current'), { enabled }, { merge: true });
-        window._tcgSaleConfig = { enabled };
+        await setDoc(doc(db, 'tcg_sale_config', 'current'), { enabled, prices });
+        window._tcgSaleConfig = { enabled, prices };
         if (status) { status.textContent = 'Saved!'; setTimeout(() => status.textContent = '', 2000); }
+        window._tcgRenderStore();
     } catch(e) { alert('Save failed: ' + e.message); }
 };
 
@@ -8882,7 +8904,6 @@ const TCG_PACKS = [
         id: 'standard',
         name: 'Standard Pack',
         cost: 150,
-        salePrice: 100,
         gradient: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Standard%20Pack.png',
         description: '5 cards · 1 guaranteed Rare+',
@@ -8893,7 +8914,6 @@ const TCG_PACKS = [
         id: 'premium',
         name: 'Premium Pack',
         cost: 750,
-        salePrice: null,
         gradient: 'linear-gradient(135deg,#b45309,#f59e0b)',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Premium%20Pack.png',
         description: '5 cards · 1 guaranteed SR+',
@@ -8904,7 +8924,6 @@ const TCG_PACKS = [
         id: 'current_premium',
         name: 'Batch 3 Premium',
         cost: 800,
-        salePrice: null,
         gradient: 'linear-gradient(135deg,#92400e,#b45309)',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%203%20Premium%20Pack.png',
         description: '5 cards · 1 guaranteed SR+',
@@ -8917,7 +8936,6 @@ const TCG_PACKS = [
         id: 'filler',
         name: 'Filler Pack',
         cost: 800,
-        salePrice: null,
         gradient: 'linear-gradient(135deg,#065f46,#047857)',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%201%20Premium%20Pack.png',
         description: 'Previous batch · 1 guaranteed SR+',
@@ -8929,7 +8947,6 @@ const TCG_PACKS = [
         id: 'prismatic',
         name: 'Neon 2026 Pack',
         cost: 800,
-        salePrice: null,
         gradient: 'linear-gradient(135deg,#ff3fe3,#7B2FBE,#01F9C6)',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Neon%202026%20Pack.png',
         description: '5 cards · Rare/SR only · chance of Neon card',
@@ -12622,7 +12639,9 @@ window._tcgRenderStore = async function() {
         }
     } catch(e) {}
 
-    const saleActive = await _tcgFlashSaleActive();
+    const saleConfig = await _tcgLoadSaleConfig();
+    const saleActive = !!saleConfig.enabled;
+    const salePrices = saleConfig.prices || {};
     const [prismaticConfig, fillerConfig, batchReleaseConfig] = await Promise.all([
         _tcgLoadPrismaticEventConfig(),
         _tcgLoadFillerConfig(),
@@ -12635,9 +12654,10 @@ window._tcgRenderStore = async function() {
     window._tcgPackQty = window._tcgPackQty || {};
     window._tcgLastAmber = amber;
     window._tcgLastSaleActive = saleActive;
+    window._tcgLastSalePrices = salePrices;
     const packCard = (pack, isComingSoon = false, topHtml = '', grayscale = false, extraClass = '', bottomHtml = '') => {
-        const onSale = !isComingSoon && saleActive && pack.salePrice != null;
-        const unitCost = onSale ? pack.salePrice : pack.cost;
+        const onSale = !isComingSoon && saleActive && salePrices[pack.id] != null;
+        const unitCost = onSale ? salePrices[pack.id] : pack.cost;
         const qty = isComingSoon ? 1 : (window._tcgPackQty[pack.id] || 1);
         const totalCost = unitCost * qty;
         const canAfford = !isComingSoon && amber >= totalCost;
@@ -12815,8 +12835,9 @@ window._tcgSetPackQty = function(packId, qty) {
     const pack = TCG_PACKS.find(p => p.id === packId);
     if (!pack) return;
     const amber = window._tcgLastAmber || 0;
-    const onSale = window._tcgLastSaleActive && pack.salePrice != null;
-    const unitCost = onSale ? pack.salePrice : pack.cost;
+    const salePrices = window._tcgLastSalePrices || {};
+    const onSale = window._tcgLastSaleActive && salePrices[pack.id] != null;
+    const unitCost = onSale ? salePrices[pack.id] : pack.cost;
     const totalCost = unitCost * qty;
     const canAfford = amber >= totalCost;
 

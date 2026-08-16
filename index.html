@@ -1179,15 +1179,23 @@
                         <div id="admin-subtab-economy" style="display:none;">
 
                             <!-- Flash Sale -->
-                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                                <div style="flex:1;">
-                                    <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🎉 Pack Store Flash Sale</div>
-                                    <div style="font-size:12px; color:var(--text-muted);">Rolls pack prices back to their sale price. Stays active until toggled off.</div>
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                                    <div>
+                                        <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🎉 Pack Store Flash Sale</div>
+                                        <div style="font-size:12px; color:var(--text-muted);">Set a sale price per pack. Leave blank for no discount on that pack. Stays active until toggled off.</div>
+                                    </div>
+                                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; cursor:pointer;">
+                                        <input id="tcg-sale-enabled" type="checkbox"> Flash sale active
+                                    </label>
                                 </div>
-                                <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; cursor:pointer;">
-                                    <input id="tcg-sale-enabled" type="checkbox" onchange="window._tcgSaveSaleConfig()"> Flash sale active
-                                </label>
-                                <span id="tcg-sale-status" style="font-size:13px; color:var(--text-muted);"></span>
+                                <div id="tcg-sale-prices" style="background:var(--bg-white); border-radius:10px; padding:10px 14px; margin-bottom:12px;">
+                                    <span style="font-size:12px; color:var(--text-muted);">Loading…</span>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:12px;">
+                                    <button onclick="window._tcgSaveSaleConfig()" style="padding:8px 16px; border-radius:8px; border:none; background:#dc2626; color:white; font-weight:700; font-size:13px; cursor:pointer;">Save</button>
+                                    <span id="tcg-sale-status" style="font-size:13px; color:var(--text-muted);"></span>
+                                </div>
                             </div>
 
                             <!-- Batch Release Override -->
@@ -2910,6 +2918,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=735"></script>
+    <script type="module" src="app.js?v=736"></script>
 </body>
 </html>
