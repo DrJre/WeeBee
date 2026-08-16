@@ -198,6 +198,9 @@ const TCG_SR_CARDS = [
     { name: 'Tien', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Tien%20-%20Dragon%20Ball%20Z%20-%20SR.jpg', batch: 3 },
     { name: 'Winry Rockbell', anime: 'Fullmetal Alchemist', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fullmetal%20Alchemist/SR/Winry%20Rockbell%20-%20Fullmetal%20Alchemist%20-%20SR.jpg', batch: 3 },
     { name: 'Scar', anime: 'Fullmetal Alchemist', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Fullmetal%20Alchemist/SR/Scar%20-%20Fullmetal%20Alchemist%20-%20SR.jpg', batch: 3 },
+    { name: 'Goten', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Goten%20-%20Dragon%20Ball%20Z%20-%20SR.jpg', batch: 3 },
+    { name: 'Krillin', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Krillin%20-%20Dragon%20Ball%20-%20SR.jpg', batch: 3 },
+    { name: 'Bulma', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SR/Bulma%20-%20Dragon%20Ball%20-%20SR.jpg', batch: 3 },
 ];
 
 const TCG_SSR_CARDS = [
@@ -299,6 +302,16 @@ const TCG_SSR_CARDS = [
     { name: 'Frieza', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Frieza%20-%20Dragon%20Ball%20Z%20-%20SSR.jpg', batch: 3 },
     { name: 'Kenpachi', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SSR/Kenpachi%20-%20Bleach%20-%20SSR.jpg', batch: 3 },
     { name: 'Shunsui', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/SSR/Shunsui%20-%20Bleach%20-%20SSR.jpg', batch: 3 },
+    { name: 'Asahi Azumane', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SSR/Asahi%20Azumane%20-%20Haikyu!%20-%20SSR.jpg', batch: 3 },
+    { name: 'Daichi Sawamura', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SSR/Daichi%20Sawamura%20-%20Haikyu!%20-%20SSR.jpg', batch: 3 },
+    { name: 'Oikawa', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SSR/Oikawa%20-%20Haikyu!%20-%20SSR.jpg', batch: 3 },
+    { name: 'Wakatoshi Ushijima', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SSR/Wakatoshi%20Ushijima%20-%20Haikyu!%20-%20SSR.jpg', batch: 3 },
+    { name: 'Tetsuro Kuroo', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/SSR/Tetsuro%20Kuroo%20-%20Haikyu!%20-%20SSR.jpg', batch: 3 },
+    { name: 'Goten', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Goten%20-%20Dragon%20Ball%20Z%20-%20SSR.jpg', batch: 3 },
+    { name: 'Krillin', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Krillin%20-%20Dragon%20Ball%20-%20SSR.jpg', batch: 3 },
+    { name: 'Master Roshi', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Master%20Roshi%20-%20Dragon%20Ball%20-%20SSR.jpg', batch: 3 },
+    { name: 'Piccolo', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Picollo%20-%20Dragon%20Ball%20-%20SSR.jpg', batch: 3 },
+    { name: 'Trunks', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon%20Ball/SSR/Trunks%20-%20Dragon%20Ball%20Z%20-%20SSR.jpg', batch: 3 },
 ];
 
 const TCG_UR_CARDS = [
@@ -315,6 +328,12 @@ const TCG_UR_CARDS = [
     { name: 'Rock Lee', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/UR/Rock Lee.gif' },
     { name: 'Levi Ackerman', anime: 'Attack on Titan', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Attack on Titan/UR/Levi Ackerman.gif' },
     { name: 'Goku', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon Ball/UR/Goku_UR.gif' },
+    { name: 'Gohan', anime: 'Dragon Ball', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dragon Ball/UR/URGOHAN2-ezgif.com-crop.gif', batch: 3 },
+    { name: 'Tobio Kageyama', anime: 'Haikyu!', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Haikyuu/UR/Tobio%20Kageyama%20-%20Haikyu!%20-%20UR.gif', batch: 3 },
+    { name: 'Deku', anime: 'My Hero Academia', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/MHA/UR/Deku%20-%20My%20Hero%20Academia%20-%20UR.gif', batch: 3 },
+    { name: 'Naruto Uzumaki', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/UR/Naruto%20-%20Naruto%20-%20UR.gif', batch: 3 },
+    { name: 'Choji', anime: 'Naruto', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Naruto/UR/Choji.gif', batch: 3 },
+    { name: 'David Martinez', anime: 'Cyberpunk: Edgerunners', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Cyberpunk%20Edgerunners/UR/David%20Martinez%20-%20Cyberpunk%20Edgerunners%20-%20UR.gif', batch: 3 },
 ];
 
 const TCG_PR_CARDS = [
@@ -342,7 +361,7 @@ const TCG_NR_CARDS = [
     { name: 'Sylphiette',      anime: 'Jobless Reincarnation',    neonClass: '2col',   neonA: '#5AF3C3', neonB: '#ffffff', neonC: null,      flickerDelay: '5.2s',  image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Sylphiette.png' },
     { name: 'Jotaro Kujo',     anime: "JoJo's Bizarre Adventure", neonClass: 'custom', neonA: '#7B00D4', neonB: '#E2E207', neonC: '#3EFF05', flickerDelay: '7.0s',  image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Jotaro Kujo.png' },
     { name: 'Fern',            anime: 'Frieren',                  neonClass: '2col',   neonA: '#7B00D4', neonB: '#ffffff', neonC: null,      flickerDelay: '8.8s',  image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Fern.png' },
-    { name: 'Cell',            anime: 'Dragon Ball Z',            neonClass: '2col',   neonA: '#3EFF05', neonB: '#7B00D4', neonC: null,      flickerDelay: '10.5s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Cell.png' },
+    { name: 'Cell',            anime: 'Dragon Ball',              neonClass: '2col',   neonA: '#3EFF05', neonB: '#7B00D4', neonC: null,      flickerDelay: '10.5s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Cell.png' },
     { name: 'Kaiju No. 8',    anime: 'Kaiju No. 8',              neonClass: '2col',   neonA: '#3DDFFF', neonB: '#ffffff', neonC: null,      flickerDelay: '12.2s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Kaiju No. 8.png' },
     { name: 'Rei Ayanami',    anime: 'Neon Genesis',             neonClass: '2col',   neonA: '#E99FB6', neonB: '#B2EDF7', neonC: null,      flickerDelay: '13.9s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Rei Ayanami.png' },
     { name: 'Taro Sakamoto',  anime: 'Sakamoto Days',            neonClass: '2col',   neonA: '#3EFF05', neonB: '#E2E207', neonC: null,      flickerDelay: '15.6s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Sakamoto.png' },
@@ -353,4 +372,6 @@ const TCG_NR_CARDS = [
     { name: 'Yami Sukehiro',  anime: 'Black Clover',             neonClass: '2col',   neonA: '#3DDFFF', neonB: '#7B00D4', neonC: null,      flickerDelay: '24.1s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Yami.png' },
 ];
 
-module.exports = { TCG_SR_CARDS, TCG_SSR_CARDS, TCG_UR_CARDS, TCG_PR_CARDS, TCG_NR_CARDS };
+const TCG_RELEASED_BATCH = 3;
+
+module.exports = { TCG_SR_CARDS, TCG_SSR_CARDS, TCG_UR_CARDS, TCG_PR_CARDS, TCG_NR_CARDS, TCG_RELEASED_BATCH };

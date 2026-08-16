@@ -1190,6 +1190,16 @@
                                 <span id="tcg-sale-status" style="font-size:13px; color:var(--text-muted);"></span>
                             </div>
 
+                            <!-- Batch Release Override -->
+                            <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                                <div style="flex:1;">
+                                    <div style="font-size:14px; font-weight:800; margin-bottom:2px;">🚀 Batch Release Override</div>
+                                    <div style="font-size:12px; color:var(--text-muted);">Force-launch the current batch pack immediately, bypassing the release timer. Affects all users at once.</div>
+                                </div>
+                                <button onclick="window._tcgLaunchBatchNow()" style="padding:8px 16px; border-radius:8px; border:none; background:#7c3aed; color:white; font-weight:700; font-size:13px; cursor:pointer;">Launch Now</button>
+                                <span id="tcg-batch-launch-status" style="font-size:13px; color:var(--text-muted); width:100%;"></span>
+                            </div>
+
                             <!-- Filler Pack (flex slot default) -->
                             <div style="background:var(--bg-gray); border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                                 <div style="flex:1;">
@@ -2900,6 +2910,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=720"></script>
+    <script type="module" src="app.js?v=735"></script>
 </body>
 </html>

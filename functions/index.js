@@ -2,7 +2,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const { onRequest } = require('firebase-functions/v2/https');
-const { TCG_SR_CARDS, TCG_SSR_CARDS, TCG_UR_CARDS, TCG_PR_CARDS, TCG_NR_CARDS } = require('./tcg-card-pools');
+const { TCG_SR_CARDS, TCG_SSR_CARDS, TCG_UR_CARDS, TCG_PR_CARDS, TCG_NR_CARDS, TCG_RELEASED_BATCH } = require('./tcg-card-pools');
 
 initializeApp();
 
@@ -583,7 +583,9 @@ function pickCard(pool, rarity) {
                  neonClass: src.neonClass || '', flickerDelay: src.flickerDelay || '0s' };
     }
     if (rarity === 'ur') {
-        const arr = pool.ur.length ? pool.ur : TCG_UR_CARDS;
+        const all = pool.ur.length ? pool.ur : TCG_UR_CARDS;
+        const released = all.filter(c => (c.batch || 1) <= TCG_RELEASED_BATCH);
+        const arr = released.length ? released : all;
         if (!arr.length) return pickCard(pool, 'ssr');
         const src = arr[Math.floor(Math.random() * arr.length)];
         return { name: src.name, anime: normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity: 'ur' };
@@ -607,10 +609,11 @@ function pickCard(pool, rarity) {
     return { name: c.name, anime: normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity };
 }
 
-// Picks a card filtered to targetBatch. UR uses 4:1 weighting (current vs older).
+// Picks a card filtered to targetBatch. UR uses 4:1 weighting (current vs older),
+// restricted to batch <= TCG_RELEASED_BATCH so unreleased URs can't appear.
 function pickCardBatch(pool, rarity, targetBatch) {
     if (rarity === 'ur') {
-        const all = pool.ur.length ? pool.ur : TCG_UR_CARDS;
+        const all = (pool.ur.length ? pool.ur : TCG_UR_CARDS).filter(c => (c.batch || 1) <= TCG_RELEASED_BATCH);
         const cur = all.filter(c => (c.batch || 1) === targetBatch);
         const old = all.filter(c => (c.batch || 1) !== targetBatch);
         let src;
