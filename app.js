@@ -4033,7 +4033,7 @@ window.loadProfileStats = async function(uid) {
             getDocs(query(collection(db, 'trivia_posts'), where('uid', '==', uid))).catch(() => _empty),
         ]);
 
-        const reviews = revSnap.docs.map(d => d.data()).filter(r => r.type !== 'suggestion' && r.type !== 'series');
+        const reviews = revSnap.docs.map(d => d.data()).filter(r => r.type !== 'suggestion');
         const listEntries = listSnap.docs.map(d => d.data());
         const scoredReviews = reviews.filter(r => parseFloat(r.score) > 0);
 
@@ -8927,7 +8927,7 @@ const TCG_PACKS = [
         gradient: 'linear-gradient(135deg,#92400e,#b45309)',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%203%20Premium%20Pack.png',
         description: '5 cards · 1 guaranteed SR+',
-        odds: 'Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.5% UR bonus · 4:1 current batch',
+        odds: 'Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.5% UR bonus · Batch 3 cards only',
         guaranteedSR: true,
         currentBatch: true,
         releaseAt: new Date('2026-08-17T04:01:00Z').getTime(),
@@ -8939,7 +8939,7 @@ const TCG_PACKS = [
         gradient: 'linear-gradient(135deg,#065f46,#047857)',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%201%20Premium%20Pack.png',
         description: 'Previous batch · 1 guaranteed SR+',
-        odds: 'Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.5% UR bonus',
+        odds: 'Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.5% UR bonus · Batch cards only',
         guaranteedSR: true,
         filler: true,
     },
@@ -11497,7 +11497,11 @@ window._plinkoExecuteDrop = async function(dropX) {
     if (totalDrops >= 30) plinkoAch.push('plinko_total_30');
     if (streak >= 7) plinkoAch.push('plinko_streak_7');
     if (streak >= 100) plinkoAch.push('plinko_streak_100');
-    if (hitStar) plinkoAch.push('plinko_star');
+    if (hitStar) {
+        plinkoAch.push('plinko_star');
+        // ~20% chance Zoro appears scared — bottom-right or top-left (rotated)
+        if (Math.random() < 0.2) setTimeout(() => _ZORO.show('scared', Math.random() < 0.5 ? 'bottom-right' : 'top-left', { bypass: true }), 600);
+    }
     window.awardAchievements(plinkoAch).catch(() => {});
 
     const didSplit = bins.length > 1;
@@ -12553,7 +12557,7 @@ window._tcgShowWhatsInside = async function(packId, batchNum) {
     if (pack.filler && batchNum) packDisplayName = `Batch ${batchNum} Pack`;
     if (pack.currentBatch && batchNum) packDisplayName = `Batch ${batchNum} Premium`;
 
-    // Build pool — SR/SSR filtered by batch if batch-specific; UR/Rare/Common always all
+    // Build pool — all rarities filtered to batch for batch-specific packs; UR/Rare/Common shared for Standard/Premium
     const eventRarity = pack.poolRarity || 'pr';
     let fullPool;
     if (pack.prismatic) {
@@ -12561,7 +12565,7 @@ window._tcgShowWhatsInside = async function(packId, batchNum) {
     } else {
         const base = _tcgFullCardPool().filter(c => c.rarity !== 'pr' && c.rarity !== 'nr' && !c.founder);
         fullPool = batchNum
-            ? base.filter(c => c.rarity === 'ur' || c.rarity === 'rare' || c.rarity === 'common' || _tcgCardBatch(c) === batchNum)
+            ? base.filter(c => _tcgCardBatch(c) === batchNum)
             : base;
     }
 
@@ -14415,6 +14419,8 @@ window._tcgRevealAll = function() {
         return;
     }
     cards.forEach((_, i) => setTimeout(() => window._tcgFlipCard(i), i * 220));
+    // ~7% chance Zoro peeks from behind a card once all flips complete
+    if (Math.random() < 0.07) setTimeout(() => _ZORO.peekPackCard(), (cards.length - 1) * 220 + 1400);
 };
 
 // Opens a small composer for sharing this pack's pull to the Community feed
@@ -14437,7 +14443,7 @@ window._tcgOpenSharePackModal = function() {
             </div>
             ${isGodPack ? `<div style="background:linear-gradient(135deg,rgba(180,83,9,0.12),rgba(251,191,36,0.1));border:1px solid rgba(251,191,36,0.4);border-radius:10px;padding:10px 14px;font-size:13px;color:#b45309;font-weight:700;margin-bottom:12px;text-align:center;">You pulled 2 URs and 3 SSRs. This moment deserves a post.</div>` : ''}
             <textarea id="tcg-share-pack-text" placeholder="${isGodPack ? '⚜️ I JUST PULLED A GOD PACK' : 'LOOK WHAT I JUST PULLED'}" maxlength="2000" rows="3" style="width:100%;background:var(--bg-gray);border:1px solid ${isGodPack ? 'rgba(251,191,36,0.5)' : 'var(--border-color)'};border-radius:10px;padding:12px;font-size:14px;color:var(--text-dark);resize:none;box-sizing:border-box;font-family:inherit;"></textarea>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:14px;padding:14px;background:${isGodPack ? 'linear-gradient(135deg,rgba(120,53,15,0.08),rgba(251,191,36,0.06))' : 'var(--bg-gray)'};border-radius:12px;${isGodPack ? 'border:1px solid rgba(251,191,36,0.25);' : ''}">
+            <div id="zoro-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:14px;padding:14px;background:${isGodPack ? 'linear-gradient(135deg,rgba(120,53,15,0.08),rgba(251,191,36,0.06))' : 'var(--bg-gray)'};border-radius:12px;${isGodPack ? 'border:1px solid rgba(251,191,36,0.25);' : ''}position:relative;">
                 ${cards.map(c => `<div style="width:121px;height:169px;overflow:hidden;flex-shrink:0;"><div style="transform:scale(0.55);transform-origin:top left;">${_tcgBuildCardFace(c)}</div></div>`).join('')}
             </div>
             <div style="display:flex;justify-content:flex-end;margin-top:14px;">
@@ -14446,6 +14452,12 @@ window._tcgOpenSharePackModal = function() {
         </div>`;
 
     document.body.appendChild(modal);
+
+    // Zoro laughs when you open the share screen after getting a Common in a guaranteed-SR pack
+    const pack = window._tcgOpeningPack;
+    if (!isGodPack && pack?.guaranteedSR && cards.some(c => c.rarity === 'common') && Math.random() < 0.35) {
+        setTimeout(() => _ZORO.show('laugh', 'bottom-right', { bypass: true }), 700);
+    }
 };
 
 // Posts the current pack's pull to the Community feed as a general post
@@ -23298,6 +23310,103 @@ window.searchAnime = async function(queryStr) {
     }
 };
 
+// ── Zoro Easter Egg System ───────────────────────────────────────────────────
+const _ZORO = {
+    imgs: {
+        confused: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/avatars/Zoro_Confused-removebg-preview.png',
+        laugh:    'https://pub-b241667abcf649f48658584322a083c1.r2.dev/avatars/Zoro_Laugh-removebg-preview.png',
+        scared:   'https://pub-b241667abcf649f48658584322a083c1.r2.dev/avatars/Zoro_Scared-removebg-preview.png',
+        worried:  'https://pub-b241667abcf649f48658584322a083c1.r2.dev/avatars/Zoro_Worried-removebg-preview.png',
+    },
+    cooldown: 10 * 60 * 1000,
+    _last: 0,
+    _busy: false,
+    canShow(bypass) { return !this._busy && (bypass || Date.now() - this._last > this.cooldown); },
+
+    // entry: 'left' | 'top' | 'bottom' | 'bottom-right' | 'top-left'
+    // All entries orient so the flat image bottom exits through the entry edge.
+    show(type, entry, { bypass = false, force = false, hang = 3200 } = {}) {
+        if (!force && !this.canShow(bypass)) return;
+        if (this._busy) return;
+        this._busy = true;
+        if (!bypass && !force) this._last = Date.now();
+
+        document.getElementById('zoro-egg')?.remove();
+        const el = document.createElement('div');
+        el.id = 'zoro-egg';
+        el.style.cssText = 'position:fixed;z-index:99999;pointer-events:none;transition:transform 0.6s cubic-bezier(0.34,1.15,0.64,1);will-change:transform;';
+
+        let hidden, visible, imgExtra = '';
+        switch (entry) {
+            case 'left':
+                // 90° CW: flat bottom faces left (hidden at screen left edge)
+                // Image is ~220px tall; rotated it appears ~220px wide.
+                // Use px offsets since percentage of layout box ≠ rotated visual size.
+                el.style.left = '0'; el.style.bottom = '15%';
+                imgExtra = 'transform:rotate(90deg);transform-origin:center center;';
+                hidden = 'translateX(-280px)'; visible = 'translateX(-120px)';
+                break;
+            case 'top':
+                // 180°: flat bottom faces up (hidden above top edge), head peeks down
+                el.style.top = '0'; el.style.left = '30%';
+                imgExtra = 'transform:rotate(180deg);';
+                hidden = 'translateY(-240px)'; visible = 'translateY(-130px)';
+                break;
+            case 'bottom':
+                // No rotation: flat bottom exits through bottom edge
+                el.style.bottom = '0'; el.style.left = '25%';
+                hidden = 'translateY(100%)'; visible = 'translateY(0)';
+                break;
+            case 'bottom-right':
+                el.style.right = '24px'; el.style.bottom = '0';
+                hidden = 'translateY(100%)'; visible = 'translateY(0)';
+                break;
+            case 'top-left':
+                // 180°: flat bottom faces up (hidden above top edge), drops from top-left
+                el.style.left = '24px'; el.style.top = '0';
+                imgExtra = 'transform:rotate(180deg);';
+                hidden = 'translateY(-240px)'; visible = 'translateY(-150px)';
+                break;
+        }
+
+        el.innerHTML = `<img src="${this.imgs[type]}" style="height:220px;display:block;${imgExtra}user-select:none;-webkit-user-drag:none;" draggable="false">`;
+        el.style.transform = hidden;
+        document.body.appendChild(el);
+        requestAnimationFrame(() => requestAnimationFrame(() => { el.style.transform = visible; }));
+
+        setTimeout(() => {
+            el.style.transition = 'transform 0.45s ease-in';
+            el.style.transform = hidden;
+            setTimeout(() => { el.remove(); this._busy = false; }, 500);
+        }, hang);
+    },
+
+    // Slides Zoro up from the bottom of the screen during the pack reveal
+    peekPackCard(force = false) { this.show('worried', 'bottom-right', { bypass: true, force }); },
+};
+window._ZORO = _ZORO;
+
+window._zoroAdmin = function() {
+    document.getElementById('zoro-admin-panel')?.remove();
+    const p = document.createElement('div');
+    p.id = 'zoro-admin-panel';
+    const btn = 'width:100%;padding:7px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray-darker);color:var(--text-dark);font-size:12px;font-weight:700;cursor:pointer;text-align:left;';
+    p.style.cssText = 'position:fixed;top:80px;right:20px;z-index:99998;background:var(--bg-card);border:1px solid var(--border-color);border-radius:14px;padding:16px;width:250px;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
+    p.innerHTML = `
+        <div style="font-size:13px;font-weight:800;margin-bottom:10px;">🗡️ Zoro Test Panel</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+            <button style="${btn}" onclick="window._ZORO.show('confused','left',{force:true})">Confused — left (90° rotated)</button>
+            <button style="${btn}" onclick="window._ZORO.show('confused','top',{force:true})">Confused — top (180° rotated)</button>
+            <button style="${btn}" onclick="window._ZORO.show('confused','bottom',{force:true})">Confused — bottom</button>
+            <button style="${btn}" onclick="window._ZORO.show('laugh','bottom-right',{force:true})">Laugh — bottom right</button>
+            <button style="${btn}" onclick="window._ZORO.show('scared','bottom-right',{force:true})">Scared — bottom right</button>
+            <button style="${btn}" onclick="window._ZORO.show('scared','top-left',{force:true})">Scared — top left (180° rotated)</button>
+            <button style="${btn}" onclick="window._ZORO.peekPackCard(true)">Worried — pack reveal (bottom-right)</button>
+            <button style="margin-top:4px;${btn}background:transparent;color:var(--text-muted);" onclick="document.getElementById('zoro-admin-panel').remove()">Close</button>
+        </div>`;
+    document.body.appendChild(p);
+};
+
 // --- Navigation ---
 window.switchView = function(targetId, isSearch = false, skipHistory = false) {
     if (targetId !== 'games-view') window._obStopAudio?.();
@@ -23376,6 +23485,9 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
             });
         }
     }
+    // Zoro: ~1-in-8 chance to peek from a random edge on any page switch
+    if (Math.random() < 0.125) { const e = ['left','top','bottom'][Math.floor(Math.random()*3)]; _ZORO.show('confused', e); }
+
     if(targetId === 'profile-view') fetchUserProfile(window.targetProfileUid);
     if(targetId === 'my-list-view') fetchMyList(); 
     if(targetId === 'discover-view' && !isSearch) {
@@ -24693,7 +24805,7 @@ window.checkBwNrtAchievements = async function(guessCount, streak, totalWins) {
     if (!auth.currentUser) return;
     const ids = [];
     if (totalWins === 1) ids.push('bwnrt_first');
-    if (guessCount === 1) ids.push('bwnrt_1guess');
+    if (guessCount === 1) { ids.push('bwnrt_1guess'); if (Math.random() < 0.15) setTimeout(() => _ZORO.show('scared', Math.random() < 0.5 ? 'bottom-right' : 'top-left', { bypass: true }), 800); }
     if (streak >= 7) ids.push('bwnrt_streak_7');
     if (totalWins >= 30) ids.push('bwnrt_total_30');
     const today = bwGetDate();
@@ -25541,7 +25653,7 @@ window.checkBwOpAchievements = async function(guessCount, streak, totalWins) {
     if (!auth.currentUser) return;
     const ids = [];
     if (totalWins === 1) ids.push('bwop_first');
-    if (guessCount === 1) ids.push('bwop_1guess');
+    if (guessCount === 1) { ids.push('bwop_1guess'); if (Math.random() < 0.15) setTimeout(() => _ZORO.show('scared', Math.random() < 0.5 ? 'bottom-right' : 'top-left', { bypass: true }), 800); }
     if (streak >= 7) ids.push('bwop_streak_7');
     if (streak >= 100) ids.push('bwop_streak_100');
     if (totalWins >= 30) ids.push('bwop_total_30');
@@ -26089,7 +26201,7 @@ window.checkBwBlcAchievements = async function(guessCount, streak, totalWins) {
     if (!auth.currentUser) return;
     const ids = [];
     if (totalWins === 1) ids.push('bwblc_first');
-    if (guessCount === 1) ids.push('bwblc_1guess');
+    if (guessCount === 1) { ids.push('bwblc_1guess'); if (Math.random() < 0.15) setTimeout(() => _ZORO.show('scared', Math.random() < 0.5 ? 'bottom-right' : 'top-left', { bypass: true }), 800); }
     if (streak >= 7) ids.push('bwblc_streak_7');
     if (totalWins >= 30) ids.push('bwblc_total_30');
     const unlocked = await window.awardAchievements(ids).catch(() => new Set());
@@ -26514,7 +26626,7 @@ window.checkBwDbAchievements = async function(guessCount, streak, totalWins) {
     if (!auth.currentUser) return;
     const ids = [];
     if (totalWins === 1) ids.push('bwdb_first');
-    if (guessCount === 1) ids.push('bwdb_1guess');
+    if (guessCount === 1) { ids.push('bwdb_1guess'); if (Math.random() < 0.15) setTimeout(() => _ZORO.show('scared', Math.random() < 0.5 ? 'bottom-right' : 'top-left', { bypass: true }), 800); }
     if (streak >= 7) ids.push('bwdb_streak_7');
     if (totalWins >= 30) ids.push('bwdb_total_30');
     const unlocked = await window.awardAchievements(ids).catch(() => new Set());

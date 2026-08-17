@@ -615,15 +615,11 @@ function pickCardBatch(pool, rarity, targetBatch) {
     if (rarity === 'ur') {
         const all = (pool.ur.length ? pool.ur : TCG_UR_CARDS).filter(c => (c.batch || 1) <= TCG_RELEASED_BATCH);
         const cur = all.filter(c => (c.batch || 1) === targetBatch);
-        const old = all.filter(c => (c.batch || 1) !== targetBatch);
-        let src;
-        if (cur.length && (!old.length || Math.random() < 0.8))
-            src = cur[Math.floor(Math.random() * cur.length)];
-        else if (old.length)
-            src = old[Math.floor(Math.random() * old.length)];
-        else if (all.length)
-            src = all[Math.floor(Math.random() * all.length)];
-        else return pickCard(pool, 'ssr');
+        // Strictly batch-locked; fall back to full UR pool only if this batch has no URs yet
+        const src = cur.length ? cur[Math.floor(Math.random() * cur.length)]
+                  : all.length ? all[Math.floor(Math.random() * all.length)]
+                  : null;
+        if (!src) return pickCard(pool, 'ssr');
         return { name: src.name, anime: normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity: 'ur' };
     }
     let arr;
