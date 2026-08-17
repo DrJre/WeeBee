@@ -11727,16 +11727,11 @@ function _tcgPickCard(rarity) {
 function _tcgPickCardBatch(rarity, targetBatch) {
     if (rarity === 'ur') {
         const all = (window._tcgURPool && window._tcgURPool.length) ? window._tcgURPool : TCG_UR_CARDS;
-        const cur = all.filter(c => (c.batch || 1) === targetBatch);
-        const old = all.filter(c => (c.batch || 1) !== targetBatch);
-        let src;
-        if (cur.length && (!old.length || Math.random() < 0.8))
-            src = cur[Math.floor(Math.random() * cur.length)];
-        else if (old.length)
-            src = old[Math.floor(Math.random() * old.length)];
-        else if (all.length)
-            src = all[Math.floor(Math.random() * all.length)];
-        else return _tcgPickCard('ssr');
+        const pool = all.filter(c => (c.batch || 1) === targetBatch);
+        const src = pool.length ? pool[Math.floor(Math.random() * pool.length)]
+                  : all.length  ? all[Math.floor(Math.random() * all.length)]
+                  : null;
+        if (!src) return _tcgPickCard('ssr');
         return { name: src.name, anime: _normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity: 'ur' };
     }
     let pool;
@@ -11751,12 +11746,10 @@ function _tcgPickCardBatch(rarity, targetBatch) {
         if (!pool.length) pool = all;
     } else if (rarity === 'rare') {
         pool = (window._tcgRarePool || []).filter(c => (c.batch || 1) === targetBatch);
-        if (!pool.length) pool = window._tcgRarePool || [];
-        if (!pool.length) return { name: '???', anime: '', image: '', rarity };
+        if (!pool.length) return _tcgPickCardBatch('sr', targetBatch); // no batch rares → upgrade to SR
     } else {
         pool = (window._tcgCommonPool || []).filter(c => (c.batch || 1) === targetBatch);
-        if (!pool.length) pool = window._tcgCommonPool || [];
-        if (!pool.length) return { name: '???', anime: '', image: '', rarity };
+        if (!pool.length) return _tcgPickCardBatch('rare', targetBatch); // no batch commons → upgrade to rare
     }
     if (!pool.length) return { name: '???', anime: '', image: '', rarity };
     const src = pool[Math.floor(Math.random() * pool.length)];

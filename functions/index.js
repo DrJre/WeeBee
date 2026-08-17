@@ -447,27 +447,27 @@ exports.settleBulletinOffer = onRequest({ invoker: 'public' }, async (req, res) 
 // Mirrors TCG_PACKS in app.js — keep cost/odds/flags in sync if that array changes.
 const TCG_PACKS = {
     standard: {
-        id: 'standard', name: 'Standard Pack', cost: 150, salePrice: 100,
+        id: 'standard', name: 'Standard Pack', cost: 150,
         guaranteedSR: false, prismatic: false,
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Standard%20Pack.png',
     },
     premium: {
-        id: 'premium', name: 'Premium Pack', cost: 750, salePrice: null,
+        id: 'premium', name: 'Premium Pack', cost: 750,
         guaranteedSR: true, prismatic: false,
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Premium%20Pack.png',
     },
     current_premium: {
-        id: 'current_premium', name: 'Current Batch Premium', cost: 800, salePrice: null,
+        id: 'current_premium', name: 'Current Batch Premium', cost: 800,
         guaranteedSR: true, currentBatch: true,
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Premium%20Pack.png',
     },
     filler: {
-        id: 'filler', name: 'Filler Pack', cost: 800, salePrice: null,
+        id: 'filler', name: 'Filler Pack', cost: 800,
         guaranteedSR: true, filler: true,
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Premium%20Pack.png',
     },
     prismatic: {
-        id: 'prismatic', name: 'Neon 2026 Pack', cost: 800, salePrice: null,
+        id: 'prismatic', name: 'Neon 2026 Pack', cost: 800,
         guaranteedSR: false, prismatic: true,
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Neon%202026%20Pack.png',
     },
@@ -848,10 +848,12 @@ exports.purchasePacks = onRequest({ invoker: 'public' }, async (req, res) => {
     let costPerPack = pack.cost;
     try {
         const saleSnap = await db.collection('tcg_sale_config').doc('current').get();
-        // Mirrors _tcgLoadSaleConfig() in app.js: the sale defaults to ON until an
-        // admin explicitly saves the toggle (the doc only exists once that happens).
-        const saleEnabled = saleSnap.exists ? !!saleSnap.data().enabled : true;
-        if (saleEnabled && pack.salePrice != null) costPerPack = pack.salePrice;
+        const saleEnabled = saleSnap.exists ? !!saleSnap.data().enabled : false;
+        if (saleEnabled) {
+            const prices = (saleSnap.exists && saleSnap.data().prices) || {};
+            const salePrice = prices[packId];
+            if (salePrice != null && salePrice > 0) costPerPack = salePrice;
+        }
     } catch(e) {}
     const totalCost = costPerPack * quantity;
 
