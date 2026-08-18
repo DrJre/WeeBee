@@ -272,7 +272,7 @@ async function loadDropRoleConfig() {
     console.error('[drop-role] Failed to load config:', e.message);
   }
 }
-const DROP_INTERVAL_MS  = 5 * 60 * 1000;
+const DROP_INTERVAL_MS  = 3 * 60 * 1000;
 const CLAIM_WINDOW_MS     = 15 * 1000;
 const SSR_CLAIM_WINDOW_MS = 60 * 1000;
 const SR_COOLDOWN_MS    = 60 * 60 * 1000;

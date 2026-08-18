@@ -14725,25 +14725,40 @@ window._tcgLoadVersionsView = async function(el, name, anime, rarity) {
         const placeholder = `<div style="width:52px;height:52px;border-radius:50%;border:2px solid rgba(128,128,128,0.25);position:relative;overflow:hidden;flex-shrink:0;"><div style="position:absolute;width:2px;height:74px;background:rgba(128,128,128,0.25);top:50%;left:50%;transform:translate(-50%,-50%) rotate(45deg);"></div></div>`;
 
         let gridHTML = '';
-        for (let i = 1; i <= maxSerial; i++) {
-            const ownerUid = ownerMap[i];
-            if (ownerUid) {
-                const p = profileMap[ownerUid] || {};
+        if (rarity === 'common' || rarity === 'rare') {
+            // Only list claimed serials in ascending order — no placeholders for unclaimed
+            const claimedEntries = Object.entries(ownerMap)
+                .map(([serial, uid]) => ({ serial: parseInt(serial), uid }))
+                .sort((a, b) => a.serial - b.serial);
+            for (const { serial, uid } of claimedEntries) {
+                const p = profileMap[uid] || {};
                 const displayName = p.displayName || 'Unknown';
-                const safeDisplayName = displayName.replace(/'/g, "\\'");
                 const avatar = p.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
-                const safeAvatar = avatar.replace(/'/g, "%27");
-                gridHTML += `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;" onclick="viewUserProfile('${ownerUid}')">
-                    <div style="font-size:9px;font-weight:800;color:${rarityColor};">#${i}</div>
+                gridHTML += `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;" onclick="viewUserProfile('${uid}')">
+                    <div style="font-size:9px;font-weight:800;color:${rarityColor};">#${serial}</div>
                     <img src="${avatar}" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid ${rarityColor};" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333'">
                     <div style="font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px;text-align:center;">${displayName}</div>
                 </div>`;
-            } else {
-                gridHTML += `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
-                    <div style="font-size:9px;font-weight:800;color:var(--text-muted);">#${i}</div>
-                    ${placeholder}
-                    <div style="font-size:9px;color:var(--text-muted);">No Owner</div>
-                </div>`;
+            }
+        } else {
+            for (let i = 1; i <= maxSerial; i++) {
+                const ownerUid = ownerMap[i];
+                if (ownerUid) {
+                    const p = profileMap[ownerUid] || {};
+                    const displayName = p.displayName || 'Unknown';
+                    const avatar = p.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333`;
+                    gridHTML += `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;" onclick="viewUserProfile('${ownerUid}')">
+                        <div style="font-size:9px;font-weight:800;color:${rarityColor};">#${i}</div>
+                        <img src="${avatar}" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid ${rarityColor};" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=ffc107&fontColor=333333'">
+                        <div style="font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px;text-align:center;">${displayName}</div>
+                    </div>`;
+                } else {
+                    gridHTML += `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+                        <div style="font-size:9px;font-weight:800;color:var(--text-muted);">#${i}</div>
+                        ${placeholder}
+                        <div style="font-size:9px;color:var(--text-muted);">No Owner</div>
+                    </div>`;
+                }
             }
         }
 
@@ -14762,7 +14777,7 @@ window._tcgLoadVersionsView = async function(el, name, anime, rarity) {
                 <div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:4px 12px;border-radius:20px;border:1px solid ${rarityColor};background:rgba(0,0,0,0.1);">
                     <span style="font-size:12px;font-weight:800;color:${rarityColor};">${rarityLabel}</span>
                 </div>
-                <div style="font-size:12px;color:var(--text-muted);margin-top:8px;">${claimedCount} / ${maxSerial} claimed</div>
+                ${(rarity !== 'common' && rarity !== 'rare') ? `<div style="font-size:12px;color:var(--text-muted);margin-top:8px;">${claimedCount} / ${maxSerial} claimed</div>` : ''}
             </div>
             <div class="tcg-versions-grid" style="display:grid;grid-template-columns:repeat(10,1fr);gap:14px 6px;">
                 ${gridHTML}
