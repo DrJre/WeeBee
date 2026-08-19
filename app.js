@@ -473,6 +473,11 @@ window._amberSubscribeTopbar = function() {
         const val = document.getElementById('topbar-amber-value');
         if (val) val.textContent = amber.toLocaleString();
         if (badge) badge.style.display = 'flex';
+        const shards = data.shards || 0;
+        const shardsBadge = document.getElementById('topbar-shards-badge');
+        const shardsVal = document.getElementById('topbar-shards-value');
+        if (shardsVal) shardsVal.textContent = shards.toLocaleString();
+        if (shardsBadge) shardsBadge.style.display = shards > 0 ? 'flex' : 'none';
         const hw = document.getElementById('hw-amber');
         if (hw) hw.textContent = amber.toLocaleString();
         // Keep topbar name in sync with Firestore — this fires immediately on
@@ -515,6 +520,16 @@ async function _incrementUserStats(fields) {
         setDoc(doc(db, 'user_stats', uid), updates, { merge: true }),
         setDoc(doc(db, 'user_stats', uid, 'years', year), updates, { merge: true }),
     ]);
+}
+
+// Award shards (crafting currency) to the current user
+async function _awardShards(amount) {
+    if (!auth.currentUser || amount <= 0) return;
+    const uid = auth.currentUser.uid;
+    try {
+        await updateDoc(doc(db, 'profiles', uid), { shards: increment(amount) });
+        if (window._myProfile) window._myProfile.shards = (window._myProfile.shards || 0) + amount;
+    } catch(e) {}
 }
 
 // Award amber to any uid — used for likes received by post author
@@ -989,6 +1004,9 @@ onAuthStateChanged(auth, async (user) => {
             <div style="display:flex; align-items:center; gap: 10px;">
                 <div id="topbar-amber-badge" class="topbar-amber-badge" onclick="event.stopPropagation(); switchView('tcg-view')" title="Amber balance" style="display:none; align-items:center; gap:4px; font-weight:600; font-size:13px; background:rgba(255,193,7,0.15); color:#b8860b; border-radius:12px; padding:4px 10px; cursor:pointer;">
                     <span style="font-size:14px;">🟡</span><span id="topbar-amber-value">0</span>
+                </div>
+                <div id="topbar-shards-badge" onclick="event.stopPropagation(); window._tcgInitialCollectionTab='craft'; switchView('tcg-view'); switchTcgTab(null,'tcg-tab-collection')" title="Click to open Craft tab" style="display:none; align-items:center; gap:4px; font-weight:600; font-size:13px; background:rgba(56,189,248,0.12); color:#0ea5e9; border-radius:12px; padding:4px 10px; cursor:pointer;">
+                    <span style="font-size:14px;">🔷</span><span id="topbar-shards-value">0</span>
                 </div>
                 <span id="topbar-user-name" class="topbar-display-name" style="font-weight:600; font-size:14px;">${user.displayName}</span><span id="topbar-rank-badge" style="display:inline-flex; align-items:center; margin-left:2px;"></span>
                 <img src="${avatarUrl}" alt="User" class="avatar" style="cursor:pointer;" onclick="window.topbarAvatarClick(event, '${user.uid}')" onerror="this.src='https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(user.displayName||'U')}&backgroundColor=ffc107&fontColor=333333'">
@@ -6746,7 +6764,7 @@ window.switchTcgTab = function(event, tabId) {
             if (btn.getAttribute('onclick')?.includes(tabId)) btn.classList.add('active');
         });
     }
-    if (tabId === 'tcg-tab-collection') window._tcgRenderMyCollection();
+    if (tabId === 'tcg-tab-collection') { const t = window._tcgInitialCollectionTab; window._tcgInitialCollectionTab = undefined; window._tcgRenderMyCollection(t); }
     if (tabId === 'tcg-tab-inventory') window._tcgRenderInventory();
     if (tabId === 'tcg-tab-trading') window._tcgRenderTradingTab();
     if (tabId === 'tcg-tab-auction') window._auctionRender();
@@ -8907,7 +8925,7 @@ const TCG_PACKS = [
         gradient: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Standard%20Pack.png',
         description: '5 cards · 1 guaranteed Rare+',
-        odds: 'Common 90% · Rare 9.5%\nSR 0.4% · SSR 0.1%\nGuar slot: Rare 95% · SR 4.6% · SSR 0.4%\n+0.25% bonus UR chance per pack',
+        odds: 'Common 90% · Rare 9.5%\nSR 0.4% · SSR 0.1%\nGuar slot: Rare 95% · SR 4.6% · SSR 0.4%\n+0.1% bonus UR chance per pack',
         guaranteedSR: false,
     },
     {
@@ -8917,7 +8935,7 @@ const TCG_PACKS = [
         gradient: 'linear-gradient(135deg,#b45309,#f59e0b)',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Premium%20Pack.png',
         description: '5 cards · 1 guaranteed SR+',
-        odds: 'Common 75% · Rare 21%\nSR 3.5% · SSR 0.5%\nGuaranteed: SR 96.5% · SSR 3.5%\n+0.5% bonus UR chance per pack',
+        odds: 'Common 75% · Rare 21%\nSR 3.5% · SSR 0.5%\nGuaranteed: SR 96.5% · SSR 3.5%\n+0.25% bonus UR chance per pack',
         guaranteedSR: true,
     },
     {
@@ -8927,7 +8945,7 @@ const TCG_PACKS = [
         gradient: 'linear-gradient(135deg,#92400e,#b45309)',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%203%20Premium%20Pack.png',
         description: '5 cards · 1 guaranteed SR+',
-        odds: 'Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.5% UR bonus · Batch 3 cards only',
+        odds: 'Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.4% UR bonus · Batch 3 cards only',
         guaranteedSR: true,
         currentBatch: true,
         releaseAt: new Date('2026-08-17T04:01:00Z').getTime(),
@@ -8939,7 +8957,7 @@ const TCG_PACKS = [
         gradient: 'linear-gradient(135deg,#065f46,#047857)',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%201%20Premium%20Pack.png',
         description: 'Previous batch · 1 guaranteed SR+',
-        odds: 'Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.5% UR bonus · Batch cards only',
+        odds: 'Common 75% · Rare 20.75%\nSR 3.5% · SSR 0.75%\nGuaranteed: SR 96% · SSR 4%\n+0.4% UR bonus · Batch cards only',
         guaranteedSR: true,
         filler: true,
     },
@@ -9580,7 +9598,7 @@ window._tcgFindCard = async function(nameQuery, rarities) {
 
 // Admin sub-tab switcher
 window.switchAdminSubtab = function(tab) {
-    ['moderation','economy','cards','gifts','feedback','setcards'].forEach(t => {
+    ['moderation','economy','cards','gifts','feedback','setcards','dungeon'].forEach(t => {
         const el = document.getElementById('admin-subtab-' + t);
         const btn = document.getElementById('admin-subtab-' + t + '-btn');
         if (el) el.style.display = t === tab ? '' : 'none';
@@ -9591,6 +9609,37 @@ window.switchAdminSubtab = function(tab) {
         }
     });
     if (tab === 'feedback') window._adminLoadFeedback();
+};
+
+window._adminResetMvpCounts = async function() {
+    if (!window.isAdmin) return;
+    const el = document.getElementById('admin-mvp-reset-result');
+    if (!el) return;
+    if (!confirm('This will clear legacy mvpCounts from ALL users\' dungeon career stats. Continue?')) return;
+    el.innerHTML = '<span style="color:var(--text-muted);">Scanning dungeon_progress docs…</span>';
+    try {
+        const snap = await getDocs(collection(db, 'dungeon_progress'));
+        if (snap.empty) { el.innerHTML = '<span style="color:#22c55e;">No documents found.</span>'; return; }
+        const BATCH_SIZE = 400;
+        let batches = [writeBatch(db)];
+        let count = 0;
+        snap.forEach(d => {
+            const data = d.data();
+            if (!data.lifetime?.mvpCounts) return;
+            const newLifetime = { ...data.lifetime };
+            delete newLifetime.mvpCounts;
+            if (count > 0 && count % BATCH_SIZE === 0) batches.push(writeBatch(db));
+            batches[batches.length - 1].update(d.ref, { lifetime: newLifetime });
+            count++;
+        });
+        if (count === 0) { el.innerHTML = '<span style="color:#22c55e;">Nothing to reset — all users already clean.</span>'; return; }
+        el.innerHTML = `<span style="color:var(--text-muted);">Committing ${count} updates…</span>`;
+        await Promise.all(batches.map(b => b.commit()));
+        el.innerHTML = `<span style="color:#22c55e;">✓ Reset complete — cleared mvpCounts from ${count} user(s).</span>`;
+    } catch(e) {
+        console.error('[admin] MVP reset error:', e);
+        el.innerHTML = `<span style="color:#ef4444;">Error: ${e.message}</span>`;
+    }
 };
 
 window._adminLoadFeedback = async function() {
@@ -12569,7 +12618,7 @@ window._tcgShowWhatsInside = async function(packId, batchNum) {
             : base;
     }
 
-    const rarityOrder = { ur: 0, ssr: 1, sr: 2, rare: 3, common: 4, pr: 0, nr: 0 };
+    const rarityOrder = { 'ur+': -0.5, ur: 0, 'ssr+': 0.5, ssr: 1, 'sr+': 1.5, sr: 2, rare: 3, common: 4, pr: 0, nr: 0 };
     fullPool.sort((a, b) => (rarityOrder[a.rarity] ?? 9) - (rarityOrder[b.rarity] ?? 9));
 
     const counts = {};
@@ -12629,10 +12678,17 @@ window._tcgRenderStore = async function() {
     if (!el) return;
     _tcgEnsureCardPool(); // warm the pool cache so Buy Pack feels instant
     let amber = 0;
+    let pityStandardUsed = false;
+    let pityPremiumUsed = false;
     try {
         if (auth.currentUser) {
             const pd = await getDoc(doc(db, 'profiles', auth.currentUser.uid));
-            amber = pd.exists() ? (pd.data().amber || 0) : 0;
+            if (pd.exists()) {
+                const pdData = pd.data();
+                amber = pdData.amber || 0;
+                pityStandardUsed = pdData.pityStandardUsedBatch === TCG_RELEASED_BATCH;
+                pityPremiumUsed  = pdData.pityPremiumUsedBatch  === TCG_RELEASED_BATCH;
+            }
         }
     } catch(e) {}
 
@@ -12740,8 +12796,8 @@ window._tcgRenderStore = async function() {
         ${saleActive ? `<div style="background:linear-gradient(135deg,#dc2626,#f59e0b);color:white;border-radius:10px;padding:10px 16px;margin-bottom:18px;text-align:center;font-weight:800;font-size:14px;letter-spacing:0.5px;">🎉 FLASH SALE — Pack prices rolled back for 72 hours! 🎉</div>` : ''}
         <div style="position:relative;">
             <div class="tcg-pack-grid" id="tcg-pack-carousel" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
-                ${packCard(TCG_PACKS.find(p => p.id === 'standard'))}
-                ${packCard(TCG_PACKS.find(p => p.id === 'premium'))}
+                ${packCard(TCG_PACKS.find(p => p.id === 'standard'), false, pityStandardUsed ? `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;gap:5px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;font-weight:700;font-size:11px;color:#22c55e;">✓ Pity claimed — Batch ${TCG_RELEASED_BATCH}</div>` : '')}
+                ${packCard(TCG_PACKS.find(p => p.id === 'premium'), false, pityPremiumUsed ? `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;gap:5px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;font-weight:700;font-size:11px;color:#22c55e;">✓ Pity claimed — Batch ${TCG_RELEASED_BATCH}</div>` : '')}
                 ${packCard(curBatchPack, !batchReleased, curBatchLabelHtml)}
                 ${flexSlotHtml}
             </div>
@@ -13180,11 +13236,15 @@ window._tcgOpenSetProgress = async function(setId) {
 };
 
 window._tcgClaimSetCard = async function(setId) {
+    if (window._tcgClaimSetInProgress) return;
+    window._tcgClaimSetInProgress = true;
     const uid = auth.currentUser?.uid;
-    if (!uid) { alert('Please sign in to claim.'); return; }
+    if (!uid) { window._tcgClaimSetInProgress = false; alert('Please sign in to claim.'); return; }
     const btn = document.getElementById('tcg-claim-set-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
     try {
+        // Bypass cache so a stale read can't let a second call slip through
+        if (window._tcgCollectionCache) window._tcgCollectionCache.delete(uid);
         const [sets, myCards] = await Promise.all([_tcgLoadSetCards(), _tcgLoadCollection(uid)]);
         const s = sets.find(x => x.id === setId);
         if (!s) throw new Error('Set not found');
@@ -13199,7 +13259,8 @@ window._tcgClaimSetCard = async function(setId) {
             if (btn) { btn.disabled = false; btn.textContent = '✦ Claim Set Card'; }
             return;
         }
-        const cardId = `set_${setId}_${uid.slice(0, 6)}_${Date.now()}`;
+        // Deterministic doc ID so concurrent claims are idempotent at the Firestore level
+        const cardId = `set_${setId}_${uid}`;
         const cardData = { name: s.cardName, anime: s.animeName, rarity: 'set', setId: s.id, image: s.image || '', pullTimestamp: new Date().toISOString() };
         document.getElementById('tcg-set-progress-modal')?.remove();
         const results = await Promise.allSettled([
@@ -13213,6 +13274,8 @@ window._tcgClaimSetCard = async function(setId) {
         document.getElementById('tcg-set-claim-anim')?.remove();
         alert('Failed to claim Set Card. Please try again.');
         if (btn) { btn.disabled = false; btn.textContent = '✦ Claim Set Card'; }
+    } finally {
+        window._tcgClaimSetInProgress = false;
     }
 };
 
@@ -13426,7 +13489,7 @@ window._tcgAdminSeedBatch3SetCards = async function() {
     ];
     console.log('[SeedSetCards] Loading card pool…');
     await _tcgEnsureCardPool();
-    const rarityOrder = { ur: 0, ssr: 1, sr: 2, rare: 3, common: 4 };
+    const rarityOrder = { 'ur+': -0.5, ur: 0, 'ssr+': 0.5, ssr: 1, 'sr+': 1.5, sr: 2, rare: 3, common: 4 };
     const allCards = [
         ...(window._tcgURPool?.length ? window._tcgURPool : TCG_UR_CARDS).map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), rarity: 'ur', image: c.image || '' })),
         ...(window._tcgSSRPool?.length ? window._tcgSSRPool : TCG_SSR_CARDS).map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), rarity: 'ssr', image: c.image || '' })),
@@ -14294,13 +14357,18 @@ function _tcgBuildCardFace(card) {
         </div>`;
     }
     const isPrismatic = rarity === 'pr';
-    const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'PR' }[rarity] || 'Common';
+    const isPlus = rarity.endsWith('+');
+    const baseRarity = isPlus ? rarity.slice(0, -1) : rarity;
+    const label = { ur: 'UR', 'ur+': 'UR+', ssr: 'SSR', 'ssr+': 'SSR+', sr: 'SR', 'sr+': 'SR+', rare: 'Rare', common: 'Common', pr: 'PR' }[rarity] || 'Common';
+    const MVP_STAR_THRESHOLDS = { sr: 12, 'sr+': 12, ssr: 30, 'ssr+': 30, ur: 50, 'ur+': 50 };
+    const mvpThreshold = MVP_STAR_THRESHOLDS[rarity];
+    const hasMvpStar = mvpThreshold != null && (card.mvpCount || 0) >= mvpThreshold;
     const eName = (card.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const eAnime = (card.anime || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const _needsCache = card.image && !card.image.startsWith(_R2_PUBLIC_BASE) && !card.image.includes('firebasestorage.googleapis.com');
     const _cacheAttrs = _needsCache ? ` data-char-cache="${(card.name+'|'+card.anime).replace(/"/g,'&quot;')}" onload="window._tcgLazyCacheCharacterImage('${eName}','${eAnime}',this.src)"` : '';
     const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}"${_cacheAttrs} onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
-    const gem = (rarity === 'sr' || rarity === 'ssr' || rarity === 'ur') ? `<span class="wb-rarity-gem"><span>⬡</span></span>` : (rarity === 'pr' ? `<span class="wb-rarity-gem wb-rarity-gem--star">★</span>` : `<span class="wb-rarity-gem">⬡</span>`);
+    const gem = (baseRarity === 'sr' || baseRarity === 'ssr' || baseRarity === 'ur') ? `<span class="wb-rarity-gem"><span>⬡</span></span>` : (rarity === 'pr' ? `<span class="wb-rarity-gem wb-rarity-gem--star">★</span>` : `<span class="wb-rarity-gem">⬡</span>`);
     const maxV = card.maxVersions || RARITY_MAX_VERSIONS[rarity] || 5000;
     const serialInner = card.founder
         ? `<div class="wb-founder-label">Founder</div>`
@@ -14312,10 +14380,11 @@ function _tcgBuildCardFace(card) {
     const serialRow = (isPrismatic || rarity === 'nr')
         ? ''
         : `<div style="margin-top:4px;">${serialInner}</div>`;
+    const plusClass = isPlus ? ' is-plus' : '';
     const prismaticClass = isPrismatic ? ' wb-card--prismatic' : '';
     const sparkles = isPrismatic ? `<div class="wb-prismatic-sparkles">${'<span class="wb-sparkle">✦</span>'.repeat(8)}</div>` : '';
     const prismaticCornerStamp = isPrismatic ? `<span class="wb-prismatic-stamp">✦ Prismatic 2026</span>` : '';
-    return `<div class="wb-card rarity-${rarity}${prismaticClass}">
+    return `<div class="wb-card rarity-${baseRarity}${prismaticClass}${plusClass}">
         <div class="wb-card-inner">
             ${sparkles}
             ${prismaticCornerStamp}
@@ -14325,7 +14394,7 @@ function _tcgBuildCardFace(card) {
             </div>
             <div class="wb-card-art">${art}</div>
             <div class="wb-card-footer">
-                <div class="wb-card-name">${card.name}</div>
+                <div class="wb-card-name">${card.name}${hasMvpStar ? '<span class="wb-mvp-star">★</span>' : ''}</div>
                 <div class="wb-card-series">${card.anime}</div>
                 <div class="wb-card-rarity-label">${label}</div>
                 ${serialRow}
@@ -14336,7 +14405,7 @@ function _tcgBuildCardFace(card) {
 
 // Holographic shimmer — updates --mx/--my on SSR/UR/PR cards so the CSS overlay follows the cursor
 document.addEventListener('mousemove', function(e) {
-    const card = e.target.closest('.rarity-ssr, .rarity-ur, .rarity-pr, .rarity-set');
+    const card = e.target.closest('.rarity-ssr, .rarity-ur, .rarity-pr, .rarity-set, .is-plus');
     if (!card) return;
     const r = card.getBoundingClientRect();
     card.style.setProperty('--mx', ((e.clientX - r.left) / r.width).toFixed(3));
@@ -14524,7 +14593,7 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
     const isSet = card.rarity === 'set';
     const isPR = card.rarity === 'pr' || card.rarity === 'nr' || isSet;
     const versionText = card.founder ? 'Founder Edition · 1 of 1' : ((card.monthlyUr||card.tradedMonthlyUr) ? card.stampText : ((!isPR && card.serial != null) ? `${card.serial} / ${maxV}${(card.edition||1)>1?` · Edition ${card.edition}`:''}` : '—'));
-    const rarityLabel = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event', nr:'Neon', set:'SET' }[card.rarity] || card.rarity;
+    const rarityLabel = { ur:'UR', 'ur+':'UR+', ssr:'SSR', 'ssr+':'SSR+', sr:'SR', 'sr+':'SR+', rare:'Rare', common:'Common', pr:'Event', nr:'Neon', set:'SET' }[card.rarity] || card.rarity;
     const safeOwnerUid = ownerUid.replace(/'/g,"\\'");
     const shareUrl = `${window.location.origin}${window.location.pathname}?card=${encodeURIComponent(ownerUid)}~${encodeURIComponent(cardId)}`;
 
@@ -14545,6 +14614,12 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
         } catch(e) {}
     }
 
+    const isCardOwner = auth.currentUser?.uid === ownerUid;
+    const _dismantleAmt = TCG_DISMANTLE_RATES[card.rarity] || 0;
+    const _shatterAmt = TCG_SHATTER_RATES[card.rarity] || 0;
+    const _canFuse = !!TCG_FUSE_REQUIREMENTS[card.rarity];
+    const _safeCardName = (card.name || '').replace(/'/g, "\\'");
+
     body.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
             <div style="font-size:16px;font-weight:800;">Card Details</div>
@@ -14564,6 +14639,7 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
             </div>` : `<button data-vname="${(card.name||'').replace(/"/g,'&quot;')}" data-vanime="${(card.anime||'').replace(/"/g,'&quot;')}" data-vrarity="${card.rarity||'pr'}" onclick="const b=this;document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenVersionsView(b.dataset.vname,b.dataset.vanime,b.dataset.vrarity)" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">👑 View All Owners</button>`}
             <div><strong>Owner:</strong> <span onclick="document.getElementById('tcg-card-viewer-modal').remove();viewUserProfile('${safeOwnerUid}')" style="cursor:pointer;color:#f59e0b;font-weight:700;">${ownerName}</span></div>
         </div>
+        ${isCardOwner ? `<div style="display:flex;gap:6px;flex-wrap:wrap;width:100%;margin-top:4px;">${_dismantleAmt ? `<button onclick="window._tcgDismantleCard('${cardId}','${card.rarity}','${_safeCardName}','${safeOwnerUid}')" style="flex:1;padding:9px 10px;border-radius:9px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:800;font-size:12px;cursor:pointer;">Dismantle 🟡 ${_dismantleAmt}</button>` : ""}${_shatterAmt ? `<button onclick="window._tcgShatterCard('${cardId}','${card.rarity}','${_safeCardName}','${safeOwnerUid}')" style="flex:1;padding:9px 10px;border-radius:9px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:800;font-size:12px;cursor:pointer;">Shatter 🔷 ${_shatterAmt}</button>` : ""}${_canFuse ? `<button onclick="window._tcgOpenFuseModal('${cardId}','${safeOwnerUid}')" style="flex:1;padding:9px 10px;border-radius:9px;border:1px solid rgba(167,139,250,0.4);background:transparent;color:#a78bfa;font-weight:800;font-size:12px;cursor:pointer;">⚗️ Fuse</button>` : ""}</div>` : ""}
         <button onclick="navigator.clipboard.writeText('${shareUrl}').then(()=>alert('Link copied! Anyone you send it to can view this card.')).catch(()=>alert('Could not copy link'))" style="width:100%;padding:10px 22px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">🔗 Copy Share Link</button>`;
     _tcgObserveSSRCards(body);
 };
@@ -14863,12 +14939,21 @@ window._tcgViewCardSnapshot = async function(snapId) {
 
 // ── TCG Collection System ─────────────────────────────────────────────────────
 
-const RARITY_MAX_VERSIONS = { common: 5000, rare: 2500, sr: 500, ssr: 250, ur: 50, pr: 100 };
+const RARITY_MAX_VERSIONS = { common: 5000, rare: 2500, sr: 500, 'sr+': 500, ssr: 250, 'ssr+': 250, ur: 50, 'ur+': 50, pr: 100 };
 // Event cards (PR/NR/SET) never get serial numbers, never show version text.
 function _tcgIsEventCard(card) { return card.rarity === 'pr' || card.rarity === 'nr' || card.rarity === 'set' || !!card.event; }
 
 // Flat amber refund for breaking down a card — SET cards cannot be dismantled (0)
-const TCG_DISMANTLE_RATES = { common: 5, rare: 20, sr: 100, ssr: 400, ur: 1500, pr: 250, nr: 250, set: 0 };
+// + rarity dismantle value = sum of all dupes consumed to fuse it
+const TCG_DISMANTLE_RATES = { common: 5, rare: 20, sr: 100, 'sr+': 600, ssr: 400, 'ssr+': 1600, ur: 1500, 'ur+': 4500, pr: 250, nr: 250, set: 0 };
+
+// Shards earned when shattering a card (crafting currency)
+const TCG_SHATTER_RATES = { common: 5, rare: 15, sr: 30, 'sr+': 125, ssr: 300, 'ssr+': 625, ur: 1250, 'ur+': 2500 };
+// Shard cost to craft a specific card — Common/Rare/SR only; SSR+ require fusing
+const TCG_CRAFT_COSTS = { common: 25, rare: 60, sr: 250 };
+
+// Dupe copies required to fuse into the next + rarity (base rarities only)
+const TCG_FUSE_REQUIREMENTS = { sr: 6, ssr: 4, ur: 3 };
 
 // Dismantles an owned card for a flat amber payout based on rarity
 window._tcgDismantling = false;
@@ -14876,7 +14961,7 @@ window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
     if (!auth.currentUser || window._tcgDismantling) return;
     if (window._tcgFavoriteIds?.has(cardId)) { alert(`"${name}" is favorited. Unfavorite it first to dismantle.`); return; }
     const amount = TCG_DISMANTLE_RATES[rarity] || 0;
-    const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'Event', nr: 'Neon' }[rarity] || rarity;
+    const label = { ur: 'UR', 'ur+': 'UR+', ssr: 'SSR', 'ssr+': 'SSR+', sr: 'SR', 'sr+': 'SR+', rare: 'Rare', common: 'Common', pr: 'Event', nr: 'Neon' }[rarity] || rarity;
     if (!confirm(`Dismantle ${name} (${label}) for 🟡 ${amount.toLocaleString()} Amber? This cannot be undone.`)) return;
     window._tcgDismantling = true;
     try {
@@ -14918,6 +15003,247 @@ window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
     }
 };
 
+// Shatters a card for Shards (crafting currency)
+window._tcgShatterCard = async function(cardId, rarity, name, profileUid) {
+    if (!auth.currentUser) return;
+    if (window._tcgFavoriteIds?.has(cardId)) { alert(`"${name}" is favorited. Unfavorite it first to shatter.`); return; }
+    const amount = TCG_SHATTER_RATES[rarity] || 0;
+    if (!amount) { alert('This card cannot be shattered.'); return; }
+    const label = { ur: 'UR', 'ur+': 'UR+', ssr: 'SSR', 'ssr+': 'SSR+', sr: 'SR', 'sr+': 'SR+', rare: 'Rare', common: 'Common' }[rarity] || rarity;
+    if (!confirm(`Shatter ${name} (${label}) for 🔷 ${amount.toLocaleString()} Shards? This cannot be undone.`)) return;
+    try {
+        const uid = auth.currentUser.uid;
+        const cardRef = doc(db, 'card_collections', uid, 'cards', cardId);
+        const cardSnap = await getDoc(cardRef);
+        const cardData = cardSnap.exists() ? cardSnap.data() : {};
+        await deleteDoc(cardRef);
+        await _awardShards(amount);
+        if (cardData.serial != null && !cardData.founder && !cardData.monthlyUr && !cardData.tradedMonthlyUr) {
+            const key = _tcgCardKey({ rarity: cardData.rarity || rarity, name: cardData.name || name, anime: cardData.anime || '' });
+            const serialRef = doc(db, 'card_serials', key);
+            await runTransaction(db, async tx => {
+                const snap = await tx.get(serialRef);
+                if (snap.exists()) {
+                    const pool = [...(snap.data().versionsRemaining || [])];
+                    pool.push(cardData.serial);
+                    tx.update(serialRef, { versionsRemaining: pool });
+                }
+            });
+        }
+        window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
+        if (profileUid) {
+            const el = document.getElementById('user-tcg-binders-container');
+            if (el) await window._tcgRenderProfileBindersList(el, profileUid);
+            window._tcgRenderProfileShowcase(profileUid);
+        } else {
+            window._tcgRenderMyCollection('mycards', true);
+        }
+        document.getElementById('tcg-card-viewer-modal')?.remove();
+    } catch(e) {
+        alert('Failed to shatter: ' + e.message);
+    }
+};
+
+// Opens the Fuse modal — user combines N dupe cards into a + rarity card
+window._tcgOpenFuseModal = async function(cardId, uid) {
+    if (!auth.currentUser || auth.currentUser.uid !== uid) return;
+    const rarity = (await getDoc(doc(db, 'card_collections', uid, 'cards', cardId))).data()?.rarity;
+    const required = TCG_FUSE_REQUIREMENTS[rarity];
+    if (!required) return;
+
+    const sourceSnap = await getDoc(doc(db, 'card_collections', uid, 'cards', cardId));
+    if (!sourceSnap.exists()) return;
+    const sourceCard = { id: cardId, ...sourceSnap.data() };
+    const resultRarity = rarity + '+';
+    const resultLabel = { sr: 'SR+', ssr: 'SSR+', ur: 'UR+' }[rarity] || (rarity + '+');
+
+    const allCards = await _tcgLoadCollection(uid);
+    const dupes = allCards.filter(c => c.name === sourceCard.name && c.anime === sourceCard.anime && c.rarity === rarity && c.id !== cardId);
+
+    // slots[0] is pre-filled with the source card; the rest are null until user picks
+    const slots = [sourceCard, ...Array(required - 1).fill(null)];
+    let fusing = false;
+
+    document.getElementById('fuse-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'fuse-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(5,3,15,0.88);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;overflow-y:auto;';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
+    function slottedIds() { return new Set(slots.filter(Boolean).map(c => c.id)); }
+
+    function render() {
+        const filled = slots.filter(Boolean).length;
+        const readyToFuse = filled === required;
+
+        const resultSlotHtml = `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:20px;">
+                <div style="font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;">Result</div>
+                <div style="width:110px;height:154px;border-radius:12px;border:2px dashed rgba(167,139,250,0.5);background:rgba(167,139,250,0.06);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;">
+                    <div style="font-size:22px;">✨</div>
+                    <div style="font-size:12px;font-weight:800;color:#a78bfa;">${resultLabel}</div>
+                </div>
+            </div>`;
+
+        const slotHtml = slots.map((card, i) => {
+            if (card) {
+                return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;" onclick="window._tcgFusePickSlot(${i})">
+                    <div style="width:110px;height:154px;overflow:hidden;flex-shrink:0;position:relative;border-radius:7px;">
+                        <div style="position:absolute;top:0;left:0;transform:scale(0.5);transform-origin:top left;">${_tcgBuildCardFace(card)}</div>
+                    </div>
+                    <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.5);">#${card.serial ?? '?'}</div>
+                    <div style="font-size:10px;color:#ef4444;cursor:pointer;font-weight:700;" onclick="event.stopPropagation();window._tcgFuseClearSlot(${i})">✕ Remove</div>
+                </div>`;
+            } else {
+                return `<div onclick="window._tcgFusePickSlot(${i})" style="width:110px;height:154px;border-radius:8px;border:2px dashed rgba(255,255,255,0.2);background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-direction:column;gap:4px;transition:border-color 0.15s;" onmouseover="this.style.borderColor='rgba(167,139,250,0.5)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.2)'">
+                    <div style="font-size:20px;color:rgba(255,255,255,0.3);">+</div>
+                    <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.3);">Add dupe</div>
+                </div>`;
+            }
+        }).join('');
+
+        modal.innerHTML = `
+        <div style="background:linear-gradient(165deg,#0f0a1e 0%,#180d2e 100%);border-radius:20px;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,0.6),0 0 0 1px rgba(167,139,250,0.2);max-width:480px;width:100%;box-sizing:border-box;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <div>
+                    <div style="font-size:18px;font-weight:900;color:#fff;">⚗️ Fusion Ritual</div>
+                    <div style="font-size:12px;color:#a78bfa;margin-top:2px;">Combine ${required} ${rarity.toUpperCase()} copies → ${resultLabel}</div>
+                </div>
+                <button onclick="document.getElementById('fuse-modal').remove()" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.5);padding:4px;font-size:20px;">✕</button>
+            </div>
+
+            <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:12px;padding:16px;margin-bottom:16px;text-align:center;">
+                <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:4px;">Fusing: ${sourceCard.name}</div>
+                <div style="font-size:11px;color:rgba(255,255,255,0.4);">${sourceCard.anime}</div>
+            </div>
+
+            ${resultSlotHtml}
+
+            <div style="font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:12px;">Dupe slots — ${filled} / ${required} filled</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;justify-items:center;">
+                ${slotHtml}
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:14px;padding:10px 12px;background:rgba(255,255,255,0.04);border-radius:8px;">
+                <span>Result serial: <strong style="color:#a78bfa;">${readyToFuse ? '#' + Math.min(...slots.map(c => c?.serial ?? Infinity)).toString() : '—'}</strong></span>
+                <span>You have <strong>${dupes.length}</strong> other ${rarity.toUpperCase()} dupe${dupes.length !== 1 ? 's' : ''}</span>
+            </div>
+
+            <button id="fuse-confirm-btn" onclick="window._tcgFuseConfirm()" ${readyToFuse ? '' : 'disabled'} style="width:100%;padding:12px 22px;border-radius:12px;border:none;background:${readyToFuse ? 'linear-gradient(135deg,#7c3aed,#a855f7)' : 'rgba(255,255,255,0.08)'};color:${readyToFuse ? '#fff' : 'rgba(255,255,255,0.3)'};font-weight:900;font-size:14px;cursor:${readyToFuse ? 'pointer' : 'not-allowed'};transition:all 0.2s;">
+                ${readyToFuse ? `⚡ Fuse into ${resultLabel}` : `Fill all ${required} slots to fuse (${filled}/${required})`}
+            </button>
+        </div>`;
+    }
+
+    window._tcgFusePickSlot = function(slotIndex) {
+        if (slotIndex === 0) return; // slot 0 is always the source card
+        const usedIds = slottedIds();
+        const available = dupes.filter(c => !usedIds.has(c.id));
+        if (!available.length) { alert(`No more ${rarity.toUpperCase()} dupes available to add.`); return; }
+
+        document.getElementById('fuse-picker-modal')?.remove();
+        const picker = document.createElement('div');
+        picker.id = 'fuse-picker-modal';
+        picker.style.cssText = 'position:fixed;inset:0;z-index:10003;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+        picker.onclick = e => { if (e.target === picker) picker.remove(); };
+        picker.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:16px;padding:20px;max-width:400px;width:100%;max-height:70vh;overflow-y:auto;box-sizing:border-box;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <div style="font-weight:800;font-size:15px;">Pick a dupe for slot ${slotIndex + 1}</div>
+                <button onclick="document.getElementById('fuse-picker-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:20px;">✕</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                ${available.map(c => `
+                <div onclick="window._tcgFuseSelectCard(${slotIndex},'${c.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-gray);cursor:pointer;" onmouseover="this.style.borderColor='#a78bfa'" onmouseout="this.style.borderColor='var(--border-color)'">
+                    <div style="transform:scale(0.4);transform-origin:left center;width:88px;height:55px;overflow:visible;flex-shrink:0;">${_tcgBuildCardFace(c)}</div>
+                    <div>
+                        <div style="font-size:13px;font-weight:700;">${c.name}</div>
+                        <div style="font-size:11px;color:var(--text-muted);">Serial #${c.serial ?? '?'} · ${c.anime}</div>
+                    </div>
+                </div>`).join('')}
+            </div>
+        </div>`;
+        document.body.appendChild(picker);
+    };
+
+    window._tcgFuseSelectCard = function(slotIndex, selectedCardId) {
+        const card = dupes.find(c => c.id === selectedCardId);
+        if (!card) return;
+        // If card is already in another slot, clear that slot first
+        const existingIndex = slots.findIndex(s => s?.id === selectedCardId);
+        if (existingIndex !== -1) slots[existingIndex] = null;
+        slots[slotIndex] = card;
+        document.getElementById('fuse-picker-modal')?.remove();
+        render();
+    };
+
+    window._tcgFuseClearSlot = function(slotIndex) {
+        if (slotIndex === 0) return;
+        slots[slotIndex] = null;
+        render();
+    };
+
+    window._tcgFuseConfirm = async function() {
+        if (fusing) return;
+        const filled = slots.filter(Boolean).length;
+        if (filled < required) return;
+        if (!confirm(`Fuse ${required} ${rarity.toUpperCase()} copies into ${resultLabel}? The ${required} selected cards will be permanently destroyed.`)) return;
+        fusing = true;
+        const btn = document.getElementById('fuse-confirm-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Fusing…'; }
+        try {
+            const minSerial = Math.min(...slots.map(c => c?.serial ?? Infinity));
+            for (const card of slots.filter(Boolean)) {
+                await deleteDoc(doc(db, 'card_collections', uid, 'cards', card.id));
+            }
+            await addDoc(collection(db, 'card_collections', uid, 'cards'), {
+                name: sourceCard.name,
+                anime: sourceCard.anime,
+                rarity: resultRarity,
+                image: sourceCard.image || '',
+                serial: minSerial < Infinity ? minSerial : null,
+                pulledAt: new Date(),
+                fuseSource: true,
+                batch: sourceCard.batch || null,
+            });
+            window._tcgCollectionCache.delete(uid);
+            try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
+            document.getElementById('tcg-card-viewer-modal')?.remove();
+
+            // Show reveal inside the modal instead of closing immediately
+            const newCardObj = {
+                name: sourceCard.name, anime: sourceCard.anime, rarity: resultRarity,
+                image: sourceCard.image || '', serial: minSerial < Infinity ? minSerial : null,
+                fuseSource: true, batch: sourceCard.batch || null,
+            };
+            const serialText = newCardObj.serial != null ? `Serial #${newCardObj.serial} / ${RARITY_MAX_VERSIONS[resultRarity] || 500}` : '';
+            modal.querySelector('div').innerHTML = `
+                <div style="text-align:center;padding:28px 20px 8px;">
+                    <div style="font-size:28px;margin-bottom:6px;">✨</div>
+                    <div style="font-size:20px;font-weight:900;color:#fff;margin-bottom:4px;">Fusion Complete!</div>
+                    <div style="font-size:13px;color:#a78bfa;margin-bottom:24px;">${sourceCard.name} is now <strong>${resultLabel}</strong></div>
+                    <div style="display:flex;justify-content:center;margin-bottom:14px;">
+                        <div data-hover-anim-only style="transform:scale(0.85);transform-origin:top center;width:187px;height:262px;overflow:hidden;border-radius:12px;">
+                            ${_tcgBuildCardFace(newCardObj)}
+                        </div>
+                    </div>
+                    ${serialText ? `<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:24px;">${serialText}</div>` : '<div style="margin-bottom:24px;"></div>'}
+                    <button onclick="document.getElementById('fuse-modal').remove();window._tcgRenderMyCollection('mycards',true);" style="width:100%;padding:12px 22px;border-radius:12px;border:none;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;font-weight:900;font-size:14px;cursor:pointer;">
+                        View in Collection
+                    </button>
+                </div>`;
+            _tcgObserveSSRCards(modal);
+        } catch(e) {
+            alert('Fusion failed: ' + e.message);
+            fusing = false;
+            render();
+        }
+    };
+
+    render();
+    document.body.appendChild(modal);
+};
+
 const TCG_PREMADE_BINDERS = [
     { id: 'one_piece',      name: 'One Piece',       emoji: '🏴‍☠️', color: '#f59e0b' },
     { id: 'naruto',         name: 'Naruto',          emoji: '🍃',   color: '#f97316' },
@@ -14953,6 +15279,23 @@ async function _tcgAssignSerial(card) {
             tx.set(ref, { versionsRemaining: pool, edition, maxVersions: maxV });
             return { version, edition };
         }
+        const { edition = 1 } = snap.data();
+        const pool = [...snap.data().versionsRemaining];
+        const idx = Math.floor(Math.random() * pool.length);
+        const version = pool.splice(idx, 1)[0];
+        tx.update(ref, { versionsRemaining: pool });
+        return { version, edition };
+    });
+}
+
+// Like _tcgAssignSerial but throws 'SOLD_OUT' instead of starting a new edition.
+// Craft cannot start new editions — only pack pulls can.
+async function _tcgAssignSerialCraft(card) {
+    const key = _tcgCardKey(card);
+    const ref = doc(db, 'card_serials', key);
+    return runTransaction(db, async tx => {
+        const snap = await tx.get(ref);
+        if (!snap.exists() || !snap.data().versionsRemaining?.length) throw new Error('SOLD_OUT');
         const { edition = 1 } = snap.data();
         const pool = [...snap.data().versionsRemaining];
         const idx = Math.floor(Math.random() * pool.length);
@@ -15218,7 +15561,7 @@ window._tcgRefreshCollectionGrid = function(uid, filter) {
     const cards = cached;
     const searchQ = (window._tcgCardSearch || '').toLowerCase().trim();
     const sort = window._tcgCardSort;
-    const rarityOrder = { ur:-3, nr:-2, pr:-1, ssr:0, sr:1, rare:2, common:3 };
+    const rarityOrder = { set: -5, 'ur+': -3.5, ur:-3, nr:-2, pr:-1, 'ssr+': -0.5, ssr:0, 'sr+': 0.5, sr:1, rare:2, common:3 };
     const pinnedIds = window._tcgPinnedIds || [];
     const favoriteIds = [...(window._tcgFavoriteIds || [])];
     const ms = window._tcgMultiSelect;
@@ -15265,6 +15608,8 @@ window._tcgRefreshCollectionGrid = function(uid, filter) {
     grid.innerHTML = filtered.map(card => {
         const serial = card.founder ? 'Founder Edition' : ((card.monthlyUr||card.tradedMonthlyUr) ? card.stampText : (!_tcgIsEventCard(card) && card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : ''));
         const dismantleAmount = TCG_DISMANTLE_RATES[card.rarity] || 0;
+        const shatterAmount = TCG_SHATTER_RATES[card.rarity] || 0;
+        const canFuse = !!TCG_FUSE_REQUIREMENTS[card.rarity];
         const isPinned = pinnedIds.includes(card.id);
         const isFav = favoriteIds.includes(card.id);
         const selected = ms.active && ms.selected.has(card.id);
@@ -15277,7 +15622,7 @@ window._tcgRefreshCollectionGrid = function(uid, filter) {
             ${serial ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${serial}</div>` : ''}
             ${!ms.active ? `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">
                 <button onclick="window._tcgTogglePin('${card.id}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isPinned?'var(--accent-yellow)':'var(--border-color)'};background:${isPinned?'rgba(245,158,11,0.12)':'transparent'};color:${isPinned?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;" title="${isPinned ? 'Remove from showcase' : 'Pin to profile showcase'}">${isPinned ? '★ Pinned' : '☆ Pin'}</button>
-                <button class="tcg-dismantle-btn" onclick="window._tcgDismantleCard('${card.id}','${card.rarity}','${card.name.replace(/'/g,"\\'")}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isFav?'rgba(239,68,68,0.3)':'var(--border-color)'};background:transparent;color:${isFav?'rgba(239,68,68,0.4)':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:${isFav?'not-allowed':'pointer'};" title="${isFav?'Unfavorite to dismantle':'Break down for amber'}">Dismantle · 🟡 ${dismantleAmount}</button>
+                ${canFuse ? `<button onclick="window._tcgOpenFuseModal('${card.id}','${uid}')" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(167,139,250,0.4);background:transparent;color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer;" title="Fuse dupes into + rarity">⚗️ Fuse</button>` : ''}
             </div>` : ''}
         </div>`;
     }).join('');
@@ -15387,7 +15732,7 @@ window._tcgRefreshProfileCardGrid = function(uid) {
     const profileSort = window._tcgProfileCardSort || 'rarity';
     const profileFilter = window._tcgProfileCardFilter || 'all';
     const profileSearchQ = (window._tcgProfileCardSearch || '').toLowerCase().trim();
-    const rarityOrder = { ur:-3, nr:-2, pr:-1, ssr:0, sr:1, rare:2, common:3 };
+    const rarityOrder = { set: -5, 'ur+': -3.5, ur:-3, nr:-2, pr:-1, 'ssr+': -0.5, ssr:0, 'sr+': 0.5, sr:1, rare:2, common:3 };
     const ms = window._tcgMultiSelect;
     const profileDupeActive = !!window._tcgProfileShowDupes;
     const profileDupeIdSet = profileDupeActive ? _tcgDupeIds(cards) : null;
@@ -15443,6 +15788,8 @@ window._tcgRefreshProfileCardGrid = function(uid) {
     grid.innerHTML = sortedCards.map(card => {
         const serial = card.founder ? 'Founder Edition' : ((card.monthlyUr||card.tradedMonthlyUr) ? card.stampText : (!_tcgIsEventCard(card) && card.serial != null ? `${card.serial} / ${RARITY_MAX_VERSIONS[card.rarity]||5000}${(card.edition||1)>1?` · Ed.${card.edition}`:''}` : ''));
         const dismantleAmount = TCG_DISMANTLE_RATES[card.rarity] || 0;
+        const shatterAmount = TCG_SHATTER_RATES[card.rarity] || 0;
+        const canFuse = !!TCG_FUSE_REQUIREMENTS[card.rarity];
         const isPinned = pinnedIds.includes(card.id);
         const selected = isOwner && ms.active && ms.selected.has(card.id);
         return `<div class="tcg-card-cell" style="display:flex;flex-direction:column;align-items:center;gap:6px;${selected?'outline:3px solid var(--accent-yellow);border-radius:14px;':''}">
@@ -15451,9 +15798,9 @@ window._tcgRefreshProfileCardGrid = function(uid) {
                 <div class="tcg-card-scale">${_tcgBuildCardFace(card)}</div>
             </div>
             ${serial ? `<div class="tcg-card-caption" style="font-size:11px;color:var(--text-muted);font-weight:700;">${serial}</div>` : ''}
-            ${isOwner && !ms.active ? `<div style="display:flex;gap:6px;">
+            ${isOwner && !ms.active ? `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">
                 <button onclick="window._tcgTogglePin('${card.id}','${uid}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${isPinned?'var(--accent-yellow)':'var(--border-color)'};background:${isPinned?'rgba(245,158,11,0.12)':'transparent'};color:${isPinned?'#f59e0b':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;" title="${isPinned ? 'Remove from showcase' : 'Pin to profile showcase'}">${isPinned ? '★ Pinned' : '☆ Pin'}</button>
-                <button class="tcg-dismantle-btn" onclick="window._tcgDismantleCard('${card.id}','${card.rarity}','${card.name.replace(/'/g,"\\'")}','${uid}')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;" title="Break down for amber">Dismantle · 🟡 ${dismantleAmount}</button>
+                ${canFuse ? `<button onclick="window._tcgOpenFuseModal('${card.id}','${uid}')" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(167,139,250,0.4);background:transparent;color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer;" title="Fuse dupes into + rarity">⚗️ Fuse</button>` : ''}
             </div>` : ''}
         </div>`;
     }).join('');
@@ -15813,6 +16160,244 @@ window._tcgSmartDismantleModal = async function(uid) {
     }).catch(() => {});
 };
 
+window._tcgSmartShatterModal = async function(uid) {
+    if (!auth.currentUser || auth.currentUser.uid !== uid) return;
+
+    document.getElementById('smart-shatter-modal')?.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'smart-shatter-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:var(--bg-white);display:flex;align-items:center;justify-content:center;padding:16px;';
+
+    const RARITY_LABELS = { common:'Common', rare:'Rare', sr:'SR', 'sr+':'SR+', ssr:'SSR', 'ssr+':'SSR+', ur:'UR', 'ur+':'UR+' };
+    const RARITY_ORDER  = ['common','rare','sr','sr+','ssr','ssr+','ur','ur+'];
+    let savedRarities  = new Set(['common','rare']);
+    let savedSerialMin = '';
+    let protectedAnime = [];
+    try {
+        const p = JSON.parse(localStorage.getItem('tcg_smart_shatter_prefs') || '{}');
+        if (Array.isArray(p.rarities) && p.rarities.length) savedRarities = new Set(p.rarities);
+        if (p.serialMin != null) savedSerialMin = p.serialMin;
+        if (Array.isArray(p.protectedAnime)) protectedAnime = p.protectedAnime;
+    } catch(e) {}
+    let previewCards = [];
+    let selectedIds  = new Set();
+    let allCards     = null;
+
+    const render = () => {
+        const rarityChecks = RARITY_ORDER.map(r => `
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                <input type="checkbox" id="ss-rarity-${r.replace('+','-plus')}" ${savedRarities.has(r)?'checked':''} style="width:15px;height:15px;accent-color:#38bdf8;">
+                ${RARITY_LABELS[r]}
+            </label>`).join('');
+
+        modal.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:16px;width:100%;max-width:680px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--border-color);flex-shrink:0;">
+                <div style="font-size:16px;font-weight:800;">🔷 Smart Shatter</div>
+                <button onclick="document.getElementById('smart-shatter-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:22px;line-height:1;">✕</button>
+            </div>
+
+            <div id="ss-filters" style="padding:18px 20px;border-bottom:1px solid var(--border-color);flex-shrink:0;display:flex;flex-direction:column;gap:16px;">
+                <div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">Include Rarities</div>
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;">${rarityChecks}</div>
+                </div>
+
+                <div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">Serial Number Above</div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <input type="number" id="ss-serial-min" min="1" placeholder="e.g. 100" value="${savedSerialMin}" style="width:120px;padding:7px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;">
+                        <span style="font-size:12px;color:var(--text-muted);">Leave blank to include all serials</span>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">Protect These Anime (keep their cards)</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;" id="ss-protected-tags">
+                        ${protectedAnime.map(a => `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(56,189,248,0.15);border:1px solid rgba(56,189,248,0.4);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:#38bdf8;">${a}<button onclick="window._ssRemoveAnime('${a.replace(/'/g,"\\'")}');event.stopPropagation();" style="background:none;border:none;cursor:pointer;color:#38bdf8;font-size:14px;padding:0;line-height:1;">✕</button></span>`).join('')}
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <input type="text" id="ss-anime-input" list="ss-anime-list" placeholder="Type anime name…" style="flex:1;padding:7px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;" onkeydown="if(event.key==='Enter'){event.preventDefault();window._ssAddAnime();}">
+                        <datalist id="ss-anime-list">${(allCards||[]).map(c=>c.anime).filter((v,i,a)=>a.indexOf(v)===i).sort().map(a=>`<option value="${a}">`).join('')}</datalist>
+                        <button onclick="window._ssAddAnime()" style="padding:7px 14px;border-radius:8px;border:none;background:#38bdf8;color:#fff;font-weight:700;font-size:12px;cursor:pointer;">Add</button>
+                    </div>
+                </div>
+
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+                    <input type="checkbox" id="ss-skip-pinned" checked style="width:15px;height:15px;accent-color:#38bdf8;">
+                    Skip pinned cards
+                </label>
+
+                <button onclick="window._ssPreview()" style="padding:9px 20px;border-radius:8px;border:none;background:#38bdf8;color:#fff;font-weight:800;font-size:13px;cursor:pointer;align-self:flex-start;">Preview Selection</button>
+            </div>
+
+            <div id="ss-preview-area" style="flex:1;overflow-y:auto;padding:16px 20px;">
+                <p style="color:var(--text-muted);font-size:13px;">Set your filters above and click Preview Selection.</p>
+            </div>
+
+            <div id="ss-footer" style="padding:14px 20px;border-top:1px solid var(--border-color);flex-shrink:0;display:none;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                <span id="ss-footer-label" style="font-size:13px;font-weight:700;"></span>
+                <div style="display:flex;gap:10px;">
+                    <button onclick="document.getElementById('smart-shatter-modal').remove()" style="padding:9px 18px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;font-size:13px;cursor:pointer;">Cancel</button>
+                    <button id="ss-shatter-btn" onclick="window._ssConfirmShatter()" style="padding:9px 18px;border-radius:8px;border:none;background:#0ea5e9;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">Shatter</button>
+                </div>
+            </div>
+        </div>`;
+    };
+
+    window._ssRemoveAnime = function(anime) {
+        protectedAnime = protectedAnime.filter(a => a !== anime);
+        document.getElementById('ss-protected-tags').innerHTML =
+            protectedAnime.map(a => `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(56,189,248,0.15);border:1px solid rgba(56,189,248,0.4);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:#38bdf8;">${a}<button onclick="window._ssRemoveAnime('${a.replace(/'/g,"\\'")}');event.stopPropagation();" style="background:none;border:none;cursor:pointer;color:#38bdf8;font-size:14px;padding:0;line-height:1;">✕</button></span>`).join('');
+    };
+
+    window._ssAddAnime = function() {
+        const input = document.getElementById('ss-anime-input');
+        const val = (input?.value || '').trim();
+        if (!val || protectedAnime.includes(val)) { if (input) input.value = ''; return; }
+        protectedAnime.push(val);
+        if (input) input.value = '';
+        document.getElementById('ss-protected-tags').innerHTML =
+            protectedAnime.map(a => `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(56,189,248,0.15);border:1px solid rgba(56,189,248,0.4);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:#38bdf8;">${a}<button onclick="window._ssRemoveAnime('${a.replace(/'/g,"\\'")}');event.stopPropagation();" style="background:none;border:none;cursor:pointer;color:#38bdf8;font-size:14px;padding:0;line-height:1;">✕</button></span>`).join('');
+    };
+
+    window._ssPreview = async function() {
+        const previewEl = document.getElementById('ss-preview-area');
+        previewEl.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Loading your collection…</p>';
+
+        if (!allCards) {
+            try { allCards = await _tcgLoadCollection(uid); }
+            catch(e) { previewEl.innerHTML = `<p style="color:red;font-size:13px;">Failed to load: ${e.message}</p>`; return; }
+            const dl = document.getElementById('ss-anime-list');
+            if (dl) dl.innerHTML = [...new Set(allCards.map(c=>c.anime))].sort().map(a=>`<option value="${a}">`).join('');
+        }
+
+        const selectedRarities = new Set(RARITY_ORDER.filter(r => document.getElementById(`ss-rarity-${r.replace('+','-plus')}`)?.checked));
+        const serialMinRaw = document.getElementById('ss-serial-min')?.value || '';
+        const serialMin = parseInt(serialMinRaw, 10) || 0;
+        savedRarities = selectedRarities; savedSerialMin = serialMinRaw;
+        try { localStorage.setItem('tcg_smart_shatter_prefs', JSON.stringify({ rarities:[...selectedRarities], serialMin:serialMinRaw, protectedAnime })); } catch(e) {}
+        const skipPinned = document.getElementById('ss-skip-pinned')?.checked ?? true;
+        const protectedTerms = protectedAnime.map(a => a.toLowerCase());
+
+        let pinnedSet = new Set();
+        if (skipPinned) {
+            try {
+                const pd = await getDoc(doc(db, 'profiles', uid));
+                pinnedSet = new Set(pd.exists() ? (pd.data().pinnedTcgCardIds || []) : []);
+            } catch(e) {}
+        }
+
+        previewCards = allCards.filter(c => {
+            if (c.founder || (c.monthlyUr||c.tradedMonthlyUr) || (window._tcgFavoriteIds?.has(c.id))) return false;
+            if (!(TCG_SHATTER_RATES[c.rarity] > 0)) return false;
+            if (!selectedRarities.has(c.rarity)) return false;
+            if (protectedTerms.some(term => (c.anime || '').toLowerCase().includes(term))) return false;
+            if (skipPinned && pinnedSet.has(c.id)) return false;
+            if (serialMin > 0 && (c.serial == null || c.serial <= serialMin)) return false;
+            return true;
+        });
+
+        selectedIds = new Set(previewCards.map(c => c.id));
+        window._ssRenderPreview();
+    };
+
+    window._ssRenderPreview = function() {
+        const previewEl = document.getElementById('ss-preview-area');
+        const footer    = document.getElementById('ss-footer');
+        const footerLbl = document.getElementById('ss-footer-label');
+        if (!previewEl) return;
+
+        if (!previewCards.length) {
+            previewEl.innerHTML = '<p style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px 0;">No cards match those filters.</p>';
+            if (footer) footer.style.display = 'none';
+            return;
+        }
+
+        const activeCards = previewCards.filter(c => selectedIds.has(c.id));
+        const total = activeCards.reduce((s, c) => s + (TCG_SHATTER_RATES[c.rarity] || 0), 0);
+        const rarityColors = { common:'#9aa1a8', rare:'#f59e0b', sr:'#8b5cf6', 'sr+':'#a78bfa', ssr:'#00d4ff', 'ssr+':'#67e8f9', ur:'#ff4dff', 'ur+':'#f0abfc' };
+
+        previewEl.innerHTML = `
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">${previewCards.length} card${previewCards.length!==1?'s':''} matched — uncheck any you want to keep.</div>
+            ${previewCards.map(c => {
+                const checked = selectedIds.has(c.id);
+                const serialTxt = c.serial != null ? `#${c.serial} / ${RARITY_MAX_VERSIONS[c.rarity]||5000}` : '';
+                const col = rarityColors[c.rarity] || '#aaa';
+                return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border-color);opacity:${checked?1:0.4};">
+                    <input type="checkbox" ${checked?'checked':''} onchange="window._ssToggleCard('${c.id}')" style="width:16px;height:16px;flex-shrink:0;accent-color:#38bdf8;cursor:pointer;">
+                    <img src="${c.image||''}" style="width:36px;height:50px;object-fit:cover;border-radius:4px;flex-shrink:0;border:2px solid ${col};" onerror="this.style.display='none'">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
+                        <div style="font-size:11px;color:var(--text-muted);">${c.anime}${serialTxt ? ' · ' + serialTxt : ''}</div>
+                    </div>
+                    <span style="font-size:11px;font-weight:800;color:${col};flex-shrink:0;">${(c.rarity||'').toUpperCase()}</span>
+                    <span style="font-size:12px;font-weight:700;color:#38bdf8;flex-shrink:0;">🔷 ${TCG_SHATTER_RATES[c.rarity]||0}</span>
+                </div>`;
+            }).join('')}`;
+
+        if (footer) {
+            footer.style.display = 'flex';
+            if (footerLbl) footerLbl.textContent = `${activeCards.length} card${activeCards.length!==1?'s':''} selected · 🔷 ${total.toLocaleString()} Shards`;
+            const btn = document.getElementById('ss-shatter-btn');
+            if (btn) btn.disabled = activeCards.length === 0;
+        }
+    };
+
+    window._ssToggleCard = function(cardId) {
+        if (selectedIds.has(cardId)) selectedIds.delete(cardId); else selectedIds.add(cardId);
+        const activeCards = previewCards.filter(c => selectedIds.has(c.id));
+        const total = activeCards.reduce((s, c) => s + (TCG_SHATTER_RATES[c.rarity] || 0), 0);
+        const footerLbl = document.getElementById('ss-footer-label');
+        if (footerLbl) footerLbl.textContent = `${activeCards.length} card${activeCards.length!==1?'s':''} selected · 🔷 ${total.toLocaleString()} Shards`;
+        const btn = document.getElementById('ss-shatter-btn');
+        if (btn) btn.disabled = activeCards.length === 0;
+        const rows = document.getElementById('ss-preview-area')?.querySelectorAll('div[style*="border-bottom"]');
+        if (rows) {
+            previewCards.forEach((c, i) => { if (rows[i]) rows[i].style.opacity = selectedIds.has(c.id) ? '1' : '0.4'; });
+        }
+    };
+
+    window._ssConfirmShatter = async function() {
+        if (window._tcgShattering) return;
+        const toShatter = previewCards.filter(c => selectedIds.has(c.id));
+        if (!toShatter.length) return;
+        const total = toShatter.reduce((s, c) => s + (TCG_SHATTER_RATES[c.rarity] || 0), 0);
+        if (!confirm(`Shatter ${toShatter.length} card(s) for 🔷 ${total.toLocaleString()} Shards? This cannot be undone.`)) return;
+        window._tcgShattering = true;
+        const btn = document.getElementById('ss-shatter-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Shattering…'; }
+        try {
+            for (const c of toShatter) {
+                await deleteDoc(doc(db, 'card_collections', uid, 'cards', c.id));
+            }
+            if (total > 0) {
+                await updateDoc(doc(db, 'profiles', uid), { shards: increment(total) });
+                if (window._myProfile) window._myProfile.shards = (window._myProfile.shards || 0) + total;
+            }
+            window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
+            document.getElementById('smart-shatter-modal')?.remove();
+            window._tcgRenderMyCollection('mycards', true);
+        } catch(e) {
+            alert('Shatter failed: ' + e.message);
+            if (btn) { btn.disabled = false; btn.textContent = 'Shatter'; }
+        } finally {
+            window._tcgShattering = false;
+        }
+    };
+
+    render();
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+    _tcgLoadCollection(uid).then(cards => {
+        allCards = cards;
+        const dl = document.getElementById('ss-anime-list');
+        if (dl) dl.innerHTML = [...new Set(cards.map(c => c.anime))].sort().map(a => `<option value="${a}">`).join('');
+    }).catch(() => {});
+};
+
 window._tcgBulkDismantle = async function(uid, profileUid) {
     if (!auth.currentUser || auth.currentUser.uid !== uid) return;
     if (window._tcgDismantling) return;
@@ -15862,6 +16447,56 @@ window._tcgBulkDismantle = async function(uid, profileUid) {
         alert('Failed to dismantle: ' + e.message);
     } finally {
         window._tcgDismantling = false;
+    }
+};
+
+window._tcgBulkShatter = async function(uid, profileUid) {
+    if (!auth.currentUser || auth.currentUser.uid !== uid) return;
+    if (window._tcgShattering) return;
+    window._tcgShattering = true;
+    const sel = window._tcgMultiSelect.selected;
+    if (!sel.size) { window._tcgShattering = false; return; }
+    let cards;
+    try { cards = await _tcgLoadCollection(uid); } catch(e) { window._tcgShattering = false; return; }
+    const favSet = window._tcgFavoriteIds || new Set();
+    const selectedCards = cards.filter(c => sel.has(c.id) && !favSet.has(c.id) && (TCG_SHATTER_RATES[c.rarity] > 0));
+    const skippedFavs = cards.filter(c => sel.has(c.id) && favSet.has(c.id)).length;
+    const skippedEvent = cards.filter(c => sel.has(c.id) && !favSet.has(c.id) && !(TCG_SHATTER_RATES[c.rarity] > 0)).length;
+    if (!selectedCards.length) {
+        const note = skippedFavs ? ' (favorited cards skipped)' : skippedEvent ? ' (event/set cards cannot be shattered)' : '';
+        alert('No shatterable cards selected.' + note);
+        window._tcgShattering = false; return;
+    }
+    const total = selectedCards.reduce((sum, c) => sum + (TCG_SHATTER_RATES[c.rarity] || 0), 0);
+    const skippedNote = (skippedFavs + skippedEvent) ? ` (${skippedFavs + skippedEvent} card${(skippedFavs+skippedEvent)>1?'s':''} skipped)` : '';
+    if (!confirm(`Shatter ${selectedCards.length} card(s) for 🔷 ${total.toLocaleString()} Shards total?${skippedNote} This cannot be undone.`)) { window._tcgShattering = false; return; }
+    try {
+        if (total > 0) {
+            await updateDoc(doc(db, 'profiles', uid), { shards: increment(total) });
+            if (window._myProfile) window._myProfile.shards = (window._myProfile.shards || 0) + total;
+        }
+        const BATCH_SIZE = 499;
+        for (let i = 0; i < selectedCards.length; i += BATCH_SIZE) {
+            const batch = writeBatch(db);
+            selectedCards.slice(i, i + BATCH_SIZE).forEach(c => {
+                batch.delete(doc(db, 'card_collections', uid, 'cards', c.id));
+            });
+            await batch.commit();
+        }
+        window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
+        window._tcgMultiSelect.active = false;
+        window._tcgMultiSelect.selected.clear();
+        if (profileUid) {
+            const el = document.getElementById('user-tcg-binders-container');
+            if (el) await window._tcgRenderProfileBindersList(el, profileUid);
+            window._tcgRenderProfileShowcase(profileUid);
+        } else {
+            window._tcgRenderMyCollection('mycards', true);
+        }
+    } catch(e) {
+        alert('Failed to shatter: ' + e.message);
+    } finally {
+        window._tcgShattering = false;
     }
 };
 
@@ -15968,6 +16603,7 @@ window._tcgRenderMyCollection = async function(activeTab = 'mycards', forceRefre
 
     const tabs = [
         { id: 'mycards',  label: 'My Cards' },
+        { id: 'craft',    label: '🔷 Craft' },
         { id: 'premade',  label: 'WeeBee Binders' },
         { id: 'mybinders',label: 'My Binders' },
     ];
@@ -15991,8 +16627,179 @@ window._tcgRenderMyCollection = async function(activeTab = 'mycards', forceRefre
     const content = document.getElementById('tcg-collection-content');
     const uid = auth.currentUser.uid;
     if (activeTab === 'mycards') await window._tcgRenderMyCardsTab(content, uid, window._tcgCardFilter || 'all');
+    else if (activeTab === 'craft') await window._tcgRenderCraftTab(content, uid);
     else if (activeTab === 'premade') window._tcgRenderPremadeBinderSelect(content);
     else await _tcgRenderMyBindersTab(content, uid);
+};
+
+window._tcgRenderCraftTab = async function(el, uid) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div>';
+    await _tcgEnsureCardPool();
+
+    // Load collection for ownership info (uses cache)
+    let ownedCollection = [];
+    try { ownedCollection = await _tcgLoadCollection(uid); } catch(e) {}
+    // Build owned count map: "name|||rarity" → count
+    const ownedMap = {};
+    for (const c of ownedCollection) {
+        const key = `${c.name}|||${c.rarity}`;
+        ownedMap[key] = (ownedMap[key] || 0) + 1;
+    }
+
+    const shards = window._myProfile?.shards || 0;
+    const filter = window._tcgCraftFilter || 'all';
+    const searchQ = (window._tcgCraftSearch || '').toLowerCase().trim();
+    const missingOnly = !!window._tcgCraftMissingOnly;
+
+    const srPool    = (window._tcgSRPool?.length    ? window._tcgSRPool    : TCG_SR_CARDS).map(c => ({ ...c, rarity: 'sr',     anime: _normalizeSeriesName(c.series || c.anime || '') }));
+    const rarePool  = (window._tcgRarePool?.length   ? window._tcgRarePool  : []          ).map(c => ({ ...c, rarity: 'rare',   anime: _normalizeSeriesName(c.series || c.anime || '') }));
+    const commonPool= (window._tcgCommonPool?.length  ? window._tcgCommonPool: []          ).map(c => ({ ...c, rarity: 'common', anime: _normalizeSeriesName(c.series || c.anime || '') }));
+    const fullPool  = [...srPool, ...rarePool, ...commonPool];
+
+    const filtered = fullPool
+        .filter(c => filter === 'all' || c.rarity === filter)
+        .filter(c => !searchQ || (c.name||'').toLowerCase().includes(searchQ) || (c.anime||'').toLowerCase().includes(searchQ))
+        .filter(c => !missingOnly || !ownedMap[`${c.name}|||${c.rarity}`])
+        // Missing cards first, then owned
+        .sort((a, b) => {
+            const aOwned = !!(ownedMap[`${a.name}|||${a.rarity}`]);
+            const bOwned = !!(ownedMap[`${b.name}|||${b.rarity}`]);
+            return aOwned - bOwned;
+        });
+
+    const rColors = { sr: '#8b5cf6', rare: '#f59e0b', common: '#9aa1a8' };
+    const missingCount = filtered.filter(c => !ownedMap[`${c.name}|||${c.rarity}`]).length;
+
+    el.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+            <div>
+                <div style="font-size:15px;font-weight:800;">🔷 Craft a Card</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Spend Shards to get a specific card. Each card has a limited serial pool — if it's sold out, it can't be crafted.</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.3);border-radius:10px;padding:6px 14px;">
+                <span style="font-size:16px;">🔷</span>
+                <span style="font-size:16px;font-weight:900;color:#0ea5e9;">${shards.toLocaleString()}</span>
+                <span style="font-size:12px;color:var(--text-muted);">Shards</span>
+            </div>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+            ${['all','sr','rare','common'].map(f => {
+                const active = f === filter;
+                const col = f === 'all' ? 'var(--accent-yellow)' : (rColors[f] || 'var(--accent-yellow)');
+                const bg  = active ? (f === 'all' ? 'rgba(245,158,11,0.12)' : col + '22') : 'var(--bg-gray)';
+                const cnts = { all: fullPool.length, sr: srPool.length, rare: rarePool.length, common: commonPool.length };
+                const lbl  = { all:'All', sr:'SR', rare:'Rare', common:'Common' };
+                return `<button onclick="window._tcgCraftFilter='${f}';window._tcgRenderCraftTab(document.getElementById('tcg-collection-content'),'${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?col:'var(--border-color)'};background:${bg};color:${active?col:'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${lbl[f]} (${cnts[f]})</button>`;
+            }).join('')}
+            <button onclick="window._tcgCraftMissingOnly=!window._tcgCraftMissingOnly;window._tcgRenderCraftTab(document.getElementById('tcg-collection-content'),'${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${missingOnly?'#3b82f6':'var(--border-color)'};background:${missingOnly?'rgba(59,130,246,0.12)':'var(--bg-gray)'};color:${missingOnly?'#3b82f6':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">🔍 Missing only${missingOnly&&missingCount?' ('+missingCount+')':''}</button>
+            <div style="position:relative;flex:1;min-width:160px;max-width:280px;">
+                <span class="material-symbols-outlined" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:17px;color:var(--text-muted);pointer-events:none;">search</span>
+                <input type="text" value="${searchQ.replace(/"/g,'&quot;')}" oninput="clearTimeout(window._tcgCraftSearchTimer);window._tcgCraftSearchTimer=setTimeout(()=>{window._tcgCraftSearch=this.value;window._tcgRenderCraftTab(document.getElementById('tcg-collection-content'),'${uid}')},300)" placeholder="Search by name or anime…" style="width:100%;box-sizing:border-box;padding:7px 12px 7px 34px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;outline:none;">
+            </div>
+        </div>
+
+        ${!filtered.length ? `<p style="color:var(--text-muted);padding:20px 0;text-align:center;">No cards match your search.</p>` : `
+        <div style="display:flex;flex-wrap:wrap;gap:16px;">
+            ${filtered.map(card => {
+                const cost = TCG_CRAFT_COSTS[card.rarity] || 0;
+                const canAfford = shards >= cost;
+                const rCol = rColors[card.rarity] || '#aaa';
+                const ownedCount = ownedMap[`${card.name}|||${card.rarity}`] || 0;
+                const safeName  = card.name.replace(/'/g,"\\'");
+                const safeAnime = (card.anime||'').replace(/'/g,"\\'");
+                const safeImg   = (card.image||'').replace(/'/g,"\\'");
+                return `<div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:140px;">
+                    <div style="width:140px;height:196px;overflow:hidden;border-radius:9px;position:relative;">
+                        <div style="transform:scale(0.636);transform-origin:top left;${ownedCount?'filter:brightness(0.55) saturate(0.5);':''}" data-hover-anim-only>${_tcgBuildCardFace({...card})}</div>
+                        ${ownedCount ? `<div style="position:absolute;top:7px;right:7px;background:rgba(34,197,94,0.92);border-radius:20px;padding:2px 8px;font-size:11px;font-weight:800;color:#fff;line-height:1.4;">✓ ×${ownedCount}</div>` : ''}
+                    </div>
+                    <div style="font-size:11px;font-weight:700;text-align:center;width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${card.name}">${card.name}</div>
+                    <div style="font-size:10px;color:var(--text-muted);text-align:center;width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.anime}</div>
+                    <div style="font-size:10px;font-weight:800;color:${rCol};">${card.rarity.toUpperCase()} · ${RARITY_MAX_VERSIONS[card.rarity]||5000} serials</div>
+                    <button onclick="window._tcgCraftCard('${safeName}','${safeAnime}','${card.rarity}','${safeImg}',${card.batch||1},'${uid}')" ${!canAfford?'disabled':''} style="width:100%;padding:5px 8px;border-radius:8px;border:none;background:${canAfford?'rgba(56,189,248,0.15)':'var(--bg-gray-darker)'};color:${canAfford?'#0ea5e9':'var(--text-muted)'};font-size:11px;font-weight:800;cursor:${canAfford?'pointer':'not-allowed'};">🔷 ${cost}${canAfford?'':' (need more)'}</button>
+                </div>`;
+            }).join('')}
+        </div>`}`;
+    _tcgObserveSSRCards(el);
+};
+
+window._tcgCraftCard = async function(name, anime, rarity, image, batch, uid) {
+    if (!auth.currentUser || auth.currentUser.uid !== uid) return;
+    const cost = TCG_CRAFT_COSTS[rarity] || 0;
+    const shards = window._myProfile?.shards || 0;
+    if (shards < cost) { alert('Not enough shards.'); return; }
+    if (!confirm(`Craft ${name} (${rarity.toUpperCase()}) for 🔷 ${cost.toLocaleString()} Shards?`)) return;
+
+    const cardObj = { name, anime, rarity, image, batch };
+
+    // Step 1: assign serial (throws SOLD_OUT if none remain)
+    let serial = null, edition = null;
+    try {
+        const result = await _tcgAssignSerialCraft(cardObj);
+        serial = result.version;
+        edition = result.edition;
+    } catch(e) {
+        if (e.message === 'SOLD_OUT') {
+            alert(`All ${RARITY_MAX_VERSIONS[rarity]||5000} serials for ${name} have been issued — this card is sold out and can't be crafted.`);
+        } else {
+            alert('Serial assignment failed: ' + e.message);
+        }
+        return;
+    }
+
+    // Step 2: create card
+    try {
+        await addDoc(collection(db, 'card_collections', uid, 'cards'), {
+            name, anime, rarity, image,
+            serial, edition,
+            maxVersions: RARITY_MAX_VERSIONS[rarity] || 5000,
+            batch: batch || 1,
+            craftSource: true,
+            pulledAt: serverTimestamp(),
+        });
+    } catch(e) {
+        alert('Failed to save card: ' + e.message);
+        return;
+    }
+
+    // Step 3: deduct shards
+    try {
+        await updateDoc(doc(db, 'profiles', uid), { shards: increment(-cost) });
+        if (window._myProfile) window._myProfile.shards = Math.max(0, (window._myProfile.shards || 0) - cost);
+    } catch(e) {
+        // Card was created but shards not deducted — log it but don't block the user
+        console.error('Shard deduction failed after card was created:', e);
+    }
+
+    window._tcgCollectionCache.delete(uid);
+    try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
+
+    // Show card reveal in a full-screen overlay
+    const craftedCard = { name, anime, rarity, image, serial, edition, craftSource: true, batch };
+    const maxV = RARITY_MAX_VERSIONS[rarity] || 5000;
+    const serialText = serial != null ? `Serial #${serial} / ${maxV}` : '';
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10010;background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    overlay.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:20px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,0.6);">
+            <div style="font-size:26px;margin-bottom:6px;">🔷</div>
+            <div style="font-size:19px;font-weight:900;margin-bottom:4px;">Card Crafted!</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;">${name} · ${rarity.toUpperCase()}</div>
+            <div style="display:flex;justify-content:center;margin-bottom:12px;">
+                <div data-hover-anim-only style="width:187px;height:262px;overflow:hidden;border-radius:12px;">
+                    <div style="transform:scale(0.85);transform-origin:top left;">${_tcgBuildCardFace(craftedCard)}</div>
+                </div>
+            </div>
+            ${serialText ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;">${serialText}</div>` : '<div style="margin-bottom:20px;"></div>'}
+            <div style="display:flex;gap:10px;">
+                <button onclick="this.closest('[style*=z-index]').remove();window._tcgRenderCraftTab(document.getElementById('tcg-collection-content'),'${uid}')" style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;font-size:13px;cursor:pointer;">Craft More</button>
+                <button onclick="this.closest('[style*=z-index]').remove();window._tcgRenderMyCollection('mycards',true)" style="flex:1;padding:11px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">View Collection</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    _tcgObserveSSRCards(overlay);
 };
 
 window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFilter || 'all') {
@@ -16013,7 +16820,7 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
     window._tcgFavoriteIds = new Set(favoriteIds);
     window._tcgPinnedIds = pinnedIds;
 
-    const rarityOrder = { ur:-3, nr:-2, pr:-1, ssr:0, sr:1, rare:2, common:3 };
+    const rarityOrder = { set: -5, 'ur+': -3.5, ur:-3, nr:-2, pr:-1, 'ssr+': -0.5, ssr:0, 'sr+': 0.5, sr:1, rare:2, common:3 };
     const sort = window._tcgCardSort;
     const searchQ = (window._tcgCardSearch || '').toLowerCase().trim();
     const filtered = (filter === 'all' ? [...cards]
@@ -16031,12 +16838,13 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
             if (sort === 'power-low') return _dungeonCardPower(a) - _dungeonCardPower(b);
             return (rarityOrder[a.rarity]??9) - (rarityOrder[b.rarity]??9);
         });
-    const counts = { ur:0, ssr:0, sr:0, rare:0, common:0, pr:0, nr:0, set:0 };
+    const counts = { ur:0, 'ur+':0, ssr:0, 'ssr+':0, sr:0, 'sr+':0, rare:0, common:0, pr:0, nr:0, set:0 };
     cards.forEach(c => { if (c.rarity in counts) counts[c.rarity]++; });
 
     const ms = window._tcgMultiSelect;
     const selCount = ms.selected.size;
     const selTotal = selCount ? cards.filter(c => ms.selected.has(c.id)).reduce((sum,c) => sum + (TCG_DISMANTLE_RATES[c.rarity]||0), 0) : 0;
+    const selShatterTotal = selCount ? cards.filter(c => ms.selected.has(c.id)).reduce((sum,c) => sum + (TCG_SHATTER_RATES[c.rarity]||0), 0) : 0;
 
     el.innerHTML = `
         <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
@@ -16052,6 +16860,13 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
                         const batchActive = (window._tcgCardBatchFilter||'all') !== 'all';
                         const selStyle = (active, color='var(--accent-yellow)', bg='rgba(245,158,11,0.12)') =>
                             `padding:6px 10px;border-radius:20px;border:1px solid ${active?color:'var(--border-color)'};background:${active?bg:'var(--bg-gray)'};color:${active?color:'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;outline:none;`;
+                        const plusActive = ['sr+','ssr+','ur+'].includes(filter);
+                        const plusSel = `<select onchange="window._tcgCardSearch='';window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'),'${uid}',this.value||'all')" style="${selStyle(plusActive,'#a78bfa','rgba(167,139,250,0.12)')}">
+                            <option value=""${!plusActive?' selected':''}>Plus ▾</option>
+                            <option value="sr+"${ filter==='sr+'?' selected':''}>SR+ (${counts['sr+']})</option>
+                            <option value="ssr+"${filter==='ssr+'?' selected':''}>SSR+ (${counts['ssr+']})</option>
+                            <option value="ur+"${ filter==='ur+'?' selected':''}>UR+ (${counts['ur+']})</option>
+                        </select>`;
                         const eventSel = `<select onchange="window._tcgCardSearch='';window._tcgRenderMyCardsTab(document.getElementById('tcg-collection-content'),'${uid}',this.value||'all')" style="${selStyle(eventActive)}">
                             <option value=""${!eventActive?' selected':''}>Event ▾</option>
                             <option value="event_all"${filter==='event_all'?' selected':''}>All Events (${counts.pr+counts.nr})</option>
@@ -16064,7 +16879,7 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
                             <option value="b2"${(window._tcgCardBatchFilter||'all')==='b2'?' selected':''}>Batch 2</option>
                             <option value="b3"${(window._tcgCardBatchFilter||'all')==='b3'?' selected':''}>Batch 3</option>
                         </select>`;
-                        return eventSel + batchSel;
+                        return plusSel + eventSel + batchSel;
                     })()}
                     <button id="tcg-dupes-toggle" onclick="window._tcgShowDupes=!window._tcgShowDupes;window._tcgRefreshCollectionGrid('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${window._tcgShowDupes?'var(--accent-yellow)':'var(--border-color)'};background:${window._tcgShowDupes?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${window._tcgShowDupes?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">🔁 Dupes</button>
                     <button id="tcg-missing-toggle" onclick="window._tcgShowMissing=!window._tcgShowMissing;window._tcgRefreshCollectionGrid('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${window._tcgShowMissing?'#3b82f6':'var(--border-color)'};background:${window._tcgShowMissing?'rgba(59,130,246,0.12)':'var(--bg-gray)'};color:${window._tcgShowMissing?'#3b82f6':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">🔍 Missing</button>
@@ -16082,7 +16897,8 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
                     <option value="power-low" ${sort==='power-low'?'selected':''}>Sort: Power (Low-High)</option>
                 </select>
                 <button onclick="window._tcgToggleMultiSelect('${uid}','${filter}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${ms.active?'var(--accent-yellow)':'var(--border-color)'};background:${ms.active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${ms.active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${ms.active ? '✕ Cancel' : '☑ Multiselect'}</button>
-                <button onclick="window._tcgSmartDismantleModal('${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;">⚙ Smart Select</button>
+                <button onclick="window._tcgSmartDismantleModal('${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;">🟡 Dismantle</button>
+                <button onclick="window._tcgSmartShatterModal('${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;">🔷 Shatter</button>
             </div>
         </div>
         <div style="margin-bottom:14px;">
@@ -16098,6 +16914,7 @@ window._tcgRenderMyCardsTab = async function(el, uid, filter = window._tcgCardFi
             <span style="font-size:13px;font-weight:700;">${selCount} selected</span>
             <button onclick="window._tcgBulkPin('${uid}')" ${!selCount?'disabled':''} style="padding:6px 14px;border-radius:8px;border:1px solid ${selCount?'var(--accent-yellow)':'var(--border-color)'};background:${selCount?'rgba(245,158,11,0.12)':'var(--bg-gray-darker)'};color:${selCount?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:${selCount?'pointer':'default'};">☆ Pin Selected</button>
             <button onclick="window._tcgBulkDismantle('${uid}')" ${!selCount?'disabled':''} style="padding:6px 14px;border-radius:8px;border:1px solid var(--border-color);background:${selCount?'var(--bg-card)':'var(--bg-gray-darker)'};color:${selCount?'var(--text-dark)':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:${selCount?'pointer':'default'};">Dismantle Selected${selCount?` · 🟡 ${selTotal.toLocaleString()}`:''}</button>
+            <button onclick="window._tcgBulkShatter('${uid}')" ${!selCount?'disabled':''} style="padding:6px 14px;border-radius:8px;border:1px solid var(--border-color);background:${selCount?'var(--bg-card)':'var(--bg-gray-darker)'};color:${selCount?'var(--text-dark)':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:${selCount?'pointer':'default'};">Shatter Selected${selCount?` · 🔷 ${selShatterTotal.toLocaleString()}`:''}</button>
         </div>` : ''}
         <div id="tcg-collection-grid" class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;"></div>`;
     window._tcgRefreshCollectionGrid(uid, filter);
@@ -16472,11 +17289,11 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
     }
     window._tcgProfileCards = cards;
     window._tcgProfilePinnedIds = pinnedIds;
-    const rarityOrder = { ur:-3, nr:-2, pr:-1, ssr:0, sr:1, rare:2, common:3 };
+    const rarityOrder = { set: -5, 'ur+': -3.5, ur:-3, nr:-2, pr:-1, 'ssr+': -0.5, ssr:0, 'sr+': 0.5, sr:1, rare:2, common:3 };
     const profileSort = window._tcgProfileCardSort || 'rarity';
     const profileFilter = window._tcgProfileCardFilter || 'all';
     const profileSearchQ = (window._tcgProfileCardSearch || '').toLowerCase().trim();
-    const counts = { ur:0, ssr:0, sr:0, rare:0, common:0, pr:0, nr:0, set:0 };
+    const counts = { ur:0, 'ur+':0, ssr:0, 'ssr+':0, sr:0, 'sr+':0, rare:0, common:0, pr:0, nr:0, set:0 };
     cards.forEach(c => { if (c.rarity in counts) counts[c.rarity]++; });
     const sortedCards = [...cards]
         .filter(c => profileFilter === 'all' || (profileFilter === 'pr' ? (c.rarity === 'pr' || c.rarity === 'nr') : c.rarity === profileFilter))
@@ -16494,6 +17311,7 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
     const ms = window._tcgMultiSelect;
     const selCount = ms.selected.size;
     const selTotal = (isOwner && selCount) ? cards.filter(c => ms.selected.has(c.id)).reduce((sum,c) => sum + (TCG_DISMANTLE_RATES[c.rarity]||0), 0) : 0;
+    const selShatterTotal = (isOwner && selCount) ? cards.filter(c => ms.selected.has(c.id)).reduce((sum,c) => sum + (TCG_SHATTER_RATES[c.rarity]||0), 0) : 0;
 
     el.innerHTML = `
         ${!isOwner && auth.currentUser ? `<div style="margin-bottom:24px;"><button onclick="window._tcgOpenTradeProposal('${uid}')" style="padding:10px 20px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">🔄 Propose Trade</button></div>` : ''}
@@ -16508,7 +17326,7 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
 
         ${(() => {
             const isMob = window.innerWidth < 640;
-            const rLabels = { all:`All (${cards.length})`, pr:`Event (${counts.pr + counts.nr})`, ur:`UR (${counts.ur})`, ssr:`SSR (${counts.ssr})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})`, set:`★ SET (${counts.set||0})` };
+            const rLabels = { all:`All (${cards.length})`, 'ur+': `UR+ (${counts['ur+']})`, ur:`UR (${counts.ur})`, 'ssr+': `SSR+ (${counts['ssr+']})`, ssr:`SSR (${counts.ssr})`, 'sr+': `SR+ (${counts['sr+']})`, sr:`SR (${counts.sr})`, rare:`Rare (${counts.rare})`, common:`Common (${counts.common})`, pr:`Event (${counts.pr + counts.nr})`, set:`★ SET (${counts.set||0})` };
             const bLabels = { all:'All Batches', b1:'Batch 1', b2:'Batch 2', b3:'Batch 3' };
             const bActive = window._tcgProfileBatchFilter || 'all';
             const dActive = !!window._tcgProfileShowDupes;
@@ -16517,11 +17335,11 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
             const missingBtn = isOwner ? `<button id="profile-tcg-missing-toggle" onclick="window._tcgProfileShowMissing=!window._tcgProfileShowMissing;window._tcgRefreshProfileCardGrid('${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${mActive?'#3b82f6':'var(--border-color)'};background:${mActive?'rgba(59,130,246,0.12)':'var(--bg-gray)'};color:${mActive?'#3b82f6':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">🔍 Missing</button>` : '';
             if (isMob) {
                 const selStyle = 'flex:1;min-width:0;padding:7px 10px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;font-weight:600;cursor:pointer;';
-                const rOpts = ['all','ur','pr','ssr','sr','rare','common','set'].map(f => `<option value="${f}"${f===profileFilter?' selected':''}>${rLabels[f]}</option>`).join('');
+                const rOpts = ['all','ur+','ur','ssr+','ssr','sr+','sr','rare','common','pr','set'].map(f => `<option value="${f}"${f===profileFilter?' selected':''}>${rLabels[f]}</option>`).join('');
                 const bOpts = ['all','b1','b2','b3'].map(f => `<option value="${f}"${f===bActive?' selected':''}>${bLabels[f]}</option>`).join('');
                 return `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"><div style="display:flex;gap:8px;"><select style="${selStyle}" onchange="window._tcgSetProfileCardFilter(this.value,'${uid}')">${rOpts}</select><select style="${selStyle}" onchange="window._tcgProfileBatchFilter=this.value;window._tcgRefreshProfileCardGrid('${uid}')">${bOpts}</select></div><div style="display:flex;gap:8px;">${dupesBtn}${missingBtn}</div></div>`;
             }
-            return `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${['all','ur','pr','ssr','sr','rare','common','set'].map(f => { const active = f === profileFilter; return `<button data-profile-filter="${f}" onclick="window._tcgSetProfileCardFilter('${f}','${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'var(--bg-gray)'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${rLabels[f]}</button>`; }).join('')}${dupesBtn}${missingBtn}</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${['all','b1','b2'].map(f => { const active = bActive === f; return `<button data-profile-batch="${f}" onclick="window._tcgProfileBatchFilter='${f}';window._tcgRefreshProfileCardGrid('${uid}')" style="padding:5px 12px;border-radius:20px;border:1px solid ${active?'#a78bfa':'var(--border-color)'};background:${active?'rgba(167,139,250,0.12)':'var(--bg-gray)'};color:${active?'#a78bfa':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${bLabels[f]}</button>`; }).join('')}</div></div>`;
+            return `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${['all','ur+','ur','ssr+','ssr','sr+','sr','rare','common','pr','set'].map(f => { const active = f === profileFilter; const isPlus = f.endsWith('+'); return `<button data-profile-filter="${f}" onclick="window._tcgSetProfileCardFilter('${f}','${uid}')" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?(isPlus?'#a78bfa':'var(--accent-yellow)'):'var(--border-color)'};background:${active?(isPlus?'rgba(167,139,250,0.12)':'rgba(245,158,11,0.12)'):'var(--bg-gray)'};color:${active?(isPlus?'#a78bfa':'#f59e0b'):'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${rLabels[f]}</button>`; }).join('')}${dupesBtn}${missingBtn}</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${['all','b1','b2'].map(f => { const active = bActive === f; return `<button data-profile-batch="${f}" onclick="window._tcgProfileBatchFilter='${f}';window._tcgRefreshProfileCardGrid('${uid}')" style="padding:5px 12px;border-radius:20px;border:1px solid ${active?'#a78bfa':'var(--border-color)'};background:${active?'rgba(167,139,250,0.12)':'var(--bg-gray)'};color:${active?'#a78bfa':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${bLabels[f]}</button>`; }).join('')}</div></div>`;
         })()}
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
             <div id="profile-tcg-card-count-header" style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">🃏 All Cards (${cards.length})</div>
@@ -16550,6 +17368,7 @@ window._tcgRenderProfileBindersList = async function(el, uid) {
             <span style="font-size:13px;font-weight:700;">${selCount} selected</span>
             <button onclick="window._tcgBulkPin('${uid}','${uid}')" ${!selCount?'disabled':''} style="padding:6px 14px;border-radius:8px;border:1px solid ${selCount?'var(--accent-yellow)':'var(--border-color)'};background:${selCount?'rgba(245,158,11,0.12)':'var(--bg-gray-darker)'};color:${selCount?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:${selCount?'pointer':'default'};">☆ Pin Selected</button>
             <button onclick="window._tcgBulkDismantle('${uid}','${uid}')" ${!selCount?'disabled':''} style="padding:6px 14px;border-radius:8px;border:1px solid var(--border-color);background:${selCount?'var(--bg-card)':'var(--bg-gray-darker)'};color:${selCount?'var(--text-dark)':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:${selCount?'pointer':'default'};">Dismantle Selected${selCount?` · 🟡 ${selTotal.toLocaleString()}`:''}</button>
+            <button onclick="window._tcgBulkShatter('${uid}','${uid}')" ${!selCount?'disabled':''} style="padding:6px 14px;border-radius:8px;border:1px solid var(--border-color);background:${selCount?'var(--bg-card)':'var(--bg-gray-darker)'};color:${selCount?'var(--text-dark)':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:${selCount?'pointer':'default'};">Shatter Selected${selCount?` · 🔷 ${selShatterTotal.toLocaleString()}`:''}</button>
         </div>` : ''}
         ${cards.length ? `<div id="profile-tcg-cards-grid" class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;"></div>` : `<p style="color:var(--text-muted);">${isOwner ? 'You haven\'t opened any packs yet.' : 'This user hasn\'t opened any packs yet.'}</p>`}`;
     window._tcgRefreshProfileCardGrid(uid);
@@ -18767,7 +19586,7 @@ window._tcgRefreshBulletinGrid = function() {
     const myUid = window._tcgBulletinMyUid;
     const { filter, sort, search, postType } = window._tcgBulletinBoardState || { filter:'all', sort:'newest', search:'', postType:'all' };
     const s = (search||'').trim().toLowerCase();
-    const rarityOrder = { ur:-2, nr:-1, pr:0, ssr:1, sr:2, rare:3, common:4 };
+    const rarityOrder = { 'ur+': -2.5, ur:-2, nr:-1, pr:0, 'ssr+': 0.5, ssr:1, 'sr+': 1.5, sr:2, rare:3, common:4 };
 
     const listingRarity = l => l.type === 'wanted' ? (l.wantedCard?.rarity || '') : (l.cards?.[0]?.rarity || '');
     const listingName   = l => l.type === 'wanted' ? (l.wantedCard?.name || '') : (l.cards?.[0]?.name || '');
@@ -18929,7 +19748,7 @@ window._tcgBulletinWantedSearch = function(val) {
     const lower = s.toLowerCase();
     const _rc = { ur:'#f59e0b', ssr:'#8b5cf6', sr:'#3b82f6', rare:'#10b981', common:'var(--text-muted)', pr:'#e879f9' };
     const _rl = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' };
-    const rarityOrder = { nr:0, pr:1, ur:2, ssr:3, sr:4, rare:5, common:6 };
+    const rarityOrder = { nr:0, pr:1, 'ur+': 1.5, ur:2, 'ssr+': 2.5, ssr:3, 'sr+': 3.5, sr:4, rare:5, common:6 };
 
     // _tcgFullCardPool() uses the per-rarity pools loaded by _tcgEnsureCardPool()
     // (parallel where('rarityTier','==',X) queries), which avoids the doc-ID
@@ -28420,7 +29239,7 @@ function _dungeonGeneratePool(dateKey) {
 
 // Card "Power" — rarity baseline plus a bonus for low serial numbers
 // (single-digit serials, Founder/Monthly URs all count as the strongest).
-const DUNGEON_RARITY_POWER = { common:1, rare:5, sr:9, pr:11, ssr:13, ur:17 };
+const DUNGEON_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':12, pr:11, ssr:13, 'ssr+':16, ur:17, 'ur+':20 };
 
 function _dungeonCardPower(card) {
     if (card.monthlyUr || card.tradedMonthlyUr) return 16; // Wheel URs = max SSR power (SSR base 13 + low-serial bonus 3)
@@ -28563,8 +29382,14 @@ function _dungeonGenerateStats(gate, party) {
     const distance = Math.round((1 + Math.random()*4) * scale * 10) / 10;
     const treasure = Math.round(Math.random() * (2 + scale/4));
     const closeCalls = Math.round(Math.random() * (1 + scale/6));
-    const mvp = party[Math.floor(Math.random()*party.length)];
-    return { monsters, distance, treasure, closeCalls, mvpName: mvp.name };
+    // MVP goes to the highest-powered SR+ eligible card in the party
+    const MVP_ELIGIBLE = new Set(['sr','sr+','ssr','ssr+','ur','ur+']);
+    const eligible = party.filter(c => MVP_ELIGIBLE.has(c.rarity));
+    let mvpCard = null;
+    if (eligible.length > 0) {
+        mvpCard = eligible.reduce((best, c) => _dungeonCardPower(c) > _dungeonCardPower(best) ? c : best, eligible[0]);
+    }
+    return { monsters, distance, treasure, closeCalls, mvpName: mvpCard?.name || null, mvpCardId: mvpCard?.id || null, mvpCardRarity: mvpCard?.rarity || null };
 }
 
 async function _dungeonLoadState(uid) {
@@ -30218,19 +31043,12 @@ function _dungeonLifetimeSummaryHTML(progress) {
     const totalHours = Math.round(l.totalHours * 10) / 10;
     const lengthLabel = totalHours >= 24 ? `${Math.round(totalHours/24*10)/10} days` : `${totalHours} hrs`;
 
-    let topPerformer = '';
-    const mvpEntries = Object.entries(l.mvpCounts || {});
-    if (mvpEntries.length) {
-        mvpEntries.sort((a,b) => b[1]-a[1]);
-        topPerformer = `${mvpEntries[0][0]} (MVP ${mvpEntries[0][1]}x)`;
-    }
-
     return `
         <div style="border-radius:20px;padding:26px 22px;margin-bottom:16px;position:relative;overflow:hidden;background:var(--stats-bg);">
             <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 25% 50%,rgba(139,69,19,0.18) 0%,transparent 55%),radial-gradient(ellipse at 75% 50%,rgba(75,0,130,0.15) 0%,transparent 55%);pointer-events:none;"></div>
             <div style="position:relative;z-index:1;">
                 <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(var(--stats-ink),0.35);margin-bottom:16px;text-align:center;">⚔️ Dungeon Career Stats</div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:16px;margin-bottom:${topPerformer ? '16px' : '0'};">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:16px;">
                     ${bigStat(l.totalRaids, 'Raids Completed')}
                     ${bigStat(winRate + '%', 'Gates Cleared')}
                     ${bigStat(lengthLabel, 'Total Raid Time')}
@@ -30239,7 +31057,6 @@ function _dungeonLifetimeSummaryHTML(progress) {
                     ${bigStat(l.totalCloseCalls||0, 'Close Calls')}
                     ${bigStat(l.totalBonusCards||0, 'New Teammates')}
                 </div>
-                ${topPerformer ? `<div style="text-align:center;font-size:13px;color:rgba(var(--stats-ink),0.6);">⭐ Top Performer: <strong style="color:rgb(var(--stats-ink));">${topPerformer}</strong></div>` : ''}
             </div>
         </div>`;
 }
@@ -30262,7 +31079,7 @@ function _dungeonStatsHTML(state) {
                 <div><div style="font-size:22px;font-weight:900;">${s.closeCalls}</div><div style="font-size:11px;color:var(--text-muted);">Close Calls</div></div>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-                <div style="font-size:13px;color:var(--text-muted);">⭐ MVP: <strong style="color:var(--text-dark);">${s.mvpName}</strong></div>
+                ${s.mvpName ? `<div style="font-size:13px;color:var(--text-muted);">⭐ MVP: <strong style="color:var(--text-dark);">${s.mvpName}</strong></div>` : ''}
                 ${chance !== null ? `<div style="font-size:13px;color:var(--text-muted);">🎯 Success Odds: <strong style="color:${chanceColor};">${chance}%</strong></div>` : ''}
             </div>
         </div>`;
@@ -30302,6 +31119,13 @@ window._dungeonClaim = async function() {
                     window._dungeonItems = { ...(window._dungeonItems || {}), [droppedItem]: (window._dungeonItems?.[droppedItem] || 0) + 1 };
                     window._dungeonJustEarnedItem = droppedItem;
                 }
+            }
+            // Award MVP point to the highest-powered eligible card in the party
+            if (state.stats?.mvpCardId) {
+                try {
+                    await updateDoc(doc(db, 'card_collections', uid, 'cards', state.stats.mvpCardId), { mvpCount: increment(1) });
+                    if (window._tcgCollectionCache) window._tcgCollectionCache.delete(uid);
+                } catch(mvpErr) { console.warn('[dungeon] MVP award failed:', mvpErr); }
             }
         }
         // raid_state already deleted inside the transaction above

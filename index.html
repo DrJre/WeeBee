@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=164">
+    <link rel="stylesheet" href="styles.css?v=166">
 </head>
 <body>
     <div class="app-container">
@@ -1035,6 +1035,7 @@
                             <button id="admin-subtab-feedback-btn" onclick="window.switchAdminSubtab('feedback')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">💡 Feedback</button>
                             <button onclick="window._zoroAdmin()" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🗡️ Zoro</button>
                             <button id="admin-subtab-setcards-btn" onclick="window.switchAdminSubtab('setcards')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🏆 Set Cards</button>
+                            <button id="admin-subtab-dungeon-btn" onclick="window.switchAdminSubtab('dungeon')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">⚔️ Dungeon</button>
                         </div>
 
                         <!-- ── MODERATION ── -->
@@ -1635,6 +1636,16 @@
                                 <button onclick="window._adminLoadFeedback()" style="padding:7px 16px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray-darker);color:var(--text-dark);font-weight:700;font-size:12px;cursor:pointer;">↻ Refresh</button>
                             </div>
                             <div id="admin-feedback-list"><div style="padding:20px;color:var(--text-muted);">Click Refresh to load suggestions and bug reports.</div></div>
+                        </div>
+
+                        <!-- ── DUNGEON ── -->
+                        <div id="admin-subtab-dungeon" style="display:none;">
+                            <div style="background:var(--bg-gray);border-radius:12px;padding:18px 20px;margin-bottom:16px;">
+                                <div style="font-size:14px;font-weight:800;margin-bottom:4px;">⭐ Reset Legacy MVP Counts</div>
+                                <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Clears the old random-filler MVP character counts from all users' dungeon career stats. The new MVP system tracks counts per-card instead. This is a one-time cleanup.</div>
+                                <button onclick="window._adminResetMvpCounts()" style="padding:8px 18px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">Reset All MVP Counts</button>
+                                <div id="admin-mvp-reset-result" style="margin-top:12px;font-size:13px;"></div>
+                            </div>
                         </div>
 
                     </div>
@@ -2919,6 +2930,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=746"></script>
+    <script type="module" src="app.js?v=758"></script>
 </body>
 </html>

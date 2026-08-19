@@ -677,7 +677,7 @@ function rollCurrentBatchPackCards(pool, pack, targetBatch) {
         }
         cards.push(pick(rarity));
     }
-    const urChance = pack.guaranteedSR ? 0.005 : 0.0025;
+    const urChance = 0.004;
     if (Math.random() < urChance) {
         cards[Math.floor(Math.random() * cards.length)] = pick('ur');
     }
@@ -712,7 +712,7 @@ function rollPackCards(pool, pack) {
         }
         cards.push(pickCard(pool, rarity));
     }
-    const urChance = pack.guaranteedSR ? 0.003 : 0.001;
+    const urChance = pack.guaranteedSR ? 0.0025 : 0.001;
     if (Math.random() < urChance) {
         cards[Math.floor(Math.random() * cards.length)] = pickCard(pool, 'ur');
     }
@@ -940,11 +940,15 @@ exports.openInventoryItems = onRequest({ invoker: 'public' }, async (req, res) =
     // Read pity counters — default to headstart if field has never been set
     const profileRef = db.collection('profiles').doc(callerUid);
     const pityCounters = { pityStandard: PITY_HEADSTART.pityStandard, pityPremium: PITY_HEADSTART.pityPremium };
+    // pityXxxUsedBatch tracks which batch number the pity UR was already claimed for (null = not yet claimed)
+    const pityUsedBatch = { pityStandard: null, pityPremium: null };
     try {
         const profSnap = await profileRef.get();
         const profData = profSnap.exists ? profSnap.data() : {};
         if (profData.pityStandard !== undefined) pityCounters.pityStandard = profData.pityStandard;
         if (profData.pityPremium  !== undefined) pityCounters.pityPremium  = profData.pityPremium;
+        if (profData.pityStandardUsedBatch !== undefined) pityUsedBatch.pityStandard = profData.pityStandardUsedBatch;
+        if (profData.pityPremiumUsedBatch  !== undefined) pityUsedBatch.pityPremium  = profData.pityPremiumUsedBatch;
     } catch(e) { console.error('openInventoryItems pity read error:', e); }
     const pityFieldsChanged = new Set();
 
@@ -956,9 +960,10 @@ exports.openInventoryItems = onRequest({ invoker: 'public' }, async (req, res) =
             const pityField = getPityField(item.packId);
             if (pityField) {
                 const hasNaturalUR = rolledCards.some(c => c.rarity === 'ur');
-                if (hasNaturalUR) {
-                    pityCounters[pityField] = 0;
-                } else {
+                // Natural URs no longer reset the pity counter — only a pity-triggered UR does.
+                // Also enforce 1 pity UR per batch cap.
+                const batchCapHit = pityUsedBatch[pityField] === TCG_RELEASED_BATCH;
+                if (!hasNaturalUR && !batchCapHit) {
                     const pityChance = calcPityUrChance(item.packId, pityCounters[pityField]);
                     if (pityChance > 0 && Math.random() < pityChance) {
                         const urArr = pool?.ur?.length ? pool.ur : TCG_UR_CARDS;
@@ -967,9 +972,13 @@ exports.openInventoryItems = onRequest({ invoker: 'public' }, async (req, res) =
                         rolledCards = [...rolledCards];
                         rolledCards[Math.floor(Math.random() * rolledCards.length)] = urCard;
                         pityCounters[pityField] = 0;
+                        pityUsedBatch[pityField] = TCG_RELEASED_BATCH;
                     } else {
                         pityCounters[pityField]++;
                     }
+                } else if (!hasNaturalUR) {
+                    // Batch cap hit — still increment so counter is accurate for next batch
+                    pityCounters[pityField]++;
                 }
                 pityFieldsChanged.add(pityField);
             }
@@ -996,10 +1005,13 @@ exports.openInventoryItems = onRequest({ invoker: 'public' }, async (req, res) =
         return res.status(500).json({ error: { status: 'INTERNAL', message: 'Failed to open one or more packs — please try again for the rest. Already-opened packs were saved to your collection.' }, partial: { packs: revealed } });
     }
 
-    // Write updated pity counters
+    // Write updated pity counters and batch-used flags
     if (pityFieldsChanged.size > 0) {
         const pityUpdate = {};
-        for (const f of pityFieldsChanged) pityUpdate[f] = pityCounters[f];
+        for (const f of pityFieldsChanged) {
+            pityUpdate[f] = pityCounters[f];
+            pityUpdate[f + 'UsedBatch'] = pityUsedBatch[f];
+        }
         try { await profileRef.update(pityUpdate); } catch(e) { console.error('openInventoryItems pity write error:', e); }
     }
 

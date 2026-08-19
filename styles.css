@@ -1435,6 +1435,15 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     text-shadow: 0 2px 6px rgba(0,0,0,0.5);
     line-height: 1.15;
 }
+.wb-mvp-star {
+    font-size: 8px;
+    color: #f5c842;
+    vertical-align: super;
+    margin-left: 3px;
+    display: inline;
+    text-shadow: 0 0 5px rgba(245,200,66,0.9);
+    font-style: normal;
+}
 .wb-card-series {
     font-size: 11px;
     font-weight: 600;
@@ -1812,6 +1821,26 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
 [data-hover-anim-only] .wb-card.rarity-ssr:hover .wb-rarity-gem::after { animation-play-state: running !important; }
 [data-hover-anim-only] .wb-card.rarity-ssr .wb-card-rarity-label { animation-play-state: paused !important; }
 [data-hover-anim-only] .wb-card.rarity-ssr:hover .wb-card-rarity-label { animation-play-state: running !important; }
+
+/* ── + fusion rarities (SR+, SSR+, UR+) ─────────────────────────────────────
+   Same card frame as base rarity. Only the badge gets a gold shimmer. */
+@keyframes plus-badge-shimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+.wb-card.is-plus .wb-card-rarity-label {
+    background: linear-gradient(135deg, #78350f 0%, #b45309 30%, #d97706 50%, #b45309 70%, #78350f 100%);
+    background-size: 300% 300%;
+    animation: plus-badge-shimmer 3s ease infinite;
+    animation-play-state: paused;
+    color: #fef3c7;
+    border-color: rgba(253, 230, 138, 0.6);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+    font-weight: 900;
+}
+.wb-card.is-plus.tcg-anim-in-view .wb-card-rarity-label { animation-play-state: running; }
+[data-hover-anim-only] .wb-card.is-plus .wb-card-rarity-label { animation-play-state: paused !important; }
+[data-hover-anim-only] .wb-card.is-plus:hover .wb-card-rarity-label { animation-play-state: running !important; }
 
 /* In picker/grid contexts, hide the PR ::before — it has inset:-100% which
    bleeds outside overflow:hidden on iOS Safari (WebKit transform-clip bug).
