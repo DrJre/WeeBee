@@ -527,8 +527,22 @@ service cloud.firestore {
 
     // Tracks each player's progress through the daily 5-gate pool.
     match /dungeon_progress/{uid} {
-      allow read: if isOwner(uid);
+      allow read: if isOwner(uid) || isAdmin();
       allow write: if isOwner(uid);
+    }
+
+    // ── PVP Tournaments ───────────────────────────────────────────────────────
+    match /pvp_tournaments/{tourneyId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+      match /entries/{uid} {
+        allow read: if isAuth();
+        allow write: if false; // CF only
+      }
+      match /matches/{matchId} {
+        allow read: if isAuth();
+        allow write: if false; // CF only
+      }
     }
 
     // ── TCG PVP ───────────────────────────────────────────────────────────────

@@ -1,7 +1,8 @@
 const { initializeApp } = require('firebase-admin/app');
-const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const { onRequest } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { TCG_SR_CARDS, TCG_SSR_CARDS, TCG_UR_CARDS, TCG_PR_CARDS, TCG_NR_CARDS, TCG_RELEASED_BATCH } = require('./tcg-card-pools');
 
 initializeApp();
@@ -1129,7 +1130,7 @@ exports.settlePvpBattle = onRequest({ invoker: 'public' }, async (req, res) => {
     const challengeRef = db.collection('pvp_challenges').doc(challengeId);
 
     // Port of the client-side power/battle helpers
-    const RARITY_POWER = { common:1, rare:5, sr:9, pr:11, ssr:13, ur:17 };
+    const RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
     function cardPower(card) {
         if (card.monthlyUr || card.tradedMonthlyUr) return 16;
         let p = RARITY_POWER[card.rarity] || 1;
@@ -1552,4 +1553,352 @@ exports.adminScanBossHP = onRequest({ invoker: 'public', timeoutSeconds: 300 }, 
         minTop5: Math.min(...userPowers),
         maxTop5: Math.max(...userPowers),
     }});
+});
+
+// ── TCG Tournament System ──────────────────────────────────────────────────────
+
+// Battle simulation helpers (mirrors settlePvpBattle — kept separate to avoid coupling)
+const T_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
+function _tCardPower(card) {
+    if (card.monthlyUr || card.tradedMonthlyUr) return 16;
+    let p = T_RARITY_POWER[card.rarity] || 1;
+    if (card.founder) p += 3;
+    else if (card.rarity !== 'pr' && !card.event && card.serial != null) {
+        if (card.serial < 10) p += 3;
+        else if (card.serial < 100) p += 2;
+        else if (card.serial < 1000) p += 1;
+    }
+    return p;
+}
+function _tRoundPower(card, party) {
+    const isCombo = party.some(c => c !== card && (c.anime||'') === (card.anime||'') && card.anime);
+    return _tCardPower(card) + (isCombo ? 1 : 0);
+}
+function _tSortParty(party) { return [...party].sort((a,b) => _tCardPower(b) - _tCardPower(a)); }
+function _tSuccessChance(p1Pow, p2Pow) {
+    return Math.max(15, Math.min(98, Math.round(50 + (p1Pow - p2Pow) * 4)));
+}
+function _tSimulateGame(p1Party, p2Party) {
+    const sp1 = _tSortParty(p1Party), sp2 = _tSortParty(p2Party);
+    let p1Score = 0, p2Score = 0;
+    for (let i = 0; i < 3; i++) {
+        const pow1 = _tRoundPower(sp1[i], p1Party);
+        const pow2 = _tRoundPower(sp2[i], p2Party);
+        if (Math.random() * 100 < _tSuccessChance(pow1, pow2)) p1Score++; else p2Score++;
+    }
+    return { winner: p1Score >= 2 ? 'p1' : 'p2', p1Score, p2Score };
+}
+function _tSimulateMatch(p1Party, p2Party, bestOf) {
+    const winsNeeded = Math.ceil(bestOf / 2);
+    let p1Wins = 0, p2Wins = 0;
+    const games = [];
+    while (p1Wins < winsNeeded && p2Wins < winsNeeded) {
+        const g = _tSimulateGame(p1Party, p2Party);
+        games.push(g);
+        if (g.winner === 'p1') p1Wins++; else p2Wins++;
+    }
+    return { winner: p1Wins >= winsNeeded ? 'p1' : 'p2', p1Wins, p2Wins, games };
+}
+
+async function _generateBracketInternal(db, tourneyId, tourneyData) {
+    const tourneyRef = db.collection('pvp_tournaments').doc(tourneyId);
+    const entriesSnap = await tourneyRef.collection('entries').get();
+    const entries = entriesSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
+
+    if (entries.length < 2) {
+        const batch = db.batch();
+        batch.update(tourneyRef, { status: 'cancelled', cancelReason: 'Not enough players registered (minimum 2).' });
+        for (const e of entries)
+            batch.update(db.collection('profiles').doc(e.uid), { amber: FieldValue.increment(tourneyData.entryCost || 1000) });
+        await batch.commit();
+        return;
+    }
+
+    const shuffled = [...entries].sort(() => Math.random() - 0.5);
+    let bracketSize = 1;
+    while (bracketSize < shuffled.length) bracketSize *= 2;
+    while (shuffled.length < bracketSize) shuffled.push(null);
+
+    const totalRounds = Math.log2(bracketSize);
+    const matchesRef = tourneyRef.collection('matches');
+    const batch = db.batch();
+
+    for (let round = 1; round <= totalRounds; round++) {
+        const matchCount = bracketSize / Math.pow(2, round);
+        const isFinal = round === totalRounds;
+        for (let idx = 0; idx < matchCount; idx++) {
+            const matchId = `r${round}_${idx}`;
+            const nextMatchId = round < totalRounds ? `r${round+1}_${Math.floor(idx/2)}` : null;
+            const nextMatchSlot = idx % 2 === 0 ? 'p1' : 'p2';
+            const doc = {
+                round, matchIndex: idx, isFinal,
+                bestOf: isFinal ? 7 : 3,
+                status: 'pending', winner: null,
+                p1Wins: 0, p2Wins: 0, games: [],
+                nextMatchId, nextMatchSlot, p1: null, p2: null,
+            };
+            if (round === 1) {
+                const e1 = shuffled[idx * 2], e2 = shuffled[idx * 2 + 1];
+                doc.p1 = e1 ? { uid: e1.uid, displayName: e1.displayName, avatar: e1.avatar, party: e1.party } : null;
+                doc.p2 = e2 ? { uid: e2.uid, displayName: e2.displayName, avatar: e2.avatar, party: e2.party } : null;
+                if (!e1) { doc.status = 'bye'; doc.winner = e2.uid; }
+                else if (!e2) { doc.status = 'bye'; doc.winner = e1.uid; }
+            }
+            batch.set(matchesRef.doc(matchId), doc);
+        }
+    }
+
+    // Pre-fill round 2 slots for byes so round 1 byes don't block advancement
+    if (totalRounds > 1) {
+        for (let idx = 0; idx < bracketSize / 2; idx++) {
+            const e1 = shuffled[idx * 2], e2 = shuffled[idx * 2 + 1];
+            const byeWinner = !e1 ? e2 : (!e2 ? e1 : null);
+            if (byeWinner) {
+                const nextMatchId = `r2_${Math.floor(idx / 2)}`;
+                const slot = idx % 2 === 0 ? 'p1' : 'p2';
+                batch.update(matchesRef.doc(nextMatchId), {
+                    [slot]: { uid: byeWinner.uid, displayName: byeWinner.displayName, avatar: byeWinner.avatar, party: byeWinner.party }
+                });
+            }
+        }
+    }
+
+    const nextRoundTime = new Date(Date.now() + 10 * 60 * 1000);
+    batch.update(tourneyRef, {
+        status: 'in_progress', currentRound: 1,
+        totalRounds, bracketSize,
+        playerCount: entries.length,
+        nextRoundTime, startedAt: new Date(),
+    });
+    await batch.commit();
+}
+
+async function _resolveCurrentRound(db, tourneyId, tourneyData) {
+    const { currentRound, totalRounds } = tourneyData;
+    const tourneyRef = db.collection('pvp_tournaments').doc(tourneyId);
+    const matchesRef = tourneyRef.collection('matches');
+
+    const roundSnap = await matchesRef.where('round', '==', currentRound).get();
+    const matches = roundSnap.docs.map(d => ({ id: d.id, ref: d.ref, ...d.data() }));
+
+    const batch = db.batch();
+    const advancers = [];
+
+    for (const match of matches) {
+        if (match.status === 'complete' || match.status === 'bye') {
+            if (match.winner && match.nextMatchId) {
+                const w = match.p1?.uid === match.winner ? match.p1 : match.p2;
+                if (w) advancers.push({ winner: w, nextMatchId: match.nextMatchId, nextMatchSlot: match.nextMatchSlot });
+            }
+            continue;
+        }
+        if (!match.p1 || !match.p2) continue;
+
+        const result = _tSimulateMatch(match.p1.party, match.p2.party, match.bestOf);
+        const winnerPlayer = result.winner === 'p1' ? match.p1 : match.p2;
+        batch.update(match.ref, {
+            status: 'complete', winner: winnerPlayer.uid,
+            p1Wins: result.p1Wins, p2Wins: result.p2Wins, games: result.games,
+        });
+        if (match.nextMatchId)
+            advancers.push({ winner: winnerPlayer, nextMatchId: match.nextMatchId, nextMatchSlot: match.nextMatchSlot });
+    }
+
+    for (const { winner, nextMatchId, nextMatchSlot } of advancers)
+        batch.update(matchesRef.doc(nextMatchId), { [nextMatchSlot]: winner });
+
+    await batch.commit();
+
+    const refreshed = await matchesRef.where('round', '==', currentRound).get();
+    const allDone = refreshed.docs.every(d => ['complete','bye'].includes(d.data().status));
+    if (!allDone) return;
+
+    if (currentRound === totalRounds) {
+        const finalDoc = refreshed.docs.find(d => d.data().isFinal);
+        const fd = finalDoc?.data();
+        const winnerId = fd?.winner;
+        const winnerData = fd?.p1?.uid === winnerId ? fd.p1 : fd?.p2;
+        await tourneyRef.update({ status: 'complete', winnerId, winnerName: winnerData?.displayName || '', completedAt: new Date() });
+        await _distributePrizes(db, tourneyId, tourneyData, totalRounds);
+    } else {
+        await tourneyRef.update({ currentRound: currentRound + 1, nextRoundTime: new Date(Date.now() + 10 * 60 * 1000) });
+    }
+}
+
+async function _distributePrizes(db, tourneyId, tourneyData, totalRounds) {
+    const prizes = tourneyData.prizes || {};
+    if (!Object.keys(prizes).length) return;
+
+    const matchesSnap = await db.collection('pvp_tournaments').doc(tourneyId).collection('matches').get();
+    const matches = matchesSnap.docs.map(d => d.data()).filter(m => ['complete','bye'].includes(m.status));
+    const byRound = r => matches.filter(m => m.round === r);
+    const standings = {};
+    const addLoser = (m, place) => {
+        const loser = m.p1?.uid === m.winner ? m.p2 : m.p1;
+        if (loser?.uid && !standings[loser.uid]) standings[loser.uid] = place;
+    };
+
+    byRound(totalRounds).forEach(m => {
+        if (m.winner && !standings[m.winner]) standings[m.winner] = 1;
+        addLoser(m, 2);
+    });
+    if (totalRounds >= 2) { let p = 3; byRound(totalRounds-1).forEach(m => addLoser(m, p++)); }
+    if (totalRounds >= 3) { let p = 5; byRound(totalRounds-2).forEach(m => addLoser(m, p++)); }
+    if (totalRounds >= 4) { let p = 9; byRound(totalRounds-3).forEach(m => { if (p <= 10) addLoser(m, p++); }); }
+
+    for (const [uid, place] of Object.entries(standings)) {
+        const prize = prizes[String(place)];
+        if (!prize) continue;
+        const updates = {};
+        if ((prize.amber || 0) > 0) updates.amber = FieldValue.increment(prize.amber);
+        if ((prize.shards || 0) > 0) updates.shards = FieldValue.increment(prize.shards);
+        if (Object.keys(updates).length) await db.collection('profiles').doc(uid).update(updates);
+        if (prize.cards?.length) {
+            const collRef = db.collection('card_collections').doc(uid).collection('cards');
+            for (const card of prize.cards)
+                await collRef.add({ ...card, acquiredVia: 'tournament_prize', acquiredAt: new Date() });
+        }
+        const placeLabel = ['','🥇 1st','🥈 2nd','🥉 3rd–4th','🥉 3rd–4th'][place] || `${place}th`;
+        await db.collection('notifications').add({
+            uid, type: 'tournament_result', place, tourneyId,
+            title: 'Tournament Results',
+            body: `You finished ${placeLabel} in the WeeBee Tournament!`,
+            prize, createdAt: new Date(), read: false,
+        });
+    }
+}
+
+// Scheduled: runs every 10 minutes, handles bracket generation + round resolution
+exports.resolveTournamentRounds = onSchedule({ schedule: 'every 10 minutes', timeZone: 'America/New_York' }, async () => {
+    const db = getFirestore();
+    const now = Date.now();
+
+    const regSnap = await db.collection('pvp_tournaments').where('status', '==', 'registration').get();
+    for (const doc of regSnap.docs) {
+        const t = doc.data();
+        const startMs = t.startTime?.toMillis?.() ?? (t.startTime instanceof Date ? t.startTime.getTime() : 0);
+        if (startMs <= now) await _generateBracketInternal(db, doc.id, t);
+    }
+
+    const activeSnap = await db.collection('pvp_tournaments').where('status', '==', 'in_progress').get();
+    for (const doc of activeSnap.docs) {
+        const t = doc.data();
+        const nextMs = t.nextRoundTime?.toMillis?.() ?? (t.nextRoundTime instanceof Date ? t.nextRoundTime.getTime() : 0);
+        if (nextMs <= now) await _resolveCurrentRound(db, doc.id, t);
+    }
+});
+
+exports.registerForTournament = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    const uid = await getCallerUid(req);
+    if (!uid) return sendErr(res, 401, 'UNAUTHENTICATED', 'Must be signed in.');
+    const { tourneyId, party } = req.body?.data || {};
+    if (!tourneyId || !Array.isArray(party) || party.length !== 3)
+        return sendErr(res, 400, 'INVALID_ARGUMENT', 'tourneyId and party (3 cards) required.');
+
+    const db = getFirestore();
+    const tourneyRef = db.collection('pvp_tournaments').doc(tourneyId);
+    const entryRef = tourneyRef.collection('entries').doc(uid);
+    const profileRef = db.collection('profiles').doc(uid);
+    let userError = null;
+
+    try {
+        await db.runTransaction(async tx => {
+            const [tSnap, eSnap, pSnap] = await Promise.all([tx.get(tourneyRef), tx.get(entryRef), tx.get(profileRef)]);
+            if (!tSnap.exists) { userError = [404, 'NOT_FOUND', 'Tournament not found.']; return; }
+            const t = tSnap.data();
+            if (t.status !== 'registration') { userError = [400, 'FAILED_PRECONDITION', 'Registration is not currently open.']; return; }
+            const nowMs = Date.now();
+            const openMs = t.registrationOpenTime?.toMillis?.() ?? 0;
+            if (openMs > nowMs) { userError = [400, 'FAILED_PRECONDITION', 'Registration has not opened yet.']; return; }
+            if (eSnap.exists) { userError = [400, 'FAILED_PRECONDITION', 'You are already registered for this tournament.']; return; }
+            const amber = pSnap.exists ? (pSnap.data().amber || 0) : 0;
+            const cost = t.entryCost || 1000;
+            if (amber < cost) { userError = [400, 'FAILED_PRECONDITION', `Not enough Amber. Need ${cost}, have ${amber}.`]; return; }
+            tx.update(profileRef, { amber: FieldValue.increment(-cost) });
+            tx.set(entryRef, {
+                uid, party,
+                displayName: pSnap.data()?.displayName || 'Unknown',
+                avatar: pSnap.data()?.avatar || '',
+                registeredAt: new Date(),
+            });
+            tx.update(tourneyRef, { playerCount: FieldValue.increment(1) });
+        });
+    } catch(e) { return sendErr(res, 500, 'INTERNAL', e.message); }
+    if (userError) return sendErr(res, ...userError);
+    res.json({ result: { success: true } });
+});
+
+exports.adminCreateTournament = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    const uid = await getCallerUid(req);
+    if (uid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
+    const { startTime, prizes, name, entryCost } = req.body?.data || {};
+    if (!startTime) return sendErr(res, 400, 'INVALID_ARGUMENT', 'startTime required (ISO string).');
+    const db = getFirestore();
+    const startDate = new Date(startTime);
+    const regOpenDate = new Date(startDate.getTime() - 24 * 3600 * 1000);
+    const ref = await db.collection('pvp_tournaments').add({
+        name: name || 'WeeBee Tournament',
+        status: 'registration',
+        startTime: startDate,
+        registrationOpenTime: regOpenDate,
+        entryCost: entryCost || 1000,
+        prizes: prizes || {},
+        playerCount: 0,
+        currentRound: 0, totalRounds: 0,
+        createdAt: new Date(), createdBy: uid,
+    });
+    res.json({ result: { tourneyId: ref.id } });
+});
+
+exports.adminSaveTournamentPrizes = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    const uid = await getCallerUid(req);
+    if (uid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
+    const { tourneyId, prizes } = req.body?.data || {};
+    if (!tourneyId || !prizes) return sendErr(res, 400, 'INVALID_ARGUMENT', 'tourneyId and prizes required.');
+    const db = getFirestore();
+    await db.collection('pvp_tournaments').doc(tourneyId).update({ prizes });
+    res.json({ result: { success: true } });
+});
+
+exports.adminCancelTournament = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    const uid = await getCallerUid(req);
+    if (uid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
+    const { tourneyId } = req.body?.data || {};
+    if (!tourneyId) return sendErr(res, 400, 'INVALID_ARGUMENT', 'tourneyId required.');
+    const db = getFirestore();
+    const tRef = db.collection('pvp_tournaments').doc(tourneyId);
+    const tSnap = await tRef.get();
+    if (!tSnap.exists) return sendErr(res, 404, 'NOT_FOUND', 'Tournament not found.');
+    const t = tSnap.data();
+    const entriesSnap = await tRef.collection('entries').get();
+    const batch = db.batch();
+    batch.update(tRef, { status: 'cancelled', cancelledAt: new Date() });
+    for (const e of entriesSnap.docs)
+        batch.update(db.collection('profiles').doc(e.id), { amber: FieldValue.increment(t.entryCost || 1000) });
+    await batch.commit();
+    res.json({ result: { success: true, refunded: entriesSnap.size } });
+});
+
+exports.adminGenerateBracket = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    const uid = await getCallerUid(req);
+    if (uid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
+    const { tourneyId } = req.body?.data || {};
+    if (!tourneyId) return sendErr(res, 400, 'INVALID_ARGUMENT', 'tourneyId required.');
+    const db = getFirestore();
+    const snap = await db.collection('pvp_tournaments').doc(tourneyId).get();
+    if (!snap.exists) return sendErr(res, 404, 'NOT_FOUND', 'Tournament not found.');
+    if (snap.data().status !== 'registration')
+        return sendErr(res, 400, 'FAILED_PRECONDITION', 'Tournament must be in registration status.');
+    await _generateBracketInternal(db, snap.id, snap.data());
+    res.json({ result: { success: true } });
 });

@@ -9598,7 +9598,7 @@ window._tcgFindCard = async function(nameQuery, rarities) {
 
 // Admin sub-tab switcher
 window.switchAdminSubtab = function(tab) {
-    ['moderation','economy','cards','gifts','feedback','setcards','dungeon'].forEach(t => {
+    ['moderation','economy','cards','gifts','feedback','setcards','dungeon','tournament'].forEach(t => {
         const el = document.getElementById('admin-subtab-' + t);
         const btn = document.getElementById('admin-subtab-' + t + '-btn');
         if (el) el.style.display = t === tab ? '' : 'none';
@@ -29239,7 +29239,7 @@ function _dungeonGeneratePool(dateKey) {
 
 // Card "Power" — rarity baseline plus a bonus for low serial numbers
 // (single-digit serials, Founder/Monthly URs all count as the strongest).
-const DUNGEON_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':12, pr:11, ssr:13, 'ssr+':16, ur:17, 'ur+':20 };
+const DUNGEON_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
 
 function _dungeonCardPower(card) {
     if (card.monthlyUr || card.tradedMonthlyUr) return 16; // Wheel URs = max SSR power (SSR base 13 + low-serial bonus 3)
@@ -31609,17 +31609,20 @@ window.loadPvpTab = async function() {
     }
     el.innerHTML = `<div class="loading">Loading PVP...</div>`;
     const uid = auth.currentUser.uid;
-    const [myStats, active, recent, leaderboard] = await Promise.all([
+    const [myStats, active, recent, leaderboard, tourney] = await Promise.all([
         _pvpLoadStats(uid),
         _pvpLoadActiveChallenges(uid),
         _pvpLoadRecentBattles(uid),
         _pvpLoadLeaderboard(),
+        _pvpLoadActiveTournament(),
     ]);
 
     // Update badge
     const incomingCount = active.filter(c => c._role === 'defender').length;
     const badge = document.getElementById('tcg-pvp-badge');
     if (badge) badge.style.display = incomingCount > 0 ? 'block' : 'none';
+
+    const myEntry = tourney ? await _pvpLoadMyTournamentEntry(tourney.id, uid) : null;
 
     el.innerHTML = `
         <div class="bw-banner-hero" style="border-radius:20px;padding:36px 32px;margin-bottom:20px;text-align:center;border:1px solid rgba(255,255,255,0.08);position:relative;overflow:hidden;">
@@ -31630,6 +31633,8 @@ window.loadPvpTab = async function() {
                 <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:520px;margin-left:auto;margin-right:auto;">Challenge any player to a card battle. Wager amber, wager cards, or just fight for the glory.</div>
             </div>
         </div>
+
+        ${_pvpTournamentBannerHTML(tourney, myEntry, uid)}
 
         ${_pvpStatsHTML(myStats)}
 
@@ -32612,4 +32617,522 @@ window._pvpChallengeFromProfile = function(targetUid, targetName, targetAvatar) 
         const { score } = JSON.parse(saved);
     }
 })();
+
+// ─────────────────────────────────────────────
+// TCG TOURNAMENT SYSTEM
+// ─────────────────────────────────────────────
+
+async function _pvpLoadActiveTournament() {
+    try {
+        // Load the most recent non-cancelled tournament
+        const snap = await getDocs(
+            query(collection(db, 'pvp_tournaments'),
+                where('status', 'in', ['registration', 'in_progress', 'complete']),
+                orderBy('createdAt', 'desc'),
+                limit(1))
+        );
+        if (snap.empty) return null;
+        return { id: snap.docs[0].id, ...snap.docs[0].data() };
+    } catch(e) { return null; }
+}
+
+async function _pvpLoadMyTournamentEntry(tourneyId, uid) {
+    try {
+        const snap = await getDoc(doc(db, 'pvp_tournaments', tourneyId, 'entries', uid));
+        return snap.exists() ? snap.data() : null;
+    } catch(e) { return null; }
+}
+
+function _pvpTournamentBannerHTML(tourney, myEntry, uid) {
+    if (!tourney) return '';
+
+    const fmtDate = ts => {
+        const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : new Date(ts));
+        return d.toLocaleString('en-US', { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZone:'America/New_York', timeZoneName:'short' });
+    };
+
+    const baseStyle = 'border-radius:16px;padding:20px 22px;margin-bottom:20px;border:1px solid';
+
+    if (tourney.status === 'registration') {
+        const registered = !!myEntry;
+        const regOpen = tourney.registrationOpenTime?.toDate ? tourney.registrationOpenTime.toDate() <= new Date() : true;
+        return `
+        <div style="${baseStyle} rgba(99,102,241,0.4);background:rgba(99,102,241,0.08);">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#818cf8;margin-bottom:4px;">🏆 Tournament</div>
+                    <div style="font-size:18px;font-weight:900;margin-bottom:2px;">${tourney.name || 'WeeBee Tournament'}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">Starts: ${fmtDate(tourney.startTime)} &nbsp;·&nbsp; Entry: 1,000 Amber</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${tourney.playerCount || 0} players registered</div>
+                    ${registered ? `<div style="font-size:12px;color:#22c55e;font-weight:700;margin-top:4px;">✅ You're registered!</div>` : ''}
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    ${!registered && regOpen ? `<button onclick="window._pvpTournamentRegisterFlow('${tourney.id}')" style="padding:11px 22px;border-radius:10px;border:none;background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;font-weight:800;font-size:14px;cursor:pointer;">Register (1,000 🟡)</button>` : ''}
+                    ${registered ? `<button onclick="window._pvpViewBracket('${tourney.id}')" style="padding:11px 22px;border-radius:10px;border:none;background:var(--bg-gray-darker);color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;">View Bracket</button>` : ''}
+                </div>
+            </div>
+        </div>`;
+    }
+
+    if (tourney.status === 'in_progress') {
+        const nextRound = tourney.nextRoundTime?.toDate ? tourney.nextRoundTime.toDate() : null;
+        const nextRoundStr = nextRound ? fmtDate(nextRound) : 'Soon';
+        const isFinal = tourney.currentRound === tourney.totalRounds;
+        return `
+        <div style="${baseStyle} rgba(251,191,36,0.4);background:rgba(251,191,36,0.08);">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#fbbf24;margin-bottom:4px;">⚔️ Tournament In Progress</div>
+                    <div style="font-size:18px;font-weight:900;margin-bottom:2px;">${tourney.name || 'WeeBee Tournament'}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${isFinal ? '🏆 Championship Match' : `Round ${tourney.currentRound} of ${tourney.totalRounds}`} &nbsp;·&nbsp; Next round: ${nextRoundStr}</div>
+                    ${myEntry ? `<div style="font-size:12px;color:#fbbf24;font-weight:700;margin-top:4px;">You are in this tournament!</div>` : ''}
+                </div>
+                <button onclick="window._pvpViewBracket('${tourney.id}')" style="padding:11px 22px;border-radius:10px;border:none;background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#222;font-weight:800;font-size:14px;cursor:pointer;">View Bracket</button>
+            </div>
+        </div>`;
+    }
+
+    if (tourney.status === 'complete') {
+        return `
+        <div style="${baseStyle} rgba(34,197,94,0.4);background:rgba(34,197,94,0.08);">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#22c55e;margin-bottom:4px;">🏆 Tournament Complete</div>
+                    <div style="font-size:18px;font-weight:900;margin-bottom:2px;">${tourney.name || 'WeeBee Tournament'}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">🥇 Winner: <strong>${tourney.winnerName || 'Unknown'}</strong></div>
+                </div>
+                <button onclick="window._pvpViewBracket('${tourney.id}')" style="padding:11px 22px;border-radius:10px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-weight:800;font-size:14px;cursor:pointer;">View Results</button>
+            </div>
+        </div>`;
+    }
+
+    return '';
+}
+
+// ── Registration Flow ─────────────────────────────────────────────────────────
+
+window._pvpTournamentRegisterFlow = async function(tourneyId) {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    // Reuse existing PVP card picker — same 3-card party picker
+    window._pvpTournamentDraft = { tourneyId, party: [] };
+
+    const cardsSnap = await getDocs(collection(db, 'card_collections', uid, 'cards'));
+    const myCards = cardsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const sorted = myCards.sort((a, b) => {
+        const rOrder = { ur:6, ssr:5, sr:4, pr:3, rare:2, common:1 };
+        return (rOrder[b.rarity] || 0) - (rOrder[a.rarity] || 0);
+    });
+
+    const overlay = document.createElement('div');
+    overlay.id = 'pvp-tourney-register-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;">
+            <div style="font-size:18px;font-weight:900;margin-bottom:4px;">🏆 Register for Tournament</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Pick 3 cards as your tournament team. Entry costs 1,000 Amber.</div>
+            <div id="tourney-party-slots" style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+                ${[0,1,2].map(i => `<div id="tourney-slot-${i}" style="width:100px;height:140px;border-radius:12px;border:2px dashed var(--border-color);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text-muted);">+</div>`).join('')}
+            </div>
+            <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Your Cards</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;max-height:280px;overflow-y:auto;margin-bottom:16px;" id="tourney-card-grid">
+                ${sorted.map(c => {
+                    const border = rarityBorderColor(c.rarity);
+                    return `<div onclick="window._pvpTourneyPickCard(${JSON.stringify(c).replace(/"/g,'&quot;')})" style="cursor:pointer;border-radius:10px;overflow:hidden;border:2px solid ${border};aspect-ratio:0.7;position:relative;">
+                        <img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;">
+                        <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);font-size:9px;font-weight:700;color:#fff;padding:2px 4px;text-align:center;">${c.name||''}</div>
+                    </div>`;
+                }).join('')}
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button onclick="window._pvpTourneyConfirmRegistration()" id="tourney-confirm-btn" style="flex:1;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;font-weight:800;font-size:15px;cursor:pointer;opacity:0.5;" disabled>Confirm (1,000 🟡)</button>
+                <button onclick="document.getElementById('pvp-tourney-register-modal')?.remove()" style="padding:12px 18px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-weight:700;cursor:pointer;">Cancel</button>
+            </div>
+            <div id="tourney-register-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;text-align:center;"></div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+};
+
+window._pvpTourneyPickCard = function(card) {
+    const party = window._pvpTournamentDraft?.party || [];
+    if (party.find(c => c.id === card.id)) return; // already picked
+    if (party.length >= 3) party.shift(); // replace oldest if full
+    party.push(card);
+    window._pvpTournamentDraft.party = party;
+
+    [0,1,2].forEach(i => {
+        const slot = document.getElementById(`tourney-slot-${i}`);
+        if (!slot) return;
+        const c = party[i];
+        if (c) {
+            slot.style.border = `2px solid ${rarityBorderColor(c.rarity)}`;
+            slot.innerHTML = `<img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">`;
+        } else {
+            slot.style.border = '2px dashed var(--border-color)';
+            slot.innerHTML = '<span style="font-size:24px;color:var(--text-muted);">+</span>';
+        }
+    });
+
+    const btn = document.getElementById('tourney-confirm-btn');
+    if (btn) { btn.disabled = party.length < 3; btn.style.opacity = party.length < 3 ? '0.5' : '1'; }
+};
+
+window._pvpTourneyConfirmRegistration = async function() {
+    const draft = window._pvpTournamentDraft;
+    if (!draft || draft.party.length < 3) return;
+    const btn = document.getElementById('tourney-confirm-btn');
+    const status = document.getElementById('tourney-register-status');
+    if (btn) { btn.disabled = true; btn.textContent = 'Registering…'; }
+    try {
+        const res = await _callFn('registerForTournament', { tourneyId: draft.tourneyId, party: draft.party });
+        if (res?.result?.success) {
+            document.getElementById('pvp-tourney-register-modal')?.remove();
+            window.loadPvpTab();
+        } else {
+            if (status) status.textContent = res?.error?.message || 'Registration failed.';
+            if (btn) { btn.disabled = false; btn.textContent = 'Confirm (1,000 🟡)'; }
+        }
+    } catch(e) {
+        if (status) status.textContent = e.message || 'Error — try again.';
+        if (btn) { btn.disabled = false; btn.textContent = 'Confirm (1,000 🟡)'; }
+    }
+};
+
+// ── Bracket Viewer ────────────────────────────────────────────────────────────
+
+window._pvpViewBracket = async function(tourneyId) {
+    const overlay = document.createElement('div');
+    overlay.id = 'pvp-bracket-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:10000;display:flex;flex-direction:column;padding:16px;';
+    overlay.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0;">
+        <div style="font-size:18px;font-weight:900;color:#fff;">🏆 Tournament Bracket</div>
+        <button onclick="document.getElementById('pvp-bracket-modal')?.remove()" style="padding:8px 16px;border-radius:8px;border:none;background:rgba(255,255,255,0.1);color:#fff;font-weight:700;cursor:pointer;">✕ Close</button>
+    </div>
+    <div id="pvp-bracket-inner" style="flex:1;overflow:auto;"><div style="color:rgba(255,255,255,0.4);text-align:center;padding-top:40px;">Loading bracket…</div></div>`;
+    document.body.appendChild(overlay);
+
+    try {
+        const [tSnap, matchSnap] = await Promise.all([
+            getDoc(doc(db, 'pvp_tournaments', tourneyId)),
+            getDocs(collection(db, 'pvp_tournaments', tourneyId, 'matches')),
+        ]);
+        if (!tSnap.exists()) throw new Error('Tournament not found');
+        const t = { id: tSnap.id, ...tSnap.data() };
+        const matches = matchSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        document.getElementById('pvp-bracket-inner').innerHTML = _pvpBracketHTML(t, matches);
+    } catch(e) {
+        document.getElementById('pvp-bracket-inner').innerHTML = `<div style="color:#ef4444;text-align:center;padding-top:40px;">${e.message}</div>`;
+    }
+};
+
+function _pvpBracketHTML(tourney, matches) {
+    const totalRounds = tourney.totalRounds || 0;
+    if (!totalRounds || !matches.length) return '<div style="color:rgba(255,255,255,0.4);text-align:center;padding-top:40px;">Bracket not generated yet.</div>';
+
+    const byRound = [];
+    for (let r = 1; r <= totalRounds; r++) {
+        byRound[r] = matches.filter(m => m.round === r).sort((a,b) => a.matchIndex - b.matchIndex);
+    }
+
+    const uid = auth.currentUser?.uid;
+    const roundLabels = { [totalRounds]: '🏆 Final', [totalRounds-1]: 'Semifinals', [totalRounds-2]: 'Quarterfinals' };
+
+    const matchCard = (m) => {
+        const p1 = m.p1, p2 = m.p2;
+        const isMe = uid && (p1?.uid === uid || p2?.uid === uid);
+        const borderColor = isMe ? '#6366f1' : 'rgba(255,255,255,0.1)';
+        const winnerUid = m.winner;
+
+        const playerRow = (p, wins, slot) => {
+            if (!p) return `<div style="padding:6px 10px;font-size:11px;color:rgba(255,255,255,0.3);font-style:italic;">BYE</div>`;
+            const isWinner = winnerUid && p.uid === winnerUid;
+            const name = p.displayName || 'Unknown';
+            const score = m.status === 'complete' || m.status === 'bye' ? `<span style="font-size:11px;font-weight:900;color:${isWinner ? '#fbbf24' : 'rgba(255,255,255,0.4)'};margin-left:auto;padding-left:8px;">${wins}</span>` : '';
+            return `<div style="display:flex;align-items:center;padding:6px 10px;${isWinner ? 'background:rgba(251,191,36,0.12);' : ''}border-radius:6px;">
+                <img src="${p.avatar||'https://api.dicebear.com/7.x/initials/svg?seed='+encodeURIComponent(name)}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;margin-right:7px;flex-shrink:0;">
+                <span style="font-size:12px;font-weight:${isWinner ? '800' : '500'};color:${isWinner ? '#fbbf24' : '#fff'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px;">${name}</span>
+                ${score}
+            </div>`;
+        };
+
+        const statusLabel = m.status === 'pending' ? '' : m.status === 'bye' ? '<div style="font-size:9px;color:rgba(255,255,255,0.3);text-align:center;padding:2px 0;">BYE</div>' : '';
+        const bestOfLabel = m.isFinal ? `<div style="font-size:9px;font-weight:700;color:#fbbf24;text-align:center;padding:2px 0;text-transform:uppercase;letter-spacing:0.5px;">Best of 7 · Championship</div>` : '';
+
+        return `<div style="background:rgba(255,255,255,0.05);border:1px solid ${borderColor};border-radius:10px;margin-bottom:8px;overflow:hidden;min-width:180px;">
+            ${bestOfLabel}
+            ${playerRow(p1, m.p1Wins, 'p1')}
+            <div style="height:1px;background:rgba(255,255,255,0.07);"></div>
+            ${playerRow(p2, m.p2Wins, 'p2')}
+            ${statusLabel}
+        </div>`;
+    };
+
+    const roundCols = [];
+    for (let r = 1; r <= totalRounds; r++) {
+        const label = roundLabels[r] || `Round ${r}`;
+        const matchesInRound = byRound[r] || [];
+        roundCols.push(`
+            <div style="flex-shrink:0;min-width:200px;max-width:220px;">
+                <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.35);text-align:center;margin-bottom:10px;">${label}</div>
+                <div style="display:flex;flex-direction:column;justify-content:space-around;height:calc(100% - 28px);">
+                    ${matchesInRound.map(m => matchCard(m)).join('')}
+                </div>
+            </div>
+        `);
+    }
+
+    return `<div style="display:flex;gap:16px;align-items:flex-start;padding:8px 4px;min-height:300px;">${roundCols.join('')}</div>`;
+}
+
+// ─────────────────────────────────────────────
+// TOURNAMENT ADMIN TOOLS
+// ─────────────────────────────────────────────
+
+window._tournamentAdminLoad = async function() {
+    const el = document.getElementById('admin-tourney-status');
+    if (!el) return;
+    el.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Loading…</div>';
+
+    try {
+        const snap = await getDocs(
+            query(collection(db, 'pvp_tournaments'),
+                where('status', 'in', ['registration', 'in_progress', 'complete']),
+                orderBy('createdAt', 'desc'),
+                limit(3))
+        );
+
+        if (snap.empty) {
+            el.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">No active tournaments.</div>';
+            return;
+        }
+
+        const fmtDate = ts => {
+            const d = ts?.toDate ? ts.toDate() : new Date(ts);
+            return d.toLocaleString('en-US', { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZone:'America/New_York', timeZoneName:'short' });
+        };
+
+        el.innerHTML = snap.docs.map(d => {
+            const t = { id: d.id, ...d.data() };
+            const statusColor = { registration:'#6366f1', in_progress:'#f59e0b', complete:'#22c55e', cancelled:'#ef4444' }[t.status] || '#888';
+            return `<div style="border:1px solid var(--border-color);border-radius:10px;padding:14px 16px;margin-bottom:10px;cursor:pointer;" onclick="window._tournamentAdminSelect('${t.id}')">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                    <span style="font-weight:800;font-size:14px;">${t.name || 'WeeBee Tournament'}</span>
+                    <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:${statusColor}22;color:${statusColor};">${t.status}</span>
+                </div>
+                <div style="font-size:12px;color:var(--text-muted);">Start: ${fmtDate(t.startTime)} · ${t.playerCount || 0} players</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">ID: ${t.id}</div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        el.innerHTML = `<div style="font-size:13px;color:#ef4444;">Error: ${e.message}</div>`;
+    }
+};
+
+window._tournamentAdminSelect = async function(tourneyId) {
+    window._adminActiveTourneyId = tourneyId;
+    const snap = await getDoc(doc(db, 'pvp_tournaments', tourneyId));
+    if (!snap.exists()) return;
+    const t = snap.data();
+    _tournamentAdminRenderPrizeEditor(t.prizes || {});
+    const statusEl = document.getElementById('admin-tourney-action-status');
+    if (statusEl) statusEl.textContent = `Selected: ${t.name} (${tourneyId})`;
+};
+
+function _tournamentAdminRenderPrizeEditor(prizes) {
+    const el = document.getElementById('admin-tourney-prize-editor');
+    if (!el) return;
+    const placeLabels = ['','🥇 1st','🥈 2nd','🥉 3rd','🥉 4th','5th','6th','7th','8th','9th','10th'];
+
+    el.innerHTML = `
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead>
+                    <tr style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">
+                        <th style="text-align:left;padding:6px 8px;font-weight:700;">Place</th>
+                        <th style="text-align:left;padding:6px 8px;font-weight:700;">Amber 🟡</th>
+                        <th style="text-align:left;padding:6px 8px;font-weight:700;">Shards 💎</th>
+                        <th style="text-align:left;padding:6px 8px;font-weight:700;">Cards 🃏</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${[1,2,3,4,5,6,7,8,9,10].map(place => {
+                        const p = prizes[String(place)] || {};
+                        const cardsJson = JSON.stringify(p.cards || []);
+                        return `<tr style="border-top:1px solid var(--border-color);">
+                            <td style="padding:8px;font-weight:700;">${placeLabels[place]}</td>
+                            <td style="padding:8px;"><input type="number" min="0" id="prize-amber-${place}" value="${p.amber || 0}" style="width:90px;padding:5px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;"></td>
+                            <td style="padding:8px;"><input type="number" min="0" id="prize-shards-${place}" value="${p.shards || 0}" style="width:90px;padding:5px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;"></td>
+                            <td style="padding:8px;">
+                                <div id="prize-cards-display-${place}" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">${(p.cards||[]).map(c => `<span style="font-size:11px;background:var(--bg-gray-darker);border-radius:4px;padding:2px 6px;">${c.name}</span>`).join('')}</div>
+                                <button onclick="window._tournamentAdminPickPrizeCard(${place})" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);cursor:pointer;">+ Add Card</button>
+                                <button onclick="window._tournamentAdminClearPrizeCards(${place})" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);cursor:pointer;">Clear</button>
+                                <input type="hidden" id="prize-cards-${place}" value='${cardsJson.replace(/'/g, '&#39;')}'>
+                            </td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>`;
+}
+
+window._tournamentAdminPickPrizeCard = function(place) {
+    // Opens a mini card search for prize card selection
+    const existing = document.getElementById(`prize-cards-${place}`);
+    const cards = existing ? JSON.parse(existing.value || '[]') : [];
+
+    const overlay = document.createElement('div');
+    overlay.id = 'prize-card-picker';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:20000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:16px;padding:20px;max-width:480px;width:100%;max-height:80vh;overflow-y:auto;">
+            <div style="font-weight:800;font-size:15px;margin-bottom:12px;">Pick Prize Card — Place ${place}</div>
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+                <input id="prize-card-search" type="text" placeholder="Search by character name…" style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;" oninput="window._tournamentAdminSearchPrizeCard(${place})">
+            </div>
+            <div id="prize-card-results" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;max-height:360px;overflow-y:auto;"></div>
+            <div style="display:flex;gap:8px;margin-top:12px;">
+                <button onclick="document.getElementById('prize-card-picker')?.remove()" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-weight:700;cursor:pointer;">Done</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    window._prizeCardPickPlace = place;
+};
+
+window._tournamentAdminSearchPrizeCard = async function(place) {
+    const q = document.getElementById('prize-card-search')?.value?.trim().toLowerCase();
+    const results = document.getElementById('prize-card-results');
+    if (!results || !q || q.length < 2) { if (results) results.innerHTML = ''; return; }
+
+    try {
+        const snap = await getDocs(
+            query(collection(db, 'characters'),
+                where('name', '>=', q.charAt(0).toUpperCase() + q.slice(1)),
+                where('name', '<=', q.charAt(0).toUpperCase() + q.slice(1) + ''),
+                limit(20))
+        );
+
+        const cards = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter(c => c.name?.toLowerCase().includes(q));
+
+        results.innerHTML = cards.map(c => {
+            const border = rarityBorderColor(c.rarityTier || 'sr');
+            return `<div onclick="window._tournamentAdminAddPrizeCard(${JSON.stringify(c).replace(/"/g,'&quot;')})" style="cursor:pointer;border-radius:10px;overflow:hidden;border:2px solid ${border};aspect-ratio:0.7;position:relative;">
+                <img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;">
+                <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.7);font-size:9px;font-weight:700;color:#fff;padding:2px 4px;text-align:center;">${c.name}</div>
+            </div>`;
+        }).join('');
+    } catch(e) { if (results) results.innerHTML = `<div style="font-size:12px;color:#ef4444;">Error: ${e.message}</div>`; }
+};
+
+window._tournamentAdminAddPrizeCard = function(card) {
+    const place = window._prizeCardPickPlace;
+    const input = document.getElementById(`prize-cards-${place}`);
+    const display = document.getElementById(`prize-cards-display-${place}`);
+    if (!input) return;
+    const cards = JSON.parse(input.value || '[]');
+    if (cards.find(c => c.name === card.name && c.series === card.series)) return;
+    const prizeCard = { name: card.name, image: card.image, rarity: card.rarityTier || 'sr', anime: card.series || '' };
+    cards.push(prizeCard);
+    input.value = JSON.stringify(cards);
+    if (display) display.innerHTML = cards.map(c => `<span style="font-size:11px;background:var(--bg-gray-darker);border-radius:4px;padding:2px 6px;">${c.name}</span>`).join('');
+};
+
+window._tournamentAdminClearPrizeCards = function(place) {
+    const input = document.getElementById(`prize-cards-${place}`);
+    const display = document.getElementById(`prize-cards-display-${place}`);
+    if (input) input.value = '[]';
+    if (display) display.innerHTML = '';
+};
+
+window._tournamentAdminSavePrizes = async function() {
+    const tourneyId = window._adminActiveTourneyId;
+    const status = document.getElementById('admin-tourney-prize-status');
+    if (!tourneyId) { if (status) status.textContent = 'Select a tournament first.'; return; }
+    const prizes = {};
+    for (let place = 1; place <= 10; place++) {
+        const amber = parseInt(document.getElementById(`prize-amber-${place}`)?.value || '0', 10) || 0;
+        const shards = parseInt(document.getElementById(`prize-shards-${place}`)?.value || '0', 10) || 0;
+        const cardsVal = document.getElementById(`prize-cards-${place}`)?.value || '[]';
+        const cards = JSON.parse(cardsVal);
+        if (amber > 0 || shards > 0 || cards.length > 0) prizes[String(place)] = { amber, shards, cards };
+    }
+    try {
+        if (status) status.textContent = 'Saving…';
+        await _callFn('adminSaveTournamentPrizes', { tourneyId, prizes });
+        if (status) status.textContent = '✅ Prizes saved!';
+    } catch(e) { if (status) status.textContent = `Error: ${e.message}`; }
+};
+
+window._tournamentAdminCreate = async function() {
+    const name = document.getElementById('admin-tourney-name')?.value?.trim() || 'WeeBee Tournament';
+    const startInput = document.getElementById('admin-tourney-start')?.value;
+    const entryCost = parseInt(document.getElementById('admin-tourney-entry-cost')?.value || '1000', 10) || 0;
+    const status = document.getElementById('admin-tourney-create-status');
+    if (!startInput) { if (status) status.textContent = 'Pick a start time first.'; return; }
+    // datetime-local gives local time — treat as EST by converting
+    const localDate = new Date(startInput);
+    const estOffset = 5 * 60 * 60 * 1000; // EST = UTC-5 (non-DST)
+    const utcDate = new Date(localDate.getTime() + localDate.getTimezoneOffset() * 60000 + estOffset);
+    try {
+        if (status) status.textContent = 'Creating…';
+        const res = await _callFn('adminCreateTournament', { name, startTime: utcDate.toISOString(), entryCost });
+        const tourneyId = res?.result?.tourneyId;
+        if (tourneyId) {
+            window._adminActiveTourneyId = tourneyId;
+            if (status) status.textContent = `✅ Created! ID: ${tourneyId}`;
+            await window._tournamentAdminLoad();
+        }
+    } catch(e) { if (status) status.textContent = `Error: ${e.message}`; }
+};
+
+window._tournamentAdminFillNextSlot = function() {
+    // Compute next Monday or Friday at 7PM EST
+    const now = new Date();
+    const estNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    let best = null;
+    for (const targetDay of [1, 5]) { // Mon, Fri
+        const candidate = new Date(estNow);
+        let diff = (targetDay - estNow.getDay() + 7) % 7;
+        if (diff === 0 && estNow.getHours() >= 19) diff = 7;
+        candidate.setDate(candidate.getDate() + diff);
+        candidate.setHours(19, 0, 0, 0);
+        if (!best || candidate < best) best = candidate;
+    }
+    if (!best) return;
+    // Format as datetime-local value (YYYY-MM-DDTHH:MM) in local time
+    const pad = n => String(n).padStart(2,'0');
+    const estBest = new Date(best.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const val = `${estBest.getFullYear()}-${pad(estBest.getMonth()+1)}-${pad(estBest.getDate())}T${pad(estBest.getHours())}:${pad(estBest.getMinutes())}`;
+    const input = document.getElementById('admin-tourney-start');
+    if (input) input.value = val;
+};
+
+window._tournamentAdminGenerateBracket = async function() {
+    const tourneyId = window._adminActiveTourneyId;
+    const status = document.getElementById('admin-tourney-action-status');
+    if (!tourneyId) { if (status) status.textContent = 'Select a tournament first.'; return; }
+    if (!confirm('Generate the bracket now? This locks registration.')) return;
+    try {
+        if (status) status.textContent = 'Generating bracket…';
+        await _callFn('adminGenerateBracket', { tourneyId });
+        if (status) status.textContent = '✅ Bracket generated! First round resolves in ~10 minutes.';
+        await window._tournamentAdminLoad();
+    } catch(e) { if (status) status.textContent = `Error: ${e.message}`; }
+};
+
+window._tournamentAdminCancel = async function() {
+    const tourneyId = window._adminActiveTourneyId;
+    const status = document.getElementById('admin-tourney-action-status');
+    if (!tourneyId) { if (status) status.textContent = 'Select a tournament first.'; return; }
+    if (!confirm('Cancel this tournament and refund all entry fees? This cannot be undone.')) return;
+    try {
+        if (status) status.textContent = 'Cancelling…';
+        const res = await _callFn('adminCancelTournament', { tourneyId });
+        if (status) status.textContent = `✅ Cancelled. ${res?.result?.refunded || 0} entries refunded.`;
+        window._adminActiveTourneyId = null;
+        await window._tournamentAdminLoad();
+    } catch(e) { if (status) status.textContent = `Error: ${e.message}`; }
+};
 

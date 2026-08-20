@@ -1036,6 +1036,7 @@
                             <button onclick="window._zoroAdmin()" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🗡️ Zoro</button>
                             <button id="admin-subtab-setcards-btn" onclick="window.switchAdminSubtab('setcards')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🏆 Set Cards</button>
                             <button id="admin-subtab-dungeon-btn" onclick="window.switchAdminSubtab('dungeon')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">⚔️ Dungeon</button>
+                            <button id="admin-subtab-tournament-btn" onclick="window.switchAdminSubtab('tournament');window._tournamentAdminLoad();" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🏆 Tournament</button>
                         </div>
 
                         <!-- ── MODERATION ── -->
@@ -1645,6 +1646,62 @@
                                 <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Clears the old random-filler MVP character counts from all users' dungeon career stats. The new MVP system tracks counts per-card instead. This is a one-time cleanup.</div>
                                 <button onclick="window._adminResetMvpCounts()" style="padding:8px 18px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">Reset All MVP Counts</button>
                                 <div id="admin-mvp-reset-result" style="margin-top:12px;font-size:13px;"></div>
+                            </div>
+                        </div>
+
+                        <!-- ── TOURNAMENT ── -->
+                        <div id="admin-subtab-tournament" style="display:none;">
+                            <!-- Current tournament status -->
+                            <div id="admin-tourney-status" style="background:var(--bg-gray);border-radius:12px;padding:18px 20px;margin-bottom:16px;">
+                                <p style="color:var(--text-muted);font-size:13px;margin:0;">Click the Tournament tab to load status.</p>
+                            </div>
+
+                            <!-- Create new tournament -->
+                            <div style="background:var(--bg-gray);border-radius:12px;padding:18px 20px;margin-bottom:16px;">
+                                <div style="font-size:14px;font-weight:800;margin-bottom:4px;">➕ Create Tournament</div>
+                                <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Registration opens 24 hours before the start time.</div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                                    <div>
+                                        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">Name</div>
+                                        <input id="admin-tourney-name" type="text" value="WeeBee Tournament" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;width:200px;">
+                                    </div>
+                                    <div>
+                                        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">Start Time (EST)</div>
+                                        <input id="admin-tourney-start" type="datetime-local" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;">
+                                    </div>
+                                    <div>
+                                        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">Entry Fee (Amber)</div>
+                                        <input id="admin-tourney-entry-cost" type="number" min="0" value="1000" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;width:120px;">
+                                    </div>
+                                </div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                    <button onclick="window._tournamentAdminCreate()" style="padding:9px 18px;border-radius:8px;border:none;background:#6366f1;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">Create Tournament</button>
+                                    <button onclick="window._tournamentAdminFillNextSlot()" style="padding:9px 18px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-weight:700;font-size:13px;cursor:pointer;">📅 Next Mon/Fri 7PM EST</button>
+                                </div>
+                                <div id="admin-tourney-create-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;"></div>
+                            </div>
+
+                            <!-- Prize editor -->
+                            <div style="background:var(--bg-gray);border-radius:12px;padding:18px 20px;margin-bottom:16px;">
+                                <div style="font-size:14px;font-weight:800;margin-bottom:4px;">🎁 Prize Configuration</div>
+                                <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">Set prizes for each finishing position. Select a tournament above first, then configure and save.</div>
+                                <div id="admin-tourney-prize-editor">
+                                    <p style="font-size:12px;color:var(--text-muted);">Load a tournament to edit prizes.</p>
+                                </div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+                                    <button onclick="window._tournamentAdminSavePrizes()" style="padding:9px 18px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">💾 Save Prizes</button>
+                                </div>
+                                <div id="admin-tourney-prize-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;"></div>
+                            </div>
+
+                            <!-- Actions -->
+                            <div style="background:var(--bg-gray);border-radius:12px;padding:18px 20px;margin-bottom:16px;">
+                                <div style="font-size:14px;font-weight:800;margin-bottom:12px;">🔧 Actions</div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                    <button onclick="window._tournamentAdminGenerateBracket()" style="padding:9px 18px;border-radius:8px;border:none;background:#f59e0b;color:#222;font-weight:800;font-size:13px;cursor:pointer;">⚡ Generate Bracket Now</button>
+                                    <button onclick="window._tournamentAdminCancel()" style="padding:9px 18px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">❌ Cancel & Refund All</button>
+                                </div>
+                                <div id="admin-tourney-action-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;"></div>
                             </div>
                         </div>
 
@@ -2930,6 +2987,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=758"></script>
+    <script type="module" src="app.js?v=762"></script>
 </body>
 </html>
