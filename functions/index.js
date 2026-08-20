@@ -1902,3 +1902,310 @@ exports.adminGenerateBracket = onRequest({ invoker: 'public' }, async (req, res)
     await _generateBracketInternal(db, snap.id, snap.data());
     res.json({ result: { success: true } });
 });
+
+// ── PVP Weekly Ladder ─────────────────────────────────────────────────────────
+
+const LADDER_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
+
+function _ladderCardPower(card) {
+    if (card.monthlyUr || card.tradedMonthlyUr) return 16;
+    let p = LADDER_RARITY_POWER[card.rarity] || 1;
+    if (card.founder) p += 3;
+    else if (card.rarity !== 'pr' && !card.event && card.serial != null) {
+        if (card.serial < 10) p += 3;
+        else if (card.serial < 100) p += 2;
+        else if (card.serial < 1000) p += 1;
+    }
+    return p;
+}
+function _ladderRoundPower(card, party) {
+    const isCombo = party.some(c => c !== card && (c.anime||'') === (card.anime||'') && card.anime);
+    return _ladderCardPower(card) + (isCombo ? 1 : 0);
+}
+function _ladderSortParty(party) { return [...party].sort((a,b) => _ladderCardPower(b) - _ladderCardPower(a)); }
+function _ladderRunBattle(party1, party2) {
+    const s1 = _ladderSortParty(party1);
+    const s2 = _ladderSortParty(party2);
+    const rounds = [0,1,2].map(i => {
+        const c1 = s1[i], c2 = s2[i];
+        const p1 = _ladderRoundPower(c1, party1), p2 = _ladderRoundPower(c2, party2);
+        const chance = Math.max(15, Math.min(98, Math.round(50 + (p1 - p2) * 4)));
+        const p1w = Math.random() * 100 < chance;
+        return { card1: { name: c1.name, rarity: c1.rarity }, card2: { name: c2.name, rarity: c2.rarity }, power1: p1, power2: p2, winner: p1w ? 0 : 1 };
+    });
+    const p1Score = rounds.filter(r => r.winner === 0).length;
+    return { winner: p1Score >= 2 ? 0 : 1, rounds, p1Score, p2Score: 3 - p1Score };
+}
+async function _ladderGetTop3(db, uid) {
+    const snap = await db.collection('card_collections').doc(uid).collection('cards').get();
+    const cards = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return cards.sort((a,b) => _ladderCardPower(b) - _ladderCardPower(a)).slice(0,3);
+}
+async function _ladderBestOf7(db, a, b) {
+    const [cA, cB] = await Promise.all([_ladderGetTop3(db, a.uid), _ladderGetTop3(db, b.uid)]);
+    const matches = [];
+    let wA = 0, wB = 0;
+    while (wA < 4 && wB < 4 && matches.length < 7) {
+        const r = _ladderRunBattle(cA, cB);
+        if (r.winner === 0) wA++; else wB++;
+        matches.push({ ...r, matchNum: matches.length + 1 });
+    }
+    return { winnerId: wA >= 4 ? a.uid : b.uid, uid1: a.uid, uid2: b.uid,
+             uid1Name: a.displayName||'', uid2Name: b.displayName||'',
+             uid1Wins: wA, uid2Wins: wB, matches };
+}
+function _ladderSlotId(d) {
+    const t = new Date(d); t.setUTCMinutes(0,0,0); return t.toISOString();
+}
+function _shuffleArr(arr) {
+    for (let i = arr.length-1; i>0; i--) {
+        const j = Math.floor(Math.random()*(i+1));
+        [arr[i],arr[j]] = [arr[j],arr[i]];
+    }
+    return arr;
+}
+
+// Runs every :00 UTC — opens the hourly pool slot
+exports.pvpLadderHourlyOpen = onSchedule({ schedule: '0 * * * *', timeZone: 'UTC' }, async () => {
+    const db = getFirestore();
+    const now = new Date();
+    const slotId = _ladderSlotId(now);
+    const weekSnap = await db.collection('pvp_ladder_weeks').where('status','==','active').limit(1).get();
+    if (weekSnap.empty) { console.log('[ladder] No active week, skipping open.'); return; }
+    const weekId = weekSnap.docs[0].id;
+    const closeTime = new Date(now); closeTime.setUTCMinutes(30,0,0);
+    await db.collection('pvp_ladder_pool').doc(slotId).set({
+        status: 'open', openTime: now, closeTime, weekId, entryCount: 0,
+    });
+    console.log(`[ladder] Opened slot ${slotId} for week ${weekId}`);
+});
+
+// Runs every :30 UTC — closes pool, pairs players, runs battles, updates leaderboard
+exports.pvpLadderHourlyClose = onSchedule({ schedule: '30 * * * *', timeZone: 'UTC' }, async () => {
+    const db = getFirestore();
+    const now = new Date();
+    const slotId = _ladderSlotId(now);
+    const slotRef = db.collection('pvp_ladder_pool').doc(slotId);
+    let weekId;
+    try {
+        await db.runTransaction(async tx => {
+            const snap = await tx.get(slotRef);
+            if (!snap.exists || snap.data().status !== 'open') throw new Error('not_open');
+            weekId = snap.data().weekId;
+            tx.update(slotRef, { status: 'resolving' });
+        });
+    } catch(e) { console.log(`[ladder] Slot ${slotId}: ${e.message}`); return; }
+
+    const entriesSnap = await slotRef.collection('entries').get();
+    const entries = _shuffleArr(entriesSnap.docs.map(d => ({ uid: d.id, ...d.data() })));
+
+    if (!entries.length) {
+        await slotRef.update({ status: 'resolved', matchCount: 0, resolvedAt: now });
+        return;
+    }
+
+    const batch = db.batch();
+    const weekDelta = {};
+    for (let i = 0; i < entries.length; i += 2) {
+        const e1 = entries[i], e2 = entries[i+1] || null;
+        const isMirror = !e2;
+        const matchRef = slotRef.collection('matches').doc();
+        if (isMirror) {
+            batch.set(matchRef, { uid1: e1.uid, uid1Name: e1.displayName||'', uid2: e1.uid, isMirror: true,
+                result: { winnerId: e1.uid }, resolvedAt: now });
+            if (!weekDelta[e1.uid]) weekDelta[e1.uid] = { wins:0, losses:0, name: e1.displayName||'', av: e1.avatar||'' };
+            weekDelta[e1.uid].wins++;
+        } else {
+            const battle = _ladderRunBattle(e1.cards, e2.cards);
+            const wid = battle.winner===0 ? e1.uid : e2.uid;
+            const lid = battle.winner===0 ? e2.uid : e1.uid;
+            const we = battle.winner===0 ? e1 : e2, le = battle.winner===0 ? e2 : e1;
+            batch.set(matchRef, {
+                uid1: e1.uid, uid1Name: e1.displayName||'', uid1Avatar: e1.avatar||'',
+                uid2: e2.uid, uid2Name: e2.displayName||'', uid2Avatar: e2.avatar||'',
+                isMirror: false,
+                result: { winnerId: wid, rounds: battle.rounds, p1Score: battle.p1Score, p2Score: battle.p2Score },
+                resolvedAt: now,
+            });
+            if (!weekDelta[wid]) weekDelta[wid] = { wins:0, losses:0, name: we.displayName||'', av: we.avatar||'' };
+            if (!weekDelta[lid]) weekDelta[lid] = { wins:0, losses:0, name: le.displayName||'', av: le.avatar||'' };
+            weekDelta[wid].wins++;
+            weekDelta[lid].losses++;
+        }
+    }
+
+    for (const [uid, d] of Object.entries(weekDelta)) {
+        batch.set(db.collection('pvp_ladder_weeks').doc(weekId).collection('entries').doc(uid), {
+            uid, displayName: d.name, avatar: d.av,
+            wins: FieldValue.increment(d.wins),
+            losses: FieldValue.increment(d.losses),
+            lastMatch: now,
+        }, { merge: true });
+    }
+    batch.update(slotRef, { status: 'resolved', matchCount: Math.ceil(entries.length/2), resolvedAt: now });
+    await batch.commit();
+
+    // Notify participants
+    try {
+        const nb = db.batch();
+        for (const [uid, d] of Object.entries(weekDelta)) {
+            nb.set(db.collection('notifications').doc(), {
+                targetUid: uid, type: 'ladder_match', slotId,
+                message: d.wins > 0 ? '⚔️ Ladder match result: you won! Check the Weekly Ladder.' : '⚔️ Ladder match result: you lost. Better luck next round.',
+                timestamp: now, read: false,
+            });
+        }
+        await nb.commit();
+    } catch(e) {}
+
+    console.log(`[ladder] Resolved slot ${slotId}: ${Math.ceil(entries.length/2)} matches, ${entries.length} players`);
+});
+
+// Runs Saturday 7PM ET — finalizes week, resolves ties, distributes prizes
+exports.pvpLadderWeeklyClose = onSchedule({ schedule: '0 19 * * 6', timeZone: 'America/New_York' }, async () => {
+    const db = getFirestore();
+    const weekSnap = await db.collection('pvp_ladder_weeks').where('status','==','active').limit(1).get();
+    if (weekSnap.empty) { console.log('[ladder] No active week to close.'); return; }
+    const weekRef = weekSnap.docs[0].ref;
+    const weekId = weekSnap.docs[0].id;
+    await weekRef.update({ status: 'distributing' });
+
+    const entriesSnap = await weekRef.collection('entries').get();
+    let entries = entriesSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
+    entries.sort((a,b) => (b.wins||0)-(a.wins||0) || (a.losses||0)-(b.losses||0));
+
+    const configSnap = await db.collection('pvp_ladder_config').doc('rewards').get();
+    const prizes = configSnap.exists ? (configSnap.data().prizes||{}) : {};
+
+    // Resolve tiebreakers for prize positions
+    const tiebreakers = [];
+    for (let i = 0; i < Math.min(entries.length-1, 3); i++) {
+        const a = entries[i], b = entries[i+1];
+        if ((a.wins||0)===(b.wins||0) && (a.losses||0)===(b.losses||0)) {
+            console.log(`[ladder] Tiebreaker place ${i+1}: ${a.uid} vs ${b.uid}`);
+            const tb = await _ladderBestOf7(db, a, b);
+            tb.place = i+1;
+            tiebreakers.push(tb);
+            if (tb.winnerId===b.uid) [entries[i],entries[i+1]] = [entries[i+1],entries[i]];
+        }
+    }
+
+    const now = new Date();
+    const finalRankings = entries.slice(0,10).map((e,i) => ({
+        uid: e.uid, displayName: e.displayName||'', avatar: e.avatar||'',
+        wins: e.wins||0, losses: e.losses||0, place: i+1,
+    }));
+
+    const pb = db.batch();
+    for (let i = 0; i < finalRankings.length; i++) {
+        const place = i + 1;
+        const prize = prizes[String(place)];
+        if (!prize || (!prize.amber && !prize.shards && !prize.cardId)) continue;
+        const uid = finalRankings[i].uid;
+        const profileRef = db.collection('profiles').doc(uid);
+        const profileUpdate = {};
+        const parts = [];
+
+        if (prize.amber) {
+            profileUpdate.amber = FieldValue.increment(prize.amber);
+            pb.set(db.collection('amber_log').doc(), { uid, amount: prize.amber, reason: `pvp_ladder:${weekId}:place:${place}`, timestamp: now });
+            parts.push(`${prize.amber.toLocaleString()} Amber`);
+        }
+        if (prize.shards) {
+            profileUpdate.shards = FieldValue.increment(prize.shards);
+            pb.set(db.collection('amber_log').doc(), { uid, amount: prize.shards, reason: `pvp_ladder:${weekId}:place:${place}:shards`, timestamp: now });
+            parts.push(`${prize.shards.toLocaleString()} Shards`);
+        }
+        if (Object.keys(profileUpdate).length) pb.update(profileRef, profileUpdate);
+
+        if (prize.cardId) {
+            try {
+                const cardSnap = await db.collection('pvp_prize_cards').doc(prize.cardId).get();
+                if (cardSnap.exists) {
+                    const newCardRef = db.collection('card_collections').doc(uid).collection('cards').doc();
+                    pb.set(newCardRef, { ...cardSnap.data(), id: newCardRef.id, acquiredVia: 'ladder_prize', acquiredAt: now });
+                    parts.push(`a ${cardSnap.data().rarity?.toUpperCase() || 'prize'} card`);
+                } else {
+                    console.warn(`[ladder] Prize card ${prize.cardId} not found in pvp_prize_cards`);
+                }
+            } catch(e) { console.error(`[ladder] Card prize error for uid ${uid}:`, e); }
+        }
+
+        pb.set(db.collection('notifications').doc(), {
+            targetUid: uid, type: 'ladder_reward',
+            message: `🏆 Weekly Ladder ended! You finished #${place} and earned ${parts.join(', ')}!`,
+            timestamp: now, read: false,
+        });
+    }
+    pb.update(weekRef, { status: 'complete', completedAt: now, finalRankings, tiebreakers, playerCount: entries.length });
+    await pb.commit();
+    console.log(`[ladder] Week ${weekId} closed — ${entries.length} players, ${tiebreakers.length} tiebreakers`);
+});
+
+// Runs Sunday 7PM ET — opens new week
+exports.pvpLadderWeeklyOpen = onSchedule({ schedule: '0 19 * * 0', timeZone: 'America/New_York' }, async () => {
+    const db = getFirestore();
+    const existing = await db.collection('pvp_ladder_weeks').where('status','==','active').limit(1).get();
+    if (!existing.empty) { console.log('[ladder] Active week already exists.'); return; }
+    const now = new Date();
+    const endTime = new Date(now.getTime() + 6*24*3600*1000);
+    const weekId = now.toISOString().slice(0,10);
+    await db.collection('pvp_ladder_weeks').doc(weekId).set({
+        startTime: now, endTime, status: 'active', createdAt: now, playerCount: 0,
+    });
+    console.log(`[ladder] Opened new week ${weekId}`);
+});
+
+// Callable: user enters the current hourly pool with 3 cards
+exports.pvpLadderEnterPool = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    const callerUid = await getCallerUid(req);
+    if (!callerUid) return sendErr(res, 401, 'UNAUTHENTICATED', 'Must be signed in.');
+    const { cards } = req.body?.data || {};
+    if (!Array.isArray(cards) || cards.length !== 3)
+        return sendErr(res, 400, 'INVALID_ARGUMENT', 'Exactly 3 cards required.');
+    const db = getFirestore();
+    const now = new Date();
+    if (now.getUTCMinutes() >= 30)
+        return sendErr(res, 400, 'FAILED_PRECONDITION', 'Pool is closed. Opens again at the top of the next hour.');
+    const slotId = _ladderSlotId(now);
+    const slotRef = db.collection('pvp_ladder_pool').doc(slotId);
+    const slotSnap = await slotRef.get();
+    if (!slotSnap.exists || slotSnap.data().status !== 'open')
+        return sendErr(res, 400, 'FAILED_PRECONDITION', 'No active pool right now. Try at the top of the next hour.');
+    const entryRef = slotRef.collection('entries').doc(callerUid);
+    if ((await entryRef.get()).exists)
+        return sendErr(res, 400, 'ALREADY_EXISTS', 'You already entered this pool.');
+    const cardIds = cards.map(c => c.id).filter(Boolean);
+    if (cardIds.length !== 3) return sendErr(res, 400, 'INVALID_ARGUMENT', 'All 3 cards must have IDs.');
+    const cardSnaps = await Promise.all(cardIds.map(id =>
+        db.collection('card_collections').doc(callerUid).collection('cards').doc(id).get()
+    ));
+    if (cardSnaps.some(s => !s.exists)) return sendErr(res, 400, 'FAILED_PRECONDITION', 'You do not own all selected cards.');
+    const profileSnap = await db.collection('profiles').doc(callerUid).get();
+    const profile = profileSnap.exists ? profileSnap.data() : {};
+    await entryRef.set({
+        uid: callerUid,
+        displayName: profile.displayName || '',
+        avatar: profile.avatar || '',
+        cards: cardSnaps.map(s => ({ id: s.id, ...s.data() })),
+        submittedAt: now,
+    });
+    try { await slotRef.update({ entryCount: FieldValue.increment(1) }); } catch(e) {}
+    res.json({ result: { success: true, slotId } });
+});
+
+// Admin: set weekly ladder prize config (persists week-to-week)
+exports.pvpLadderSetConfig = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    const uid = await getCallerUid(req);
+    if (uid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
+    const { prizes } = req.body?.data || {};
+    if (!prizes || typeof prizes !== 'object')
+        return sendErr(res, 400, 'INVALID_ARGUMENT', 'prizes object required.');
+    const db = getFirestore();
+    await db.collection('pvp_ladder_config').doc('rewards').set({ prizes, updatedAt: new Date(), updatedBy: uid }, { merge: true });
+    res.json({ result: { success: true } });
+});

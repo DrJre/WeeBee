@@ -720,5 +720,39 @@ service cloud.firestore {
       allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
       allow delete: if isAuth();
     }
+
+    // ── PVP Prize Card Templates ──────────────────────────────────────────────
+    // Admin pre-defines cards here; CF copies them to winners at week end.
+    match /pvp_prize_cards/{cardId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // ── PVP Weekly Ladder ──────────────────────────────────────────────────────
+    // All writes are CF-only. Reads are open to signed-in users.
+    match /pvp_ladder_config/{doc} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /pvp_ladder_weeks/{weekId} {
+      allow read: if isAuth();
+      allow write: if false;
+      match /entries/{uid} {
+        allow read: if isAuth();
+        allow write: if false;
+      }
+    }
+    match /pvp_ladder_pool/{slotId} {
+      allow read: if isAuth();
+      allow write: if false;
+      match /entries/{uid} {
+        allow read: if isAuth();
+        allow write: if false;
+      }
+      match /matches/{matchId} {
+        allow read: if isAuth();
+        allow write: if false;
+      }
+    }
   }
 }

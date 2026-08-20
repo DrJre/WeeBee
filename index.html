@@ -1037,6 +1037,7 @@
                             <button id="admin-subtab-setcards-btn" onclick="window.switchAdminSubtab('setcards')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🏆 Set Cards</button>
                             <button id="admin-subtab-dungeon-btn" onclick="window.switchAdminSubtab('dungeon')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">⚔️ Dungeon</button>
                             <button id="admin-subtab-tournament-btn" onclick="window.switchAdminSubtab('tournament');window._tournamentAdminLoad();" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🏆 Tournament</button>
+                            <button id="admin-subtab-ladder-btn" onclick="window.switchAdminSubtab('ladder');window._ladderAdminLoad();" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">📅 Ladder</button>
                         </div>
 
                         <!-- ── MODERATION ── -->
@@ -1666,7 +1667,7 @@
                                         <input id="admin-tourney-name" type="text" value="WeeBee Tournament" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;width:200px;">
                                     </div>
                                     <div>
-                                        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">Start Time (EST)</div>
+                                        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">Start Time (Eastern)</div>
                                         <input id="admin-tourney-start" type="datetime-local" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;">
                                     </div>
                                     <div>
@@ -1694,6 +1695,20 @@
                                 <div id="admin-tourney-prize-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;"></div>
                             </div>
 
+                            <!-- Update Start Time -->
+                            <div style="background:var(--bg-gray);border-radius:12px;padding:18px 20px;margin-bottom:16px;">
+                                <div style="font-size:14px;font-weight:800;margin-bottom:4px;">🕐 Update Start Time</div>
+                                <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Enter the new start time in EST (UTC-5). Registration open time updates automatically to 24h before.</div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+                                    <div>
+                                        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">New Start Time (Eastern)</div>
+                                        <input id="admin-tourney-update-start" type="datetime-local" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;">
+                                    </div>
+                                    <button onclick="window._tournamentAdminUpdateStartTime()" style="padding:9px 18px;border-radius:8px;border:none;background:#6366f1;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">Update</button>
+                                </div>
+                                <div id="admin-tourney-update-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;"></div>
+                            </div>
+
                             <!-- Actions -->
                             <div style="background:var(--bg-gray);border-radius:12px;padding:18px 20px;margin-bottom:16px;">
                                 <div style="font-size:14px;font-weight:800;margin-bottom:12px;">🔧 Actions</div>
@@ -1702,6 +1717,21 @@
                                     <button onclick="window._tournamentAdminCancel()" style="padding:9px 18px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">❌ Cancel & Refund All</button>
                                 </div>
                                 <div id="admin-tourney-action-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;"></div>
+                            </div>
+                        </div>
+
+                        <!-- ── WEEKLY LADDER ── -->
+                        <div id="admin-subtab-ladder" style="display:none;">
+                            <div style="background:var(--bg-gray);border-radius:12px;padding:18px 20px;margin-bottom:16px;">
+                                <div style="font-size:14px;font-weight:800;margin-bottom:4px;">📅 Weekly Ladder Prizes</div>
+                                <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">Set how much Amber each place earns at the end of the week. These prizes stay in effect every week until you change and save them.</div>
+                                <div id="admin-ladder-config">
+                                    <div style="font-size:13px;color:var(--text-muted);">Click the Ladder tab to load config.</div>
+                                </div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+                                    <button onclick="window._ladderAdminSave()" style="padding:9px 18px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">💾 Save Prizes</button>
+                                </div>
+                                <div id="admin-ladder-save-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;"></div>
                             </div>
                         </div>
 
@@ -2987,6 +3017,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=762"></script>
+    <script type="module" src="app.js?v=767"></script>
 </body>
 </html>

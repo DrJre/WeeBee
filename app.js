@@ -6771,6 +6771,7 @@ window.switchTcgTab = function(event, tabId) {
     if (tabId === 'tcg-tab-dungeon') window.loadDungeonTab();
     else window._dungeonStopRefresh?.();
     if (tabId === 'tcg-tab-pvp') window.loadPvpTab();
+    else if (window._ladderTimerInterval) { clearInterval(window._ladderTimerInterval); window._ladderTimerInterval = null; }
     if (tabId === 'tcg-tab-admin') { window._tcgRenderFounderPreview(); window._tcgRenderEventCardPreview(); window._tcgLoadSaleConfigUI(); window._tcgLoadPrismaticEventUI(); window._tcgLoadFillerConfigUI(); window._tcgLoadBatchReleaseConfigUI(); }
 };
 
@@ -9598,7 +9599,7 @@ window._tcgFindCard = async function(nameQuery, rarities) {
 
 // Admin sub-tab switcher
 window.switchAdminSubtab = function(tab) {
-    ['moderation','economy','cards','gifts','feedback','setcards','dungeon','tournament'].forEach(t => {
+    ['moderation','economy','cards','gifts','feedback','setcards','dungeon','tournament','ladder'].forEach(t => {
         const el = document.getElementById('admin-subtab-' + t);
         const btn = document.getElementById('admin-subtab-' + t + '-btn');
         if (el) el.style.display = t === tab ? '' : 'none';
@@ -16603,6 +16604,7 @@ window._tcgRenderMyCollection = async function(activeTab = 'mycards', forceRefre
 
     const tabs = [
         { id: 'mycards',  label: 'My Cards' },
+        { id: 'sets',     label: '★ Sets' },
         { id: 'craft',    label: '🔷 Craft' },
         { id: 'premade',  label: 'WeeBee Binders' },
         { id: 'mybinders',label: 'My Binders' },
@@ -16627,9 +16629,64 @@ window._tcgRenderMyCollection = async function(activeTab = 'mycards', forceRefre
     const content = document.getElementById('tcg-collection-content');
     const uid = auth.currentUser.uid;
     if (activeTab === 'mycards') await window._tcgRenderMyCardsTab(content, uid, window._tcgCardFilter || 'all');
+    else if (activeTab === 'sets') await window._tcgRenderSetsTab(content, uid);
     else if (activeTab === 'craft') await window._tcgRenderCraftTab(content, uid);
     else if (activeTab === 'premade') window._tcgRenderPremadeBinderSelect(content);
     else await _tcgRenderMyBindersTab(content, uid);
+};
+
+window._tcgRenderSetsTab = async function(el, uid) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading sets…</div>';
+    try {
+        const [sets, myCards] = await Promise.all([_tcgLoadSetCards(), _tcgLoadCollection(uid)]);
+        if (!sets.length) {
+            el.innerHTML = '<p style="color:var(--text-muted);padding:20px 0;">No Set Cards available yet.</p>';
+            return;
+        }
+        // Build owned key set for fast lookup (same logic as _tcgOpenSetProgress)
+        const nonFounderMine = myCards.filter(c => !c.founder && c.rarity !== 'set');
+        const ownedSet = new Set(nonFounderMine.map(c => `${c.name}|||${_tcgNormalizeAnimeKey(c.anime)}|||${_tcgNormalizeRarityKey(c.rarity)}`));
+        const claimedSetIds = new Set(myCards.filter(c => c.rarity === 'set').map(c => c.setId));
+
+        el.innerHTML = `
+            <div style="margin-bottom:16px;">
+                <div style="font-size:13px;color:var(--text-muted);">Collect all 50 required cards from an anime to unlock its Set Card. Click any set to see your progress and the full card list.</div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:20px;">
+                ${sets.map(s => {
+                    const required = s.requiredCards || [];
+                    const ownedCount = required.filter(r => ownedSet.has(`${r.name}|||${_tcgNormalizeAnimeKey(r.anime)}|||${_tcgNormalizeRarityKey(r.rarity)}`)).length;
+                    const total = required.length;
+                    const pct = total > 0 ? Math.min(100, Math.round((ownedCount / total) * 100)) : 0;
+                    const complete = total >= 50 && ownedCount >= 50;
+                    const claimed = claimedSetIds.has(s.id);
+                    const barColor = claimed ? '#f5c842' : complete ? '#22c55e' : '#a78bfa';
+                    const statusText = claimed
+                        ? `<span style="color:#f5c842;font-weight:800;">★ Collected</span>`
+                        : complete
+                            ? `<span style="color:#22c55e;font-weight:800;">✓ Claim now!</span>`
+                            : `<span style="color:var(--text-muted);">${ownedCount} / ${total}</span>`;
+                    return `<div onclick="window._tcgOpenSetProgress('${s.id}')" style="cursor:pointer;width:160px;display:flex;flex-direction:column;align-items:center;gap:8px;" onmouseenter="this.querySelector('.set-card-wrap').style.transform='scale(1.03)'" onmouseleave="this.querySelector('.set-card-wrap').style.transform=''">
+                        <div class="set-card-wrap" style="transition:transform .15s;width:160px;height:224px;overflow:hidden;border-radius:10px;${claimed ? '' : 'filter:brightness(0.75) saturate(0.6);'}">
+                            <div style="transform:scale(0.727);transform-origin:top left;">${_tcgBuildCardFace({ name: s.cardName, anime: s.animeName, rarity: 'set', image: s.image, setId: s.id })}</div>
+                        </div>
+                        <div style="width:100%;text-align:center;">
+                            <div style="font-size:12px;font-weight:800;color:var(--text-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.animeName}</div>
+                            <div style="font-size:11px;margin-top:2px;">${statusText}</div>
+                            <div style="margin-top:6px;height:5px;background:var(--border-color);border-radius:3px;overflow:hidden;">
+                                <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .3s;"></div>
+                            </div>
+                            <div style="font-size:10px;color:var(--text-muted);margin-top:3px;">${pct}%</div>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>`;
+        el.querySelectorAll('.wb-card--set').forEach(c => c.classList.add('tcg-anim-in-view'));
+        _tcgObserveSSRCards(el);
+    } catch(e) {
+        console.error('[sets tab]', e);
+        el.innerHTML = '<p style="color:var(--text-muted);">Error loading sets.</p>';
+    }
 };
 
 window._tcgRenderCraftTab = async function(el, uid) {
@@ -31609,12 +31666,13 @@ window.loadPvpTab = async function() {
     }
     el.innerHTML = `<div class="loading">Loading PVP...</div>`;
     const uid = auth.currentUser.uid;
-    const [myStats, active, recent, leaderboard, tourney] = await Promise.all([
+    const [myStats, active, recent, leaderboard, tourney, ladderData] = await Promise.all([
         _pvpLoadStats(uid),
         _pvpLoadActiveChallenges(uid),
         _pvpLoadRecentBattles(uid),
         _pvpLoadLeaderboard(),
         _pvpLoadActiveTournament(),
+        _pvpLoadLadderData(uid),
     ]);
 
     // Update badge
@@ -31633,6 +31691,8 @@ window.loadPvpTab = async function() {
                 <div style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:520px;margin-left:auto;margin-right:auto;">Challenge any player to a card battle. Wager amber, wager cards, or just fight for the glory.</div>
             </div>
         </div>
+
+        ${_pvpWeeklyLadderHTML(ladderData, uid)}
 
         ${_pvpTournamentBannerHTML(tourney, myEntry, uid)}
 
@@ -31656,6 +31716,7 @@ window.loadPvpTab = async function() {
             <button class="action-btn" style="padding:14px 32px;font-size:15px;font-weight:800;background:linear-gradient(135deg,#6366f1,#a855f7);" onclick="window._pvpFindOpponent()">⚔️ Challenge a Player</button>
         </div>
     `;
+    if (ladderData?.week) window._pvpStartLadderTimers();
 };
 
 // ── Stats Block ───────────────────────────────
@@ -33065,20 +33126,50 @@ window._tournamentAdminSavePrizes = async function() {
     } catch(e) { if (status) status.textContent = `Error: ${e.message}`; }
 };
 
+// Parse a datetime-local string as Eastern time and return a UTC Date.
+// DST-aware: EDT (UTC-4) April–October, EST (UTC-5) November–March.
+// Does NOT depend on the browser's timezone.
+function _estInputToUtc(datetimeLocalValue) {
+    const [datePart, timePart] = (datetimeLocalValue || '').split('T');
+    const [year, month, day] = (datePart || '').split('-').map(Number);
+    const [hours, minutes] = (timePart || '0:0').split(':').map(Number);
+    const offsetHours = (month >= 4 && month <= 10) ? 4 : 5; // EDT vs EST
+    return new Date(Date.UTC(year, month - 1, day, hours + offsetHours, minutes));
+}
+
+window._tournamentAdminUpdateStartTime = async function() {
+    if (!window.isAdmin) return;
+    const tourneyId = window._adminActiveTourneyId;
+    const status = document.getElementById('admin-tourney-update-status');
+    const input = document.getElementById('admin-tourney-update-start')?.value;
+    if (!tourneyId) { if (status) status.textContent = 'Select a tournament first.'; return; }
+    if (!input) { if (status) status.textContent = 'Pick a new start time.'; return; }
+    const utcDate = _estInputToUtc(input);
+    const regOpenDate = new Date(utcDate.getTime() - 24 * 3600 * 1000);
+    try {
+        if (status) status.textContent = 'Saving…';
+        await updateDoc(doc(db, 'pvp_tournaments', tourneyId), {
+            startTime: utcDate,
+            registrationOpenTime: regOpenDate,
+        });
+        if (status) status.textContent = `✅ Start time updated to ${utcDate.toLocaleString('en-US', { timeZone:'America/New_York', weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' })}`;
+        await window._tournamentAdminLoad();
+    } catch(e) { if (status) status.textContent = `Error: ${e.message}`; }
+};
+
 window._tournamentAdminCreate = async function() {
     const name = document.getElementById('admin-tourney-name')?.value?.trim() || 'WeeBee Tournament';
     const startInput = document.getElementById('admin-tourney-start')?.value;
     const entryCost = parseInt(document.getElementById('admin-tourney-entry-cost')?.value || '1000', 10) || 0;
     const status = document.getElementById('admin-tourney-create-status');
     if (!startInput) { if (status) status.textContent = 'Pick a start time first.'; return; }
-    // datetime-local gives local time — treat as EST by converting
-    const localDate = new Date(startInput);
-    const estOffset = 5 * 60 * 60 * 1000; // EST = UTC-5 (non-DST)
-    const utcDate = new Date(localDate.getTime() + localDate.getTimezoneOffset() * 60000 + estOffset);
+    // datetime-local input is treated as Eastern time — parse raw numbers and add EST offset (UTC-5)
+    // so the result is independent of the admin's browser timezone
+    const utcDate = _estInputToUtc(startInput);
     try {
         if (status) status.textContent = 'Creating…';
         const res = await _callFn('adminCreateTournament', { name, startTime: utcDate.toISOString(), entryCost });
-        const tourneyId = res?.result?.tourneyId;
+        const tourneyId = res?.tourneyId;
         if (tourneyId) {
             window._adminActiveTourneyId = tourneyId;
             if (status) status.textContent = `✅ Created! ID: ${tourneyId}`;
@@ -33134,5 +33225,316 @@ window._tournamentAdminCancel = async function() {
         window._adminActiveTourneyId = null;
         await window._tournamentAdminLoad();
     } catch(e) { if (status) status.textContent = `Error: ${e.message}`; }
+};
+
+// ── PVP Weekly Ladder (client) ────────────────────────────────────────────────
+
+async function _pvpLoadLadderData(uid) {
+    try {
+        const [weekSnap, configSnap] = await Promise.all([
+            getDocs(query(collection(db, 'pvp_ladder_weeks'), where('status','==','active'), limit(1))),
+            getDoc(doc(db, 'pvp_ladder_config', 'rewards')),
+        ]);
+        const config = configSnap.exists() ? configSnap.data() : {};
+        if (weekSnap.empty) return { week: null, myEntry: null, leaderboard: [], config, alreadyEntered: false };
+
+        const weekDoc = weekSnap.docs[0];
+        const week = { id: weekDoc.id, ...weekDoc.data() };
+
+        const [myEntrySnap, lbSnap] = await Promise.all([
+            getDoc(doc(db, 'pvp_ladder_weeks', week.id, 'entries', uid)),
+            getDocs(query(collection(db, 'pvp_ladder_weeks', week.id, 'entries'), orderBy('wins','desc'), limit(20))),
+        ]);
+
+        const myEntry = myEntrySnap.exists() ? myEntrySnap.data() : null;
+        const leaderboard = lbSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
+
+        // Sort leaderboard: wins desc, losses asc
+        leaderboard.sort((a,b) => (b.wins||0)-(a.wins||0) || (a.losses||0)-(b.losses||0));
+
+        // Check if user already entered current slot
+        const now = new Date();
+        const slotTime = new Date(now); slotTime.setUTCMinutes(0,0,0);
+        const slotId = slotTime.toISOString();
+        let alreadyEntered = false;
+        try {
+            const entrySnap = await getDoc(doc(db, 'pvp_ladder_pool', slotId, 'entries', uid));
+            alreadyEntered = entrySnap.exists();
+        } catch(e) {}
+
+        return { week, myEntry, leaderboard, config, alreadyEntered, slotId };
+    } catch(e) {
+        console.error('[ladder] load error', e);
+        return { week: null, myEntry: null, leaderboard: [], config: {}, alreadyEntered: false };
+    }
+}
+
+function _pvpWeeklyLadderHTML(data, uid) {
+    const { week, myEntry, leaderboard, config, alreadyEntered } = data || {};
+
+    const fmtDate = ts => {
+        if (!ts) return '—';
+        const d = ts?.toDate ? ts.toDate() : new Date(ts);
+        return d.toLocaleDateString('en-US', { month:'short', day:'numeric', timeZone:'America/New_York' });
+    };
+
+    const placeEmoji = p => ['🥇','🥈','🥉'][p-1] || `#${p}`;
+    const prizes = config?.prizes || {};
+
+    const prizeEntries = Object.entries(prizes).sort((a,b)=>+a[0]-+b[0]).filter(([,v]) => v?.amber||v?.shards||v?.cardId);
+    const prizeRow = prizeEntries.length
+        ? prizeEntries.map(([p,v]) => {
+            const parts = [];
+            if (v.amber)  parts.push(`<b>${v.amber.toLocaleString()}</b> 🟡`);
+            if (v.shards) parts.push(`<b>${v.shards.toLocaleString()}</b> 🔷`);
+            if (v.cardId) parts.push(`🃏`);
+            return `<span style="margin-right:10px;font-size:11px;white-space:nowrap;">${placeEmoji(+p)} ${parts.join(' + ')}</span>`;
+          }).join('')
+        : '<span style="font-size:12px;color:var(--text-muted);">No prizes set yet</span>';
+
+    if (!week) {
+        return `<div style="background:var(--bg-gray);border-radius:16px;padding:20px 24px;margin-bottom:20px;">
+            <div style="font-weight:800;font-size:15px;margin-bottom:6px;">📅 Weekly Ladder</div>
+            <div style="font-size:13px;color:var(--text-muted);">No active ladder week right now. Check back Sunday at 7 PM ET.</div>
+        </div>`;
+    }
+
+    const myWins   = myEntry?.wins   || 0;
+    const myLosses = myEntry?.losses || 0;
+    const myRank   = leaderboard.findIndex(e => e.uid === uid) + 1;
+
+    const lbRows = leaderboard.slice(0,10).map((e, i) => {
+        const isMe = e.uid === uid;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:${isMe ? 'rgba(99,102,241,0.12)' : 'transparent'};">
+            <div style="width:24px;text-align:center;font-size:13px;font-weight:800;color:${i<3?'var(--accent-yellow)':'var(--text-muted)'};">${placeEmoji(i+1)}</div>
+            <img src="${e.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(e.displayName||'?')}&backgroundColor=ffc107&fontColor=333333`}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;">
+            <div style="flex:1;min-width:0;font-size:13px;font-weight:${isMe?'800':'600'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${isMe?'#a78bfa':'var(--text-dark)'};">${e.displayName||'Player'}${isMe?' (you)':''}</div>
+            <div style="font-size:12px;font-weight:700;color:#22c55e;white-space:nowrap;">${e.wins||0}W</div>
+            <div style="font-size:12px;color:var(--text-muted);white-space:nowrap;">${e.losses||0}L</div>
+        </div>`;
+    }).join('');
+
+    return `<div style="background:var(--bg-gray);border-radius:16px;padding:20px 24px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+            <div>
+                <div style="font-weight:900;font-size:15px;">📅 Weekly Ladder</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${fmtDate(week.startTime)} – ${fmtDate(week.endTime)} · <span id="ladder-week-countdown" style="font-weight:700;"></span></div>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);text-align:right;">Prizes: ${prizeRow}</div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-white);border-radius:12px;margin-bottom:14px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">Pool Status</div>
+                <div id="ladder-pool-status" style="font-size:13px;font-weight:700;"></div>
+            </div>
+            <div style="text-align:center;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">My Record</div>
+                <div style="font-size:14px;font-weight:800;">${myWins}W – ${myLosses}L${myRank ? ` · <span style="color:#a78bfa;">#${myRank}</span>` : ''}</div>
+            </div>
+            <div id="ladder-enter-area">
+                ${alreadyEntered
+                    ? `<div style="padding:10px 18px;border-radius:10px;background:rgba(34,197,94,0.12);color:#22c55e;font-weight:800;font-size:13px;">✓ Entered</div>`
+                    : `<button id="ladder-enter-btn" onclick="window._pvpEnterLadderPool()" style="padding:10px 20px;border-radius:10px;border:none;background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;font-weight:800;font-size:13px;cursor:pointer;">⚔️ Enter Pool</button>`
+                }
+            </div>
+        </div>
+
+        ${leaderboard.length ? `
+        <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Leaderboard</div>
+        <div>${lbRows}</div>` : `<div style="font-size:13px;color:var(--text-muted);text-align:center;padding:12px 0;">No matches yet this week — enter the pool to be first!</div>`}
+    </div>`;
+}
+
+// Called after PVP tab renders — starts countdown timers
+window._pvpStartLadderTimers = function() {
+    if (window._ladderTimerInterval) clearInterval(window._ladderTimerInterval);
+    function tick() {
+        const now = new Date();
+        const m = now.getUTCMinutes(), s = now.getUTCSeconds();
+        const poolEl = document.getElementById('ladder-pool-status');
+        const cdEl   = document.getElementById('ladder-week-countdown');
+        if (poolEl) {
+            if (m < 30) {
+                const secsLeft = (29 - m) * 60 + (60 - s);
+                const mm = String(Math.floor(secsLeft/60)).padStart(2,'0');
+                const ss = String(secsLeft%60).padStart(2,'0');
+                poolEl.innerHTML = `<span style="color:#22c55e;">● Pool open</span> — closes in ${mm}:${ss}`;
+                const enterBtn = document.getElementById('ladder-enter-btn');
+                if (enterBtn) enterBtn.disabled = false;
+            } else {
+                const secsLeft = (59 - m) * 60 + (60 - s);
+                const mm = String(Math.floor(secsLeft/60)).padStart(2,'0');
+                const ss = String(secsLeft%60).padStart(2,'0');
+                poolEl.innerHTML = `<span style="color:var(--text-muted);">● Pool closed</span> — next opens in ${mm}:${ss}`;
+                const enterBtn = document.getElementById('ladder-enter-btn');
+                if (enterBtn) { enterBtn.disabled = true; enterBtn.style.opacity = '0.5'; }
+            }
+        }
+    }
+    tick();
+    window._ladderTimerInterval = setInterval(tick, 1000);
+};
+
+window._pvpEnterLadderPool = async function() {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const myCards = await _tcgLoadCollection(uid);
+    if (!myCards.length) { alert('You have no cards yet!'); return; }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'pvp-ladder-pool-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+    const rarityOrder = { ur:0,'ur+':0, ssr:1,'ssr+':1, sr:2,'sr+':2, pr:3, rare:4, common:5, set:6 };
+    const sorted = [...myCards].sort((a,b) => (rarityOrder[a.rarity]??9)-(rarityOrder[b.rarity]??9) || _pvpCardPower(b)-_pvpCardPower(a));
+
+    window._ladderPoolDraft = [];
+
+    function renderModal() {
+        const search = document.getElementById('ladder-pick-search')?.value?.toLowerCase() || '';
+        const rarityFilter = document.getElementById('ladder-pick-rarity')?.value || '';
+        let filtered = sorted.filter(c => {
+            if (rarityFilter && c.rarity !== rarityFilter) return false;
+            if (search && !((c.name||'').toLowerCase().includes(search) || (c.anime||'').toLowerCase().includes(search))) return false;
+            return true;
+        });
+        const draft = window._ladderPoolDraft;
+        const draftIds = new Set(draft.map(c => c.id));
+        const grid = document.getElementById('ladder-pick-grid');
+        const confirm = document.getElementById('ladder-confirm-btn');
+        if (confirm) { confirm.disabled = draft.length < 3; confirm.style.opacity = draft.length < 3 ? '0.5' : '1'; }
+        if (!grid) return;
+        grid.innerHTML = filtered.map(card => {
+            const sel = draftIds.has(card.id);
+            const idx = draft.findIndex(c => c.id === card.id);
+            return `<div onclick="window._ladderPoolToggleCard('${card.id}')" style="cursor:pointer;border:2px solid ${sel?'#a78bfa':'transparent'};border-radius:10px;padding:8px;background:${sel?'rgba(167,139,250,0.1)':'var(--bg-gray)'};position:relative;transition:border-color .15s;">
+                ${sel ? `<div style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:#a78bfa;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;">${idx+1}</div>` : ''}
+                <div style="font-size:11px;font-weight:700;color:${rarityBorderColor(card.rarity)};margin-bottom:2px;">${(card.rarity||'').toUpperCase()}</div>
+                <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name||'?'}</div>
+                <div style="font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.anime||''}</div>
+                <div style="font-size:10px;color:var(--accent-yellow);margin-top:2px;">⚡${_pvpCardPower(card)}</div>
+            </div>`;
+        }).join('') || '<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px;">No cards match.</div>';
+    }
+
+    overlay.innerHTML = `<div style="background:var(--bg-white);border-radius:20px;padding:24px;width:100%;max-width:860px;max-height:90vh;display:flex;flex-direction:column;gap:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-size:17px;font-weight:900;">⚔️ Enter Ladder Pool — Pick 3 Cards</div>
+            <button onclick="document.getElementById('pvp-ladder-pool-modal')?.remove()" style="padding:6px 14px;border-radius:8px;border:none;background:var(--bg-gray);color:var(--text-dark);font-weight:700;cursor:pointer;">✕</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input id="ladder-pick-search" type="text" placeholder="Search cards…" oninput="window._ladderPoolRender()" style="flex:1;min-width:140px;padding:8px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;">
+            <select id="ladder-pick-rarity" onchange="window._ladderPoolRender()" style="padding:8px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;">
+                <option value="">All Rarities</option>
+                <option value="ur+">UR+</option><option value="ur">UR</option>
+                <option value="ssr+">SSR+</option><option value="ssr">SSR</option>
+                <option value="sr+">SR+</option><option value="sr">SR</option>
+                <option value="pr">PR</option><option value="rare">Rare</option><option value="common">Common</option>
+            </select>
+        </div>
+        <div id="ladder-pick-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;overflow-y:auto;max-height:400px;padding-right:4px;"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div id="ladder-draft-preview" style="font-size:13px;color:var(--text-muted);">Select 3 cards</div>
+            <div style="display:flex;gap:8px;">
+                <button onclick="document.getElementById('pvp-ladder-pool-modal')?.remove()" style="padding:10px 20px;border-radius:10px;border:1px solid var(--border-color);background:transparent;color:var(--text-dark);font-weight:700;cursor:pointer;">Cancel</button>
+                <button id="ladder-confirm-btn" onclick="window._pvpConfirmLadderEntry()" style="padding:10px 24px;border-radius:10px;border:none;background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;font-weight:800;font-size:14px;cursor:pointer;opacity:0.5;" disabled>Enter Pool</button>
+            </div>
+        </div>
+        <div id="ladder-entry-status" style="font-size:12px;color:var(--text-muted);text-align:center;min-height:16px;"></div>
+    </div>`;
+    document.body.appendChild(overlay);
+    window._ladderPoolRender = renderModal;
+    renderModal();
+};
+
+window._ladderPoolToggleCard = function(cardId) {
+    const myCards = window._tcgCollectionCache?.[auth.currentUser?.uid] || [];
+    const card = myCards.find(c => c.id === cardId);
+    if (!card) return;
+    const draft = window._ladderPoolDraft;
+    const idx = draft.findIndex(c => c.id === cardId);
+    if (idx >= 0) draft.splice(idx, 1);
+    else if (draft.length < 3) draft.push(card);
+    const preview = document.getElementById('ladder-draft-preview');
+    if (preview) {
+        if (draft.length === 0) preview.textContent = 'Select 3 cards';
+        else preview.innerHTML = draft.map(c => `<span style="font-weight:700;color:${rarityBorderColor(c.rarity)};">${c.name}</span>`).join(' · ');
+    }
+    window._ladderPoolRender?.();
+};
+
+window._pvpConfirmLadderEntry = async function() {
+    const draft = window._ladderPoolDraft;
+    if (!draft || draft.length !== 3) return;
+    const btn = document.getElementById('ladder-confirm-btn');
+    const status = document.getElementById('ladder-entry-status');
+    if (btn) { btn.disabled = true; btn.textContent = 'Entering…'; }
+    try {
+        await _callFn('pvpLadderEnterPool', { cards: draft });
+        document.getElementById('pvp-ladder-pool-modal')?.remove();
+        // Update UI inline without full reload
+        const enterArea = document.getElementById('ladder-enter-area');
+        if (enterArea) enterArea.innerHTML = `<div style="padding:10px 18px;border-radius:10px;background:rgba(34,197,94,0.12);color:#22c55e;font-weight:800;font-size:13px;">✓ Entered</div>`;
+    } catch(e) {
+        const msg = e.message || 'Error — try again.';
+        if (status) status.textContent = msg;
+        if (btn) { btn.disabled = false; btn.textContent = 'Enter Pool'; }
+    }
+};
+
+// Admin: load and display ladder prize config
+window._ladderAdminLoad = async function() {
+    const el = document.getElementById('admin-ladder-config');
+    if (!el) return;
+    el.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Loading…</div>';
+    try {
+        const snap = await getDoc(doc(db, 'pvp_ladder_config', 'rewards'));
+        const prizes = snap.exists() ? (snap.data().prizes || {}) : {};
+        const updatedAt = snap.exists() && snap.data().updatedAt ? new Date(snap.data().updatedAt.toDate()).toLocaleString() : 'Never';
+        const placeLabel = p => ['🥇','🥈','🥉'][p-1] || `#${p}`;
+        el.innerHTML = `
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Last saved: ${updatedAt}</div>
+            <div style="display:grid;grid-template-columns:36px 60px 1fr 1fr 2fr;gap:6px;align-items:center;margin-bottom:6px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);">
+                <div></div><div>Place</div><div>🟡 Amber</div><div>🔷 Shards</div><div>🃏 Card ID (optional)</div>
+            </div>
+            ${[1,2,3,4,5,6,7,8,9,10].map(p => {
+                const pr = prizes[String(p)] || {};
+                return `<div style="display:grid;grid-template-columns:36px 60px 1fr 1fr 2fr;gap:6px;align-items:center;margin-bottom:6px;">
+                    <div style="font-size:13px;font-weight:700;">${placeLabel(p)}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">#${p}</div>
+                    <input id="ladder-prize-${p}-amber"  type="number" min="0" placeholder="0" value="${pr.amber  || ''}" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:12px;width:100%;">
+                    <input id="ladder-prize-${p}-shards" type="number" min="0" placeholder="0" value="${pr.shards || ''}" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:12px;width:100%;">
+                    <input id="ladder-prize-${p}-card"   type="text"   placeholder="card doc ID" value="${pr.cardId || ''}" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:12px;width:100%;">
+                </div>`;
+            }).join('')}
+        `;
+    } catch(e) {
+        el.innerHTML = `<div style="color:#ef4444;font-size:12px;">Error loading config: ${e.message}</div>`;
+    }
+};
+
+window._ladderAdminSave = async function() {
+    const status = document.getElementById('admin-ladder-save-status');
+    const prizes = {};
+    for (let p = 1; p <= 10; p++) {
+        const amber  = parseInt(document.getElementById(`ladder-prize-${p}-amber`)?.value  || '0');
+        const shards = parseInt(document.getElementById(`ladder-prize-${p}-shards`)?.value || '0');
+        const cardId = document.getElementById(`ladder-prize-${p}-card`)?.value?.trim() || '';
+        if (amber > 0 || shards > 0 || cardId) {
+            prizes[String(p)] = {};
+            if (amber  > 0)  prizes[String(p)].amber  = amber;
+            if (shards > 0)  prizes[String(p)].shards = shards;
+            if (cardId)      prizes[String(p)].cardId = cardId;
+        }
+    }
+    try {
+        if (status) status.textContent = 'Saving…';
+        await _callFn('pvpLadderSetConfig', { prizes });
+        if (status) status.textContent = '✅ Saved! These prizes will apply to all future weeks until changed.';
+        await window._ladderAdminLoad();
+    } catch(e) {
+        if (status) status.textContent = `Error: ${e.message}`;
+    }
 };
 
