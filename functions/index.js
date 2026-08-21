@@ -1760,11 +1760,30 @@ async function _distributePrizes(db, tourneyId, tourneyData, totalRounds) {
         }
         const placeLabel = ['','🥇 1st','🥈 2nd','🥉 3rd–4th','🥉 3rd–4th'][place] || `${place}th`;
         await db.collection('notifications').add({
-            uid, type: 'tournament_result', place, tourneyId,
-            title: 'Tournament Results',
-            body: `You finished ${placeLabel} in the WeeBee Tournament!`,
-            prize, createdAt: new Date(), read: false,
+            targetUid: uid, type: 'tournament_result', place, tourneyId,
+            senderName: 'WeeBee Tournament', senderAvatar: '',
+            message: `You finished ${placeLabel} in the WeeBee Tournament!`,
+            prize, timestamp: new Date(), read: false,
         });
+    }
+}
+
+// Fans a "registration is open" notification out to every user. Best-effort —
+// a failure here shouldn't block bracket generation for other tournaments.
+async function _notifyTournamentRegistrationOpen(db, tourneyId, tourneyData) {
+    const profilesSnap = await db.collection('profiles').get();
+    const name = tourneyData.name || 'WeeBee Tournament';
+    const base = {
+        type: 'tournament_open', tourneyId,
+        senderName: name, senderAvatar: '',
+        message: `Entry is now open for the ${name}! Register your party before it closes.`,
+        timestamp: new Date(), read: false,
+    };
+    const docs = profilesSnap.docs;
+    for (let i = 0; i < docs.length; i += 450) {
+        const batch = db.batch();
+        docs.slice(i, i + 450).forEach(d => batch.set(db.collection('notifications').doc(), { ...base, targetUid: d.id }));
+        await batch.commit();
     }
 }
 
@@ -1777,6 +1796,11 @@ exports.resolveTournamentRounds = onSchedule({ schedule: 'every 10 minutes', tim
     for (const doc of regSnap.docs) {
         const t = doc.data();
         const startMs = t.startTime?.toMillis?.() ?? (t.startTime instanceof Date ? t.startTime.getTime() : 0);
+        const openMs = t.registrationOpenTime?.toMillis?.() ?? (t.registrationOpenTime instanceof Date ? t.registrationOpenTime.getTime() : 0);
+        if (openMs && openMs <= now && !t.registrationOpenNotified) {
+            await doc.ref.update({ registrationOpenNotified: true });
+            try { await _notifyTournamentRegistrationOpen(db, doc.id, t); } catch (e) { console.error('notifyTournamentRegistrationOpen', e); }
+        }
         if (startMs <= now) await _generateBracketInternal(db, doc.id, t);
     }
 

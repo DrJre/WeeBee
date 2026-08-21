@@ -1517,6 +1517,8 @@ window.fetchNotifications = function() {
                 onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-pvp');window.loadPvpTab();window._pvpAcceptFlow('${n.challengeId}')"`;
             } else if (n.type === 'pvp_result' && n.challengeId) {
                 onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-pvp');window._pvpReplayBattle('${n.challengeId}')"`;
+            } else if (n.type === 'tournament_open' || n.type === 'tournament_result') {
+                onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-pvp')"`;
             } else if (n.type === 'follow' || n.type === 'friend_accept' || n.type === 'friend_request') {
                 onClickAction = `onclick="viewUserProfile('${n.senderUid}')"`;
             } else if (n.type === 'system') {
@@ -21686,6 +21688,8 @@ window._renderGeneralPostFeed = function() {
     feed.innerHTML = window._generalPostsList.map(p => window._renderGeneralPostCard(p, uid)).join('');
 };
 
+// Common → UR display order for pack-pull posts (lowest rarity first, i.e. top-left of the wrapping grid).
+const _PACK_POST_RARITY_ORDER = { common:0, rare:1, sr:2, 'sr+':3, ssr:4, 'ssr+':5, pr:6, nr:6, ur:7, 'ur+':8, set:9 };
 window._renderGeneralPostCard = function(post, uid) {
     if (post.spoiler && post.id && !window._revealedSpoilers?.has(post.id)) {
         const inner = window._renderGeneralPostCardInner(post, uid);
@@ -21735,7 +21739,7 @@ window._renderGeneralPostCardInner = function(post, uid) {
         <p id="gp-text-${post.id}" style="font-size:15px;line-height:1.55;margin:0 0 12px;color:var(--text-dark);white-space:pre-wrap;">${post.text}${post.edited ? ' <span style="font-size:11px;color:var(--text-muted);font-style:italic;">(edited)</span>' : ''}</p>
         ${post.imageUrl ? `<img src="${post.imageUrl}" style="width:100%;max-height:400px;object-fit:contain;border-radius:10px;margin-bottom:12px;background:rgba(0,0,0,0.04);" loading="lazy">` : ''}
         ${post.packCards?.length ? `<div class="tcg-card-grid" style="display:flex;flex-wrap:wrap;gap:18px;justify-content:center;padding:14px;margin-bottom:12px;border-radius:12px;${isGodPack ? 'background:linear-gradient(135deg,rgba(120,53,15,0.08),rgba(251,191,36,0.05));border:1px solid rgba(251,191,36,0.2);' : ''}">
-            ${post.packCards.map(c => { const _sid = _tcgStoreSnap(c); return `<div class="tcg-card-cell" onclick="event.stopPropagation();window._tcgViewCardSnapshot(${_sid})" style="cursor:pointer;"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(c)}</div></div></div>`; }).join('')}
+            ${[...post.packCards].sort((a,b) => (_PACK_POST_RARITY_ORDER[a.rarity]??99) - (_PACK_POST_RARITY_ORDER[b.rarity]??99)).map(c => { const _sid = _tcgStoreSnap(c); return `<div class="tcg-card-cell" onclick="event.stopPropagation();window._tcgViewCardSnapshot(${_sid})" style="cursor:pointer;"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(c)}</div></div></div>`; }).join('')}
         </div>` : ''}
         <div class="review-actions">
             <div class="action-stat">
