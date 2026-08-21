@@ -751,18 +751,22 @@ window.loadProfileAchievements = async function(uid) {
     if (!container || !uid) return;
     container.innerHTML = '<div class="loading">Loading achievements...</div>';
     try {
-        const achDoc = await getDoc(doc(db, "achievements", uid));
+        const [achDoc, profileDoc, setCards] = await Promise.all([
+            getDoc(doc(db, "achievements", uid)),
+            getDoc(doc(db, "profiles", uid)),
+            _tcgLoadSetCards().catch(() => []),
+        ]);
         const earned = achDoc.exists() ? achDoc.data() : {};
+        const setAchievements = profileDoc.exists() ? (profileDoc.data().setAchievements || {}) : {};
         const cats = ['Critic', 'Social', 'Collector', 'Special', 'Community'];
         const fmtDate = ts => { try { const d = ts?.toDate ? ts.toDate() : new Date(ts); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch(e) { return null; }};
-        const achCard = (ach) => {
-            const isEarned = !!earned[ach.id];
-            const date = isEarned ? fmtDate(earned[ach.id]?.earnedAt) : null;
+        const achCard = (ach, isEarned, earnedAt, perk) => {
+            const date = isEarned ? fmtDate(earnedAt) : null;
             return `<div class="achievement-card ${isEarned ? 'earned' : 'locked'}" title="${ach.name}: ${ach.desc}">
                 <span class="material-symbols-outlined ach-icon" style="${isEarned ? `color:${ach.color}` : ''}">${ach.icon}</span>
                 <div class="ach-name">${ach.name}</div>
                 <div class="ach-desc">${ach.desc}</div>
-                ${isEarned && ach.perk ? `<div class="ach-perk" style="font-size:11px;font-weight:700;color:#f59e0b;margin-top:4px;">🟡 ${ach.perk}</div>` : ''}
+                ${isEarned && (perk || ach.perk) ? `<div class="ach-perk" style="font-size:11px;font-weight:700;color:#f59e0b;margin-top:4px;">🟡 ${perk || ach.perk}</div>` : ''}
                 ${date ? `<div class="ach-date">${date}</div>` : ''}
             </div>`;
         };
@@ -773,7 +777,7 @@ window.loadProfileAchievements = async function(uid) {
             html += `<div style="margin-bottom:28px;">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
                     <h4 style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--text-muted);">${cat}</h4>
-                    <span style="font-size:11px; color:var(--text-muted);">${earnedCount} / ${catAchs.length}</span>
+                    <span style="font-size:11px; color:var(--text-muted);">${earnedCount} / ${catAchs.length + (cat === 'Community' ? setCards.length : 0)}</span>
                 </div>`;
             if (cat === 'Community') {
                 const subcats = [...new Set(catAchs.map(a => a.subcat || 'General'))];
@@ -785,11 +789,27 @@ window.loadProfileAchievements = async function(uid) {
                             <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted);">${sc}</span>
                             <span style="font-size:11px; color:var(--text-muted);">${scEarned} / ${scAchs.length}</span>
                         </div>
-                        <div class="achievement-grid">${scAchs.map(achCard).join('')}</div>
+                        <div class="achievement-grid">${scAchs.map(a => achCard(a, !!earned[a.id], earned[a.id]?.earnedAt)).join('')}</div>
                     </div>`;
                 });
+                // Dynamic SET card achievements
+                if (setCards.length) {
+                    const setEarned = setCards.filter(s => setAchievements[s.id]).length;
+                    html += `<div style="margin-bottom:22px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border-color);">
+                            <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted);">TCG SET Cards</span>
+                            <span style="font-size:11px; color:var(--text-muted);">${setEarned} / ${setCards.length}</span>
+                        </div>
+                        <div class="achievement-grid">${setCards.map(s => {
+                            const isEarned = !!setAchievements[s.id];
+                            const earnedAt = isEarned ? setAchievements[s.id].claimedAt : null;
+                            const synth = { name: `${s.animeName} Collector`, desc: `Claimed the ${s.cardName} SET gold card`, icon: 'workspace_premium', color: '#d4a200' };
+                            return achCard(synth, isEarned, earnedAt, `+1 attack to all ${s.animeName} cards`);
+                        }).join('')}</div>
+                    </div>`;
+                }
             } else {
-                html += `<div class="achievement-grid">${catAchs.map(achCard).join('')}</div>`;
+                html += `<div class="achievement-grid">${catAchs.map(a => achCard(a, !!earned[a.id], earned[a.id]?.earnedAt)).join('')}</div>`;
             }
             html += `</div>`;
         });
