@@ -38,7 +38,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="stylesheet" href="styles.css?v=166">
+    <link rel="stylesheet" href="styles.css?v=167">
 </head>
 <body>
     <div class="app-container">
@@ -110,6 +110,14 @@
         </div>
 
         <div class="mobile-menu" id="mobile-menu">
+            <div style="padding:10px 12px 8px; border-bottom:1px solid var(--border-color);">
+                <div style="display:flex;align-items:center;gap:8px;background:var(--bg-gray);border-radius:20px;padding:8px 14px;">
+                    <span class="material-symbols-outlined" style="font-size:18px;color:var(--text-muted);flex-shrink:0;">search</span>
+                    <input type="search" id="mobile-menu-search" placeholder="Search anime..." autocomplete="off"
+                           style="flex:1;border:none;background:transparent;outline:none;font-size:14px;color:var(--text-dark);min-width:0;"
+                           onkeydown="if(event.key==='Enter'&&this.value.trim()!==''){searchAnime(this.value.trim());this.value='';closeMobileMenu();}">
+                </div>
+            </div>
             <button class="nav-btn" data-target="home-view" onclick="switchView('home-view'); closeMobileMenu()">
                 <span class="material-symbols-outlined">home</span> Home
             </button>
@@ -1038,6 +1046,7 @@
                             <button id="admin-subtab-dungeon-btn" onclick="window.switchAdminSubtab('dungeon')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">⚔️ Dungeon</button>
                             <button id="admin-subtab-tournament-btn" onclick="window.switchAdminSubtab('tournament');window._tournamentAdminLoad();" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">🏆 Tournament</button>
                             <button id="admin-subtab-ladder-btn" onclick="window.switchAdminSubtab('ladder');window._ladderAdminLoad();" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">📅 Ladder</button>
+                            <button id="admin-subtab-announce-btn" onclick="window.switchAdminSubtab('announce')" style="padding:8px 16px; border-radius:8px; border:none; background:var(--bg-gray-darker); color:var(--text-dark); font-weight:600; font-size:13px; cursor:pointer;">📢 Broadcast</button>
                         </div>
 
                         <!-- ── MODERATION ── -->
@@ -1732,6 +1741,19 @@
                                     <button onclick="window._ladderAdminSave()" style="padding:9px 18px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">💾 Save Prizes</button>
                                 </div>
                                 <div id="admin-ladder-save-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;"></div>
+                            </div>
+                        </div>
+
+                        <!-- ── BROADCAST ── -->
+                        <div id="admin-subtab-announce" style="display:none;">
+                            <div style="background:var(--bg-gray);border-radius:12px;padding:18px 20px;margin-bottom:16px;">
+                                <div style="font-size:14px;font-weight:800;margin-bottom:4px;">📢 Broadcast Notification</div>
+                                <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">Send a notification to every user on WeeBee. It appears in their notification bell with an unread badge.</div>
+                                <textarea id="admin-broadcast-msg" placeholder="Write your announcement here…" rows="4" style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-white);color:var(--text-dark);font-size:13px;resize:vertical;font-family:inherit;"></textarea>
+                                <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;">
+                                    <button onclick="window._adminBroadcastSend()" style="padding:9px 20px;border-radius:8px;border:none;background:#6366f1;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">📢 Send to All Users</button>
+                                    <span id="admin-broadcast-status" style="font-size:12px;color:var(--text-muted);"></span>
+                                </div>
                             </div>
                         </div>
 
@@ -3017,6 +3039,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=771"></script>
+    <script type="module" src="app.js?v=772"></script>
 </body>
 </html>

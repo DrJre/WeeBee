@@ -2280,3 +2280,34 @@ exports.pvpLadderSetConfig = onRequest({ invoker: 'public' }, async (req, res) =
     await db.collection('pvp_ladder_config').doc('rewards').set({ prizes, updatedAt: new Date(), updatedBy: uid }, { merge: true });
     res.json({ result: { success: true } });
 });
+
+// Admin: broadcast notification to all users
+exports.adminBroadcastNotification = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    const callerUid = await getCallerUid(req);
+    if (callerUid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
+    const { message } = req.body?.data || {};
+    if (!message || typeof message !== 'string' || !message.trim())
+        return sendErr(res, 400, 'INVALID_ARGUMENT', 'message is required.');
+    const db = getFirestore();
+    const profilesSnap = await db.collection('profiles').get();
+    const now = new Date();
+    const base = {
+        type: 'announcement',
+        senderName: 'WeeBee',
+        senderAvatar: '',
+        message: message.trim(),
+        timestamp: now,
+        read: false,
+    };
+    const docs = profilesSnap.docs;
+    for (let i = 0; i < docs.length; i += 450) {
+        const batch = db.batch();
+        docs.slice(i, i + 450).forEach(d => {
+            batch.set(db.collection('notifications').doc(), { ...base, targetUid: d.id });
+        });
+        await batch.commit();
+    }
+    res.json({ result: { success: true, count: docs.length } });
+});

@@ -480,6 +480,11 @@ window._amberSubscribeTopbar = function() {
         if (shardsBadge) shardsBadge.style.display = shards > 0 ? 'flex' : 'none';
         const hw = document.getElementById('hw-amber');
         if (hw) hw.textContent = amber.toLocaleString();
+        // Keep large balance displays in store and crafting tab in sync
+        const storeAmberEl = document.getElementById('store-amber-bal');
+        if (storeAmberEl) storeAmberEl.textContent = amber.toLocaleString();
+        const craftShardsEl = document.getElementById('craft-shards-bal');
+        if (craftShardsEl) craftShardsEl.textContent = shards.toLocaleString();
         // Keep topbar name in sync with Firestore — this fires immediately on
         // subscribe so it always reflects the latest displayName without a
         // separate getDoc race.
@@ -9637,7 +9642,7 @@ window._tcgFindCard = async function(nameQuery, rarities) {
 
 // Admin sub-tab switcher
 window.switchAdminSubtab = function(tab) {
-    ['moderation','economy','cards','gifts','feedback','setcards','dungeon','tournament','ladder'].forEach(t => {
+    ['moderation','economy','cards','gifts','feedback','setcards','dungeon','tournament','ladder','announce'].forEach(t => {
         const el = document.getElementById('admin-subtab-' + t);
         const btn = document.getElementById('admin-subtab-' + t + '-btn');
         if (el) el.style.display = t === tab ? '' : 'none';
@@ -16845,7 +16850,7 @@ window._tcgRenderCraftTab = async function(el, uid) {
             </div>
             <div style="display:flex;align-items:center;gap:6px;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.3);border-radius:10px;padding:6px 14px;">
                 <span style="font-size:16px;">🔷</span>
-                <span style="font-size:16px;font-weight:900;color:#0ea5e9;">${shards.toLocaleString()}</span>
+                <span id="craft-shards-bal" style="font-size:16px;font-weight:900;color:#0ea5e9;">${shards.toLocaleString()}</span>
                 <span style="font-size:12px;color:var(--text-muted);">Shards</span>
             </div>
         </div>
@@ -24776,10 +24781,28 @@ window.loadAnimeDetails = async function(mal_id, skipHistory = false, defaultTab
 };
 
 // --- Mobile Menu ---
-window.toggleMobileMenu = function() { document.getElementById('mobile-menu').classList.toggle('open'); };
+window.toggleMobileMenu = function() {
+    document.getElementById('mobile-menu').classList.toggle('open');
+    // Focus the in-menu search on open
+    if (document.getElementById('mobile-menu').classList.contains('open')) {
+        setTimeout(() => document.getElementById('mobile-menu-search')?.focus(), 100);
+    }
+};
 window.closeMobileMenu = function() { document.getElementById('mobile-menu').classList.remove('open'); };
 
-// --- Mobile Search ---
+// --- Desktop compact search (triggered by narrow window width) ---
+(function _initCompactSearch() {
+    const COMPACT_THRESHOLD = 1000;
+    function _updateCompact() {
+        // Only apply compact mode when hamburger is NOT active (>960px breakpoint)
+        if (window.innerWidth <= 960) { document.body.classList.remove('topbar-compact'); return; }
+        document.body.classList.toggle('topbar-compact', window.innerWidth < COMPACT_THRESHOLD);
+    }
+    window.addEventListener('resize', _updateCompact, { passive: true });
+    _updateCompact();
+})();
+
+// --- Mobile Search (dropdown, used by desktop compact icon) ---
 window.toggleMobileSearch = function() {
     const bar = document.getElementById('mobile-search-bar');
     if (!bar) return;
@@ -33669,6 +33692,22 @@ window._ladderAdminLoad = async function() {
         `;
     } catch(e) {
         el.innerHTML = `<div style="color:#ef4444;font-size:12px;">Error loading config: ${e.message}</div>`;
+    }
+};
+
+window._adminBroadcastSend = async function() {
+    const msgEl = document.getElementById('admin-broadcast-msg');
+    const statusEl = document.getElementById('admin-broadcast-status');
+    const msg = msgEl?.value?.trim();
+    if (!msg) { alert('Enter a message before sending.'); return; }
+    if (!confirm(`Send this notification to ALL WeeBee users?\n\n"${msg}"`)) return;
+    if (statusEl) statusEl.textContent = 'Sending…';
+    try {
+        const result = await _callFn('adminBroadcastNotification', { message: msg });
+        if (statusEl) statusEl.textContent = `✅ Sent to ${result?.count ?? 'all'} users.`;
+        if (msgEl) msgEl.value = '';
+    } catch(e) {
+        if (statusEl) statusEl.textContent = `Error: ${e.message}`;
     }
 };
 

@@ -219,12 +219,20 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     .top-nav { display: none; }
     .hamburger-btn { display: flex; }
     .search-bar { display: none; }
-    .search-icon-btn { display: flex; }
+    /* Search is inside the hamburger menu on mobile/tablet — no icon button needed */
+    .search-icon-btn { display: none; }
     .discord-nav-btn { display: none; }
     .discord-bubble-wrap { display: none; }
     .content-views { padding: 20px; }
     .logo { font-size: 20px; margin-right: 0; }
 }
+
+/* ── Desktop compact mode (JS-applied via body.topbar-compact) ── */
+/* Kicks in when the browser window is narrowed below 1000px on a desktop
+   (e.g. snapped to one side of the monitor). Collapses the full search bar
+   into a single icon that opens a dropdown instead. */
+body.topbar-compact .search-bar { display: none; }
+body.topbar-compact .search-icon-btn { display: flex !important; }
 
 /* ── Mobile breakpoints ── */
 @media (max-width: 860px) {
@@ -232,7 +240,7 @@ body { background-color: var(--bg-white); color: var(--text-dark); }
     .top-nav { display: none; }
     .hamburger-btn { display: flex; }
     .search-bar { display: none; }
-    .search-icon-btn { display: flex; }
+    .search-icon-btn { display: none; }
     .logo { margin-right: 0; font-size: 20px; }
     .content-views { padding: 20px; }
     .app-container { overflow-x: hidden; }
