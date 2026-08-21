@@ -1155,6 +1155,7 @@ exports.settlePvpBattle = onRequest({ invoker: 'public' }, async (req, res) => {
 
     // Port of the client-side power/battle helpers
     const RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
+    const PVP_MVP_THRESHOLDS = { sr: 12, 'sr+': 12, ssr: 30, 'ssr+': 30, ur: 50, 'ur+': 50 };
     function cardPower(card, boosts) {
         const animeKey = (card.anime || '').toLowerCase().trim();
         const animeBoost = (boosts || {})[animeKey] || 0;
@@ -1167,6 +1168,8 @@ exports.settlePvpBattle = onRequest({ invoker: 'public' }, async (req, res) => {
             else if (card.serial < 100) p += 2;
             else if (card.serial < 1000) p += 1;
         }
+        const mvpT = PVP_MVP_THRESHOLDS[card.rarity];
+        if (mvpT != null && (card.mvpCount || 0) >= mvpT) p += 1;
         return p + animeBoost;
     }
     function roundPower(card, party, boosts) {
@@ -1962,6 +1965,7 @@ exports.adminGenerateBracket = onRequest({ invoker: 'public' }, async (req, res)
 
 const LADDER_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
 
+const LADDER_MVP_THRESHOLDS = { sr: 12, 'sr+': 12, ssr: 30, 'ssr+': 30, ur: 50, 'ur+': 50 };
 function _ladderCardPower(card, boosts) {
     const animeKey = (card.anime || '').toLowerCase().trim();
     const animeBoost = (boosts || {})[animeKey] || 0;
@@ -1974,6 +1978,8 @@ function _ladderCardPower(card, boosts) {
         else if (card.serial < 100) p += 2;
         else if (card.serial < 1000) p += 1;
     }
+    const mvpT = LADDER_MVP_THRESHOLDS[card.rarity];
+    if (mvpT != null && (card.mvpCount || 0) >= mvpT) p += 1;
     return p + animeBoost;
 }
 function _ladderRoundPower(card, party, boosts) {

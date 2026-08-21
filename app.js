@@ -29436,6 +29436,9 @@ function _dungeonCardPower(card) {
         else if (card.serial < 100) power += 2;
         else if (card.serial < 1000) power += 1;
     }
+    const MVP_THRESHOLDS = { sr: 12, 'sr+': 12, ssr: 30, 'ssr+': 30, ur: 50, 'ur+': 50 };
+    const mvpThreshold = MVP_THRESHOLDS[card.rarity];
+    if (mvpThreshold != null && (card.mvpCount || 0) >= mvpThreshold) power += 1;
     return power + animeBoost;
 }
 
