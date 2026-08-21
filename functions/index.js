@@ -1154,7 +1154,7 @@ exports.settlePvpBattle = onRequest({ invoker: 'public' }, async (req, res) => {
     const challengeRef = db.collection('pvp_challenges').doc(challengeId);
 
     // Port of the client-side power/battle helpers
-    const RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
+    const RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, nr:11, ar:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
     const PVP_MVP_THRESHOLDS = { sr: 12, 'sr+': 12, ssr: 30, 'ssr+': 30, ur: 50, 'ur+': 50 };
     function cardPower(card, boosts) {
         const animeKey = (card.anime || '').toLowerCase().trim();
@@ -1592,7 +1592,7 @@ exports.adminScanBossHP = onRequest({ invoker: 'public', timeoutSeconds: 300 }, 
 // ── TCG Tournament System ──────────────────────────────────────────────────────
 
 // Battle simulation helpers (mirrors settlePvpBattle — kept separate to avoid coupling)
-const T_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
+const T_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, nr:11, ar:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
 function _tCardPower(card) {
     if (card.monthlyUr || card.tradedMonthlyUr) return 16;
     let p = T_RARITY_POWER[card.rarity] || 1;
@@ -1963,7 +1963,7 @@ exports.adminGenerateBracket = onRequest({ invoker: 'public' }, async (req, res)
 
 // ── PVP Weekly Ladder ─────────────────────────────────────────────────────────
 
-const LADDER_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
+const LADDER_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, nr:11, ar:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
 
 const LADDER_MVP_THRESHOLDS = { sr: 12, 'sr+': 12, ssr: 30, 'ssr+': 30, ur: 50, 'ur+': 50 };
 function _ladderCardPower(card, boosts) {

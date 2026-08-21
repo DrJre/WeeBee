@@ -2426,6 +2426,113 @@ details summary .material-symbols-outlined { transition: transform 0.2s ease; }
     100%  { opacity: 1;    }
 }
 
+/* ── Astral 2026 Event Frame (AR) ────────────────────────────────────────── */
+.astral-event-frame {
+    width: 220px; height: 308px;
+    border-radius: 14px;
+    position: relative;
+    padding: 6px;
+    box-sizing: border-box;
+    isolation: isolate;
+    --astral-a: #0d1b4b;
+    --astral-b: #1e0545;
+    --astral-c: #7aa2ff;
+}
+/* Visible border: dark navy → deep purple → starlight blue → star-white flash */
+.astral-event-frame::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 14px;
+    background: linear-gradient(
+        135deg,
+        var(--astral-a) 0%,
+        var(--astral-b) 28%,
+        var(--astral-c) 50%,
+        rgba(255,255,255,0.82) 58%,
+        var(--astral-c) 66%,
+        var(--astral-b) 78%,
+        var(--astral-a) 100%
+    );
+    background-size: 300% 300%;
+    z-index: -1;
+    animation: astral-drift 9s linear infinite;
+}
+/* Blurred cosmic glow halo */
+.astral-event-frame::before {
+    content: '';
+    position: absolute; inset: -5px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--astral-a) 0%, var(--astral-b) 40%, var(--astral-c) 70%, var(--astral-a) 100%);
+    background-size: 300% 300%;
+    filter: blur(10px);
+    opacity: 0.6;
+    z-index: -2;
+    animation: astral-drift 9s linear infinite;
+}
+.astral-event-frame .wb-card-inner { background: linear-gradient(160deg, #060d24 0%, #050818 100%) !important; }
+.astral-event-frame .wb-card-footer { padding-bottom: 12px !important; }
+.astral-event-frame .wb-card-series { color: rgba(170, 195, 255, 0.75) !important; margin-top: 4px; }
+.astral-event-frame .wb-mark { color: rgba(190, 215, 255, 0.95) !important; }
+/* Card name: cool stellar gradient */
+.astral-event-frame .wb-card-name {
+    background: linear-gradient(90deg, #c4d8ff, #a78bfa, #e2e8ff, #7aa2ff);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: none;
+    animation: astral-drift 7s linear infinite;
+    animation-play-state: running;
+}
+/* AR rarity badge */
+.astral-event-frame .wb-card-rarity-label {
+    background: linear-gradient(90deg, var(--astral-a), var(--astral-b), var(--astral-c), var(--astral-a)) !important;
+    background-size: 300% 100% !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+    color: #c4d8ff !important;
+    font-weight: 900;
+    padding: 3px 8px;
+    border-radius: 5px;
+    margin-top: 5px;
+    animation: astral-drift 7s linear infinite !important;
+    animation-play-state: running !important;
+}
+/* Cursor-reactive cosmic spotlight */
+.astral-event-frame .wb-card-art::before {
+    background: radial-gradient(
+        circle at calc(var(--mx, 0.5) * 100%) calc(var(--my, 0.5) * 100%),
+        rgba(150, 180, 255, 0.45) 0%,
+        rgba(30, 5, 69, 0.4) 30%,
+        transparent 70%
+    );
+}
+.astral-event-frame:hover .wb-card-art::before { opacity: 0.65; }
+/* ✦ Astral 2026 event tag */
+.wb-astral-event-label {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: rgba(196, 216, 255, 0.6);
+    margin-top: 5px;
+}
+.astral-event-frame .wb-astral-event-label {
+    background: linear-gradient(90deg, #7aa2ff, #c4b5fd, #c4d8ff);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: astral-drift 7s linear infinite;
+    animation-play-state: running;
+}
+@keyframes astral-drift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
 /* Floating sparkle particles */
 .wb-prismatic-sparkles {
     position: absolute;

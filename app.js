@@ -7648,9 +7648,8 @@ const TCG_PR_CARDS = [
     { name: 'Tomura Shigaraki', anime: 'My Hero Academia',   image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Prismatic%20Cards/2026%20Prismatic/Tomura%20Shigaraki.webp' },
 ];
 
-// Neon 2026 event card preview — shown in TCG admin tab for design review.
-// Replace this array each event; neonA/B/C drive the border color via CSS vars.
-const TCG_EVENT_PREVIEW_CARDS = [
+// Neon 2026 event card pool — used as fallback when _tcgNeonPool hasn't loaded from Firestore.
+const TCG_NEON_PREVIEW_CARDS = [
     { name: 'Lucy',             anime: 'Cyberpunk: Edgerunners',      neonClass: '',       neonA: '#ff3fe3', neonB: '#01F9C6',                    flickerDelay: '0s',   image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Lucy.png' },
     { name: 'Shinra Kusakabe', anime: 'Fire Force',                   neonClass: 'custom', neonA: '#FF2F09', neonB: '#FA9F2D', neonC: '#ECDCB9', flickerDelay: '1.8s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Fire%20Force%20Guy.png' },
     { name: 'Koby',             anime: 'One Piece',                   neonClass: 'custom', neonA: '#EF7EF7', neonB: '#54FF1C', neonC: '#40B8FA', flickerDelay: '3.5s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Koby.png' },
@@ -7668,34 +7667,35 @@ const TCG_EVENT_PREVIEW_CARDS = [
     { name: 'Yami Sukehiro', anime: 'Black Clover',                neonClass: '2col',   neonA: '#3DDFFF', neonB: '#7B00D4',                    flickerDelay: '24.1s', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Neon/2026/Yami.png' },
 ];
 
+// Astral 2026 event card pool — AR rarity, constellation/space theme.
+const TCG_ASTRAL_PREVIEW_CARDS = [
+    { name: 'Mitsuha Miyamizu', anime: 'Your Name', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Events/Astral/2026/Mitsuha%20Miyamizu%20-%20Your%20Name%20-%20AR.gif' },
+];
+
 window._tcgRenderEventCardPreview = function() {
     const el = document.getElementById('event-card-preview-grid');
     if (!el) return;
-    el.innerHTML = TCG_EVENT_PREVIEW_CARDS.map(card => {
-        const extraClass = card.neonClass ? ` neon-${card.neonClass}` : '';
-        const vars = [
-            card.neonA ? `--neon-a:${card.neonA}` : '',
-            card.neonB ? `--neon-b:${card.neonB}` : '',
-            card.neonC ? `--neon-c:${card.neonC}` : '',
-            `--flicker-delay:${card.flickerDelay || '0s'}`,
-        ].filter(Boolean).join(';');
+    const pool = (window._tcgAstralPool && window._tcgAstralPool.length) ? window._tcgAstralPool : TCG_ASTRAL_PREVIEW_CARDS;
+    el.innerHTML = pool.map(card => {
+        const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" loading="lazy">` : '';
         return `
         <div style="isolation:isolate;">
-          <div class="neon-event-frame rarity-pr wb-card--prismatic tcg-anim-in-view${extraClass}" style="${vars}">
+          <div class="astral-event-frame rarity-pr wb-card--prismatic tcg-anim-in-view">
             <div class="wb-card-inner">
-              <div class="wb-card-art"><img src="${_toR2Url(card.image)}" alt="${card.name}" loading="lazy"></div>
               <div class="wb-card-header"><span class="wb-mark">WEEBEE</span><span class="wb-rarity-gem wb-rarity-gem--star">★</span></div>
+              <div class="wb-card-art">${art}</div>
               <div class="wb-card-footer">
                 <div class="wb-card-name">${card.name}</div>
                 <div class="wb-card-series">${card.anime}</div>
-                <div class="wb-card-rarity-label">NR</div>
-                <div class="wb-neon-event-label">✦ Neon 2026</div>
+                <div class="wb-card-rarity-label">AR</div>
+                <div class="wb-astral-event-label">✦ Astral 2026</div>
               </div>
             </div>
           </div>
           <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);margin-top:10px;text-align:center;">${card.name}</div>
         </div>`;
     }).join('');
+    _tcgObserveSSRCards(el);
 };
 
 // Founder gift cards — 1-of-1 designs, hand-gifted by an admin. Never enter
@@ -11693,7 +11693,7 @@ const _TCG_POOL_CACHE_KEY = 'tcg_card_pool_v2';
 const _TCG_POOL_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 
 async function _tcgEnsureCardPool() {
-    if (window._tcgRarePool && window._tcgCommonPool && window._tcgSRPool && window._tcgSSRPool && window._tcgURPool && window._tcgPrismaticPool && window._tcgNeonPool) return;
+    if (window._tcgRarePool && window._tcgCommonPool && window._tcgSRPool && window._tcgSSRPool && window._tcgURPool && window._tcgPrismaticPool && window._tcgNeonPool && window._tcgAstralPool) return;
 
     // Try localStorage cache first
     try {
@@ -11708,13 +11708,14 @@ async function _tcgEnsureCardPool() {
                 window._tcgURPool        = data.ur;
                 window._tcgPrismaticPool = data.pr;
                 window._tcgNeonPool      = data.nr;
+                window._tcgAstralPool    = data.ar || [];
                 return;
             }
         }
     } catch {}
 
     try {
-        const [rareSnap, commonSnap, srSnap, ssrSnap, urSnap, prSnap, nrSnap] = await Promise.all([
+        const [rareSnap, commonSnap, srSnap, ssrSnap, urSnap, prSnap, nrSnap, arSnap] = await Promise.all([
             getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'rare'),   limit(2000))),
             getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'common'), limit(2000))),
             getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'sr'),     limit(500))),
@@ -11722,6 +11723,7 @@ async function _tcgEnsureCardPool() {
             getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'ur'),     limit(100))),
             getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'pr'),     limit(200))),
             getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'nr'),     limit(200))),
+            getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'ar'),     limit(200))),
         ]);
         window._tcgRarePool   = [];
         window._tcgCommonPool = [];
@@ -11730,6 +11732,7 @@ async function _tcgEnsureCardPool() {
         window._tcgURPool = [];
         window._tcgPrismaticPool = [];
         window._tcgNeonPool = [];
+        window._tcgAstralPool = [];
         rareSnap.forEach(d   => { const c = d.data(); if (c.name && c.image && c.series && !c.imageBroken) window._tcgRarePool.push(c); });
         commonSnap.forEach(d => { const c = d.data(); if (c.name && c.image && c.series && !c.imageBroken) window._tcgCommonPool.push(c); });
         srSnap.forEach(d  => { const c = d.data(); if (c.name && c.image && !c.imageBroken) window._tcgSRPool.push(c); });
@@ -11737,15 +11740,16 @@ async function _tcgEnsureCardPool() {
         urSnap.forEach(d  => { const c = d.data(); if (c.name && c.image && !c.imageBroken) window._tcgURPool.push(c); });
         prSnap.forEach(d  => { const c = d.data(); if (c.name && c.image && !c.imageBroken) window._tcgPrismaticPool.push(c); });
         nrSnap.forEach(d  => { const c = d.data(); if (c.name && c.image && !c.imageBroken) window._tcgNeonPool.push(c); });
+        arSnap.forEach(d  => { const c = d.data(); if (c.name && c.image && !c.imageBroken) window._tcgAstralPool.push(c); });
 
         // Persist to localStorage so refreshes don't re-read Firestore
         try {
             localStorage.setItem(_TCG_POOL_CACHE_KEY, JSON.stringify({
                 ts: Date.now(),
-                data: { rare: window._tcgRarePool, common: window._tcgCommonPool, sr: window._tcgSRPool, ssr: window._tcgSSRPool, ur: window._tcgURPool, pr: window._tcgPrismaticPool, nr: window._tcgNeonPool }
+                data: { rare: window._tcgRarePool, common: window._tcgCommonPool, sr: window._tcgSRPool, ssr: window._tcgSSRPool, ur: window._tcgURPool, pr: window._tcgPrismaticPool, nr: window._tcgNeonPool, ar: window._tcgAstralPool }
             }));
         } catch {}
-    } catch(e) { window._tcgRarePool = []; window._tcgCommonPool = []; window._tcgSRPool = []; window._tcgSSRPool = []; window._tcgURPool = []; window._tcgPrismaticPool = []; window._tcgNeonPool = []; }
+    } catch(e) { window._tcgRarePool = []; window._tcgCommonPool = []; window._tcgSRPool = []; window._tcgSSRPool = []; window._tcgURPool = []; window._tcgPrismaticPool = []; window._tcgNeonPool = []; window._tcgAstralPool = []; }
 }
 
 // Returns the full browsable/searchable card pool (Firestore-backed SR/SSR/UR with
@@ -11767,8 +11771,12 @@ function _tcgFullCardPool() {
         : TCG_PR_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'pr', batch: c.batch || 1, addedAt: null }));
     const nr = (window._tcgNeonPool && window._tcgNeonPool.length)
         ? window._tcgNeonPool.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'nr', batch: c.batch || 1, addedAt: c.addedAt || null, neonA: c.neonA || null, neonB: c.neonB || null, neonC: c.neonC || null, neonClass: c.neonClass || '', flickerDelay: c.flickerDelay || '0s' }))
-        : TCG_EVENT_PREVIEW_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'nr', batch: 1, addedAt: null, neonA: c.neonA || null, neonB: c.neonB || null, neonC: c.neonC || null, neonClass: c.neonClass || '', flickerDelay: c.flickerDelay || '0s' }));
+        : TCG_NEON_PREVIEW_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'nr', batch: 1, addedAt: null, neonA: c.neonA || null, neonB: c.neonB || null, neonC: c.neonC || null, neonClass: c.neonClass || '', flickerDelay: c.flickerDelay || '0s' }));
+    const ar = (window._tcgAstralPool && window._tcgAstralPool.length)
+        ? window._tcgAstralPool.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'ar', batch: c.batch || 1, addedAt: c.addedAt || null }))
+        : TCG_ASTRAL_PREVIEW_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'ar', batch: 1, addedAt: null }));
     return [
+        ...ar,
         ...nr,
         ...pr,
         ...ur,
@@ -11781,12 +11789,18 @@ function _tcgFullCardPool() {
 
 function _tcgPickCard(rarity) {
     if (rarity === 'nr') {
-        const pool = (window._tcgNeonPool && window._tcgNeonPool.length) ? window._tcgNeonPool : TCG_EVENT_PREVIEW_CARDS;
+        const pool = (window._tcgNeonPool && window._tcgNeonPool.length) ? window._tcgNeonPool : TCG_NEON_PREVIEW_CARDS;
         if (!pool.length) return _tcgPickCard('sr');
         const src = pool[Math.floor(Math.random() * pool.length)];
         return { name: src.name, anime: _normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity: 'nr',
                  neonA: src.neonA || null, neonB: src.neonB || null, neonC: src.neonC || null,
                  neonClass: src.neonClass || '', flickerDelay: src.flickerDelay || '0s' };
+    }
+    if (rarity === 'ar') {
+        const pool = (window._tcgAstralPool && window._tcgAstralPool.length) ? window._tcgAstralPool : TCG_ASTRAL_PREVIEW_CARDS;
+        if (!pool.length) return _tcgPickCard('sr');
+        const src = pool[Math.floor(Math.random() * pool.length)];
+        return { name: src.name, anime: _normalizeSeriesName(src.series || src.anime || ''), image: src.image, rarity: 'ar' };
     }
     if (rarity === 'pr') {
         const pool = (window._tcgPrismaticPool && window._tcgPrismaticPool.length) ? window._tcgPrismaticPool : TCG_PR_CARDS;
@@ -11864,8 +11878,8 @@ window._tcgBrowsePool = async function(filter = 'all', search = '', offset = 0) 
 
     try {
         const constraints = [collection(db, 'characters')];
-        if (filter === 'event_all') constraints.push(where('rarityTier', 'in', ['pr', 'nr']));
-        else if (['ur','ssr','sr','rare','common','pr','nr'].includes(filter)) constraints.push(where('rarityTier', '==', filter));
+        if (filter === 'event_all') constraints.push(where('rarityTier', 'in', ['pr', 'nr', 'ar']));
+        else if (['ur','ssr','sr','rare','common','pr','nr','ar'].includes(filter)) constraints.push(where('rarityTier', '==', filter));
 
         // fetch all matching (we need count + search client-side, pool is ≤3000)
         const snap = await getDocs(query(...constraints, limit(3000)));
@@ -11887,17 +11901,18 @@ window._tcgBrowsePool = async function(filter = 'all', search = '', offset = 0) 
         const commonCount = countFor('common');
         const prCount = countFor('pr');
         const nrCount = countFor('nr');
+        const arCount = countFor('ar');
         const page = docs.slice(offset, offset + PAGE);
 
-        const filterBtns = ['all','ur','ssr','sr','rare','common','pr','nr'].map(f => {
+        const filterBtns = ['all','ur','ssr','sr','rare','common','pr','nr','ar'].map(f => {
             const active = f === filter;
-            const label = { all: 'All', ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'PR (Event)', nr: 'NR (Neon)' }[f];
+            const label = { all: 'All', ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'PR (Event)', nr: 'NR (Neon)', ar: 'AR (Astral)' }[f];
             return `<button onclick="window._tcgBrowsePool('${f}',document.getElementById('tcg-pool-search').value,0)" style="padding:6px 14px;border-radius:20px;border:1px solid ${active?'var(--accent-yellow)':'var(--border-color)'};background:${active?'rgba(245,158,11,0.12)':'transparent'};color:${active?'#f59e0b':'var(--text-muted)'};font-size:12px;font-weight:700;cursor:pointer;">${label}</button>`;
         }).join('');
 
         const cards = page.map(c => {
             const rarity = c.rarityTier || 'common';
-            const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'PR (Event)', nr: 'NR (Neon)' }[rarity] || rarity.toUpperCase();
+            const label = { ur: 'UR', ssr: 'SSR', sr: 'SR', rare: 'Rare', common: 'Common', pr: 'PR (Event)', nr: 'NR (Neon)', ar: 'AR (Astral)' }[rarity] || rarity.toUpperCase();
             const art = c.image ? `<img src="${c.image}" alt="${c.name}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<div style=&quot;display:flex;align-items:center;justify-content:center;height:100%;color:#ef4444;font-size:11px;font-weight:700;text-align:center;padding:8px;&quot;>Image failed to load</div>'">` : '';
             return `<div style="display:flex;flex-direction:column;align-items:flex-start;gap:6px;">
                 <div class="wb-card rarity-${rarity}" style="transform:scale(0.85);transform-origin:top left;flex-shrink:0;margin-bottom:-46px;">
@@ -11939,7 +11954,8 @@ window._tcgBrowsePool = async function(filter = 'all', search = '', offset = 0) 
                     <b>${rareCount}</b> Rare &nbsp;·&nbsp;
                     <b>${commonCount}</b> Common &nbsp;·&nbsp;
                     <b>${prCount}</b> PR &nbsp;·&nbsp;
-                    <b>${nrCount}</b> NR (Neon)
+                    <b>${nrCount}</b> NR (Neon) &nbsp;·&nbsp;
+                    <b>${arCount}</b> AR (Astral)
                 </span>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;">
@@ -11960,6 +11976,7 @@ function _tcgClearPoolCache() {
     window._tcgURPool = null;
     window._tcgPrismaticPool = null;
     window._tcgNeonPool = null;
+    window._tcgAstralPool = null;
 }
 
 window._tcgEditCardImage = async function(docId, name) {
@@ -12124,20 +12141,20 @@ window._tcgMigrateSRSSRToPool = async function() {
     }
 };
 
-// One-time admin migration: seed TCG_EVENT_PREVIEW_CARDS into Firestore as
+// One-time admin migration: seed TCG_NEON_PREVIEW_CARDS into Firestore as
 // rarityTier:'nr' (Neon Rare). Stores neon color metadata so rendering works
 // from the pool. Safe to re-run (uses merge, only stamps addedAt on new docs).
 window._tcgMigrateNeonToPool = async function() {
     if (!window.isAdmin) return;
     const statusEl = document.getElementById('tcg-neon-migrate-status');
     const slug = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
-    if (statusEl) statusEl.textContent = `Migrating ${TCG_EVENT_PREVIEW_CARDS.length} Neon cards…`;
+    if (statusEl) statusEl.textContent = `Migrating ${TCG_NEON_PREVIEW_CARDS.length} Neon cards…`;
     try {
         const snap = await getDocs(query(collection(db, 'characters'), where('rarityTier', '==', 'nr'), limit(200)));
         const existingIds = new Set();
         snap.forEach(d => existingIds.add(d.id));
         let newCount = 0;
-        for (const c of TCG_EVENT_PREVIEW_CARDS) {
+        for (const c of TCG_NEON_PREVIEW_CARDS) {
             const id = `nr_${slug(c.name)}_${slug(c.anime)}`;
             const fields = {
                 name: c.name, series: c.anime, image: c.image, rarityTier: 'nr',
@@ -12148,7 +12165,7 @@ window._tcgMigrateNeonToPool = async function() {
             await setDoc(doc(db, 'characters', id), fields, { merge: true });
         }
         _tcgClearPoolCache();
-        if (statusEl) statusEl.textContent = `Done — ${TCG_EVENT_PREVIEW_CARDS.length} Neon cards synced (${newCount} new).`;
+        if (statusEl) statusEl.textContent = `Done — ${TCG_NEON_PREVIEW_CARDS.length} Neon cards synced (${newCount} new).`;
         window._tcgBrowsePool('all', '', 0);
     } catch(e) {
         if (statusEl) statusEl.textContent = `Failed: ${e.message}`;
@@ -12656,13 +12673,13 @@ window._tcgShowWhatsInside = async function(packId, batchNum) {
     if (pack.prismatic) {
         fullPool = _tcgFullCardPool().filter(c => c.rarity === eventRarity);
     } else {
-        const base = _tcgFullCardPool().filter(c => c.rarity !== 'pr' && c.rarity !== 'nr' && !c.founder);
+        const base = _tcgFullCardPool().filter(c => c.rarity !== 'pr' && c.rarity !== 'nr' && c.rarity !== 'ar' && !c.founder);
         fullPool = batchNum
             ? base.filter(c => _tcgCardBatch(c) === batchNum)
             : base;
     }
 
-    const rarityOrder = { 'ur+': -0.5, ur: 0, 'ssr+': 0.5, ssr: 1, 'sr+': 1.5, sr: 2, rare: 3, common: 4, pr: 0, nr: 0 };
+    const rarityOrder = { 'ur+': -0.5, ur: 0, 'ssr+': 0.5, ssr: 1, 'sr+': 1.5, sr: 2, rare: 3, common: 4, pr: 0, nr: 0, ar: 0 };
     fullPool.sort((a, b) => (rarityOrder[a.rarity] ?? 9) - (rarityOrder[b.rarity] ?? 9));
 
     const counts = {};
@@ -13984,7 +14001,7 @@ window._tcgSimulateGodPack = async function() {
 // Admin-only browser preview of the Neon God Pack reveal — fake cards, no Firestore writes.
 window._tcgSimulateNeonGodPack = async function() {
     if (!window.isAdmin) return;
-    const shuffled = [...TCG_EVENT_PREVIEW_CARDS].sort(() => Math.random() - 0.5).slice(0, 5);
+    const shuffled = [...TCG_NEON_PREVIEW_CARDS].sort(() => Math.random() - 0.5).slice(0, 5);
     const fakeCards = shuffled.map((c, i) => ({
         name: c.name, anime: c.anime, rarity: 'nr', image: c.image, serial: i + 1,
         neonA: c.neonA || null, neonB: c.neonB || null, neonC: c.neonC || null,
@@ -14400,7 +14417,7 @@ function _tcgBuildCardFace(card) {
     // Neon 2026 event cards carry their own border colors — render with neon-event-frame.
     // If neonA is missing (old post/collection doc), look it up from the preview array.
     if (rarity === 'nr' && !card.neonA) {
-        const meta = TCG_EVENT_PREVIEW_CARDS.find(p => p.name === card.name) || TCG_EVENT_PREVIEW_CARDS[0];
+        const meta = TCG_NEON_PREVIEW_CARDS.find(p => p.name === card.name) || TCG_NEON_PREVIEW_CARDS[0];
         card = { ...card, neonA: meta.neonA, neonB: meta.neonB || null, neonC: meta.neonC || null, neonClass: meta.neonClass || '', flickerDelay: meta.flickerDelay || '0s' };
     }
     if (card.neonA) {
@@ -14423,6 +14440,24 @@ function _tcgBuildCardFace(card) {
                     <div class="wb-card-series">${card.anime}</div>
                     <div class="wb-card-rarity-label">NR</div>
                     <div class="wb-neon-event-label">✦ Neon 2026</div>
+                </div>
+            </div>
+        </div></div>`;
+    }
+    // AR — Astral 2026 event card (constellation/space theme)
+    if (rarity === 'ar') {
+        const eName = (card.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const eAnime = (card.anime || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
+        return `<div style="isolation:isolate;"><div class="astral-event-frame rarity-pr wb-card--prismatic tcg-anim-in-view">
+            <div class="wb-card-inner">
+                <div class="wb-card-header"><span class="wb-mark">WEEBEE</span><span class="wb-rarity-gem wb-rarity-gem--star">★</span></div>
+                <div class="wb-card-art">${art}</div>
+                <div class="wb-card-footer">
+                    <div class="wb-card-name">${card.name}</div>
+                    <div class="wb-card-series">${card.anime}</div>
+                    <div class="wb-card-rarity-label">AR</div>
+                    <div class="wb-astral-event-label">✦ Astral 2026</div>
                 </div>
             </div>
         </div></div>`;
@@ -14838,8 +14873,8 @@ window._tcgLoadVersionsView = async function(el, name, anime, rarity) {
             } catch(e) {}
         }
 
-        // Event (PR/NR) cards — no serial limit, no serial numbers; show all collectors in pull order
-        if (rarity === 'pr' || rarity === 'nr') {
+        // Event (PR/NR/AR) cards — no serial limit, no serial numbers; show all collectors in pull order
+        if (rarity === 'pr' || rarity === 'nr' || rarity === 'ar') {
             const eventOwners = [];
             snap.forEach(d => {
                 const data = d.data();
@@ -15044,8 +15079,8 @@ window._tcgViewCardSnapshot = async function(snapId) {
 // ── TCG Collection System ─────────────────────────────────────────────────────
 
 const RARITY_MAX_VERSIONS = { common: 5000, rare: 2500, sr: 500, 'sr+': 500, ssr: 250, 'ssr+': 250, ur: 50, 'ur+': 50, pr: 100 };
-// Event cards (PR/NR/SET) never get serial numbers, never show version text.
-function _tcgIsEventCard(card) { return card.rarity === 'pr' || card.rarity === 'nr' || card.rarity === 'set' || !!card.event; }
+// Event cards (PR/NR/AR/SET) never get serial numbers, never show version text.
+function _tcgIsEventCard(card) { return card.rarity === 'pr' || card.rarity === 'nr' || card.rarity === 'ar' || card.rarity === 'set' || !!card.event; }
 
 // Flat amber refund for breaking down a card — SET cards cannot be dismantled (0)
 // + rarity dismantle value = sum of all dupes consumed to fuse it
@@ -15794,7 +15829,7 @@ window._tcgRenderMyMissingCards = async function(uid, filter) {
         rarity,
         batch: c.batch,
     }));
-    const nrSrc = window._tcgNeonPool?.length ? window._tcgNeonPool : TCG_EVENT_PREVIEW_CARDS;
+    const nrSrc = window._tcgNeonPool?.length ? window._tcgNeonPool : TCG_NEON_PREVIEW_CARDS;
     const pools = {
         ur:     mapPool(window._tcgURPool?.length        ? window._tcgURPool        : TCG_UR_CARDS,  'ur'),
         nr:     nrSrc.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'nr', batch: c.batch || 1, neonA: c.neonA||null, neonB: c.neonB||null, neonC: c.neonC||null, neonClass: c.neonClass||'', flickerDelay: c.flickerDelay||'0s' })),
@@ -29469,7 +29504,7 @@ function _dungeonGeneratePool(dateKey) {
 
 // Card "Power" — rarity baseline plus a bonus for low serial numbers
 // (single-digit serials, Founder/Monthly URs all count as the strongest).
-const DUNGEON_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
+const DUNGEON_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, nr:11, ar:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
 
 function _dungeonCardPower(card) {
     const animeKey = (card.anime || '').toLowerCase().trim();
