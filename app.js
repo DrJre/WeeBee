@@ -1427,6 +1427,20 @@ window.fetchNotifications = function() {
     if(window.notifUnsubscribe) { window.notifUnsubscribe(); window.notifUnsubscribe = null; }
     const q = query(collection(db, "notifications"), where("targetUid", "==", auth.currentUser.uid));
     window.notifUnsubscribe = onSnapshot(q, (snap) => {
+        // A trade/bulletin settlement notifies the other party's targetUid the
+        // moment their cards change server-side. That's the only realtime signal
+        // this client gets for a trade it didn't initiate itself, so use it to
+        // drop the stale collection cache instead of waiting out its 5-min TTL.
+        snap.docChanges().forEach(change => {
+            if (change.type !== 'added') return;
+            const n = change.doc.data();
+            if (n.type === 'trade_offer' && auth.currentUser) {
+                const myUid = auth.currentUser.uid;
+                window._tcgCollectionCache?.delete(myUid); try { localStorage.removeItem(`tcg_coll_${myUid}`); } catch {}
+                if (document.getElementById('tcg-collection-content')) window._tcgRenderMyCollection('mycards', true);
+            }
+        });
+
         const list = document.getElementById('notif-list');
         const badge = document.getElementById('notif-badge');
         if(!list || !badge) return;
@@ -14990,13 +15004,12 @@ window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
         }
 
         window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
-        if (profileUid) {
-            const el = document.getElementById('user-tcg-binders-container');
-            if (el) await window._tcgRenderProfileBindersList(el, profileUid);
-            window._tcgRenderProfileShowcase(profileUid);
-        } else {
-            window._tcgRenderMyCollection('mycards', true);
-        }
+        // Refresh whichever view is actually on screen — profileUid is passed
+        // by the shared card-viewer modal regardless of which tab opened it,
+        // so branching on it alone would silently skip the real re-render.
+        const bindersEl = document.getElementById('user-tcg-binders-container');
+        if (bindersEl) { await window._tcgRenderProfileBindersList(bindersEl, profileUid || uid); window._tcgRenderProfileShowcase(profileUid || uid); }
+        if (document.getElementById('tcg-collection-content')) window._tcgRenderMyCollection('mycards', true);
     } catch(e) {
         alert('Failed to dismantle: ' + e.message);
     } finally {
@@ -18184,8 +18197,14 @@ window._tcgAcceptTrade = async function(tradeId) {
         }
         await _callFn('settleTrade', { tradeId });
         document.getElementById('tcg-trade-review-modal')?.remove();
+        // Cards just moved server-side — the collection cache doesn't know that
+        // yet and would otherwise keep serving the pre-trade list for up to
+        // its 5-minute TTL, making the trade look like it "didn't go through".
+        const myUid = auth.currentUser.uid;
+        window._tcgCollectionCache.delete(myUid); try { localStorage.removeItem(`tcg_coll_${myUid}`); } catch {}
         alert('Trade accepted! Your cards have been updated.');
         window._tcgRenderTradingTab();
+        if (document.getElementById('tcg-collection-content')) window._tcgRenderMyCollection('mycards', true);
     } catch(e) { alert('Failed to accept trade: ' + (e.details || e.message || 'Unknown error')); }
     finally { window._tcgAcceptInProgress = false; }
 };
