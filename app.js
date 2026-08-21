@@ -13263,11 +13263,18 @@ window._tcgOpenSetProgress = async function(setId) {
                     const owns = ownedSet.has(`${r.name}|||${_tcgNormalizeAnimeKey(r.anime)}|||${_tcgNormalizeRarityKey(r.rarity)}`);
                     const eName = r.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     const eAnime = (r.anime||'').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    return `<div onclick="window._tcgOpenVersionsView('${eName}','${eAnime}','${r.rarity}')" title="See who owns ${r.name}" style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;transition:transform .12s;${owns ? '' : 'opacity:0.35;filter:grayscale(55%);'}" onmouseenter="this.style.transform='scale(1.04)'" onmouseleave="this.style.transform=''">
-                        <div style="width:110px;height:154px;overflow:hidden;border-radius:8px;">
-                            <div style="transform:scale(0.5);transform-origin:top left;width:220px;">${_tcgBuildCardFace(r)}</div>
+                    const eImg = (r.image||'').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    const craftCost = TCG_CRAFT_COSTS[r.rarity] || 0;
+                    const canCraft = !owns && craftCost > 0 && !!uid;
+                    const canAfford = canCraft && (window._myProfile?.shards || 0) >= craftCost;
+                    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+                        <div onclick="window._tcgOpenVersionsView('${eName}','${eAnime}','${r.rarity}')" title="See who owns ${r.name}" style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;transition:transform .12s;${owns ? '' : 'opacity:0.35;filter:grayscale(55%);'}" onmouseenter="this.style.transform='scale(1.04)'" onmouseleave="this.style.transform=''">
+                            <div style="width:110px;height:154px;overflow:hidden;border-radius:8px;">
+                                <div style="transform:scale(0.5);transform-origin:top left;width:220px;">${_tcgBuildCardFace(r)}</div>
+                            </div>
+                            <div style="font-size:9px;font-weight:700;color:${owns ? '#22c55e' : 'var(--text-muted)'};text-align:center;line-height:1.2;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${owns ? '✓ ' : ''}${r.name}</div>
                         </div>
-                        <div style="font-size:9px;font-weight:700;color:${owns ? '#22c55e' : 'var(--text-muted)'};text-align:center;line-height:1.2;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${owns ? '✓ ' : ''}${r.name}</div>
+                        ${canCraft ? `<button onclick="window._tcgCraftFromSetModal('${eName}','${eAnime}','${r.rarity}','${eImg}',${r.batch||1},'${uid}','${s.id}')" ${!canAfford ? 'disabled' : ''} style="width:110px;padding:4px 0;border-radius:7px;border:none;background:${canAfford ? 'rgba(56,189,248,0.18)' : 'var(--bg-gray-darker)'};color:${canAfford ? '#0ea5e9' : 'var(--text-muted)'};font-size:10px;font-weight:800;cursor:${canAfford ? 'pointer' : 'not-allowed'};">🔷 Craft · ${craftCost}</button>` : ''}
                     </div>`;
                 }).join('')}
             </div>`;
@@ -13277,6 +13284,13 @@ window._tcgOpenSetProgress = async function(setId) {
         console.error('Set progress error:', e);
         body.innerHTML = '<p style="color:var(--text-muted);padding:20px;">Error loading set progress.</p>';
     }
+};
+
+// Craft a missing required card and refresh the SET progress modal when done
+window._tcgCraftFromSetModal = async function(name, anime, rarity, image, batch, uid, setId) {
+    await window._tcgCraftCard(name, anime, rarity, image, batch, uid);
+    // Re-open the SET modal so it reflects the newly crafted card (appears behind the craft overlay)
+    window._tcgOpenSetProgress(setId);
 };
 
 window._tcgClaimSetCard = async function(setId) {
@@ -14808,6 +14822,20 @@ window._tcgLoadVersionsView = async function(el, name, anime, rarity) {
         if (!sampleCard) {
             await _tcgEnsureCardPool();
             sampleCard = _tcgFullCardPool().find(c => c.name === name && c.anime === anime && c.rarity === rarity) || null;
+        }
+        // Last resort: look in SET card required lists (covers SET-only cards not in the main pool)
+        if (!sampleCard) {
+            try {
+                const sets = await _tcgLoadSetCards();
+                for (const s of sets) {
+                    const match = (s.requiredCards || []).find(r =>
+                        r.name === name &&
+                        _tcgNormalizeAnimeKey(r.anime) === _tcgNormalizeAnimeKey(anime) &&
+                        _tcgNormalizeRarityKey(r.rarity) === _tcgNormalizeRarityKey(rarity)
+                    );
+                    if (match) { sampleCard = match; break; }
+                }
+            } catch(e) {}
         }
 
         // Event (PR/NR) cards — no serial limit, no serial numbers; show all collectors in pull order
@@ -24790,13 +24818,12 @@ window.toggleMobileMenu = function() {
 };
 window.closeMobileMenu = function() { document.getElementById('mobile-menu').classList.remove('open'); };
 
-// --- Desktop compact search (triggered by narrow window width) ---
+// --- Desktop compact search (collapsed when window is not maximized) ---
 (function _initCompactSearch() {
-    const COMPACT_THRESHOLD = 1000;
+    function _isMaximized() { return window.outerWidth >= screen.availWidth; }
     function _updateCompact() {
-        // Only apply compact mode when hamburger is NOT active (>960px breakpoint)
         if (window.innerWidth <= 960) { document.body.classList.remove('topbar-compact'); return; }
-        document.body.classList.toggle('topbar-compact', window.innerWidth < COMPACT_THRESHOLD);
+        document.body.classList.toggle('topbar-compact', !_isMaximized());
     }
     window.addEventListener('resize', _updateCompact, { passive: true });
     _updateCompact();
