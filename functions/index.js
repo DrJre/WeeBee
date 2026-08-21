@@ -58,7 +58,7 @@ exports.settleTrade = onRequest({ invoker: 'public' }, async (req, res) => {
     const db = getFirestore();
     const tradeRef = db.collection('trades').doc(tradeId);
 
-    let tradeData, userError = null;
+    let tradeData, userError = null, setIntactInvalidations = [];
     try {
         await db.runTransaction(async tx => {
             const snap = await tx.get(tradeRef);
@@ -80,6 +80,23 @@ exports.settleTrade = onRequest({ invoker: 'public' }, async (req, res) => {
 
             if (fromSnaps.some(s => !s.exists)) { userError = [400, 'FAILED_PRECONDITION', 'The offerer no longer has all their offered cards.']; return; }
             if (toSnaps.some(s => !s.exists))   { userError = [400, 'FAILED_PRECONDITION', 'You no longer have all the requested cards.']; return; }
+
+            // Block trade if any card is SET-locked
+            const tradeNow2 = new Date();
+            const lockedFromCard = fromSnaps.find(s => { const d = s.data(); if (!d.setLockUntil) return false; const t = d.setLockUntil.toDate ? d.setLockUntil.toDate() : new Date(d.setLockUntil); return t > tradeNow2; });
+            const lockedToCard   = toSnaps.find(s => { const d = s.data(); if (!d.setLockUntil) return false; const t = d.setLockUntil.toDate ? d.setLockUntil.toDate() : new Date(d.setLockUntil); return t > tradeNow2; });
+            if (lockedFromCard) { userError = [400, 'FAILED_PRECONDITION', 'set_locked:offerer']; return; }
+            if (lockedToCard)   { userError = [400, 'FAILED_PRECONDITION', 'set_locked:recipient']; return; }
+
+            // Capture SET card references that need intact=false after trade
+            for (const s of fromSnaps) {
+                const sId = s.data().setCardId;
+                if (sId) setIntactInvalidations.push({ uid: t.fromUid, setCardId: sId });
+            }
+            for (const s of toSnaps) {
+                const sId = s.data().setCardId;
+                if (sId) setIntactInvalidations.push({ uid: t.toUid, setCardId: sId });
+            }
 
             const offerAmber = t.offerAmber || 0;
             const requestAmber = t.requestAmber || 0;
@@ -171,6 +188,13 @@ exports.settleTrade = onRequest({ invoker: 'public' }, async (req, res) => {
             await b.commit();
         }
     } catch(e) {}
+
+    // Invalidate SET cards for any required cards that were traded away (non-critical)
+    if (setIntactInvalidations.length) {
+        Promise.allSettled(setIntactInvalidations.map(({ uid, setCardId }) =>
+            db.collection('card_collections').doc(uid).collection('cards').doc(setCardId).update({ setIntact: false })
+        )).catch(() => {});
+    }
 
     res.json({ result: { success: true } });
 });
@@ -1131,8 +1155,11 @@ exports.settlePvpBattle = onRequest({ invoker: 'public' }, async (req, res) => {
 
     // Port of the client-side power/battle helpers
     const RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
-    function cardPower(card) {
-        if (card.monthlyUr || card.tradedMonthlyUr) return 16;
+    function cardPower(card, boosts) {
+        const animeKey = (card.anime || '').toLowerCase().trim();
+        const animeBoost = (boosts || {})[animeKey] || 0;
+        if (card.monthlyUr || card.tradedMonthlyUr) return 16 + animeBoost;
+        if (card.rarity === 'set') return (card.setIntact !== false ? 25 : 1) + animeBoost;
         let p = RARITY_POWER[card.rarity] || 1;
         if (card.founder) p += 3;
         else if (card.rarity !== 'pr' && !card.event && card.serial != null) {
@@ -1140,13 +1167,13 @@ exports.settlePvpBattle = onRequest({ invoker: 'public' }, async (req, res) => {
             else if (card.serial < 100) p += 2;
             else if (card.serial < 1000) p += 1;
         }
-        return p;
+        return p + animeBoost;
     }
-    function roundPower(card, party) {
+    function roundPower(card, party, boosts) {
         const isCombo = party.some(c => c !== card && (c.anime||'') === (card.anime||'') && card.anime);
-        return cardPower(card) + (isCombo ? 1 : 0);
+        return cardPower(card, boosts) + (isCombo ? 1 : 0);
     }
-    function sortParty(party) { return [...party].sort((a,b) => cardPower(b) - cardPower(a)); }
+    function sortParty(party, boosts) { return [...party].sort((a,b) => cardPower(b, boosts) - cardPower(a, boosts)); }
     function successChance(partyPow, difficulty) {
         return Math.max(15, Math.min(98, Math.round(50 + (partyPow - difficulty) * 4)));
     }
@@ -1161,12 +1188,16 @@ exports.settlePvpBattle = onRequest({ invoker: 'public' }, async (req, res) => {
             if (c.defenderId !== callerUid) { userError = [403, 'PERMISSION_DENIED', 'Only the defender can accept this challenge.']; return; }
             challengeData = c;
 
+            // Always load both profiles — needed for anime boosts + optionally amber check
+            const [cProf, dProf] = await Promise.all([
+                tx.get(db.collection('profiles').doc(c.challengerId)),
+                tx.get(db.collection('profiles').doc(callerUid)),
+            ]);
+            const challengerBoosts = cProf.exists ? (cProf.data().animeBoosts || {}) : {};
+            const defenderBoosts   = dProf.exists ? (dProf.data().animeBoosts || {}) : {};
+
             // Amber check
             if (c.battleType === 'amber' && c.amberWager > 0) {
-                const [cProf, dProf] = await Promise.all([
-                    tx.get(db.collection('profiles').doc(c.challengerId)),
-                    tx.get(db.collection('profiles').doc(callerUid)),
-                ]);
                 const cAmber = cProf.exists ? (cProf.data().amber || 0) : 0;
                 const dAmber = dProf.exists ? (dProf.data().amber || 0) : 0;
                 if (cAmber < c.amberWager || dAmber < c.amberWager) {
@@ -1177,12 +1208,12 @@ exports.settlePvpBattle = onRequest({ invoker: 'public' }, async (req, res) => {
             }
 
             // Resolve battle
-            const cParty = sortParty(c.challengerParty);
-            const dParty = sortParty(defenderParty);
+            const cParty = sortParty(c.challengerParty, challengerBoosts);
+            const dParty = sortParty(defenderParty, defenderBoosts);
             const rounds = [0, 1, 2].map(i => {
                 const cCard = cParty[i], dCard = dParty[i];
-                const cPow = roundPower(cCard, c.challengerParty);
-                const dPow = roundPower(dCard, defenderParty);
+                const cPow = roundPower(cCard, c.challengerParty, challengerBoosts);
+                const dPow = roundPower(dCard, defenderParty, defenderBoosts);
                 const chance = successChance(cPow, dPow);
                 const cWins = Math.random() * 100 < chance;
                 return { challengerCard: cCard, defenderCard: dCard, challengerPower: cPow, defenderPower: dPow, winner: cWins ? 'challenger' : 'defender' };
@@ -1931,8 +1962,11 @@ exports.adminGenerateBracket = onRequest({ invoker: 'public' }, async (req, res)
 
 const LADDER_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
 
-function _ladderCardPower(card) {
-    if (card.monthlyUr || card.tradedMonthlyUr) return 16;
+function _ladderCardPower(card, boosts) {
+    const animeKey = (card.anime || '').toLowerCase().trim();
+    const animeBoost = (boosts || {})[animeKey] || 0;
+    if (card.monthlyUr || card.tradedMonthlyUr) return 16 + animeBoost;
+    if (card.rarity === 'set') return (card.setIntact !== false ? 25 : 1) + animeBoost;
     let p = LADDER_RARITY_POWER[card.rarity] || 1;
     if (card.founder) p += 3;
     else if (card.rarity !== 'pr' && !card.event && card.serial != null) {
@@ -1940,19 +1974,19 @@ function _ladderCardPower(card) {
         else if (card.serial < 100) p += 2;
         else if (card.serial < 1000) p += 1;
     }
-    return p;
+    return p + animeBoost;
 }
-function _ladderRoundPower(card, party) {
+function _ladderRoundPower(card, party, boosts) {
     const isCombo = party.some(c => c !== card && (c.anime||'') === (card.anime||'') && card.anime);
-    return _ladderCardPower(card) + (isCombo ? 1 : 0);
+    return _ladderCardPower(card, boosts) + (isCombo ? 1 : 0);
 }
-function _ladderSortParty(party) { return [...party].sort((a,b) => _ladderCardPower(b) - _ladderCardPower(a)); }
-function _ladderRunBattle(party1, party2) {
-    const s1 = _ladderSortParty(party1);
-    const s2 = _ladderSortParty(party2);
+function _ladderSortParty(party, boosts) { return [...party].sort((a,b) => _ladderCardPower(b, boosts) - _ladderCardPower(a, boosts)); }
+function _ladderRunBattle(party1, party2, boosts1, boosts2) {
+    const s1 = _ladderSortParty(party1, boosts1);
+    const s2 = _ladderSortParty(party2, boosts2);
     const rounds = [0,1,2].map(i => {
         const c1 = s1[i], c2 = s2[i];
-        const p1 = _ladderRoundPower(c1, party1), p2 = _ladderRoundPower(c2, party2);
+        const p1 = _ladderRoundPower(c1, party1, boosts1), p2 = _ladderRoundPower(c2, party2, boosts2);
         const chance = Math.max(15, Math.min(98, Math.round(50 + (p1 - p2) * 4)));
         const p1w = Math.random() * 100 < chance;
         return { card1: { name: c1.name, rarity: c1.rarity }, card2: { name: c2.name, rarity: c2.rarity }, power1: p1, power2: p2, winner: p1w ? 0 : 1 };
@@ -1960,17 +1994,23 @@ function _ladderRunBattle(party1, party2) {
     const p1Score = rounds.filter(r => r.winner === 0).length;
     return { winner: p1Score >= 2 ? 0 : 1, rounds, p1Score, p2Score: 3 - p1Score };
 }
-async function _ladderGetTop3(db, uid) {
+async function _ladderGetTop3(db, uid, boosts) {
     const snap = await db.collection('card_collections').doc(uid).collection('cards').get();
     const cards = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    return cards.sort((a,b) => _ladderCardPower(b) - _ladderCardPower(a)).slice(0,3);
+    return cards.sort((a,b) => _ladderCardPower(b, boosts) - _ladderCardPower(a, boosts)).slice(0,3);
 }
 async function _ladderBestOf7(db, a, b) {
-    const [cA, cB] = await Promise.all([_ladderGetTop3(db, a.uid), _ladderGetTop3(db, b.uid)]);
+    const [profA, profB] = await Promise.all([
+        db.collection('profiles').doc(a.uid).get().catch(() => null),
+        db.collection('profiles').doc(b.uid).get().catch(() => null),
+    ]);
+    const boostsA = profA?.exists ? (profA.data().animeBoosts || {}) : {};
+    const boostsB = profB?.exists ? (profB.data().animeBoosts || {}) : {};
+    const [cA, cB] = await Promise.all([_ladderGetTop3(db, a.uid, boostsA), _ladderGetTop3(db, b.uid, boostsB)]);
     const matches = [];
     let wA = 0, wB = 0;
     while (wA < 4 && wB < 4 && matches.length < 7) {
-        const r = _ladderRunBattle(cA, cB);
+        const r = _ladderRunBattle(cA, cB, boostsA, boostsB);
         if (r.winner === 0) wA++; else wB++;
         matches.push({ ...r, matchNum: matches.length + 1 });
     }
@@ -2040,7 +2080,7 @@ exports.pvpLadderHourlyClose = onSchedule({ schedule: '30 * * * *', timeZone: 'U
             if (!weekDelta[e1.uid]) weekDelta[e1.uid] = { wins:0, losses:0, name: e1.displayName||'', av: e1.avatar||'' };
             weekDelta[e1.uid].wins++;
         } else {
-            const battle = _ladderRunBattle(e1.cards, e2.cards);
+            const battle = _ladderRunBattle(e1.cards, e2.cards, e1.animeBoosts || {}, e2.animeBoosts || {});
             const wid = battle.winner===0 ? e1.uid : e2.uid;
             const lid = battle.winner===0 ? e2.uid : e1.uid;
             const we = battle.winner===0 ? e1 : e2, le = battle.winner===0 ? e2 : e1;
@@ -2214,6 +2254,7 @@ exports.pvpLadderEnterPool = onRequest({ invoker: 'public' }, async (req, res) =
         displayName: profile.displayName || '',
         avatar: profile.avatar || '',
         cards: cardSnaps.map(s => ({ id: s.id, ...s.data() })),
+        animeBoosts: profile.animeBoosts || {},
         submittedAt: now,
     });
     try { await slotRef.update({ entryCount: FieldValue.increment(1) }); } catch(e) {}

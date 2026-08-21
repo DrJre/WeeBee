@@ -969,6 +969,7 @@ onAuthStateChanged(auth, async (user) => {
                     // Expired — lift silently
                     updateDoc(doc(db, 'profiles', user.uid), { banned: false, banExpiresAt: null }).catch(() => {});
                 }
+                window._userAnimeBoosts = d.animeBoosts || {};
             }
         } catch(e) {}
 
@@ -1141,6 +1142,7 @@ onAuthStateChanged(auth, async (user) => {
         authSection.innerHTML = `<button class="action-btn" onclick="openAuthModal()"><span class="material-symbols-outlined">login</span> Sign In</button>`;
         if(window.currentActiveViewId === 'profile-view' || window.currentActiveViewId === 'my-list-view') switchView('home-view');
         window.myAnimeList = [];
+        window._userAnimeBoosts = {};
         window.applyCursor('default');
         if (window.amberUnsubscribe) { window.amberUnsubscribe(); window.amberUnsubscribe = null; }
         _wheelLoadConfig().then(config => {
@@ -13278,12 +13280,44 @@ window._tcgClaimSetCard = async function(setId) {
         }
         // Deterministic doc ID so concurrent claims are idempotent at the Firestore level
         const cardId = `set_${setId}_${uid}`;
-        const cardData = { name: s.cardName, anime: s.animeName, rarity: 'set', setId: s.id, image: s.image || '', pullTimestamp: new Date().toISOString() };
+        const lockUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const animeKey = (s.animeName || '').toLowerCase().trim();
+
+        // Find required cards in the user's collection to lock
+        const requiredKeys = new Set((s.requiredCards || []).map(r =>
+            `${r.name}|||${_tcgNormalizeAnimeKey(r.anime)}|||${_tcgNormalizeRarityKey(r.rarity)}`
+        ));
+        const cardsToLock = myCards.filter(c => {
+            if (c.founder || c.rarity === 'set' || !c.id) return false;
+            return requiredKeys.has(`${c.name}|||${_tcgNormalizeAnimeKey(c.anime)}|||${_tcgNormalizeRarityKey(c.rarity)}`);
+        });
+
+        const claimBatch = writeBatch(db);
+        claimBatch.set(doc(db, 'card_collections', uid, 'cards', cardId), {
+            name: s.cardName, anime: s.animeName, rarity: 'set', setId: s.id,
+            image: s.image || '', pullTimestamp: new Date().toISOString(), setIntact: true,
+        });
+        for (const c of cardsToLock) {
+            claimBatch.update(doc(db, 'card_collections', uid, 'cards', c.id), {
+                setLockUntil: lockUntil, setCardId: cardId,
+            });
+        }
+        // Grant anime boost and record achievement on profile
+        claimBatch.update(doc(db, 'profiles', uid), {
+            [`animeBoosts.${animeKey}`]: 1,
+            [`setAchievements.${setId}`]: { claimedAt: new Date().toISOString(), animeName: s.animeName },
+        });
+
         document.getElementById('tcg-set-progress-modal')?.remove();
         const results = await Promise.allSettled([
-            setDoc(doc(db, 'card_collections', uid, 'cards', cardId), cardData),
+            claimBatch.commit(),
             _tcgPlaySetClaimAnimation(s)
         ]);
+        // Update client-side boost cache immediately
+        if (results[0].status === 'fulfilled') {
+            if (!window._userAnimeBoosts) window._userAnimeBoosts = {};
+            window._userAnimeBoosts[animeKey] = 1;
+        }
         if (results[0].status === 'rejected') throw results[0].reason;
         if (window._tcgCollectionCache) window._tcgCollectionCache.delete(uid);
     } catch(e) {
@@ -14987,7 +15021,22 @@ window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
         const cardSnap = await getDoc(cardRef);
         const cardData = cardSnap.exists() ? cardSnap.data() : {};
 
+        // Block dismantle if card is SET-locked
+        if (cardData.setLockUntil) {
+            const lockDate = cardData.setLockUntil?.toDate?.() || new Date(cardData.setLockUntil);
+            if (lockDate > new Date()) {
+                const daysLeft = Math.ceil((lockDate - new Date()) / (1000 * 60 * 60 * 24));
+                alert(`This card is part of a SET collection and is locked for ${daysLeft} more day${daysLeft !== 1 ? 's' : ''}. You cannot dismantle it until the lock expires.`);
+                window._tcgDismantling = false;
+                return;
+            }
+        }
+
         await deleteDoc(cardRef);
+        // Invalidate the SET card's intact status since a required card was removed
+        if (cardData.setCardId) {
+            updateDoc(doc(db, 'card_collections', uid, 'cards', cardData.setCardId), { setIntact: false }).catch(() => {});
+        }
         await _awardAmber(amount, 'tcg:dismantle');
         _incrementUserStats({ cardsDismantled: 1 }).catch(() => {});
 
@@ -15032,7 +15081,22 @@ window._tcgShatterCard = async function(cardId, rarity, name, profileUid) {
         const cardRef = doc(db, 'card_collections', uid, 'cards', cardId);
         const cardSnap = await getDoc(cardRef);
         const cardData = cardSnap.exists() ? cardSnap.data() : {};
+
+        // Block shatter if card is SET-locked
+        if (cardData.setLockUntil) {
+            const lockDate = cardData.setLockUntil?.toDate?.() || new Date(cardData.setLockUntil);
+            if (lockDate > new Date()) {
+                const daysLeft = Math.ceil((lockDate - new Date()) / (1000 * 60 * 60 * 24));
+                alert(`This card is part of a SET collection and is locked for ${daysLeft} more day${daysLeft !== 1 ? 's' : ''}. You cannot shatter it until the lock expires.`);
+                return;
+            }
+        }
+
         await deleteDoc(cardRef);
+        // Invalidate the SET card's intact status since a required card was removed
+        if (cardData.setCardId) {
+            updateDoc(doc(db, 'card_collections', uid, 'cards', cardData.setCardId), { setIntact: false }).catch(() => {});
+        }
         await _awardShards(amount);
         if (cardData.serial != null && !cardData.founder && !cardData.monthlyUr && !cardData.tradedMonthlyUr) {
             const key = _tcgCardKey({ rarity: cardData.rarity || rarity, name: cardData.name || name, anime: cardData.anime || '' });
@@ -18218,7 +18282,12 @@ window._tcgAcceptTrade = async function(tradeId) {
         alert('Trade accepted! Your cards have been updated.');
         window._tcgRenderTradingTab();
         if (document.getElementById('tcg-collection-content')) window._tcgRenderMyCollection('mycards', true);
-    } catch(e) { alert('Failed to accept trade: ' + (e.details || e.message || 'Unknown error')); }
+    } catch(e) {
+        const msg = e.details || e.message || '';
+        if (msg.includes('set_locked:offerer')) alert("The trade was blocked: the other user's card is locked as part of a SET collection and cannot be traded yet.");
+        else if (msg.includes('set_locked:recipient')) alert("The trade was blocked: one of your cards is locked as part of a SET collection. The lock expires 7 days after you claimed the SET card.");
+        else alert('Failed to accept trade: ' + (msg || 'Unknown error'));
+    }
     finally { window._tcgAcceptInProgress = false; }
 };
 
@@ -29333,7 +29402,13 @@ function _dungeonGeneratePool(dateKey) {
 const DUNGEON_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
 
 function _dungeonCardPower(card) {
-    if (card.monthlyUr || card.tradedMonthlyUr) return 16; // Wheel URs = max SSR power (SSR base 13 + low-serial bonus 3)
+    const animeKey = (card.anime || '').toLowerCase().trim();
+    const animeBoost = (window._userAnimeBoosts || {})[animeKey] || 0;
+    if (card.monthlyUr || card.tradedMonthlyUr) return 16 + animeBoost; // Wheel URs = max SSR power (SSR base 13 + low-serial bonus 3)
+    if (card.rarity === 'set') {
+        // SET gold cards retain UR+ power (25) as long as all required cards are still owned
+        return (card.setIntact !== false ? 25 : 1) + animeBoost;
+    }
     let power = DUNGEON_RARITY_POWER[card.rarity] || 1;
     if (card.founder) power += 3;
     else if (!_tcgIsEventCard(card) && card.serial != null) {
@@ -29341,7 +29416,7 @@ function _dungeonCardPower(card) {
         else if (card.serial < 100) power += 2;
         else if (card.serial < 1000) power += 1;
     }
-    return power;
+    return power + animeBoost;
 }
 
 // +1 power for every card in the party that shares an anime with at least
@@ -31639,17 +31714,17 @@ async function _pvpLoadActiveChallenges(uid) {
             getDocs(query(collection(db, 'pvp_challenges'),
                 where('challengerId', '==', uid),
                 where('status', '==', 'pending'),
-                orderBy('createdAt', 'desc'), limit(10))),
+                limit(20))),
             getDocs(query(collection(db, 'pvp_challenges'),
                 where('defenderId', '==', uid),
                 where('status', '==', 'pending'),
-                orderBy('createdAt', 'desc'), limit(10))),
+                limit(20))),
         ]);
         return [
             ...asChallenger.docs.map(d => ({ id: d.id, ...d.data(), _role: 'challenger' })),
             ...asDefender.docs.map(d => ({ id: d.id, ...d.data(), _role: 'defender' })),
         ].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-    } catch(e) { return []; }
+    } catch(e) { console.error('[pvp] loadActiveChallenges error:', e); return []; }
 }
 
 async function _pvpLoadRecentBattles(uid) {
