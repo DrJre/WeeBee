@@ -32799,7 +32799,7 @@ window._pvpTournamentRegisterFlow = async function(tourneyId) {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
     // Reuse existing PVP card picker — same 3-card party picker
-    window._pvpTournamentDraft = { tourneyId, party: [] };
+    window._pvpTournamentDraft = { tourneyId, party: [], cards: [] };
 
     const cardsSnap = await getDocs(collection(db, 'card_collections', uid, 'cards'));
     const myCards = cardsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -32807,6 +32807,7 @@ window._pvpTournamentRegisterFlow = async function(tourneyId) {
         const rOrder = { ur:6, ssr:5, sr:4, pr:3, rare:2, common:1 };
         return (rOrder[b.rarity] || 0) - (rOrder[a.rarity] || 0);
     });
+    window._pvpTournamentDraft.cards = sorted;
 
     const overlay = document.createElement('div');
     overlay.id = 'pvp-tourney-register-modal';
@@ -32815,18 +32816,13 @@ window._pvpTournamentRegisterFlow = async function(tourneyId) {
         <div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;">
             <div style="font-size:18px;font-weight:900;margin-bottom:4px;">🏆 Register for Tournament</div>
             <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Pick 3 cards as your tournament team. Entry costs 1,000 Amber.</div>
-            <div id="tourney-party-slots" style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-                ${[0,1,2].map(i => `<div id="tourney-slot-${i}" style="width:100px;height:140px;border-radius:12px;border:2px dashed var(--border-color);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text-muted);">+</div>`).join('')}
+            <div id="tourney-party-slots" style="display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+                ${[0,1,2].map(i => `<div id="tourney-slot-${i}" style="width:100px;height:140px;border-radius:12px;border:2px dashed var(--border-color);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text-muted);position:relative;">+</div>`).join('')}
             </div>
+            <div id="tourney-power-summary" style="font-size:13px;font-weight:800;color:var(--text-muted);margin-bottom:16px;">⚡ Party Power: 0</div>
             <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Your Cards</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;max-height:280px;overflow-y:auto;margin-bottom:16px;" id="tourney-card-grid">
-                ${sorted.map(c => {
-                    const border = rarityBorderColor(c.rarity);
-                    return `<div onclick="window._pvpTourneyPickCard(${JSON.stringify(c).replace(/"/g,'&quot;')})" style="cursor:pointer;border-radius:10px;overflow:hidden;border:2px solid ${border};aspect-ratio:0.7;position:relative;">
-                        <img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;">
-                        <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);font-size:9px;font-weight:700;color:#fff;padding:2px 4px;text-align:center;">${c.name||''}</div>
-                    </div>`;
-                }).join('')}
+                ${sorted.map(c => window._pvpTourneyCardCellHTML(c)).join('')}
             </div>
             <div style="display:flex;gap:8px;">
                 <button onclick="window._pvpTourneyConfirmRegistration()" id="tourney-confirm-btn" style="flex:1;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;font-weight:800;font-size:15px;cursor:pointer;opacity:0.5;" disabled>Confirm (1,000 🟡)</button>
@@ -32838,12 +32834,34 @@ window._pvpTournamentRegisterFlow = async function(tourneyId) {
     document.body.appendChild(overlay);
 };
 
-window._pvpTourneyPickCard = function(card) {
+// One grid cell — shows resolved card art, power, and a COMBO badge when the
+// card shares an anime with another currently-selected card.
+window._pvpTourneyCardCellHTML = function(c) {
     const party = window._pvpTournamentDraft?.party || [];
+    const isSel = party.some(p => p.id === c.id);
+    const animeCounts = {};
+    party.forEach(p => { const a = p.anime || ''; if (a) animeCounts[a] = (animeCounts[a] || 0) + 1; });
+    const inCombo = isSel && (animeCounts[c.anime || ''] || 0) > 1;
+    const border = inCombo ? '#a855f7' : (isSel ? 'var(--accent-yellow)' : rarityBorderColor(c.rarity));
+    return `<div onclick="window._pvpTourneyPickCard('${c.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:2px solid ${border};aspect-ratio:0.7;position:relative;background:var(--bg-gray);">
+        <img src="${_toR2Url(c.image)||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;" loading="lazy">
+        <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);font-size:9px;font-weight:700;color:#fff;padding:2px 4px;text-align:center;">
+            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name||''}</div>
+            <div style="color:${inCombo?'#d8a4ff':'#FFD700'};">⚡${_pvpCardPower(c)}${inCombo?' +1':''}</div>
+        </div>
+        ${isSel ? `<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:${inCombo?'#a855f7':'var(--accent-yellow)'};color:${inCombo?'#fff':'#222'};font-weight:900;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>` : ''}
+    </div>`;
+};
+
+window._pvpTourneyPickCard = function(cardId) {
+    const draft = window._pvpTournamentDraft;
+    if (!draft) return;
+    const card = draft.cards.find(c => c.id === cardId);
+    if (!card) return;
+    const party = draft.party;
     if (party.find(c => c.id === card.id)) return; // already picked
     if (party.length >= 3) party.shift(); // replace oldest if full
     party.push(card);
-    window._pvpTournamentDraft.party = party;
 
     [0,1,2].forEach(i => {
         const slot = document.getElementById(`tourney-slot-${i}`);
@@ -32851,12 +32869,20 @@ window._pvpTourneyPickCard = function(card) {
         const c = party[i];
         if (c) {
             slot.style.border = `2px solid ${rarityBorderColor(c.rarity)}`;
-            slot.innerHTML = `<img src="${c.image||''}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">`;
+            slot.innerHTML = `<img src="${_toR2Url(c.image)||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;border-radius:10px;">`;
         } else {
             slot.style.border = '2px dashed var(--border-color)';
             slot.innerHTML = '<span style="font-size:24px;color:var(--text-muted);">+</span>';
         }
     });
+
+    const basePower = party.reduce((sum, c) => sum + _pvpCardPower(c), 0);
+    const combo = _pvpComboBonus(party);
+    const summary = document.getElementById('tourney-power-summary');
+    if (summary) summary.textContent = `⚡ Party Power: ${basePower + combo}${combo ? ` (${basePower} base +${combo} combo)` : ''}`;
+
+    const grid = document.getElementById('tourney-card-grid');
+    if (grid) grid.innerHTML = draft.cards.map(c => window._pvpTourneyCardCellHTML(c)).join('');
 
     const btn = document.getElementById('tourney-confirm-btn');
     if (btn) { btn.disabled = party.length < 3; btn.style.opacity = party.length < 3 ? '0.5' : '1'; }
