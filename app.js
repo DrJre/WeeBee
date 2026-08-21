@@ -15305,13 +15305,24 @@ async function _tcgAssignSerial(card) {
 }
 
 // Like _tcgAssignSerial but throws 'SOLD_OUT' instead of starting a new edition.
-// Craft cannot start new editions — only pack pulls can.
+// Craft cannot start new editions — only pack pulls can. A missing card_serials
+// doc isn't a sold-out edition though — it means no one has ever pulled this
+// card, so its first edition's pool hasn't been initialized yet. That's safe
+// for craft to do too (it's not skipping ahead to a new edition, just doing
+// the same first-time setup a pack pull would do).
 async function _tcgAssignSerialCraft(card) {
     const key = _tcgCardKey(card);
+    const maxV = RARITY_MAX_VERSIONS[card.rarity] || 5000;
     const ref = doc(db, 'card_serials', key);
     return runTransaction(db, async tx => {
         const snap = await tx.get(ref);
-        if (!snap.exists() || !snap.data().versionsRemaining?.length) throw new Error('SOLD_OUT');
+        if (!snap.exists()) {
+            const pool = _tcgShufflePool(maxV);
+            const version = pool.pop();
+            tx.set(ref, { versionsRemaining: pool, edition: 1, maxVersions: maxV });
+            return { version, edition: 1 };
+        }
+        if (!snap.data().versionsRemaining?.length) throw new Error('SOLD_OUT');
         const { edition = 1 } = snap.data();
         const pool = [...snap.data().versionsRemaining];
         const idx = Math.floor(Math.random() * pool.length);
