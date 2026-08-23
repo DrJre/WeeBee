@@ -32921,6 +32921,72 @@ async function _pvpLoadMyTournamentEntry(tourneyId, uid) {
     } catch(e) { return null; }
 }
 
+// Compact "1st: 1,000🟡 · 2nd: 500🟡 · ..." strip, plus a button opening the
+// full breakdown (including prize cards) — shown across all tournament states
+// so users can see what's on the line before and during entry.
+function _pvpTournamentPrizesHTML(tourney) {
+    const prizes = tourney.prizes || {};
+    const places = Object.keys(prizes).map(Number).filter(p => {
+        const pr = prizes[String(p)];
+        return pr && (pr.amber || pr.shards || pr.cards?.length);
+    }).sort((a,b) => a - b);
+    if (!places.length) return '';
+
+    const medal = { 1:'🥇', 2:'🥈', 3:'🥉' };
+    const chips = places.slice(0, 4).map(p => {
+        const pr = prizes[String(p)];
+        const label = medal[p] || `${p}th`;
+        const parts = [];
+        if (pr.amber) parts.push(`${pr.amber.toLocaleString()}🟡`);
+        if (pr.shards) parts.push(`${pr.shards.toLocaleString()}🔷`);
+        if (pr.cards?.length) parts.push(`+${pr.cards.length} card${pr.cards.length>1?'s':''}`);
+        return `<span style="background:rgba(0,0,0,0.06);border-radius:8px;padding:4px 9px;font-size:11px;font-weight:700;">${label} ${parts.join(' + ')}</span>`;
+    }).join('');
+
+    return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;">
+        <span style="font-size:11px;font-weight:700;color:var(--text-muted);">🎁 Prizes:</span>
+        ${chips}
+        ${places.length > 4 ? `<span style="font-size:11px;color:var(--text-muted);">+${places.length-4} more</span>` : ''}
+        <button onclick="event.stopPropagation();window._pvpOpenPrizeDetailsModal(${JSON.stringify(prizes).replace(/"/g,'&quot;')})" style="font-size:11px;font-weight:700;color:#6366f1;background:none;border:none;cursor:pointer;padding:2px 4px;text-decoration:underline;">View all</button>
+    </div>`;
+}
+
+window._pvpOpenPrizeDetailsModal = function(prizes) {
+    document.getElementById('pvp-prize-details-modal')?.remove();
+    const placeLabels = { 1:'🥇 1st', 2:'🥈 2nd', 3:'🥉 3rd', 4:'🥉 4th' };
+    const places = Object.keys(prizes).map(Number).sort((a,b) => a - b);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'pvp-prize-details-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:10001;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = `
+        <div style="background:var(--bg-white);border-radius:18px;padding:22px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                <div style="font-size:16px;font-weight:900;">🎁 Tournament Prizes</div>
+                <button onclick="document.getElementById('pvp-prize-details-modal')?.remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+                ${places.map(p => {
+                    const pr = prizes[String(p)] || {};
+                    return `<div style="border:1px solid var(--border-color);border-radius:10px;padding:10px 12px;">
+                        <div style="font-weight:800;font-size:13px;margin-bottom:4px;">${placeLabels[p] || `${p}th Place`}</div>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);margin-bottom:${pr.cards?.length?'8px':'0'};">
+                            ${pr.amber ? `<span>🟡 ${pr.amber.toLocaleString()} Amber</span>` : ''}
+                            ${pr.shards ? `<span>🔷 ${pr.shards.toLocaleString()} Shards</span>` : ''}
+                        </div>
+                        ${pr.cards?.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${pr.cards.map(c => `
+                            <div style="width:56px;text-align:center;">
+                                <div style="width:56px;height:78px;border-radius:6px;overflow:hidden;border:2px solid ${rarityBorderColor(c.rarity)};"><img src="${_toR2Url(c.image)||''}" style="width:100%;height:100%;object-fit:cover;"></div>
+                                <div style="font-size:9px;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name||''}</div>
+                            </div>`).join('')}</div>` : ''}
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+};
+
 function _pvpTournamentBannerHTML(tourney, myEntry, uid) {
     if (!tourney) return '';
 
@@ -32930,6 +32996,7 @@ function _pvpTournamentBannerHTML(tourney, myEntry, uid) {
     };
 
     const baseStyle = 'border-radius:16px;padding:20px 22px;margin-bottom:20px;border:1px solid';
+    const prizesHTML = _pvpTournamentPrizesHTML(tourney);
 
     if (tourney.status === 'registration') {
         const registered = !!myEntry;
@@ -32943,6 +33010,7 @@ function _pvpTournamentBannerHTML(tourney, myEntry, uid) {
                     <div style="font-size:12px;color:var(--text-muted);">Starts: ${fmtDate(tourney.startTime)} &nbsp;·&nbsp; Entry: 1,000 Amber</div>
                     <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${tourney.playerCount || 0} players registered</div>
                     ${registered ? `<div style="font-size:12px;color:#22c55e;font-weight:700;margin-top:4px;">✅ You're registered!</div>` : ''}
+                    ${prizesHTML}
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
                     ${!registered && regOpen ? `<button onclick="window._pvpTournamentRegisterFlow('${tourney.id}')" style="padding:11px 22px;border-radius:10px;border:none;background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;font-weight:800;font-size:14px;cursor:pointer;">Register (1,000 🟡)</button>` : ''}
@@ -32964,6 +33032,7 @@ function _pvpTournamentBannerHTML(tourney, myEntry, uid) {
                     <div style="font-size:18px;font-weight:900;margin-bottom:2px;">${tourney.name || 'WeeBee Tournament'}</div>
                     <div style="font-size:12px;color:var(--text-muted);">${isFinal ? '🏆 Championship Match' : `Round ${tourney.currentRound} of ${tourney.totalRounds}`} &nbsp;·&nbsp; Next round: ${nextRoundStr}</div>
                     ${myEntry ? `<div style="font-size:12px;color:#fbbf24;font-weight:700;margin-top:4px;">You are in this tournament!</div>` : ''}
+                    ${prizesHTML}
                 </div>
                 <button onclick="window._pvpViewBracket('${tourney.id}')" style="padding:11px 22px;border-radius:10px;border:none;background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#222;font-weight:800;font-size:14px;cursor:pointer;">View Bracket</button>
             </div>
@@ -32978,6 +33047,7 @@ function _pvpTournamentBannerHTML(tourney, myEntry, uid) {
                     <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#22c55e;margin-bottom:4px;">🏆 Tournament Complete</div>
                     <div style="font-size:18px;font-weight:900;margin-bottom:2px;">${tourney.name || 'WeeBee Tournament'}</div>
                     <div style="font-size:12px;color:var(--text-muted);">🥇 Winner: <strong>${tourney.winnerName || 'Unknown'}</strong></div>
+                    ${prizesHTML}
                 </div>
                 <button onclick="window._pvpViewBracket('${tourney.id}')" style="padding:11px 22px;border-radius:10px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-weight:800;font-size:14px;cursor:pointer;">View Results</button>
             </div>
@@ -33238,7 +33308,16 @@ window._tournamentAdminSelect = async function(tourneyId) {
     const snap = await getDoc(doc(db, 'pvp_tournaments', tourneyId));
     if (!snap.exists()) return;
     const t = snap.data();
-    _tournamentAdminRenderPrizeEditor(t.prizes || {});
+    let prizes = t.prizes || {};
+    // A freshly created tournament has no prizes yet — fall back to whatever
+    // was last saved so the admin isn't re-typing the same amounts every time.
+    if (!Object.keys(prizes).length) {
+        try {
+            const defSnap = await getDoc(doc(db, 'meta', 'tournamentPrizeDefaults'));
+            if (defSnap.exists()) prizes = defSnap.data().prizes || {};
+        } catch(e) {}
+    }
+    _tournamentAdminRenderPrizeEditor(prizes);
     const statusEl = document.getElementById('admin-tourney-action-status');
     if (statusEl) statusEl.textContent = `Selected: ${t.name} (${tourneyId})`;
 };
@@ -33365,6 +33444,8 @@ window._tournamentAdminSavePrizes = async function() {
     try {
         if (status) status.textContent = 'Saving…';
         await _callFn('adminSaveTournamentPrizes', { tourneyId, prizes });
+        // Remember these amounts as the default for the next tournament created.
+        setDoc(doc(db, 'meta', 'tournamentPrizeDefaults'), { prizes, updatedAt: new Date() }).catch(() => {});
         if (status) status.textContent = '✅ Prizes saved!';
     } catch(e) { if (status) status.textContent = `Error: ${e.message}`; }
 };
