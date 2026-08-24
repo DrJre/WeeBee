@@ -2135,6 +2135,7 @@ exports.pvpLadderHourlyClose = onSchedule({ schedule: '30 * * * *', timeZone: 'U
         for (const [uid, d] of Object.entries(weekDelta)) {
             nb.set(db.collection('notifications').doc(), {
                 targetUid: uid, type: 'ladder_match', slotId, matchId: matchIdByUid[uid],
+                senderName: 'Weekly Ladder', senderAvatar: '',
                 message: d.wins > 0 ? '⚔️ Ladder match result: you won! Check the Weekly Ladder.' : '⚔️ Ladder match result: you lost. Better luck next round.',
                 timestamp: now, read: false,
             });
@@ -2217,6 +2218,7 @@ exports.pvpLadderWeeklyClose = onSchedule({ schedule: '0 19 * * 6', timeZone: 'A
 
         pb.set(db.collection('notifications').doc(), {
             targetUid: uid, type: 'ladder_reward',
+            senderName: 'Weekly Ladder', senderAvatar: '',
             message: `🏆 Weekly Ladder ended! You finished #${place} and earned ${parts.join(', ')}!`,
             timestamp: now, read: false,
         });
