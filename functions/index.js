@@ -2076,15 +2076,27 @@ exports.pvpLadderHourlyClose = onSchedule({ schedule: '30 * * * *', timeZone: 'U
 
     const batch = db.batch();
     const weekDelta = {};
+    const matchIdByUid = {};
     for (let i = 0; i < entries.length; i += 2) {
         const e1 = entries[i], e2 = entries[i+1] || null;
         const isMirror = !e2;
         const matchRef = slotRef.collection('matches').doc();
         if (isMirror) {
-            batch.set(matchRef, { uid1: e1.uid, uid1Name: e1.displayName||'', uid2: e1.uid, isMirror: true,
-                result: { winnerId: e1.uid }, resolvedAt: now });
+            // No opponent this hour — fight a mirror of your own party (same
+            // cards on both sides) so there's a real best-of-3 to look at,
+            // not just a silent freebie win with no data behind it.
+            const boosts = e1.animeBoosts || {};
+            const battle = _ladderRunBattle(e1.cards, e1.cards, boosts, boosts);
+            batch.set(matchRef, {
+                uid1: e1.uid, uid1Name: e1.displayName||'', uid1Avatar: e1.avatar||'',
+                uid2: e1.uid, uid2Name: e1.displayName||'', uid2Avatar: e1.avatar||'',
+                isMirror: true,
+                result: { winnerId: e1.uid, rounds: battle.rounds, p1Score: battle.p1Score, p2Score: battle.p2Score },
+                resolvedAt: now,
+            });
             if (!weekDelta[e1.uid]) weekDelta[e1.uid] = { wins:0, losses:0, name: e1.displayName||'', av: e1.avatar||'' };
             weekDelta[e1.uid].wins++;
+            matchIdByUid[e1.uid] = matchRef.id;
         } else {
             const battle = _ladderRunBattle(e1.cards, e2.cards, e1.animeBoosts || {}, e2.animeBoosts || {});
             const wid = battle.winner===0 ? e1.uid : e2.uid;
@@ -2101,6 +2113,8 @@ exports.pvpLadderHourlyClose = onSchedule({ schedule: '30 * * * *', timeZone: 'U
             if (!weekDelta[lid]) weekDelta[lid] = { wins:0, losses:0, name: le.displayName||'', av: le.avatar||'' };
             weekDelta[wid].wins++;
             weekDelta[lid].losses++;
+            matchIdByUid[e1.uid] = matchRef.id;
+            matchIdByUid[e2.uid] = matchRef.id;
         }
     }
 
@@ -2120,7 +2134,7 @@ exports.pvpLadderHourlyClose = onSchedule({ schedule: '30 * * * *', timeZone: 'U
         const nb = db.batch();
         for (const [uid, d] of Object.entries(weekDelta)) {
             nb.set(db.collection('notifications').doc(), {
-                targetUid: uid, type: 'ladder_match', slotId,
+                targetUid: uid, type: 'ladder_match', slotId, matchId: matchIdByUid[uid],
                 message: d.wins > 0 ? '⚔️ Ladder match result: you won! Check the Weekly Ladder.' : '⚔️ Ladder match result: you lost. Better luck next round.',
                 timestamp: now, read: false,
             });

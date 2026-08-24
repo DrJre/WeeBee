@@ -1546,6 +1546,8 @@ window.fetchNotifications = function() {
                 onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-pvp');window._pvpReplayBattle('${n.challengeId}')"`;
             } else if (n.type === 'tournament_open' || n.type === 'tournament_result') {
                 onClickAction = `onclick="window.switchView('tcg-view');window.switchTcgTab(null,'tcg-tab-pvp')"`;
+            } else if (n.type === 'ladder_match' && n.slotId && n.matchId) {
+                onClickAction = `onclick="window._pvpOpenLadderMatchResult('${n.slotId}','${n.matchId}')"`;
             } else if (n.type === 'follow' || n.type === 'friend_accept' || n.type === 'friend_request') {
                 onClickAction = `onclick="viewUserProfile('${n.senderUid}')"`;
             } else if (n.type === 'system') {
@@ -33695,6 +33697,65 @@ window._pvpStartLadderLiveListener = function(weekId, uid) {
         const recEl = document.getElementById('ladder-my-record');
         if (recEl) recEl.innerHTML = _pvpLadderMyRecordHTML(leaderboard.find(e => e.uid === uid) || null, leaderboard, uid);
     }, (e) => console.error('[ladder] live listener error', e));
+};
+
+// Shows the best-of-3 breakdown for one resolved ladder match — real 2-player
+// matches and mirror matches (solo players fighting their own party) alike.
+window._pvpOpenLadderMatchResult = async function(slotId, matchId) {
+    document.getElementById('pvp-ladder-match-modal')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'pvp-ladder-match-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10001;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = `<div id="pvp-ladder-match-body" style="background:var(--bg-white);border-radius:18px;padding:22px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto;"><div style="text-align:center;padding:30px;color:var(--text-muted);">Loading…</div></div>`;
+    document.body.appendChild(overlay);
+
+    try {
+        const snap = await getDoc(doc(db, 'pvp_ladder_pool', slotId, 'matches', matchId));
+        const body = document.getElementById('pvp-ladder-match-body');
+        if (!body) return;
+        if (!snap.exists()) { body.innerHTML = '<p style="color:var(--text-muted);">Match not found.</p>'; return; }
+        const m = snap.data();
+        const result = m.result || {};
+        const rounds = result.rounds || [];
+        const isMirror = !!m.isMirror;
+        const myUid = auth.currentUser?.uid;
+        const won = result.winnerId === myUid;
+        const avatarUrl = (name, av) => av || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(name||'?')}&backgroundColor=ffc107&fontColor=333333`;
+
+        body.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                <div style="font-size:16px;font-weight:900;">⚔️ Ladder Match Result</div>
+                <button onclick="document.getElementById('pvp-ladder-match-modal')?.remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            ${isMirror ? `<div style="font-size:12px;font-weight:700;color:#a78bfa;background:rgba(167,139,250,0.12);border-radius:8px;padding:6px 10px;margin-bottom:12px;text-align:center;">🪞 Mirror Match — no opponent that round, you fought your own team</div>` : ''}
+            <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:16px;">
+                <div style="text-align:center;">
+                    <img src="${avatarUrl(m.uid1Name, m.uid1Avatar)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;">
+                    <div style="font-size:12px;font-weight:700;margin-top:4px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.uid1Name||'Player'}</div>
+                    <div style="font-size:20px;font-weight:900;color:${result.winnerId===m.uid1?'#22c55e':'var(--text-muted)'};">${result.p1Score ?? '—'}</div>
+                </div>
+                <div style="font-size:13px;font-weight:800;color:var(--text-muted);">VS</div>
+                <div style="text-align:center;">
+                    <img src="${avatarUrl(m.uid2Name, m.uid2Avatar)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;">
+                    <div style="font-size:12px;font-weight:700;margin-top:4px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.uid2Name||'Player'}${isMirror?' (mirror)':''}</div>
+                    <div style="font-size:20px;font-weight:900;color:${result.winnerId===m.uid2 && !isMirror?'#22c55e':'var(--text-muted)'};">${result.p2Score ?? '—'}</div>
+                </div>
+            </div>
+            ${myUid ? `<div style="text-align:center;font-weight:800;font-size:13px;color:${won?'#22c55e':'#ef4444'};margin-bottom:14px;">${won?'✅ You won this match!':'❌ You lost this match.'}</div>` : ''}
+            ${rounds.length ? `<div style="display:flex;flex-direction:column;gap:8px;">
+                ${rounds.map((r,i) => `<div style="border:1px solid var(--border-color);border-radius:10px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                    <div style="font-size:11px;font-weight:700;color:var(--text-muted);width:52px;flex-shrink:0;">Round ${i+1}</div>
+                    <div style="flex:1;text-align:right;font-size:12px;font-weight:${r.winner===0?'800':'500'};color:${r.winner===0?rarityBorderColor(r.card1?.rarity||'common'):'var(--text-muted)'};">${r.card1?.name||'?'} <span style="font-size:10px;">⚡${r.power1}</span></div>
+                    <div style="font-size:11px;color:var(--text-muted);flex-shrink:0;">vs</div>
+                    <div style="flex:1;font-size:12px;font-weight:${r.winner===1?'800':'500'};color:${r.winner===1?rarityBorderColor(r.card2?.rarity||'common'):'var(--text-muted)'};">${r.card2?.name||'?'} <span style="font-size:10px;">⚡${r.power2}</span></div>
+                </div>`).join('')}
+            </div>` : `<div style="font-size:12px;color:var(--text-muted);text-align:center;">No round data for this match.</div>`}
+        `;
+    } catch(e) {
+        const body = document.getElementById('pvp-ladder-match-body');
+        if (body) body.innerHTML = `<p style="color:#ef4444;">Failed to load: ${e.message}</p>`;
+    }
 };
 
 // Called after PVP tab renders — starts countdown timers
