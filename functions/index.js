@@ -2087,15 +2087,20 @@ exports.pvpLadderHourlyClose = onSchedule({ schedule: '30 * * * *', timeZone: 'U
             // not just a silent freebie win with no data behind it.
             const boosts = e1.animeBoosts || {};
             const battle = _ladderRunBattle(e1.cards, e1.cards, boosts, boosts);
+            const playerWon = battle.winner === 0;
             batch.set(matchRef, {
                 uid1: e1.uid, uid1Name: e1.displayName||'', uid1Avatar: e1.avatar||'',
                 uid2: e1.uid, uid2Name: e1.displayName||'', uid2Avatar: e1.avatar||'',
                 isMirror: true,
-                result: { winnerId: e1.uid, rounds: battle.rounds, p1Score: battle.p1Score, p2Score: battle.p2Score },
+                // uid1 and uid2 are the same player, so winnerId alone can't
+                // distinguish a win from a loss here — playerWon carries the
+                // actual outcome. winnerId is still set to e1.uid on a win so
+                // the client's generic "did I win" check keeps working there.
+                result: { winnerId: playerWon ? e1.uid : null, playerWon, rounds: battle.rounds, p1Score: battle.p1Score, p2Score: battle.p2Score },
                 resolvedAt: now,
             });
             if (!weekDelta[e1.uid]) weekDelta[e1.uid] = { wins:0, losses:0, name: e1.displayName||'', av: e1.avatar||'' };
-            weekDelta[e1.uid].wins++;
+            if (playerWon) weekDelta[e1.uid].wins++; else weekDelta[e1.uid].losses++;
             matchIdByUid[e1.uid] = matchRef.id;
         } else {
             const battle = _ladderRunBattle(e1.cards, e2.cards, e1.animeBoosts || {}, e2.animeBoosts || {});

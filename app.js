@@ -33739,7 +33739,7 @@ window._pvpOpenLadderMatchResult = async function(slotId, matchId) {
                 <div style="text-align:center;">
                     <img src="${avatarUrl(m.uid2Name, m.uid2Avatar)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;">
                     <div style="font-size:12px;font-weight:700;margin-top:4px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.uid2Name||'Player'}${isMirror?' (mirror)':''}</div>
-                    <div style="font-size:20px;font-weight:900;color:${result.winnerId===m.uid2 && !isMirror?'#22c55e':'var(--text-muted)'};">${result.p2Score ?? '—'}</div>
+                    <div style="font-size:20px;font-weight:900;color:${isMirror ? (result.playerWon===false?'#22c55e':'var(--text-muted)') : (result.winnerId===m.uid2?'#22c55e':'var(--text-muted)')};">${result.p2Score ?? '—'}</div>
                 </div>
             </div>
             ${myUid ? `<div style="text-align:center;font-weight:800;font-size:13px;color:${won?'#22c55e':'#ef4444'};margin-bottom:14px;">${won?'✅ You won this match!':'❌ You lost this match.'}</div>` : ''}
