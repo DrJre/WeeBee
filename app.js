@@ -33773,7 +33773,7 @@ window._pvpEnterLadderPool = async function() {
 };
 
 window._ladderPoolToggleCard = function(cardId) {
-    const myCards = window._tcgCollectionCache?.[auth.currentUser?.uid] || [];
+    const myCards = window._tcgCollectionCache?.get(auth.currentUser?.uid) || [];
     const card = myCards.find(c => c.id === cardId);
     if (!card) return;
     const draft = window._ladderPoolDraft;
