@@ -31933,7 +31933,10 @@ window.loadPvpTab = async function() {
             <button class="action-btn" style="padding:14px 32px;font-size:15px;font-weight:800;background:linear-gradient(135deg,#6366f1,#a855f7);" onclick="window._pvpFindOpponent()">⚔️ Challenge a Player</button>
         </div>
     `;
-    if (ladderData?.week) window._pvpStartLadderTimers();
+    if (ladderData?.week) {
+        window._pvpStartLadderTimers();
+        window._pvpStartLadderLiveListener(ladderData.week.id, uid);
+    }
 };
 
 // ── Stats Block ───────────────────────────────
@@ -33623,21 +33626,6 @@ function _pvpWeeklyLadderHTML(data, uid) {
         </div>`;
     }
 
-    const myWins   = myEntry?.wins   || 0;
-    const myLosses = myEntry?.losses || 0;
-    const myRank   = leaderboard.findIndex(e => e.uid === uid) + 1;
-
-    const lbRows = leaderboard.slice(0,10).map((e, i) => {
-        const isMe = e.uid === uid;
-        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:${isMe ? 'rgba(99,102,241,0.12)' : 'transparent'};">
-            <div style="width:24px;text-align:center;font-size:13px;font-weight:800;color:${i<3?'var(--accent-yellow)':'var(--text-muted)'};">${placeEmoji(i+1)}</div>
-            <img src="${e.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(e.displayName||'?')}&backgroundColor=ffc107&fontColor=333333`}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;">
-            <div style="flex:1;min-width:0;font-size:13px;font-weight:${isMe?'800':'600'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${isMe?'#a78bfa':'var(--text-dark)'};">${e.displayName||'Player'}${isMe?' (you)':''}</div>
-            <div style="font-size:12px;font-weight:700;color:#22c55e;white-space:nowrap;">${e.wins||0}W</div>
-            <div style="font-size:12px;color:var(--text-muted);white-space:nowrap;">${e.losses||0}L</div>
-        </div>`;
-    }).join('');
-
     return `<div style="background:var(--bg-gray);border-radius:16px;padding:20px 24px;margin-bottom:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
             <div>
@@ -33654,7 +33642,7 @@ function _pvpWeeklyLadderHTML(data, uid) {
             </div>
             <div style="text-align:center;">
                 <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">My Record</div>
-                <div style="font-size:14px;font-weight:800;">${myWins}W – ${myLosses}L${myRank ? ` · <span style="color:#a78bfa;">#${myRank}</span>` : ''}</div>
+                <div id="ladder-my-record" style="font-size:14px;font-weight:800;">${_pvpLadderMyRecordHTML(myEntry, leaderboard, uid)}</div>
             </div>
             <div id="ladder-enter-area">
                 ${alreadyEntered
@@ -33664,11 +33652,50 @@ function _pvpWeeklyLadderHTML(data, uid) {
             </div>
         </div>
 
-        ${leaderboard.length ? `
-        <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Leaderboard</div>
-        <div>${lbRows}</div>` : `<div style="font-size:13px;color:var(--text-muted);text-align:center;padding:12px 0;">No matches yet this week — enter the pool to be first!</div>`}
+        <div id="ladder-leaderboard-container">${_pvpLadderLeaderboardBodyHTML(leaderboard, uid)}</div>
     </div>`;
 }
+
+function _pvpLadderMyRecordHTML(myEntry, leaderboard, uid) {
+    const myWins   = myEntry?.wins   || 0;
+    const myLosses = myEntry?.losses || 0;
+    const myRank   = leaderboard.findIndex(e => e.uid === uid) + 1;
+    return `${myWins}W – ${myLosses}L${myRank ? ` · <span style="color:#a78bfa;">#${myRank}</span>` : ''}`;
+}
+
+function _pvpLadderLeaderboardBodyHTML(leaderboard, uid) {
+    if (!leaderboard.length) return `<div style="font-size:13px;color:var(--text-muted);text-align:center;padding:12px 0;">No matches yet this week — enter the pool to be first!</div>`;
+    const placeEmoji = p => ['🥇','🥈','🥉'][p-1] || `#${p}`;
+    const lbRows = leaderboard.slice(0,10).map((e, i) => {
+        const isMe = e.uid === uid;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:${isMe ? 'rgba(99,102,241,0.12)' : 'transparent'};">
+            <div style="width:24px;text-align:center;font-size:13px;font-weight:800;color:${i<3?'var(--accent-yellow)':'var(--text-muted)'};">${placeEmoji(i+1)}</div>
+            <img src="${e.avatar || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(e.displayName||'?')}&backgroundColor=ffc107&fontColor=333333`}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;">
+            <div style="flex:1;min-width:0;font-size:13px;font-weight:${isMe?'800':'600'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${isMe?'#a78bfa':'var(--text-dark)'};">${e.displayName||'Player'}${isMe?' (you)':''}</div>
+            <div style="font-size:12px;font-weight:700;color:#22c55e;white-space:nowrap;">${e.wins||0}W</div>
+            <div style="font-size:12px;color:var(--text-muted);white-space:nowrap;">${e.losses||0}L</div>
+        </div>`;
+    }).join('');
+    return `<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Leaderboard</div>
+        <div>${lbRows}</div>`;
+}
+
+// Live-updates the leaderboard rows and "My Record" line as hourly matches
+// resolve, instead of only refreshing on the next full PVP tab load.
+window._pvpLadderUnsubscribe = null;
+window._pvpStartLadderLiveListener = function(weekId, uid) {
+    if (window._pvpLadderUnsubscribe) { window._pvpLadderUnsubscribe(); window._pvpLadderUnsubscribe = null; }
+    if (!weekId) return;
+    const q = query(collection(db, 'pvp_ladder_weeks', weekId, 'entries'), orderBy('wins', 'desc'), limit(20));
+    window._pvpLadderUnsubscribe = onSnapshot(q, (snap) => {
+        const leaderboard = snap.docs.map(d => ({ uid: d.id, ...d.data() }))
+            .sort((a, b) => (b.wins||0) - (a.wins||0) || (a.losses||0) - (b.losses||0));
+        const lbEl = document.getElementById('ladder-leaderboard-container');
+        if (lbEl) lbEl.innerHTML = _pvpLadderLeaderboardBodyHTML(leaderboard, uid);
+        const recEl = document.getElementById('ladder-my-record');
+        if (recEl) recEl.innerHTML = _pvpLadderMyRecordHTML(leaderboard.find(e => e.uid === uid) || null, leaderboard, uid);
+    }, (e) => console.error('[ladder] live listener error', e));
+};
 
 // Called after PVP tab renders — starts countdown timers
 window._pvpStartLadderTimers = function() {
