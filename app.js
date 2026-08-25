@@ -14746,6 +14746,14 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
     const _shatterAmt = TCG_SHATTER_RATES[card.rarity] || 0;
     const _canFuse = !!TCG_FUSE_REQUIREMENTS[card.rarity];
     const _safeCardName = (card.name || '').replace(/'/g, "\\'");
+    // Same thresholds used everywhere else MVP count affects power (card face
+    // star badge, dungeon/PVP/ladder power calc) — mirrored here for display.
+    const MVP_STAR_THRESHOLDS_VIEW = { sr: 12, 'sr+': 12, ssr: 30, 'ssr+': 30, ur: 50, 'ur+': 50 };
+    const _mvpThreshold = MVP_STAR_THRESHOLDS_VIEW[card.rarity];
+    const _mvpCount = card.mvpCount || 0;
+    const mvpHTML = _mvpThreshold != null
+        ? `<div><strong>MVP Count:</strong> ${_mvpCount} / ${_mvpThreshold}${_mvpCount >= _mvpThreshold ? ' ⭐ (+1 Power)' : ''}</div>`
+        : (_mvpCount > 0 ? `<div><strong>MVP Count:</strong> ${_mvpCount}</div>` : '');
 
     body.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
@@ -14759,6 +14767,7 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
             <div><strong>Series:</strong> ${card.anime}</div>
             <div><strong>Rarity:</strong> ${rarityLabel}</div>
             <div><strong>Power:</strong> ${_dungeonCardPower(card)}</div>
+            ${mvpHTML}
             ${isSet ? `<button onclick="document.getElementById('tcg-card-viewer-modal').remove();window._tcgOpenSetProgress('${card.setId||''}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:#f5c842;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">★ View Set Progress</button>`
             : !isPR ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                 <div><strong>Version:</strong> ${versionText}</div>
