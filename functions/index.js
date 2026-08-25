@@ -1393,8 +1393,8 @@ exports.adminGiftGodPack = onRequest({ invoker: 'public' }, async (req, res) => 
 
 // ── TCG Community Boss ─────────────────────────────────────────────────────
 
-const BOSS_CARD_DAMAGE_CF = { common: 10, rare: 30, sr: 150, ssr: 500, ur: 2000, pr: 800 };
-const BOSS_CRIT_RATES    = { ssr: 0.20, ur: 0.25 }; // 20% SSR, 25% UR → 2× damage on crit
+const BOSS_CARD_DAMAGE_CF = { common: 10, rare: 30, sr: 150, 'sr+': 275, ssr: 500, 'ssr+': 1000, ur: 2000, 'ur+': 4000, pr: 800 };
+const BOSS_CRIT_RATES    = { ssr: 0.20, 'ssr+': 0.20, ur: 0.25, 'ur+': 0.25 }; // 20% SSR(+), 25% UR(+) → 2× damage on crit
 const BOSS_ANIME_MATCH_MULT = 1.5;                   // +50% if card anime matches the boss
 
 exports.attackBoss = onRequest({ invoker: 'public' }, async (req, res) => {

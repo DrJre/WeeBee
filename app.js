@@ -29798,7 +29798,7 @@ window.loadDungeonTab = async function() {
 
 // ── Community Boss ────────────────────────────────────────────────────────────
 
-const BOSS_CARD_DAMAGE = { common: 10, rare: 30, sr: 150, ssr: 500, ur: 2000, pr: 800 };
+const BOSS_CARD_DAMAGE = { common: 10, rare: 30, sr: 150, 'sr+': 275, ssr: 500, 'ssr+': 1000, ur: 2000, 'ur+': 4000, pr: 800 };
 
 function _bossCardDamage(card) { return BOSS_CARD_DAMAGE[card?.rarity] || 0; }
 
@@ -29816,7 +29816,7 @@ function _bossWeekId() {
 }
 
 function _bossRarityLabel(r) {
-    return { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' }[r] || r;
+    return { 'ur+':'UR+', ur:'UR', 'ssr+':'SSR+', ssr:'SSR', 'sr+':'SR+', sr:'SR', rare:'Rare', common:'Common', pr:'Event' }[r] || r;
 }
 
 window.loadCommunityBossSection = async function() {
