@@ -13167,7 +13167,12 @@ function _tcgNormalizeAnimeKey(name) {
 // treated as equivalent so that a required "rare" slot is satisfied by a "common"
 // copy of the same character and vice versa. SR/SSR/UR/PR/NR still match exactly.
 function _tcgNormalizeRarityKey(rarity) {
-    return (rarity === 'rare' || rarity === 'common') ? 'pool' : (rarity || 'pool');
+    if (rarity === 'rare' || rarity === 'common') return 'pool';
+    // A fused +rarity (sr+/ssr+/ur+) is still the same required card for SET
+    // purposes — collapse it back to its base rarity so fusing a needed card
+    // doesn't make it stop counting toward the set.
+    if (typeof rarity === 'string' && rarity.endsWith('+')) return rarity.slice(0, -1);
+    return rarity || 'pool';
 }
 
 window._tcgSetCompletionCount = function _tcgSetCompletionCount(setDef, myCards) {
