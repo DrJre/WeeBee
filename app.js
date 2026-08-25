@@ -29691,11 +29691,16 @@ async function _dungeonLoadState(uid) {
 
 // Tracks a player's progress through today's 5-gate pool:
 // { date: '<EST date key>', poolIndex: 0-5, results: [{gateId,success,reward}], summaryShared }
+// Deliberately does NOT swallow read errors into null — a transient failure
+// here is indistinguishable from "no progress doc exists yet" to callers,
+// and _dungeonClaim in particular treats a null return as license to start
+// from a blank slate (no difficulty, poolIndex 0) and save that over the
+// player's real progress. Letting failures throw means a network hiccup
+// aborts the claim with a retryable error instead of silently wiping
+// difficulty and rolling the daily pool back a gate.
 async function _dungeonLoadProgress(uid) {
-    try {
-        const snap = await getDoc(doc(db, 'dungeon_progress', uid));
-        return snap.exists() ? snap.data() : null;
-    } catch(e) { return null; }
+    const snap = await getDoc(doc(db, 'dungeon_progress', uid));
+    return snap.exists() ? snap.data() : null;
 }
 
 async function _dungeonSaveProgress(uid, progress) {
