@@ -13023,6 +13023,24 @@ window._tcgSetPackQty = function(packId, qty) {
 // Items are read directly (allowed for the owner), but every write — including
 // "opening" one — goes through the openInventoryItems Cloud Function. The client
 // never decides what's inside a pack; it only ever displays what's already there.
+//
+// The badge tracks "seen" item ids in localStorage rather than just "any items
+// present" — a pack the user deliberately keeps unopened shouldn't hold the
+// badge on forever. Visiting the Inventory tab marks everything currently
+// there as seen; the badge reappears only once a genuinely new item lands.
+function _tcgInventorySeenIds() {
+    if (!auth.currentUser) return new Set();
+    try {
+        return new Set(JSON.parse(localStorage.getItem(`wb_inv_seen_${auth.currentUser.uid}`) || '[]'));
+    } catch(e) { return new Set(); }
+}
+function _tcgInventoryMarkAllSeen(items) {
+    if (!auth.currentUser) return;
+    try {
+        localStorage.setItem(`wb_inv_seen_${auth.currentUser.uid}`, JSON.stringify(items.map(i => i.id)));
+    } catch(e) {}
+}
+
 window._tcgInventoryGroups = [];
 window._tcgRenderInventory = async function() {
     const el = document.getElementById('tcg-inventory');
@@ -13042,8 +13060,10 @@ window._tcgRenderInventory = async function() {
         return;
     }
 
+    // Viewing the tab acknowledges everything currently in it.
+    _tcgInventoryMarkAllSeen(items);
     const badge = document.getElementById('tcg-inventory-badge');
-    if (badge) badge.style.display = items.length ? 'block' : 'none';
+    if (badge) badge.style.display = 'none';
 
     if (!items.length) {
         el.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--text-muted);">
@@ -24601,7 +24621,10 @@ window.switchView = function(targetId, isSearch = false, skipHistory = false) {
         if (auth.currentUser) {
             getDocs(collection(db, 'inventory', auth.currentUser.uid, 'items')).then(snap => {
                 const badge = document.getElementById('tcg-inventory-badge');
-                if (badge) badge.style.display = snap.size ? 'block' : 'none';
+                if (!badge) return;
+                const seen = _tcgInventorySeenIds();
+                const hasUnseen = snap.docs.some(d => !seen.has(d.id));
+                badge.style.display = hasUnseen ? 'block' : 'none';
             }).catch(() => {});
         }
     }
