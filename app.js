@@ -33942,12 +33942,13 @@ window._pvpEnterLadderPool = async function() {
         grid.innerHTML = filtered.map(card => {
             const sel = draftIds.has(card.id);
             const idx = draft.findIndex(c => c.id === card.id);
-            return `<div onclick="window._ladderPoolToggleCard('${card.id}')" style="cursor:pointer;border:2px solid ${sel?'#a78bfa':'transparent'};border-radius:10px;padding:8px;background:${sel?'rgba(167,139,250,0.1)':'var(--bg-gray)'};position:relative;transition:border-color .15s;">
+            return `<div onclick="window._ladderPoolToggleCard('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:2px solid ${sel?'#a78bfa':'transparent'};background:var(--bg-gray);position:relative;aspect-ratio:0.7;transition:border-color .15s;">
+                <img src="${_toR2Url(card.image)||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="lazy">
+                <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);font-size:10px;font-weight:700;color:#fff;padding:3px 5px;text-align:center;">
+                    <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name||'?'}</div>
+                    <div style="color:${rarityBorderColor(card.rarity)};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${(card.rarity||'').toUpperCase()} · ⚡${_pvpCardPower(card)}</div>
+                </div>
                 ${sel ? `<div style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:#a78bfa;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;">${idx+1}</div>` : ''}
-                <div style="font-size:11px;font-weight:700;color:${rarityBorderColor(card.rarity)};margin-bottom:2px;">${(card.rarity||'').toUpperCase()}</div>
-                <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name||'?'}</div>
-                <div style="font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.anime||''}</div>
-                <div style="font-size:10px;color:var(--accent-yellow);margin-top:2px;">⚡${_pvpCardPower(card)}</div>
             </div>`;
         }).join('') || '<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px;">No cards match.</div>';
     }
