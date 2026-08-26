@@ -11791,9 +11791,14 @@ function _tcgFullCardPool() {
     const nr = (window._tcgNeonPool && window._tcgNeonPool.length)
         ? window._tcgNeonPool.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'nr', batch: c.batch || 1, addedAt: c.addedAt || null, neonA: c.neonA || null, neonB: c.neonB || null, neonC: c.neonC || null, neonClass: c.neonClass || '', flickerDelay: c.flickerDelay || '0s' }))
         : TCG_NEON_PREVIEW_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'nr', batch: 1, addedAt: null, neonA: c.neonA || null, neonB: c.neonB || null, neonC: c.neonC || null, neonClass: c.neonClass || '', flickerDelay: c.flickerDelay || '0s' }));
+    // No preview-card fallback here (unlike sr/ssr/ur/pr/nr above) — Astral isn't
+    // publicly released yet, and this pool feeds public-facing UI like the store's
+    // "From the Card Pool" showcase. Falling back to TCG_ASTRAL_PREVIEW_CARDS would
+    // put the admin-only preview sample in front of every user. The admin event
+    // preview tab reads TCG_ASTRAL_PREVIEW_CARDS directly, so it's unaffected.
     const ar = (window._tcgAstralPool && window._tcgAstralPool.length)
         ? window._tcgAstralPool.map(c => ({ name: c.name, anime: _normalizeSeriesName(c.series || c.anime || ''), image: c.image, rarity: 'ar', batch: c.batch || 1, addedAt: c.addedAt || null }))
-        : TCG_ASTRAL_PREVIEW_CARDS.map(c => ({ name: c.name, anime: c.anime, image: c.image, rarity: 'ar', batch: 1, addedAt: null }));
+        : [];
     return [
         ...ar,
         ...nr,
