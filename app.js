@@ -31922,6 +31922,44 @@ async function _pvpLoadActiveChallenges(uid) {
     } catch(e) { console.error('[pvp] loadActiveChallenges error:', e); return []; }
 }
 
+// ── PVP-usable dungeon items ──────────────────────────────────────────────────
+// Only items whose effect translates outside the dungeon (flat power / combo
+// bonus) are offered here — one optional item per party, shared with the same
+// player_items inventory the dungeon spends from.
+const PVP_USABLE_ITEMS = {
+    powerScroll: { label: 'Power Scroll', emoji: '📜', desc: '+2 Power to every card in your party for this battle.' },
+    synergySeal: { label: 'Synergy Seal', emoji: '🔮', desc: 'Doubles your combo bonus for this battle.' },
+};
+async function _pvpLoadItemCounts(uid) {
+    try {
+        const snap = await getDoc(doc(db, 'player_items', uid));
+        return snap.exists() ? snap.data() : {};
+    } catch(e) { return {}; }
+}
+function _pvpItemPickerHTML(selectedKey, itemCounts, toggleFnName) {
+    const keys = Object.keys(PVP_USABLE_ITEMS);
+    if (!keys.some(k => (itemCounts?.[k] || 0) > 0)) return '';
+    return `<div style="margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:6px;">Use an item? (optional)</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${keys.map(k => {
+                const def = PVP_USABLE_ITEMS[k];
+                const count = itemCounts?.[k] || 0;
+                const owned = count > 0;
+                const isSel = selectedKey === k;
+                return `<button ${owned ? `onclick="${toggleFnName}('${k}')"` : 'disabled'} title="${def.desc}" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;border:2px solid ${isSel ? '#a855f7' : 'rgba(168,85,247,0.3)'};background:${isSel ? 'rgba(168,85,247,0.2)' : 'rgba(168,85,247,0.06)'};cursor:${owned ? 'pointer' : 'not-allowed'};opacity:${owned ? '1' : '0.4'};color:var(--text-dark);font-size:12px;font-weight:700;">
+                    <span>${def.emoji}</span> ${def.label} ×${count} ${isSel ? '<span style="color:#a855f7;">✓</span>' : ''}
+                </button>`;
+            }).join('')}
+        </div>
+    </div>`;
+}
+function _pvpItemPowerBonus(item, selCards, comboBase) {
+    const flat = item === 'powerScroll' ? 2 * selCards.length : 0;
+    const comboExtra = item === 'synergySeal' && comboBase > 0 ? comboBase : 0; // doubles combo (base already counted once)
+    return flat + comboExtra;
+}
+
 async function _pvpLoadRecentBattles(uid) {
     try {
         const [asC, asD] = await Promise.all([
@@ -32230,7 +32268,7 @@ window._pvpSearchUsers = async function(q) {
 // ── Challenge Creation (multi-step) ───────────
 
 window._pvpStartChallenge = function(targetUid, targetName, targetAvatar) {
-    window._pvpChallengeDraft = { targetUid, targetName, targetAvatar, battleType: null, amberWager: 0, wagerCards: [], party: [] };
+    window._pvpChallengeDraft = { targetUid, targetName, targetAvatar, battleType: null, amberWager: 0, wagerCards: [], party: [], item: null };
     _pvpShowStep('type');
 };
 
@@ -32398,8 +32436,10 @@ async function _pvpShowPartyPicker(container) {
     container.innerHTML = `<div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;"><div class="loading">Loading your cards…</div></div>`;
     const uid = auth.currentUser?.uid;
     if (!uid) return;
-    const allCards = (await _tcgLoadCollection(uid)).filter(c => !c.founder);
+    const [allCardsRaw, itemCounts] = await Promise.all([_tcgLoadCollection(uid), _pvpLoadItemCounts(uid)]);
+    const allCards = allCardsRaw.filter(c => !c.founder);
     const d = window._pvpChallengeDraft;
+    d.itemCounts = itemCounts;
     const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' };
     window._pvpPickerFilter = { search: '', rarity: 'all', sort: 'power' };
 
@@ -32407,7 +32447,8 @@ async function _pvpShowPartyPicker(container) {
         const sel = new Set(d.party.map(c => c.id));
         const selCards = d.party;
         const combo = _pvpComboBonus(selCards);
-        const totalPower = selCards.reduce((s, c) => s + _pvpCardPower(c), 0) + combo;
+        const itemBonus = _pvpItemPowerBonus(d.item, selCards, combo);
+        const totalPower = selCards.reduce((s, c) => s + _pvpCardPower(c), 0) + combo + itemBonus;
         const canSend = sel.size === 3;
         const filtered = _pvpFilterCards(allCards);
 
@@ -32416,8 +32457,9 @@ async function _pvpShowPartyPicker(container) {
             <div style="font-weight:900;font-size:17px;margin-bottom:4px;">⚔️ Pick Your Battle Party</div>
             <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Choose exactly 3 cards. Cards sorted by power in battle.</div>
             <div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-                <div style="font-size:13px;">Selected: <strong>${sel.size}/3</strong> · Power: <strong>${totalPower}</strong>${combo>0?` <span style="color:#a855f7;">(+${combo} Combo)</span>`:''}</div>
+                <div style="font-size:13px;">Selected: <strong>${sel.size}/3</strong> · Power: <strong>${totalPower}</strong>${combo>0?` <span style="color:#a855f7;">(+${combo} Combo)</span>`:''}${itemBonus>0?` <span style="color:#22c55e;">(+${itemBonus} Item)</span>`:''}</div>
             </div>
+            ${_pvpItemPickerHTML(d.item, itemCounts, 'window._pvpToggleChallengeItem')}
             ${_pvpFilterBarHTML()}
             <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:135px;gap:8px;margin-bottom:14px;">
                 ${filtered.map(c => {
@@ -32452,6 +32494,12 @@ window._pvpTogglePartyCard = function(cardId) {
     window._pvpPartyPickerRender?.();
 };
 
+window._pvpToggleChallengeItem = function(key) {
+    const d = window._pvpChallengeDraft;
+    d.item = d.item === key ? null : key;
+    window._pvpPartyPickerRender?.();
+};
+
 // ── Send Challenge ────────────────────────────
 
 window._pvpSendChallenge = async function() {
@@ -32478,6 +32526,7 @@ window._pvpSendChallenge = async function() {
             challengerWagerCards: d.battleType === 'card' ? d.wagerCards.map(toStrip) : null,
             defenderWagerCards: null,
             challengerParty: d.party.map(toStrip),
+            challengerItem: d.item || null,
             defenderParty: null,
             status: 'pending',
             result: null,
@@ -32540,7 +32589,7 @@ window._pvpAcceptFlow = async function(challengeId) {
     const c = { id: snap.id, ...snap.data() };
     if (c.status !== 'pending') { alert('This challenge is no longer active.'); window.loadPvpTab(); return; }
 
-    window._pvpAcceptDraft = { challengeId, challenge: c, wagerCards: [], party: [] };
+    window._pvpAcceptDraft = { challengeId, challenge: c, wagerCards: [], party: [], item: null };
 
     const modal = document.createElement('div');
     modal.id = 'pvp-accept-modal';
@@ -32616,7 +32665,8 @@ window._pvpConfirmAcceptWager = function() {
 async function _pvpShowAcceptParty(container, c) {
     container.innerHTML = `<div style="background:var(--bg-white);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;"><div class="loading">Loading…</div></div>`;
     const uid = auth.currentUser?.uid;
-    const allCards = (await _tcgLoadCollection(uid)).filter(c => !c.founder);
+    const [allCardsRaw, itemCounts] = await Promise.all([_tcgLoadCollection(uid), _pvpLoadItemCounts(uid)]);
+    const allCards = allCardsRaw.filter(c => !c.founder);
     const rarityLabels = { ur:'UR', ssr:'SSR', sr:'SR', rare:'Rare', common:'Common', pr:'Event' };
     window._pvpPickerFilter = { search: '', rarity: 'all', sort: 'power' };
 
@@ -32625,7 +32675,8 @@ async function _pvpShowAcceptParty(container, c) {
         const sel = new Set(d.party.map(x => x.id));
         const selCards = d.party;
         const combo = _pvpComboBonus(selCards);
-        const totalPower = selCards.reduce((s, card) => s + _pvpCardPower(card), 0) + combo;
+        const itemBonus = _pvpItemPowerBonus(d.item, selCards, combo);
+        const totalPower = selCards.reduce((s, card) => s + _pvpCardPower(card), 0) + combo + itemBonus;
         const canFight = sel.size === 3;
         const filtered = _pvpFilterCards(allCards);
 
@@ -32634,8 +32685,9 @@ async function _pvpShowAcceptParty(container, c) {
             <div style="font-weight:900;font-size:17px;margin-bottom:4px;">⚔️ Pick Your Battle Party</div>
             <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">vs <strong>${c.challengerName}</strong> · ${_pvpBattleTypeLabel(c.battleType)}${c.amberWager ? ` · 🟡 ${c.amberWager} each` : ''}</div>
             <div style="background:var(--bg-gray);border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
-                <div style="font-size:13px;">Selected: <strong>${sel.size}/3</strong> · Power: <strong>${totalPower}</strong>${combo>0?` <span style="color:#a855f7;">(+${combo} Combo)</span>`:''}</div>
+                <div style="font-size:13px;">Selected: <strong>${sel.size}/3</strong> · Power: <strong>${totalPower}</strong>${combo>0?` <span style="color:#a855f7;">(+${combo} Combo)</span>`:''}${itemBonus>0?` <span style="color:#22c55e;">(+${itemBonus} Item)</span>`:''}</div>
             </div>
+            ${_pvpItemPickerHTML(d.item, itemCounts, 'window._pvpToggleAcceptItem')}
             ${_pvpFilterBarHTML()}
             <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:135px;gap:8px;margin-bottom:14px;">
                 ${filtered.map(card => {
@@ -32670,6 +32722,12 @@ window._pvpToggleAcceptParty = function(cardId) {
     window._pvpAcceptPartyRender?.();
 };
 
+window._pvpToggleAcceptItem = function(key) {
+    const d = window._pvpAcceptDraft;
+    d.item = d.item === key ? null : key;
+    window._pvpAcceptPartyRender?.();
+};
+
 // ── Submit Accept + Resolve Battle ────────────
 
 window._pvpSubmitAccept = async function() {
@@ -32694,6 +32752,7 @@ window._pvpSubmitAccept = async function() {
             challengeId: c.id,
             defenderParty,
             defenderWagerCards,
+            defenderItem: d.item || null,
         });
         const battleResult = resp?.battleResult;
         if (!battleResult) throw new Error('No battle result returned from server.');
@@ -33917,7 +33976,7 @@ window._pvpStartLadderTimers = function() {
 window._pvpEnterLadderPool = async function() {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
-    const myCards = await _tcgLoadCollection(uid);
+    const [myCards, itemCounts] = await Promise.all([_tcgLoadCollection(uid), _pvpLoadItemCounts(uid)]);
     if (!myCards.length) { alert('You have no cards yet!'); return; }
 
     const overlay = document.createElement('div');
@@ -33928,6 +33987,12 @@ window._pvpEnterLadderPool = async function() {
     const sorted = [...myCards].sort((a,b) => (rarityOrder[a.rarity]??9)-(rarityOrder[b.rarity]??9) || _pvpCardPower(b)-_pvpCardPower(a));
 
     window._ladderPoolDraft = [];
+    window._ladderPoolItem = null;
+    function renderItemPicker() {
+        const el = document.getElementById('ladder-item-picker');
+        if (el) el.innerHTML = _pvpItemPickerHTML(window._ladderPoolItem, itemCounts, 'window._ladderToggleItem');
+    }
+    window._ladderItemPickerRender = renderItemPicker;
 
     function renderModal() {
         const search = document.getElementById('ladder-pick-search')?.value?.toLowerCase() || '';
@@ -33972,6 +34037,7 @@ window._pvpEnterLadderPool = async function() {
                 <option value="pr">PR</option><option value="rare">Rare</option><option value="common">Common</option>
             </select>
         </div>
+        <div id="ladder-item-picker"></div>
         <div id="ladder-pick-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;overflow-y:auto;max-height:400px;padding-right:4px;"></div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
             <div id="ladder-draft-preview" style="font-size:13px;color:var(--text-muted);">Select 3 cards</div>
@@ -33985,6 +34051,7 @@ window._pvpEnterLadderPool = async function() {
     document.body.appendChild(overlay);
     window._ladderPoolRender = renderModal;
     renderModal();
+    renderItemPicker();
 };
 
 window._ladderPoolToggleCard = function(cardId) {
@@ -34003,6 +34070,11 @@ window._ladderPoolToggleCard = function(cardId) {
     window._ladderPoolRender?.();
 };
 
+window._ladderToggleItem = function(key) {
+    window._ladderPoolItem = window._ladderPoolItem === key ? null : key;
+    window._ladderItemPickerRender?.();
+};
+
 window._pvpConfirmLadderEntry = async function() {
     const draft = window._ladderPoolDraft;
     if (!draft || draft.length !== 3) return;
@@ -34010,7 +34082,7 @@ window._pvpConfirmLadderEntry = async function() {
     const status = document.getElementById('ladder-entry-status');
     if (btn) { btn.disabled = true; btn.textContent = 'Entering…'; }
     try {
-        await _callFn('pvpLadderEnterPool', { cards: draft });
+        await _callFn('pvpLadderEnterPool', { cards: draft, item: window._ladderPoolItem || null });
         document.getElementById('pvp-ladder-pool-modal')?.remove();
         // Update UI inline without full reload
         const enterArea = document.getElementById('ladder-enter-area');

@@ -605,6 +605,133 @@ async function dropCard() {
   }
 }
 
+// ── Item & Amber drops ─────────────────────────────────────────────────────────
+// Same claim-button-then-random-winner mechanic as card drops, just no rarity
+// cooldown gate — the only requirement is a linked account. Both are capped at a
+// few per day so they stay a nice surprise rather than the main event.
+const ITEM_DROP_DEFS = {
+  energyDrink:  { label: 'Energy Drink',  emoji: '⚡' },
+  powerScroll:  { label: 'Power Scroll',  emoji: '📜' },
+  srCompass:    { label: 'SR Compass',    emoji: '🧭' },
+  summonScroll: { label: 'Summon Scroll', emoji: '📯' },
+  synergySeal:  { label: 'Synergy Seal',  emoji: '🔮' },
+  goldenIdol:   { label: 'Golden Idol',   emoji: '🏺' },
+  warpStone:    { label: 'Warp Stone',    emoji: '💎' },
+  crazySlots:   { label: 'Crazy Slots',   emoji: '🎰' },
+};
+const ITEM_DROP_DAILY_CAP  = 3;
+const AMBER_DROP_DAILY_CAP = 3;
+const AMBER_DROP_MIN = 50;
+const AMBER_DROP_MAX = 250;
+const ITEM_DROP_CHANCE  = 0.01; // per 3-min tick, gated by the daily cap below
+const AMBER_DROP_CHANCE = 0.01;
+
+function _todayKeyUTC() { return new Date().toISOString().slice(0, 10); }
+
+// Reads today's item/amber drop counts, treating a stale (yesterday's) dayKey as 0
+// for both — resetting them together avoids one counter's stale value getting
+// mistaken for "today" once the other counter's write updates dayKey first.
+async function _dropQuotaCounts() {
+  const ref = db.doc('discord_bot_state/drops');
+  const today = _todayKeyUTC();
+  const snap = await ref.get();
+  const data = snap.exists ? snap.data() : {};
+  const stale = data.dayKey !== today;
+  return {
+    ref, today,
+    itemDrops: stale ? 0 : (data.itemDrops || 0),
+    amberDrops: stale ? 0 : (data.amberDrops || 0),
+  };
+}
+
+async function _runClaimDrop({ embed, buttonLabel, buttonStyle, claimWindow, onNoWinner, onWinner }) {
+  const channel = await client.channels.fetch(CHANNEL_ID).catch(() => null);
+  if (!channel) return console.error('[drop] Channel not found:', CHANNEL_ID);
+  const claimBtn = new ButtonBuilder().setCustomId('claim_drop').setLabel(buttonLabel).setStyle(buttonStyle);
+  const message = await channel.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(claimBtn)] });
+
+  const claimants = new Map();
+  const collector = message.createMessageComponentCollector({ componentType: ComponentType.Button, time: claimWindow });
+  collector.on('collect', async interaction => {
+    if (claimants.has(interaction.user.id)) return interaction.reply({ content: 'You already entered!', ephemeral: true });
+    claimants.set(interaction.user.id, interaction.user.username);
+    await interaction.reply({ content: `✅ You're in the draw! (${claimants.size} entered)`, ephemeral: true });
+  });
+  collector.on('end', async () => {
+    try {
+      await message.edit({ components: [new ActionRowBuilder().addComponents(ButtonBuilder.from(claimBtn).setDisabled(true))] }).catch(() => {});
+      if (claimants.size === 0) return onNoWinner(channel);
+      const eligible = [];
+      for (const [discordId] of claimants) {
+        const linkDoc = await db.doc(`discord_links/${discordId}`).get();
+        if (linkDoc.exists) eligible.push({ discordId, uid: linkDoc.data().uid });
+      }
+      if (eligible.length === 0) {
+        return channel.send(
+          'Everyone who entered hasn\'t linked their WeeBee account — it vanished! 💨\n' +
+          '*Link at weebee-fbbd8.web.app → Edit Profile → Discord*'
+        );
+      }
+      const winner = eligible[Math.floor(Math.random() * eligible.length)];
+      await onWinner(channel, winner);
+    } catch(err) {
+      console.error('[drop] End handler error:', err);
+      channel.send('Something went wrong picking a winner. It vanished! 💨').catch(() => {});
+    }
+  });
+}
+
+async function dropItem() {
+  const keys = Object.keys(ITEM_DROP_DEFS);
+  const key = keys[Math.floor(Math.random() * keys.length)];
+  const def = ITEM_DROP_DEFS[key];
+  const embed = new EmbedBuilder()
+    .setTitle(`${def.emoji}  Item Drop`)
+    .setDescription(`**${def.label}**\n\nClick **Claim** to enter the draw!\nWinner picked in ${CLAIM_WINDOW_MS/1000} seconds.`)
+    .setColor(0x22c55e)
+    .setFooter({ text: 'WeeBee TCG  •  Link your account at weebee-fbbd8.web.app' });
+  await _runClaimDrop({
+    embed, buttonLabel: '✋  Claim', buttonStyle: ButtonStyle.Success, claimWindow: CLAIM_WINDOW_MS,
+    onNoWinner: channel => channel.send('No one claimed it — it vanished! 💨'),
+    onWinner: async (channel, winner) => {
+      await db.doc(`player_items/${winner.uid}`).set({ [key]: FieldValue.increment(1) }, { merge: true });
+      await channel.send(`🎁 <@${winner.discordId}> claimed **${def.label}**! Added to their WeeBee item inventory.`);
+    },
+  });
+}
+
+async function dropAmber() {
+  const amount = AMBER_DROP_MIN + Math.floor(Math.random() * (AMBER_DROP_MAX - AMBER_DROP_MIN + 1));
+  const embed = new EmbedBuilder()
+    .setTitle('🟡  Amber Drop')
+    .setDescription(`**${amount.toLocaleString()} Amber**\n\nClick **Claim** to enter the draw!\nWinner picked in ${CLAIM_WINDOW_MS/1000} seconds.`)
+    .setColor(0xf59e0b)
+    .setFooter({ text: 'WeeBee TCG  •  Link your account at weebee-fbbd8.web.app' });
+  await _runClaimDrop({
+    embed, buttonLabel: '✋  Claim', buttonStyle: ButtonStyle.Primary, claimWindow: CLAIM_WINDOW_MS,
+    onNoWinner: channel => channel.send('No one claimed it — the amber vanished! 💨'),
+    onWinner: async (channel, winner) => {
+      await db.doc(`profiles/${winner.uid}`).set({ amber: FieldValue.increment(amount) }, { merge: true });
+      await channel.send(`🟡 <@${winner.discordId}> claimed **${amount.toLocaleString()} Amber**! Added to their WeeBee balance.`);
+    },
+  });
+}
+
+// Decides what this tick drops — item or amber if the daily cap allows and the
+// roll hits, otherwise falls through to the normal card drop.
+async function dropTick() {
+  const q = await _dropQuotaCounts();
+  if (q.itemDrops < ITEM_DROP_DAILY_CAP && Math.random() < ITEM_DROP_CHANCE) {
+    await q.ref.set({ dayKey: q.today, itemDrops: q.itemDrops + 1, amberDrops: q.amberDrops }, { merge: true });
+    return dropItem();
+  }
+  if (q.amberDrops < AMBER_DROP_DAILY_CAP && Math.random() < AMBER_DROP_CHANCE) {
+    await q.ref.set({ dayKey: q.today, itemDrops: q.itemDrops, amberDrops: q.amberDrops + 1 }, { merge: true });
+    return dropAmber();
+  }
+  return dropCard();
+}
+
 // ── /buy-amber command ────────────────────────────────────────────────────────
 async function handleBuyAmber(interaction) {
   if (!stripe) {
@@ -1537,8 +1664,8 @@ client.once('ready', async () => {
   });
   console.log('[bot] Slash commands registered');
 
-  setTimeout(dropCard, 60 * 1000);
-  setInterval(dropCard, DROP_INTERVAL_MS);
+  setTimeout(dropTick, 60 * 1000);
+  setInterval(dropTick, DROP_INTERVAL_MS);
 });
 
 client.on('interactionCreate', async interaction => {
