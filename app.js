@@ -31949,8 +31949,10 @@ window.loadPvpTab = async function() {
         _pvpLoadLadderData(uid),
     ]);
 
-    // Update badge
-    const incomingCount = active.filter(c => c._role === 'defender').length;
+    // Update badge — expired incoming challenges never change status on their
+    // own (nothing flips pending -> expired), so without this filter a stale
+    // expired challenge holds the red bubble on forever.
+    const incomingCount = active.filter(c => c._role === 'defender' && _pvpTimeLeft(c.expiresAt) !== 'Expired').length;
     const badge = document.getElementById('tcg-pvp-badge');
     if (badge) badge.style.display = incomingCount > 0 ? 'block' : 'none';
 
@@ -32105,7 +32107,7 @@ function _pvpChallengeCardHTML(c, myUid) {
             ${isChallenger
                 ? `<button onclick="window._pvpCancelChallenge('${c.id}')" class="cancel-btn" style="font-size:12px;">Cancel</button>`
                 : expired
-                    ? `<span style="font-size:12px;color:var(--text-muted);">Expired</span>`
+                    ? `<button onclick="window._pvpDismissExpiredChallenge('${c.id}')" class="cancel-btn" style="font-size:12px;">Dismiss</button>`
                     : `<button onclick="window._pvpDeclineChallenge('${c.id}')" class="cancel-btn" style="font-size:12px;">Decline</button>
                        <button onclick="window._pvpAcceptFlow('${c.id}')" class="action-btn" style="font-size:12px;font-weight:800;background:linear-gradient(135deg,#6366f1,#a855f7);">Accept ⚔️</button>`}
         </div>
@@ -32487,6 +32489,17 @@ window._pvpDeclineChallenge = async function(challengeId) {
         await updateDoc(doc(db, 'pvp_challenges', challengeId), { status: 'declined' });
         window.loadPvpTab();
     } catch(e) { alert('Failed: ' + e.message); }
+};
+
+// Clears an incoming challenge that already timed out — nothing flips an
+// expired challenge's status on its own, so without this it sits in the
+// pending list forever with no way to accept it and no way to remove it.
+// No confirm dialog: there's no offer left to decline, just dead state to clear.
+window._pvpDismissExpiredChallenge = async function(challengeId) {
+    try {
+        await updateDoc(doc(db, 'pvp_challenges', challengeId), { status: 'declined' });
+        window.loadPvpTab();
+    } catch(e) { alert('Failed to dismiss: ' + e.message); }
 };
 
 // ── Accept Flow ───────────────────────────────
