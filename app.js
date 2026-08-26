@@ -669,16 +669,33 @@ async function _awardLoginBonus() {
     const yesterday = bwGetYesterday(); // capture before any await — midnight crossing would give wrong value after
     const storageKey = `weebee_amber_login_${today}`;
     if (localStorage.getItem(storageKey)) return;
+    const profileRef = doc(db, 'profiles', uid);
+    // Read-check-write must be one atomic transaction, not a plain getDoc+setDoc.
+    // _awardLoginBonus fires from several independent triggers (auth state
+    // change, tab refocus, an hourly fallback interval, and any other tab/device
+    // the user has open) that can overlap right at the day boundary. With a
+    // plain read+write, a call starting just after midnight can read the profile
+    // BEFORE an overlapping pre-midnight call's write lands, see the stale
+    // pre-midnight lastLoginDate, decide it doesn't match "yesterday" from its
+    // own (already next-day) point of view, and reset the streak to 1 — then
+    // clobber the correct increment when it writes. A transaction always reads
+    // the latest committed state (retrying on conflict), so whichever call
+    // actually runs second always sees the first call's write and advances
+    // correctly instead of racing it.
+    let newStreak = null, bonus = 0;
     try {
-        const pd = await getDoc(doc(db, 'profiles', uid));
-        const p = pd.exists() ? pd.data() : {};
-        const lastDate = p.lastLoginDate || null;
-        if (lastDate === today) { localStorage.setItem(storageKey, '1'); return; }
-        const streak = p.loginStreak || 0;
-        const newStreak = lastDate === yesterday ? streak + 1 : 1;
-        const bonus = 100 + Math.min((newStreak - 1) * 5, 100);
-        await setDoc(doc(db, 'profiles', uid), { loginStreak: newStreak, lastLoginDate: today }, { merge: true });
+        await runTransaction(db, async (tx) => {
+            const pd = await tx.get(profileRef);
+            const p = pd.exists() ? pd.data() : {};
+            const lastDate = p.lastLoginDate || null;
+            if (lastDate === today) { newStreak = null; return; } // already claimed today
+            const streak = p.loginStreak || 0;
+            newStreak = lastDate === yesterday ? streak + 1 : 1;
+            bonus = 100 + Math.min((newStreak - 1) * 5, 100);
+            tx.set(profileRef, { loginStreak: newStreak, lastLoginDate: today }, { merge: true });
+        });
         localStorage.setItem(storageKey, '1'); // set after streak write so a tab-close before amber doesn't block tomorrow's run
+        if (newStreak == null) return; // another overlapping call already claimed today's bonus
         await _awardAmber(bonus, `login:streak${newStreak}`);
         _incrementUserStats({ loginDays: 1 }).catch(() => {});
         _showAmberToast(bonus, newStreak);
