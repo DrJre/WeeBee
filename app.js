@@ -33571,6 +33571,9 @@ window._tournamentAdminCreate = async function() {
             window._adminActiveTourneyId = tourneyId;
             if (status) status.textContent = `✅ Created! ID: ${tourneyId}`;
             await window._tournamentAdminLoad();
+            // Auto-select the new tournament so the prize editor loads immediately,
+            // pre-filled with the last-used amber/shard amounts.
+            await window._tournamentAdminSelect(tourneyId);
         }
     } catch(e) { if (status) status.textContent = `Error: ${e.message}`; }
 };
