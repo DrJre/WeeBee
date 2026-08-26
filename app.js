@@ -9228,7 +9228,10 @@ async function _wheelCanSpinToday(uid) {
 }
 
 window._wheelRefreshBadges = async function() {
-    const dots = document.querySelectorAll('.wheel-notif-dot');
+    // tcg-pvp-badge and tcg-inventory-badge share this class only for the dot's CSS
+    // styling — each has its own independent visibility logic elsewhere, so exclude
+    // them here or this wheel-spin check stomps their state on every refresh.
+    const dots = document.querySelectorAll('.wheel-notif-dot:not(#tcg-pvp-badge):not(#tcg-inventory-badge)');
     if (!dots.length) return;
     const config = await _wheelLoadConfig();
     if (!auth.currentUser || (!config.enabled && !window.isAdmin)) {
