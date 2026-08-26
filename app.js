@@ -7772,7 +7772,7 @@ const TCG_FOUNDER_CARDS = [
         founder: true,
     },
     {
-        id: 'luffy', name: 'Luffy', anime: 'One Piece', rarity: 'ur',
+        id: 'luffy', name: 'Monkey D. Luffy', anime: 'One Piece', rarity: 'ur',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/UR/Luffy%20UR.gif',
         founder: true,
     },
@@ -9639,6 +9639,20 @@ window._tcgUpdateOwnedCardArt = async function(name, newImage) {
     snap.docs.forEach(d => b.update(d.ref, { image: newImage }));
     await b.commit();
     console.log(`Done — updated ${snap.size} card(s).`);
+};
+
+// Admin: rename cards users already own in their collections (e.g. to fix a
+// legacy shortened/misspelled name after the source data is corrected).
+// Usage: await window._tcgRenameOwnedCard('Luffy', 'Monkey D. Luffy')
+window._tcgRenameOwnedCard = async function(name, newName) {
+    if (!window.isAdmin) return console.warn('Admin only.');
+    const snap = await getDocs(query(collectionGroup(db, 'cards'), where('name', '==', name)));
+    if (snap.empty) { console.log(`No owned cards found named "${name}"`); return; }
+    console.log(`Found ${snap.size} owned card(s) named "${name}" — renaming to "${newName}"…`);
+    const b = writeBatch(db);
+    snap.docs.forEach(d => b.update(d.ref, { name: newName }));
+    await b.commit();
+    console.log(`Done — renamed ${snap.size} card(s).`);
 };
 
 window._tcgFindCard = async function(nameQuery, rarities) {
