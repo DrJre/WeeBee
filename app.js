@@ -4445,7 +4445,6 @@ window.fetchUserProfile = async function(targetUid = null) {
     
     let pName = 'WeeBee User';
     let pAvatar = `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent('WeeBee User')}&backgroundColor=ffc107&fontColor=333333`;
-    let pJoined = new Date().toLocaleDateString();
     let pBio = ''; let pGenres = [];
 
     // Fetch profile doc (bio, genres, custom avatar/name) alongside auth data
@@ -4455,11 +4454,16 @@ window.fetchUserProfile = async function(targetUid = null) {
     if(isMe && auth.currentUser) {
         pName = profileData.displayName || auth.currentUser.displayName;
         pAvatar = profileData.avatar || auth.currentUser.photoURL || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(pName)}&backgroundColor=ffc107&fontColor=333333`;
-        pJoined = new Date(auth.currentUser.metadata.creationTime).toLocaleDateString();
     } else {
         pName = profileData.displayName || pName;
         pAvatar = profileData.avatar || pAvatar;
     }
+    // accountCreatedAt is backfilled to every user's own profile doc on login (only a
+    // user's own session can read their auth metadata.creationTime) — use it for any
+    // profile, own or not. Only self falls back to live auth metadata, for the rare
+    // case a profile predates that backfill and hasn't logged in since.
+    const pJoined = profileData.accountCreatedAt?.toDate?.().toLocaleDateString()
+        || (isMe && auth.currentUser?.metadata?.creationTime ? new Date(auth.currentUser.metadata.creationTime).toLocaleDateString() : null);
     pBio = profileData.bio || '';
     pGenres = profileData.genres || [];
     window.userPinnedBadgesCache[uidToFetch] = profileData.pinnedBadges || [];
@@ -4537,7 +4541,7 @@ window.fetchUserProfile = async function(targetUid = null) {
                                 ${window.getFounderBadgeHTML(uidToFetch, 18)}
                                 ${window.getRankBadgeHTML(window.userRankCache[uidToFetch] || 0, 18)}
                             </div>
-                            <p style="color:rgba(255,255,255,0.65);font-size:12px;margin:0 0 6px;">WeeBee Member since ${pJoined}</p>
+                            ${pJoined ? `<p style="color:rgba(255,255,255,0.65);font-size:12px;margin:0 0 6px;">WeeBee Member since ${pJoined}</p>` : ''}
                             <div id="profile-follow-counts" style="display:flex;gap:14px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.9);flex-wrap:wrap;"></div>
                             ${pGenres.length ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;">${pGenres.map(g=>`<span style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.9);font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;">${g}</span>`).join('')}</div>` : ''}
                             ${pinnedBannerBadges}
