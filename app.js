@@ -9662,6 +9662,20 @@ window._tcgRenameOwnedCard = async function(name, newName) {
     console.log(`Done — renamed ${snap.size} card(s).`);
 };
 
+// Admin: restore the wheel-prize month stamp on a card that lost it to the
+// pre-fix fuse bug (fusing built a fresh doc that didn't carry monthlyUr/
+// tradedMonthlyUr/stampText from the consumed copies). Find the card's
+// uid + doc id with _tcgFindCard first.
+// Usage: await window._tcgRestoreMonthlyStamp(uid, cardId, 'July 2026')
+window._tcgRestoreMonthlyStamp = async function(ownerUid, cardId, stampText) {
+    if (!window.isAdmin) return console.warn('Admin only.');
+    await updateDoc(doc(db, 'card_collections', ownerUid, 'cards', cardId), {
+        tradedMonthlyUr: true,
+        stampText,
+    });
+    console.log(`Restored stamp "${stampText}" on card ${cardId}.`);
+};
+
 window._tcgFindCard = async function(nameQuery, rarities) {
     if (!window.isAdmin) return console.warn('Admin only.');
     const snap = await getDocs(collectionGroup(db, 'cards'));
@@ -15440,6 +15454,17 @@ window._tcgOpenFuseModal = async function(cardId, uid) {
         if (btn) { btn.disabled = true; btn.textContent = 'Fusing…'; }
         try {
             const minSerial = Math.min(...slots.map(c => c?.serial ?? Infinity));
+            // If any of the fused copies carries a special-provenance badge (wheel-prize
+            // UR month stamp, founder edition), the result should keep it — otherwise
+            // fusing silently strips it since the new doc is built fresh, not merged
+            // from the consumed ones.
+            const specialSource = slots.find(c => c?.monthlyUr || c?.tradedMonthlyUr || c?.founder);
+            const specialFields = specialSource ? {
+                monthlyUr: !!specialSource.monthlyUr,
+                tradedMonthlyUr: !!specialSource.tradedMonthlyUr,
+                stampText: specialSource.stampText || null,
+                founder: !!specialSource.founder,
+            } : {};
             for (const card of slots.filter(Boolean)) {
                 await deleteDoc(doc(db, 'card_collections', uid, 'cards', card.id));
             }
@@ -15452,6 +15477,7 @@ window._tcgOpenFuseModal = async function(cardId, uid) {
                 pulledAt: new Date(),
                 fuseSource: true,
                 batch: sourceCard.batch || null,
+                ...specialFields,
             });
             window._tcgCollectionCache.delete(uid);
             try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
@@ -15462,6 +15488,7 @@ window._tcgOpenFuseModal = async function(cardId, uid) {
                 name: sourceCard.name, anime: sourceCard.anime, rarity: resultRarity,
                 image: sourceCard.image || '', serial: minSerial < Infinity ? minSerial : null,
                 fuseSource: true, batch: sourceCard.batch || null,
+                ...specialFields,
             };
             const serialText = newCardObj.serial != null ? `Serial #${newCardObj.serial} / ${RARITY_MAX_VERSIONS[resultRarity] || 500}` : '';
             modal.querySelector('div').innerHTML = `
