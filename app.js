@@ -12884,7 +12884,19 @@ window._tcgRenderStore = async function() {
         const countdownHtml = `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#ff3fe3,#7B2FBE,#01F9C6);color:#050514;border-radius:8px;font-weight:800;font-size:11px;letter-spacing:0.5px;">✦ Event ends in <span id="prismatic-countdown-timer">…</span></div>`;
         flexSlotHtml = packCard(TCG_PACKS.find(p => p.prismatic), false, countdownHtml, false, 'prismatic-pack-glow');
     } else if (fillerBatch) {
-        flexSlotHtml = packCard(TCG_PACKS.find(p => p.filler));
+        // The store tile previously always showed the pack's static definition
+        // (Batch 1 art, "Filler Pack" name) no matter which batch the admin
+        // configured — only the "What's Inside" modal computed a batch-aware
+        // label. Build a display copy so the tile itself reflects the batch too.
+        const fillerBase = TCG_PACKS.find(p => p.filler);
+        const fillerDisplayPack = {
+            ...fillerBase,
+            name: `Batch ${fillerBatch} Pack`,
+            description: `Batch ${fillerBatch} cards · 1 guaranteed SR+`,
+            image: `https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%20${fillerBatch}%20Premium%20Pack.png`,
+        };
+        const fillerLabelHtml = `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#065f46,#047857);color:white;border-radius:8px;font-weight:800;font-size:11px;letter-spacing:0.5px;">📦 BATCH ${fillerBatch} PACK</div>`;
+        flexSlotHtml = packCard(fillerDisplayPack, false, fillerLabelHtml);
     } else {
         // No event active and no filler configured — show Neon pack as coming soon
         const neonSoonLabel = `<div style="width:100%;box-sizing:border-box;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#ff3fe3,#7B2FBE,#01F9C6);color:#050514;border-radius:8px;font-weight:800;font-size:11px;letter-spacing:0.5px;">✦ COMING SOON</div>`;
@@ -13834,8 +13846,20 @@ window._tcgBuyPacks = async function(packId, quantity) {
     if (!auth.currentUser) return window.openAuthModal();
     if (window._tcgBuyInProgress) return;
     if (navigator.onLine === false) return alert("You appear to be offline — please check your connection and try again.");
-    const pack = TCG_PACKS.find(p => p.id === packId);
+    let pack = TCG_PACKS.find(p => p.id === packId);
     if (!pack) return;
+    // Filler pack's name/art depend on the admin-configured batch — match the
+    // same display copy the store tile builds so the purchase modals don't
+    // fall back to the pack's static Batch-1 definition.
+    if (pack.filler) {
+        const fillerBatch = window._tcgFillerConfig?.batch;
+        if (fillerBatch) pack = {
+            ...pack,
+            name: `Batch ${fillerBatch} Pack`,
+            description: `Batch ${fillerBatch} cards · 1 guaranteed SR+`,
+            image: `https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%20${fillerBatch}%20Premium%20Pack.png`,
+        };
+    }
     const qty = (Number.isInteger(quantity) && quantity >= 1 && quantity <= 10) ? quantity : 1;
 
     window._tcgBuyInProgress = true;
