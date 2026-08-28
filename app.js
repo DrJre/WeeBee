@@ -29618,7 +29618,10 @@ const DUNGEON_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, nr:11, a
 function _dungeonCardPower(card) {
     const animeKey = (card.anime || '').toLowerCase().trim();
     const animeBoost = (window._userAnimeBoosts || {})[animeKey] || 0;
-    if (card.monthlyUr || card.tradedMonthlyUr) return 16 + animeBoost; // Wheel URs = max SSR power (SSR base 13 + low-serial bonus 3)
+    // Flat SSR-equivalent power (SSR base 13 + low-serial bonus 3) only for the
+    // un-fused wheel prize — once fused into ur+, fall through so it gets
+    // genuine ur+ tier power instead of being capped below an ordinary ur+.
+    if ((card.monthlyUr || card.tradedMonthlyUr) && card.rarity === 'ur') return 16 + animeBoost;
     if (card.rarity === 'set') {
         // SET gold cards retain UR+ power (25) as long as all required cards are still owned
         return (card.setIntact !== false ? 25 : 1) + animeBoost;

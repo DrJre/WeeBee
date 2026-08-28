@@ -1166,7 +1166,11 @@ exports.settlePvpBattle = onRequest({ invoker: 'public' }, async (req, res) => {
         const animeKey = (card.anime || '').toLowerCase().trim();
         const animeBoost = (boosts || {})[animeKey] || 0;
         let p;
-        if (card.monthlyUr || card.tradedMonthlyUr) p = 16 + animeBoost;
+        // Flat SSR-equivalent power only for the un-fused wheel prize (no real
+        // serial to score off of). Once fused into ur+, fall through to the
+        // normal branch below so it gets genuine ur+ tier power instead of
+        // being capped below a completely ordinary ur+.
+        if ((card.monthlyUr || card.tradedMonthlyUr) && card.rarity === 'ur') p = 16 + animeBoost;
         else if (card.rarity === 'set') p = (card.setIntact !== false ? 25 : 1) + animeBoost;
         else {
             p = RARITY_POWER[card.rarity] || 1;
@@ -1631,7 +1635,10 @@ const T_MVP_THRESHOLDS = { sr: 12, 'sr+': 12, ssr: 30, 'ssr+': 30, ur: 50, 'ur+'
 function _tCardPower(card, boosts) {
     const animeKey = (card.anime || '').toLowerCase().trim();
     const animeBoost = (boosts || {})[animeKey] || 0;
-    if (card.monthlyUr || card.tradedMonthlyUr) return 16 + animeBoost;
+    // Flat SSR-equivalent power only for the un-fused wheel prize (no real
+    // serial to score off of) — once fused into ur+, fall through so it gets
+    // genuine ur+ tier power instead of being capped below an ordinary ur+.
+    if ((card.monthlyUr || card.tradedMonthlyUr) && card.rarity === 'ur') return 16 + animeBoost;
     let p = T_RARITY_POWER[card.rarity] || 1;
     if (card.founder) p += 3;
     else if (card.rarity !== 'pr' && !card.event && card.serial != null) {
@@ -2027,7 +2034,10 @@ function _ladderCardPower(card, boosts, item) {
     const animeKey = (card.anime || '').toLowerCase().trim();
     const animeBoost = (boosts || {})[animeKey] || 0;
     let p;
-    if (card.monthlyUr || card.tradedMonthlyUr) p = 16 + animeBoost;
+    // Flat SSR-equivalent power only for the un-fused wheel prize (no real
+    // serial to score off of) — once fused into ur+, fall through so it gets
+    // genuine ur+ tier power instead of being capped below an ordinary ur+.
+    if ((card.monthlyUr || card.tradedMonthlyUr) && card.rarity === 'ur') p = 16 + animeBoost;
     else if (card.rarity === 'set') p = (card.setIntact !== false ? 25 : 1) + animeBoost;
     else {
         p = LADDER_RARITY_POWER[card.rarity] || 1;
