@@ -34107,8 +34107,11 @@ window._pvpEnterLadderPool = async function() {
     overlay.id = 'pvp-ladder-pool-modal';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
 
-    const rarityOrder = { ur:0,'ur+':0, ssr:1,'ssr+':1, sr:2,'sr+':2, pr:3, rare:4, common:5, set:6 };
-    const sorted = [...myCards].sort((a,b) => (rarityOrder[a.rarity]??9)-(rarityOrder[b.rarity]??9) || _pvpCardPower(b)-_pvpCardPower(a));
+    // Sort by actual card power rather than a hardcoded rarity bucket order —
+    // the old table ranked 'set' last (even below common), so a high-power
+    // SET card sorted to the very bottom of the picker no matter how strong
+    // it was. Matches the fix already applied to the Tournament card picker.
+    const sorted = [...myCards].sort((a,b) => _pvpCardPower(b) - _pvpCardPower(a));
 
     window._ladderPoolDraft = [];
     window._ladderPoolItem = null;
@@ -34159,6 +34162,7 @@ window._pvpEnterLadderPool = async function() {
                 <option value="ssr+">SSR+</option><option value="ssr">SSR</option>
                 <option value="sr+">SR+</option><option value="sr">SR</option>
                 <option value="pr">PR</option><option value="rare">Rare</option><option value="common">Common</option>
+                <option value="set">SET</option>
             </select>
         </div>
         <div id="ladder-item-picker"></div>
