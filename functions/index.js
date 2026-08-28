@@ -1627,8 +1627,11 @@ exports.adminScanBossHP = onRequest({ invoker: 'public', timeoutSeconds: 300 }, 
 
 // Battle simulation helpers (mirrors settlePvpBattle — kept separate to avoid coupling)
 const T_RARITY_POWER = { common:1, rare:5, sr:9, 'sr+':13, pr:11, nr:11, ar:11, ssr:13, 'ssr+':17, ur:17, 'ur+':25 };
-function _tCardPower(card) {
-    if (card.monthlyUr || card.tradedMonthlyUr) return 16;
+const T_MVP_THRESHOLDS = { sr: 12, 'sr+': 12, ssr: 30, 'ssr+': 30, ur: 50, 'ur+': 50 };
+function _tCardPower(card, boosts) {
+    const animeKey = (card.anime || '').toLowerCase().trim();
+    const animeBoost = (boosts || {})[animeKey] || 0;
+    if (card.monthlyUr || card.tradedMonthlyUr) return 16 + animeBoost;
     let p = T_RARITY_POWER[card.rarity] || 1;
     if (card.founder) p += 3;
     else if (card.rarity !== 'pr' && !card.event && card.serial != null) {
@@ -1636,32 +1639,34 @@ function _tCardPower(card) {
         else if (card.serial < 100) p += 2;
         else if (card.serial < 1000) p += 1;
     }
-    return p;
+    const mvpT = T_MVP_THRESHOLDS[card.rarity];
+    if (mvpT != null && (card.mvpCount || 0) >= mvpT) p += 1;
+    return p + animeBoost;
 }
-function _tRoundPower(card, party) {
+function _tRoundPower(card, party, boosts) {
     const isCombo = party.some(c => c !== card && (c.anime||'') === (card.anime||'') && card.anime);
-    return _tCardPower(card) + (isCombo ? 1 : 0);
+    return _tCardPower(card, boosts) + (isCombo ? 1 : 0);
 }
-function _tSortParty(party) { return [...party].sort((a,b) => _tCardPower(b) - _tCardPower(a)); }
+function _tSortParty(party, boosts) { return [...party].sort((a,b) => _tCardPower(b, boosts) - _tCardPower(a, boosts)); }
 function _tSuccessChance(p1Pow, p2Pow) {
     return Math.max(15, Math.min(98, Math.round(50 + (p1Pow - p2Pow) * 4)));
 }
-function _tSimulateGame(p1Party, p2Party) {
-    const sp1 = _tSortParty(p1Party), sp2 = _tSortParty(p2Party);
+function _tSimulateGame(p1Party, p2Party, boosts1, boosts2) {
+    const sp1 = _tSortParty(p1Party, boosts1), sp2 = _tSortParty(p2Party, boosts2);
     let p1Score = 0, p2Score = 0;
     for (let i = 0; i < 3; i++) {
-        const pow1 = _tRoundPower(sp1[i], p1Party);
-        const pow2 = _tRoundPower(sp2[i], p2Party);
+        const pow1 = _tRoundPower(sp1[i], p1Party, boosts1);
+        const pow2 = _tRoundPower(sp2[i], p2Party, boosts2);
         if (Math.random() * 100 < _tSuccessChance(pow1, pow2)) p1Score++; else p2Score++;
     }
     return { winner: p1Score >= 2 ? 'p1' : 'p2', p1Score, p2Score };
 }
-function _tSimulateMatch(p1Party, p2Party, bestOf) {
+function _tSimulateMatch(p1Party, p2Party, bestOf, boosts1, boosts2) {
     const winsNeeded = Math.ceil(bestOf / 2);
     let p1Wins = 0, p2Wins = 0;
     const games = [];
     while (p1Wins < winsNeeded && p2Wins < winsNeeded) {
-        const g = _tSimulateGame(p1Party, p2Party);
+        const g = _tSimulateGame(p1Party, p2Party, boosts1, boosts2);
         games.push(g);
         if (g.winner === 'p1') p1Wins++; else p2Wins++;
     }
@@ -1749,6 +1754,21 @@ async function _resolveCurrentRound(db, tourneyId, tourneyData) {
     const roundSnap = await matchesRef.where('round', '==', currentRound).get();
     const matches = roundSnap.docs.map(d => ({ id: d.id, ref: d.ref, ...d.data() }));
 
+    // Pre-fetch animeBoosts (SET card boosts) for every player with a match to
+    // resolve this round, same input the ladder/direct-Challenge power math uses.
+    const pendingUids = new Set();
+    for (const match of matches) {
+        if (match.status === 'complete' || match.status === 'bye') continue;
+        if (!match.p1 || !match.p2) continue;
+        pendingUids.add(match.p1.uid);
+        pendingUids.add(match.p2.uid);
+    }
+    const boostsByUid = new Map();
+    await Promise.all([...pendingUids].map(async uid => {
+        const snap = await db.collection('profiles').doc(uid).get();
+        boostsByUid.set(uid, snap.exists ? (snap.data().animeBoosts || {}) : {});
+    }));
+
     const batch = db.batch();
     const advancers = [];
 
@@ -1762,7 +1782,7 @@ async function _resolveCurrentRound(db, tourneyId, tourneyData) {
         }
         if (!match.p1 || !match.p2) continue;
 
-        const result = _tSimulateMatch(match.p1.party, match.p2.party, match.bestOf);
+        const result = _tSimulateMatch(match.p1.party, match.p2.party, match.bestOf, boostsByUid.get(match.p1.uid), boostsByUid.get(match.p2.uid));
         const winnerPlayer = result.winner === 'p1' ? match.p1 : match.p2;
         batch.update(match.ref, {
             status: 'complete', winner: winnerPlayer.uid,
