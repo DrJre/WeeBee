@@ -13917,7 +13917,13 @@ window._tcgOpenInventoryItem = async function(itemId) {
     window._tcgCollectionCache.delete(auth.currentUser.uid);
     try { localStorage.removeItem(`tcg_coll_${auth.currentUser.uid}`); } catch {}
     window._tcgRenderInventory?.();
-    const pack = TCG_PACKS.find(p => p.id === revealed.packId) || { id: revealed.packId, name: revealed.packName, image: revealed.packImage };
+    // Prefer the inventory item's own stamped name/image over the static
+    // TCG_PACKS lookup — the Filler Pack's name/art depend on which batch it
+    // was configured for at purchase time, which the static entry can't
+    // reflect (it's a generic placeholder). The item doc carries the real
+    // batch-specific values, so use those when present.
+    const staticPack = TCG_PACKS.find(p => p.id === revealed.packId);
+    const pack = { ...staticPack, id: revealed.packId, name: revealed.packName || staticPack?.name, image: revealed.packImage || staticPack?.image };
     window._tcgOpeningBatchPackName = revealed.packName;
     _tcgShowPackOpening(pack, revealed.cards, revealed.godPackTheme);
 };

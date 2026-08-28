@@ -911,6 +911,16 @@ exports.purchasePacks = onRequest({ invoker: 'public' }, async (req, res) => {
         const pool = await ensureCardPool(db);
         const cardBatch = computeCurrentBatch(pool);
         const bulkBatchId = quantity > 1 ? db.collection('inventory').doc().id : null;
+        // Filler Pack's displayed name/art depend on which batch the admin
+        // configured — the static pack.name/pack.image are a generic
+        // placeholder, so stamp the batch-specific versions onto the
+        // inventory item itself, otherwise the opening animation (which reads
+        // packName/packImage straight off this doc) always shows the
+        // placeholder regardless of the configured batch.
+        const packName = pack.filler ? `Batch ${fillerBatch} Pack` : pack.name;
+        const packImage = pack.filler
+            ? `https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%20${fillerBatch}%20Premium%20Pack.png`
+            : pack.image;
         const itemIds = [];
         const batch = db.batch();
         const invCol = db.collection('inventory').doc(callerUid).collection('items');
@@ -918,7 +928,7 @@ exports.purchasePacks = onRequest({ invoker: 'public' }, async (req, res) => {
             const { cards, godPackTheme } = rollOnePack(pool, pack, fillerBatch);
             const itemRef = invCol.doc();
             batch.set(itemRef, {
-                type: 'pack', packId: pack.id, packName: pack.name, packImage: pack.image,
+                type: 'pack', packId: pack.id, packName, packImage,
                 rolledCards: cards, godPackTheme, source: 'purchase', bulkBatchId,
                 cardBatch, grantedAt: new Date(),
             });
@@ -1023,7 +1033,7 @@ exports.openInventoryItems = onRequest({ invoker: 'public' }, async (req, res) =
             });
             batch.delete(invCol.doc(item.id));
             await batch.commit();
-            revealed.push({ itemId: item.id, packId: item.packId, packName: item.packName, godPackTheme: item.godPackTheme || null, cards: finishedCards });
+            revealed.push({ itemId: item.id, packId: item.packId, packName: item.packName, packImage: item.packImage, godPackTheme: item.godPackTheme || null, cards: finishedCards });
         }
     } catch(e) {
         console.error('openInventoryItems open error:', e);
@@ -1363,6 +1373,10 @@ exports.adminGiftPack = onRequest({ invoker: 'public' }, async (req, res) => {
         const pool = await ensureCardPool(db);
         const cardBatch = computeCurrentBatch(pool);
         const bulkBatchId = qty > 1 ? db.collection('inventory').doc().id : null;
+        const packName = (pack.filler && fillerBatch) ? `Batch ${fillerBatch} Pack` : pack.name;
+        const packImage = (pack.filler && fillerBatch)
+            ? `https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Booster%20Packs/Batch%20${fillerBatch}%20Premium%20Pack.png`
+            : pack.image;
         const itemIds = [];
         const batch = db.batch();
         const invCol = db.collection('inventory').doc(targetUid).collection('items');
@@ -1370,7 +1384,7 @@ exports.adminGiftPack = onRequest({ invoker: 'public' }, async (req, res) => {
             const { cards, godPackTheme } = rollOnePack(pool, pack, fillerBatch);
             const itemRef = invCol.doc();
             batch.set(itemRef, {
-                type: 'pack', packId: pack.id, packName: pack.name, packImage: pack.image,
+                type: 'pack', packId: pack.id, packName, packImage,
                 rolledCards: cards, godPackTheme, source: 'gift', grantedBy: callerUid, bulkBatchId,
                 cardBatch, grantedAt: new Date(),
             });
