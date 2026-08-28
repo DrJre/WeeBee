@@ -33356,11 +33356,25 @@ window._pvpTourneyConfirmRegistration = async function() {
         if (res?.result?.success) {
             document.getElementById('pvp-tourney-register-modal')?.remove();
             window.loadPvpTab();
-        } else {
-            if (status) status.textContent = res?.error?.message || 'Registration failed.';
-            if (btn) { btn.disabled = false; btn.textContent = 'Confirm (1,000 🟡)'; }
+            return;
         }
+        throw new Error(res?.error?.message || 'Registration failed.');
     } catch(e) {
+        // The registration write is one atomic transaction server-side (amber
+        // deduction + entry doc + player count all together), so the only way
+        // to land here after it actually went through is a dropped/timed-out
+        // response on our end — not a real failure. Check for that before
+        // telling the user it failed and charging them a second confusing
+        // "why can I still register" moment.
+        try {
+            const uid = auth.currentUser?.uid;
+            const eSnap = uid ? await getDoc(doc(db, 'pvp_tournaments', draft.tourneyId, 'entries', uid)) : null;
+            if (eSnap?.exists()) {
+                document.getElementById('pvp-tourney-register-modal')?.remove();
+                window.loadPvpTab();
+                return;
+            }
+        } catch {}
         if (status) status.textContent = e.message || 'Error — try again.';
         if (btn) { btn.disabled = false; btn.textContent = 'Confirm (1,000 🟡)'; }
     }
@@ -33511,8 +33525,57 @@ window._tournamentAdminSelect = async function(tourneyId) {
         } catch(e) {}
     }
     _tournamentAdminRenderPrizeEditor(prizes);
+    _tournamentAdminRenderEntries(tourneyId, t.status);
     const statusEl = document.getElementById('admin-tourney-action-status');
     if (statusEl) statusEl.textContent = `Selected: ${t.name} (${tourneyId})`;
+};
+
+// Lists everyone registered for the selected tournament — who they are, when
+// they registered, and their party — with a Kick & Refund button per entry
+// while registration is still open (removing an entry after the bracket
+// exists would leave a hole in the match tree).
+window._tournamentAdminRenderEntries = async function(tourneyId, tourneyStatus) {
+    const el = document.getElementById('admin-tourney-entries');
+    if (!el) return;
+    el.innerHTML = '<p style="font-size:12px;color:var(--text-muted);">Loading entries…</p>';
+    try {
+        const snap = await getDocs(collection(db, 'pvp_tournaments', tourneyId, 'entries'));
+        if (snap.empty) {
+            el.innerHTML = '<p style="font-size:12px;color:var(--text-muted);">No one has registered yet.</p>';
+            return;
+        }
+        const canKick = tourneyStatus === 'registration';
+        const fmtDate = ts => {
+            const d = ts?.toDate ? ts.toDate() : new Date(ts);
+            return d.toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZone:'America/New_York', timeZoneName:'short' });
+        };
+        const rows = snap.docs.map(d => {
+            const e = { uid: d.id, ...d.data() };
+            const party = (e.party || []).map(c => c.name).join(', ') || '—';
+            return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border-color);">
+                <img src="${e.avatar || ''}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;background:var(--bg-gray-darker);flex-shrink:0;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:700;">${e.displayName || 'Unknown'}</div>
+                    <div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${party} · Registered ${fmtDate(e.registeredAt)}</div>
+                </div>
+                ${canKick ? `<button onclick="window._tournamentAdminKickEntry('${tourneyId}','${e.uid}','${(e.displayName || 'Unknown').replace(/'/g, "\\'")}')" style="padding:6px 12px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-weight:700;font-size:12px;cursor:pointer;flex-shrink:0;">Kick & Refund</button>` : ''}
+            </div>`;
+        }).join('');
+        el.innerHTML = `<div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">${snap.size} registered</div>${rows}`;
+    } catch(e) {
+        el.innerHTML = `<p style="font-size:12px;color:#ef4444;">Error: ${e.message}</p>`;
+    }
+};
+
+window._tournamentAdminKickEntry = async function(tourneyId, entryUid, displayName) {
+    if (!confirm(`Remove ${displayName} from this tournament and refund their entry fee?`)) return;
+    try {
+        await _callFn('adminKickTournamentEntry', { tourneyId, entryUid });
+        await window._tournamentAdminLoad();
+        await window._tournamentAdminSelect(tourneyId);
+    } catch(e) {
+        alert('Failed to remove entry: ' + e.message);
+    }
 };
 
 function _tournamentAdminRenderPrizeEditor(prizes) {

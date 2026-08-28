@@ -2006,6 +2006,37 @@ exports.adminCancelTournament = onRequest({ invoker: 'public' }, async (req, res
     res.json({ result: { success: true, refunded: entriesSnap.size } });
 });
 
+// Removes a single registration entry and refunds their entry fee. Restricted
+// to tournaments still in 'registration' — once a bracket exists, removing an
+// entry would leave a hole in the match tree, so that has to go through
+// adminCancelTournament (cancels + refunds everyone) instead.
+exports.adminKickTournamentEntry = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    const uid = await getCallerUid(req);
+    if (uid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
+    const { tourneyId, entryUid } = req.body?.data || {};
+    if (!tourneyId || !entryUid) return sendErr(res, 400, 'INVALID_ARGUMENT', 'tourneyId and entryUid required.');
+    const db = getFirestore();
+    const tRef = db.collection('pvp_tournaments').doc(tourneyId);
+    const entryRef = tRef.collection('entries').doc(entryUid);
+    let userError = null;
+    try {
+        await db.runTransaction(async tx => {
+            const [tSnap, eSnap] = await Promise.all([tx.get(tRef), tx.get(entryRef)]);
+            if (!tSnap.exists) { userError = [404, 'NOT_FOUND', 'Tournament not found.']; return; }
+            if (!eSnap.exists) { userError = [404, 'NOT_FOUND', 'That entry no longer exists.']; return; }
+            const t = tSnap.data();
+            if (t.status !== 'registration') { userError = [400, 'FAILED_PRECONDITION', 'Can only remove entries while registration is open.']; return; }
+            tx.delete(entryRef);
+            tx.update(tRef, { playerCount: FieldValue.increment(-1) });
+            tx.update(db.collection('profiles').doc(entryUid), { amber: FieldValue.increment(t.entryCost || 1000) });
+        });
+    } catch(e) { return sendErr(res, 500, 'INTERNAL', e.message); }
+    if (userError) return sendErr(res, ...userError);
+    res.json({ result: { success: true } });
+});
+
 exports.adminGenerateBracket = onRequest({ invoker: 'public' }, async (req, res) => {
     setCORS(res);
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
