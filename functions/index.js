@@ -1711,16 +1711,37 @@ async function _generateBracketInternal(db, tourneyId, tourneyData) {
     const shuffled = [...entries].sort(() => Math.random() - 0.5);
     let bracketSize = 1;
     while (bracketSize < shuffled.length) bracketSize *= 2;
-    while (shuffled.length < bracketSize) shuffled.push(null);
 
     const totalRounds = Math.log2(bracketSize);
     const matchesRef = tourneyRef.collection('matches');
     const batch = db.batch();
 
+    // Distribute byes one-per-match instead of padding them all onto the end
+    // of the entry list. bracketSize is the SMALLEST power of 2 >= entries.length,
+    // so entries.length is always > bracketSize/2 (matchCount) — meaning the
+    // number of byes (bracketSize - entries.length) is always < matchCount,
+    // so every match can get at least one real player when byes are spread
+    // evenly. The old approach appended every bye to the tail of a flat
+    // array, which clustered 2+ byes into the same match for most entry
+    // counts (anything more than 1 below a power of 2) — a match with two
+    // null slots then crashed on `e2.uid` with nothing to catch it, which is
+    // why the scheduled bracket generation silently never advanced past
+    // 'registration' and the admin's manual "Generate Bracket Now" came back
+    // as a raw 500 instead of JSON.
+    const matchCount = bracketSize / 2;
+    const numByes = bracketSize - shuffled.length;
+    const pairs = [];
+    let entryIdx = 0;
+    for (let m = 0; m < matchCount; m++) {
+        const e1 = shuffled[entryIdx++];
+        const e2 = m < numByes ? null : shuffled[entryIdx++];
+        pairs.push([e1, e2]);
+    }
+
     for (let round = 1; round <= totalRounds; round++) {
-        const matchCount = bracketSize / Math.pow(2, round);
+        const roundMatchCount = bracketSize / Math.pow(2, round);
         const isFinal = round === totalRounds;
-        for (let idx = 0; idx < matchCount; idx++) {
+        for (let idx = 0; idx < roundMatchCount; idx++) {
             const matchId = `r${round}_${idx}`;
             const nextMatchId = round < totalRounds ? `r${round+1}_${Math.floor(idx/2)}` : null;
             const nextMatchSlot = idx % 2 === 0 ? 'p1' : 'p2';
@@ -1732,11 +1753,11 @@ async function _generateBracketInternal(db, tourneyId, tourneyData) {
                 nextMatchId, nextMatchSlot, p1: null, p2: null,
             };
             if (round === 1) {
-                const e1 = shuffled[idx * 2], e2 = shuffled[idx * 2 + 1];
+                const [e1, e2] = pairs[idx];
                 doc.p1 = e1 ? { uid: e1.uid, displayName: e1.displayName, avatar: e1.avatar, party: e1.party } : null;
                 doc.p2 = e2 ? { uid: e2.uid, displayName: e2.displayName, avatar: e2.avatar, party: e2.party } : null;
-                if (!e1) { doc.status = 'bye'; doc.winner = e2.uid; }
-                else if (!e2) { doc.status = 'bye'; doc.winner = e1.uid; }
+                if (!e1 && e2) { doc.status = 'bye'; doc.winner = e2.uid; }
+                else if (!e2 && e1) { doc.status = 'bye'; doc.winner = e1.uid; }
             }
             batch.set(matchesRef.doc(matchId), doc);
         }
@@ -1744,8 +1765,8 @@ async function _generateBracketInternal(db, tourneyId, tourneyData) {
 
     // Pre-fill round 2 slots for byes so round 1 byes don't block advancement
     if (totalRounds > 1) {
-        for (let idx = 0; idx < bracketSize / 2; idx++) {
-            const e1 = shuffled[idx * 2], e2 = shuffled[idx * 2 + 1];
+        for (let idx = 0; idx < matchCount; idx++) {
+            const [e1, e2] = pairs[idx];
             const byeWinner = !e1 ? e2 : (!e2 ? e1 : null);
             if (byeWinner) {
                 const nextMatchId = `r2_${Math.floor(idx / 2)}`;
@@ -1910,14 +1931,22 @@ exports.resolveTournamentRounds = onSchedule({ schedule: 'every 10 minutes', tim
             await doc.ref.update({ registrationOpenNotified: true });
             try { await _notifyTournamentRegistrationOpen(db, doc.id, t); } catch (e) { console.error('notifyTournamentRegistrationOpen', e); }
         }
-        if (startMs <= now) await _generateBracketInternal(db, doc.id, t);
+        // One tournament failing to generate its bracket shouldn't stop every
+        // other tournament in this batch from being checked/started too.
+        if (startMs <= now) {
+            try { await _generateBracketInternal(db, doc.id, t); }
+            catch (e) { console.error(`resolveTournamentRounds bracket gen failed for ${doc.id}:`, e); }
+        }
     }
 
     const activeSnap = await db.collection('pvp_tournaments').where('status', '==', 'in_progress').get();
     for (const doc of activeSnap.docs) {
         const t = doc.data();
         const nextMs = t.nextRoundTime?.toMillis?.() ?? (t.nextRoundTime instanceof Date ? t.nextRoundTime.getTime() : 0);
-        if (nextMs <= now) await _resolveCurrentRound(db, doc.id, t);
+        if (nextMs <= now) {
+            try { await _resolveCurrentRound(db, doc.id, t); }
+            catch (e) { console.error(`resolveTournamentRounds round resolve failed for ${doc.id}:`, e); }
+        }
     }
 });
 
@@ -2063,7 +2092,12 @@ exports.adminGenerateBracket = onRequest({ invoker: 'public' }, async (req, res)
     if (!snap.exists) return sendErr(res, 404, 'NOT_FOUND', 'Tournament not found.');
     if (snap.data().status !== 'registration')
         return sendErr(res, 400, 'FAILED_PRECONDITION', 'Tournament must be in registration status.');
-    await _generateBracketInternal(db, snap.id, snap.data());
+    try {
+        await _generateBracketInternal(db, snap.id, snap.data());
+    } catch (e) {
+        console.error('adminGenerateBracket error:', e);
+        return sendErr(res, 500, 'INTERNAL', 'Bracket generation failed: ' + e.message);
+    }
     res.json({ result: { success: true } });
 });
 
