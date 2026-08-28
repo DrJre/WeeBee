@@ -33259,10 +33259,11 @@ window._pvpTournamentRegisterFlow = async function(tourneyId) {
 
     const cardsSnap = await getDocs(collection(db, 'card_collections', uid, 'cards'));
     const myCards = cardsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const sorted = myCards.sort((a, b) => {
-        const rOrder = { ur:6, ssr:5, sr:4, pr:3, rare:2, common:1 };
-        return (rOrder[b.rarity] || 0) - (rOrder[a.rarity] || 0);
-    });
+    // Sort by actual card power rather than a hardcoded rarity list — the old
+    // list only covered base rarities, so every +rarity card (sr+/ssr+/ur+)
+    // fell through to 0 and sorted below common cards, effectively burying
+    // it at the bottom of the scrollable picker instead of near the top.
+    const sorted = myCards.sort((a, b) => _pvpCardPower(b) - _pvpCardPower(a));
     window._pvpTournamentDraft.cards = sorted;
 
     const overlay = document.createElement('div');
