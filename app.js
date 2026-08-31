@@ -34166,7 +34166,7 @@ window._pvpEnterLadderPool = async function() {
             </select>
         </div>
         <div id="ladder-item-picker"></div>
-        <div id="ladder-pick-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;overflow-y:auto;max-height:400px;padding-right:4px;"></div>
+        <div id="ladder-pick-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;overflow-y:auto;max-height:400px;padding-right:4px;"></div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
             <div id="ladder-draft-preview" style="font-size:13px;color:var(--text-muted);">Select 3 cards</div>
             <div style="display:flex;gap:8px;">
