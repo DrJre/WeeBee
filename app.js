@@ -34139,7 +34139,7 @@ window._pvpEnterLadderPool = async function() {
         grid.innerHTML = filtered.map(card => {
             const sel = draftIds.has(card.id);
             const idx = draft.findIndex(c => c.id === card.id);
-            return `<div onclick="window._ladderPoolToggleCard('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:2px solid ${sel?'#a78bfa':'transparent'};background:var(--bg-gray);position:relative;aspect-ratio:0.7;transition:border-color .15s;">
+            return `<div onclick="window._ladderPoolToggleCard('${card.id}')" style="cursor:pointer;border-radius:10px;overflow:hidden;border:2px solid ${sel?'#a78bfa':'transparent'};background:var(--bg-gray);position:relative;height:100%;transition:border-color .15s;">
                 <img src="${_toR2Url(card.image)||''}" style="width:100%;height:100%;object-fit:cover;object-position:top center;display:block;" loading="lazy">
                 <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);font-size:10px;font-weight:700;color:#fff;padding:3px 5px;text-align:center;">
                     <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${card.name||'?'}</div>
@@ -34167,7 +34167,7 @@ window._pvpEnterLadderPool = async function() {
             </select>
         </div>
         <div id="ladder-item-picker"></div>
-        <div id="ladder-pick-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;overflow-y:auto;max-height:400px;padding-right:4px;"></div>
+        <div id="ladder-pick-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:135px;gap:8px;overflow-y:auto;max-height:400px;padding-right:4px;"></div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
             <div id="ladder-draft-preview" style="font-size:13px;color:var(--text-muted);">Select 3 cards</div>
             <div style="display:flex;gap:8px;">
