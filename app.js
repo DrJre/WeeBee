@@ -32130,8 +32130,11 @@ window.loadPvpTab = async function() {
 // ── Stats Block ───────────────────────────────
 
 function _pvpStatsHTML(s) {
-    const tourneyPlayed = (s?.tourneyMatchWins || 0) + (s?.tourneyMatchLosses || 0);
-    const ladderPlayed = (s?.ladderMatchWins || 0) + (s?.ladderMatchLosses || 0);
+    const cWins = s?.wins || 0, cLosses = s?.losses || 0;
+    const tWins = s?.tourneyMatchWins || 0, tLosses = s?.tourneyMatchLosses || 0;
+    const lWins = s?.ladderMatchWins || 0, lLosses = s?.ladderMatchLosses || 0;
+    const tourneyPlayed = tWins + tLosses;
+    const ladderPlayed = lWins + lLosses;
     if (!s || (!s.totalBattles && !tourneyPlayed && !ladderPlayed)) return `
         <div style="border-radius:20px;padding:24px 22px;margin-bottom:16px;text-align:center;background:var(--stats-bg);color:rgba(var(--stats-ink),0.5);font-size:13px;margin-bottom:20px;">
             ⚔️ Win your first battle to start building your PVP record!
@@ -32140,37 +32143,57 @@ function _pvpStatsHTML(s) {
         <div style="font-size:32px;font-weight:900;color:rgb(var(--stats-ink));letter-spacing:-1px;line-height:1;">${v}</div>
         <div style="font-size:12px;font-weight:700;color:rgba(var(--stats-ink),0.55);margin-top:4px;">${label}</div>
     </div>`;
-    const winRate = s.totalBattles ? Math.round((s.wins / s.totalBattles) * 100) : 0;
-    // Direct-Challenge record stays the headline stat block (it's the mode
-    // amber/cards get wagered in); Tournament and Weekly Ladder get their own
-    // compact win-loss rows below since they're separate currencies/formats
-    // (bracket matches, best-of-3 pool matches) that don't share the same
-    // "battles/win rate/streak" shape as a direct wager.
-    const modeRow = (icon, label, wins, losses, extra) => {
+    const sectionLabel = (icon, label) => `<div style="font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:rgba(var(--stats-ink),0.4);margin:18px 0 8px;">${icon} ${label}</div>`;
+    // A compact win-loss row for a single mode, with optional extra badges
+    // (championships, podium count) tacked on the right.
+    const modeRow = (wins, losses, extra) => {
         const played = wins + losses;
-        if (!played) return '';
-        const rate = Math.round((wins / played) * 100);
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(var(--stats-ink),0.05);border-radius:10px;margin-top:8px;">
-            <div style="font-size:13px;font-weight:700;color:rgb(var(--stats-ink));">${icon} ${label}</div>
-            <div style="font-size:13px;color:rgba(var(--stats-ink),0.7);">${wins}-${losses} <span style="color:rgba(var(--stats-ink),0.4);">(${rate}%)</span>${extra || ''}</div>
+        const rate = played ? Math.round((wins / played) * 100) : 0;
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(var(--stats-ink),0.05);border-radius:10px;">
+            <div style="font-size:14px;font-weight:800;color:rgb(var(--stats-ink));">${wins}-${losses} <span style="font-weight:600;color:rgba(var(--stats-ink),0.45);font-size:12px;">(${rate}%)</span></div>
+            ${extra ? `<div style="font-size:12px;color:rgba(var(--stats-ink),0.65);">${extra}</div>` : ''}
         </div>`;
     };
+
+    const overallWins = cWins + tWins + lWins;
+    const overallLosses = cLosses + tLosses + lLosses;
+    const overallPlayed = overallWins + overallLosses;
+    const overallRate = overallPlayed ? Math.round((overallWins / overallPlayed) * 100) : 0;
+
+    const challengeWinRate = s.totalBattles ? Math.round((s.wins / s.totalBattles) * 100) : 0;
+
     return `
     <div style="border-radius:20px;padding:26px 22px;margin-bottom:20px;position:relative;overflow:hidden;background:var(--stats-bg);">
         <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 25% 50%,rgba(99,102,241,0.18) 0%,transparent 55%),radial-gradient(ellipse at 75% 50%,rgba(168,85,247,0.15) 0%,transparent 55%);pointer-events:none;"></div>
         <div style="position:relative;z-index:1;">
             <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(var(--stats-ink),0.35);margin-bottom:16px;text-align:center;">⚔️ PVP Career Stats</div>
-            ${s.totalBattles ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:16px;margin-bottom:${s.mvpCardName ? '16px' : '0'};">
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:16px;">
+                ${bigStat(overallPlayed, 'Overall Matches')}
+                ${bigStat(overallRate + '%', 'Overall Win Rate')}
+                ${bigStat(overallWins, 'Overall Wins')}
+            </div>
+            <div style="font-size:11px;text-align:center;color:rgba(var(--stats-ink),0.4);margin-top:6px;">Combined across Direct Challenges, Tournaments &amp; Weekly Ladder</div>
+
+            ${s.totalBattles ? `
+            ${sectionLabel('🗡️', 'Direct Challenges')}
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:16px;margin-bottom:${s.mvpCardName ? '10px' : '0'};">
                 ${bigStat(s.totalBattles, 'Battles')}
-                ${bigStat(winRate + '%', 'Win Rate')}
+                ${bigStat(challengeWinRate + '%', 'Win Rate')}
                 ${bigStat(s.wins, 'Wins')}
                 ${bigStat(s.bestStreak || 0, 'Best Streak')}
                 ${bigStat((s.amberWon || 0).toLocaleString(), 'Amber Won')}
                 ${bigStat(s.cardsWon || 0, 'Cards Won')}
-            </div>` : ''}
-            ${s.mvpCardName ? `<div style="text-align:center;font-size:13px;color:rgba(var(--stats-ink),0.6);">⭐ MVP Card: <strong style="color:rgb(var(--stats-ink));">${s.mvpCardName}</strong></div>` : ''}
-            ${modeRow('🏆', 'Tournament', s.tourneyMatchWins || 0, s.tourneyMatchLosses || 0, s.tourneysWon ? ` · 👑 ${s.tourneysWon} title${s.tourneysWon !== 1 ? 's' : ''}` : '')}
-            ${modeRow('📈', 'Weekly Ladder', s.ladderMatchWins || 0, s.ladderMatchLosses || 0)}
+            </div>
+            ${s.mvpCardName ? `<div style="text-align:center;font-size:13px;color:rgba(var(--stats-ink),0.6);">⭐ MVP Card: <strong style="color:rgb(var(--stats-ink));">${s.mvpCardName}</strong></div>` : ''}` : ''}
+
+            ${tourneyPlayed ? `
+            ${sectionLabel('🏆', 'Tournament Record')}
+            ${modeRow(tWins, tLosses, `${s.tourneysWon ? `👑 ${s.tourneysWon} title${s.tourneysWon !== 1 ? 's' : ''}` : ''}${s.tourneysWon && s.tourneyPodiums ? ' · ' : ''}${s.tourneyPodiums ? `🏅 ${s.tourneyPodiums} podium${s.tourneyPodiums !== 1 ? 's' : ''}` : ''}`)}` : ''}
+
+            ${ladderPlayed ? `
+            ${sectionLabel('📈', 'Weekly Ladder Record')}
+            ${modeRow(lWins, lLosses, s.ladderPodiums ? `🏅 ${s.ladderPodiums} podium${s.ladderPodiums !== 1 ? 's' : ''}` : '')}` : ''}
         </div>
     </div>`;
 }

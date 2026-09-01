@@ -1874,7 +1874,6 @@ async function _resolveCurrentRound(db, tourneyId, tourneyData) {
 
 async function _distributePrizes(db, tourneyId, tourneyData, totalRounds) {
     const prizes = tourneyData.prizes || {};
-    if (!Object.keys(prizes).length) return;
 
     const matchesSnap = await db.collection('pvp_tournaments').doc(tourneyId).collection('matches').get();
     const matches = matchesSnap.docs.map(d => d.data()).filter(m => ['complete','bye'].includes(m.status));
@@ -1892,6 +1891,19 @@ async function _distributePrizes(db, tourneyId, tourneyData, totalRounds) {
     if (totalRounds >= 2) { let p = 3; byRound(totalRounds-1).forEach(m => addLoser(m, p++)); }
     if (totalRounds >= 3) { let p = 5; byRound(totalRounds-2).forEach(m => addLoser(m, p++)); }
     if (totalRounds >= 4) { let p = 9; byRound(totalRounds-3).forEach(m => { if (p <= 10) addLoser(m, p++); }); }
+
+    // Podium tracking (places 1-4 — the bracket already treats 3rd/4th as a
+    // tied bronze finish, see placeLabel below) feeds PVP Career Stats
+    // regardless of whether the admin configured a prize for this tournament;
+    // a podium finish is worth counting on its own.
+    const podiumBatch = db.batch();
+    for (const [uid, place] of Object.entries(standings)) {
+        if (place > 4) continue;
+        podiumBatch.set(db.collection('pvp_stats').doc(uid), { tourneyPodiums: FieldValue.increment(1) }, { merge: true });
+    }
+    await podiumBatch.commit();
+
+    if (!Object.keys(prizes).length) return;
 
     for (const [uid, place] of Object.entries(standings)) {
         const prize = prizes[String(place)];
@@ -2363,6 +2375,15 @@ exports.pvpLadderWeeklyClose = onSchedule({ schedule: '0 19 * * 6', timeZone: 'A
     }));
 
     const pb = db.batch();
+    // Podium tracking feeds PVP Career Stats regardless of whether the admin
+    // configured a prize for that place — a top-3 finish is worth counting
+    // on its own.
+    for (let i = 0; i < Math.min(finalRankings.length, 3); i++) {
+        pb.set(db.collection('pvp_stats').doc(finalRankings[i].uid), {
+            ladderPodiums: FieldValue.increment(1),
+            displayName: finalRankings[i].displayName, avatar: finalRankings[i].avatar,
+        }, { merge: true });
+    }
     for (let i = 0; i < finalRankings.length; i++) {
         const place = i + 1;
         const prize = prizes[String(place)];
