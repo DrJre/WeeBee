@@ -1826,10 +1826,21 @@ async function _resolveCurrentRound(db, tourneyId, tourneyData) {
 
         const result = _tSimulateMatch(match.p1.party, match.p2.party, match.bestOf, boostsByUid.get(match.p1.uid), boostsByUid.get(match.p2.uid));
         const winnerPlayer = result.winner === 'p1' ? match.p1 : match.p2;
+        const loserPlayer = result.winner === 'p1' ? match.p2 : match.p1;
         batch.update(match.ref, {
             status: 'complete', winner: winnerPlayer.uid,
             p1Wins: result.p1Wins, p2Wins: result.p2Wins, games: result.games,
         });
+        // Tournament match record feeds the PVP Career Stats block on the client
+        // alongside the existing direct-Challenge win/loss counters.
+        batch.set(db.collection('pvp_stats').doc(winnerPlayer.uid), {
+            tourneyMatchWins: FieldValue.increment(1),
+            displayName: winnerPlayer.displayName, avatar: winnerPlayer.avatar,
+        }, { merge: true });
+        batch.set(db.collection('pvp_stats').doc(loserPlayer.uid), {
+            tourneyMatchLosses: FieldValue.increment(1),
+            displayName: loserPlayer.displayName, avatar: loserPlayer.avatar,
+        }, { merge: true });
         if (match.nextMatchId)
             advancers.push({ winner: winnerPlayer, nextMatchId: match.nextMatchId, nextMatchSlot: match.nextMatchSlot });
     }
@@ -1849,6 +1860,12 @@ async function _resolveCurrentRound(db, tourneyId, tourneyData) {
         const winnerId = fd?.winner;
         const winnerData = fd?.p1?.uid === winnerId ? fd.p1 : fd?.p2;
         await tourneyRef.update({ status: 'complete', winnerId, winnerName: winnerData?.displayName || '', completedAt: new Date() });
+        if (winnerId) {
+            await db.collection('pvp_stats').doc(winnerId).set({
+                tourneysWon: FieldValue.increment(1),
+                displayName: winnerData?.displayName || '', avatar: winnerData?.avatar || '',
+            }, { merge: true }).catch(() => {});
+        }
         await _distributePrizes(db, tourneyId, tourneyData, totalRounds);
     } else {
         await tourneyRef.update({ currentRound: currentRound + 1, nextRoundTime: new Date(Date.now() + 10 * 60 * 1000) });
@@ -2281,6 +2298,13 @@ exports.pvpLadderHourlyClose = onSchedule({ schedule: '30 * * * *', timeZone: 'U
             wins: FieldValue.increment(d.wins),
             losses: FieldValue.increment(d.losses),
             lastMatch: now,
+        }, { merge: true });
+        // Same win/loss delta also feeds the PVP Career Stats block's ladder
+        // record on the client, alongside direct-Challenge and Tournament stats.
+        batch.set(db.collection('pvp_stats').doc(uid), {
+            ladderMatchWins: FieldValue.increment(d.wins),
+            ladderMatchLosses: FieldValue.increment(d.losses),
+            displayName: d.name, avatar: d.av,
         }, { merge: true });
     }
     batch.update(slotRef, { status: 'resolved', matchCount: Math.ceil(entries.length/2), resolvedAt: now });
