@@ -15716,6 +15716,10 @@ window._tcgRenderProfileShowcase = async function(uid) {
 };
 
 // Modal — pick up to 5 cards from the current user's collection to showcase
+// Rarity sort/grouping order shared with the profile "All Cards" grid, so
+// "sorted by rarity" means the same thing everywhere in the TCG tab.
+const TCG_SHOWCASE_RARITY_ORDER = { set: -5, 'ur+': -3.5, ur:-3, nr:-2, pr:-1, ar:-0.75, 'ssr+': -0.5, ssr:0, 'sr+': 0.5, sr:1, rare:2, common:3 };
+
 window._tcgOpenShowcasePicker = async function() {
     if (!auth.currentUser) return;
     document.getElementById('tcg-showcase-picker-modal')?.remove();
@@ -15727,21 +15731,23 @@ window._tcgOpenShowcasePicker = async function() {
     modal.onclick = (e) => { if (e.target === modal) { modal.remove(); window._tcgRenderProfileShowcase(uid); } };
 
     modal.innerHTML = `
-        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:85vh;display:flex;flex-direction:column;">
+        <div style="background:var(--bg-white);border-radius:18px;width:100%;max-width:720px;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:88vh;display:flex;flex-direction:column;">
             <div style="padding:24px 24px 0;flex-shrink:0;">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                     <div style="font-size:17px;font-weight:800;color:var(--text-dark);">Edit Card Showcase</div>
                     <button onclick="document.getElementById('tcg-showcase-picker-modal').remove();window._tcgRenderProfileShowcase('${uid}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
                 </div>
                 <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Pick up to 6 cards to feature on your profile.</p>
+                <div id="tcg-showcase-picker-filters"></div>
             </div>
-            <div id="tcg-showcase-picker-grid" style="overflow-y:auto;padding:0 24px 24px;display:flex;flex-wrap:wrap;gap:14px;justify-content:center;"><div style="padding:40px;color:var(--text-muted);">Loading…</div></div>
+            <div id="tcg-showcase-picker-grid" style="overflow-y:auto;padding:14px 24px 24px;display:flex;flex-wrap:wrap;gap:14px;justify-content:center;"><div style="padding:40px;color:var(--text-muted);">Loading…</div></div>
         </div>`;
     document.body.appendChild(modal);
 
     let cards = [];
     try { cards = await _tcgLoadCollection(uid, true); } catch(e) {}
     const grid = document.getElementById('tcg-showcase-picker-grid');
+    const filtersEl = document.getElementById('tcg-showcase-picker-filters');
     if (!grid) return;
     if (!cards.length) { grid.innerHTML = `<p style="color:var(--text-muted);">No cards yet — open a pack to get started!</p>`; return; }
 
@@ -15751,8 +15757,48 @@ window._tcgOpenShowcasePicker = async function() {
         pinnedIds = pd.exists() ? (pd.data().pinnedTcgCardIds || []) : [];
     } catch(e) {}
 
+    const state = { rarity: 'all', batch: 'all', search: '' };
+
+    const renderFilters = () => {
+        if (!filtersEl) return;
+        const counts = {};
+        cards.forEach(c => { counts[c.rarity] = (counts[c.rarity] || 0) + 1; });
+        const rLabels = { all:`All (${cards.length})`, 'ur+': `UR+ (${counts['ur+']||0})`, ur:`UR (${counts.ur||0})`, 'ssr+': `SSR+ (${counts['ssr+']||0})`, ssr:`SSR (${counts.ssr||0})`, 'sr+': `SR+ (${counts['sr+']||0})`, sr:`SR (${counts.sr||0})`, rare:`Rare (${counts.rare||0})`, common:`Common (${counts.common||0})`, pr:`Event (${(counts.pr||0)+(counts.nr||0)+(counts.ar||0)})`, set:`★ SET (${counts.set||0})` };
+        const bLabels = { all:'All Batches', b1:'Batch 1', b2:'Batch 2', b3:'Batch 3' };
+        const rOrder = ['all','ur+','ur','ssr+','ssr','sr+','sr','rare','common','pr','set'];
+        filtersEl.innerHTML = `
+            <div style="position:relative;max-width:320px;margin-bottom:10px;">
+                <span class="material-symbols-outlined" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:17px;color:var(--text-muted);pointer-events:none;">search</span>
+                <input id="showcase-picker-search" type="text" value="${state.search.replace(/"/g,'&quot;')}" oninput="clearTimeout(window._tcgShowcaseSearchTimer);window._tcgShowcaseSearchTimer=setTimeout(()=>window._tcgShowcasePickerSetSearch(document.getElementById('showcase-picker-search').value),250)" placeholder="Search by name or anime…" style="width:100%;box-sizing:border-box;padding:7px 12px 7px 34px;border-radius:20px;border:1px solid var(--border-color);background:var(--bg-gray);color:var(--text-dark);font-size:13px;outline:none;">
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+                ${rOrder.map(f => {
+                    const active = f === state.rarity;
+                    const isPlus = f.endsWith('+');
+                    return `<button onclick="window._tcgShowcasePickerSetRarity('${f}')" style="padding:5px 12px;border-radius:20px;border:1px solid ${active?(isPlus?'#a78bfa':'var(--accent-yellow)'):'var(--border-color)'};background:${active?(isPlus?'rgba(167,139,250,0.12)':'rgba(245,158,11,0.12)'):'var(--bg-gray)'};color:${active?(isPlus?'#a78bfa':'#f59e0b'):'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${rLabels[f]}</button>`;
+                }).join('')}
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                ${['all','b1','b2','b3'].map(f => {
+                    const active = f === state.batch;
+                    return `<button onclick="window._tcgShowcasePickerSetBatch('${f}')" style="padding:4px 11px;border-radius:20px;border:1px solid ${active?'#a78bfa':'var(--border-color)'};background:${active?'rgba(167,139,250,0.12)':'var(--bg-gray)'};color:${active?'#a78bfa':'var(--text-muted)'};font-size:11px;font-weight:700;cursor:pointer;">${bLabels[f]}</button>`;
+                }).join('')}
+            </div>`;
+    };
+
     const renderGrid = () => {
-        grid.innerHTML = cards.map(card => {
+        const q = state.search.toLowerCase().trim();
+        const filtered = cards
+            .filter(c => state.rarity === 'all' || (state.rarity === 'pr' ? (c.rarity === 'pr' || c.rarity === 'nr' || c.rarity === 'ar') : c.rarity === state.rarity))
+            .filter(c => state.batch === 'all' || _tcgCardBatch(c) === ({ b1:1,b2:2,b3:3 }[state.batch]||1))
+            .filter(c => !q || (c.name||'').toLowerCase().includes(q) || (c.anime||'').toLowerCase().includes(q))
+            .sort((a,b) => (TCG_SHOWCASE_RARITY_ORDER[a.rarity]??9) - (TCG_SHOWCASE_RARITY_ORDER[b.rarity]??9));
+
+        if (!filtered.length) {
+            grid.innerHTML = `<p style="color:var(--text-muted);padding:20px;">No cards match those filters.</p>`;
+            return;
+        }
+        grid.innerHTML = filtered.map(card => {
             const isPinned = pinnedIds.includes(card.id);
             return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
                 <div style="width:121px;height:169px;overflow:hidden;"><div style="transform:scale(0.55);transform-origin:top left;">${_tcgBuildCardFace(card)}</div></div>
@@ -15761,7 +15807,12 @@ window._tcgOpenShowcasePicker = async function() {
         }).join('');
         _tcgObserveSSRCards(grid);
     };
+    renderFilters();
     renderGrid();
+
+    window._tcgShowcasePickerSetRarity = function(f) { state.rarity = f; renderFilters(); renderGrid(); };
+    window._tcgShowcasePickerSetBatch = function(f) { state.batch = f; renderFilters(); renderGrid(); };
+    window._tcgShowcasePickerSetSearch = function(v) { state.search = v; renderGrid(); };
 
     window._tcgTogglePinFromPicker = async function(cardId) {
         await window._tcgTogglePin(cardId);
