@@ -268,7 +268,14 @@ service cloud.firestore {
     match /top_anime_lists/{doc} {
       allow read: if true;
       allow create: if isAuth();
-      allow update, delete: if isOwner(resource.data.uid);
+      // doc ID is the user's own uid (see saveTopAnime in app.js), so check
+      // that directly rather than a data field — the client's setDoc for
+      // this collection didn't write a uid field, so every doc created
+      // before that was fixed has no resource.data.uid and would otherwise
+      // fail this check forever (the first save creates the doc under the
+      // 'create' rule above with no uid check, but every save after that is
+      // an update, evaluated against the pre-write resource data).
+      allow update, delete: if isOwner(doc);
     }
 
     // ── Social (follows, friends, DMs) ───────────────────────────────────────

@@ -3034,7 +3034,11 @@ window.renderTopAnimeEditList = function() {
 window.saveTopAnime = async function() {
     if(!auth.currentUser) return;
     try {
-        await setDoc(doc(db, "top_anime_lists", auth.currentUser.uid), { list: window.currentTopAnimeList });
+        // firestore.rules gates updates on resource.data.uid matching the
+        // requester — without writing uid here, the doc created by the very
+        // first save has no uid field, so every save after that gets denied
+        // as an update to a doc it doesn't "own" per the rules' own check.
+        await setDoc(doc(db, "top_anime_lists", auth.currentUser.uid), { uid: auth.currentUser.uid, list: window.currentTopAnimeList });
         window.closeAllModals();
         fetchUserProfile(window.targetProfileUid); 
     } catch(e) { alert("Failed to save Top Anime list."); console.error(e); }

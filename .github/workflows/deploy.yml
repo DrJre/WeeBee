@@ -26,7 +26,7 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-sa.json"
 
-      - name: Deploy to Firebase (hosting + functions)
+      - name: Deploy to Firebase (hosting + functions + firestore rules)
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
-        run: npx --yes firebase-tools@latest deploy --only hosting,functions --project weebee-fbbd8 --non-interactive
+        run: npx --yes firebase-tools@latest deploy --only hosting,functions,firestore:rules --project weebee-fbbd8 --non-interactive
