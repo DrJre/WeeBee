@@ -14671,7 +14671,7 @@ document.addEventListener('mousemove', function(e) {
 // on a throwaway Image means a CORS miss just quietly skips the pause
 // behavior for that card (onerror, caught below) — the real, visible card
 // art is never fetched in CORS mode and so can never be broken by this.
-function _tcgSetupGifHoverPause(img) {
+window._tcgSetupGifHoverPause = function(img) {
     if (img.dataset.hoverPauseReady) return;
     img.dataset.hoverPauseReady = '1'; // set up at most once per element, success or not
     const src = img.src || '';
@@ -14703,7 +14703,7 @@ function _tcgSetupGifHoverPause(img) {
     // server now allows. A harmless cache-busting param forces a distinct,
     // genuinely CORS-validated fetch.
     probe.src = src + (src.includes('?') ? '&' : '?') + 'corsProbe=1';
-}
+};
 
 // Pause SSR/UR prismatic/gem animations when off-screen — keeps the effect while
 // avoiding constant repaints for cards the user isn't currently looking at.
