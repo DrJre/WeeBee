@@ -14661,31 +14661,42 @@ document.addEventListener('mousemove', function(e) {
 // otherwise means the browser is decoding/repainting every GIF at once, all
 // the time, whether or not anyone's looking at any of them. Freezes the art
 // on its first frame via a one-time canvas snapshot, then swaps back to the
-// real animated src on mouseenter/mouseleave. If the snapshot fails (e.g. the
-// art host doesn't send CORS headers permitting canvas reads), this just
-// leaves the GIF animating as it always has — no broken image, no regression.
+// real animated src on mouseenter/mouseleave.
+//
+// The snapshot is taken through a separate, invisible probe Image with
+// crossOrigin set — never on the visible <img> itself. Setting crossOrigin
+// switches the request to CORS mode, and if the art host doesn't send an
+// Access-Control-Allow-Origin header back, a CORS-mode request FAILS TO LOAD
+// entirely rather than just failing to be canvas-readable. Doing that probe
+// on a throwaway Image means a CORS miss just quietly skips the pause
+// behavior for that card (onerror, caught below) — the real, visible card
+// art is never fetched in CORS mode and so can never be broken by this.
 function _tcgSetupGifHoverPause(img) {
     if (img.dataset.hoverPauseReady) return;
+    img.dataset.hoverPauseReady = '1'; // set up at most once per element, success or not
     const src = img.src || '';
     if (!/\.gif(\?|#|$)/i.test(src)) return;
-    try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth || img.width;
-        canvas.height = img.naturalHeight || img.height;
-        if (!canvas.width || !canvas.height) return;
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        const poster = canvas.toDataURL('image/png');
-        img.dataset.hoverPauseReady = '1';
-        img.dataset.gifSrc = src;
-        img.src = poster;
-        img.addEventListener('mouseenter', () => { img.src = img.dataset.gifSrc; });
-        img.addEventListener('mouseleave', () => { img.src = poster; });
-    } catch (e) {
-        // Canvas tainted (cross-origin without CORS) or another failure —
-        // mark it handled so we don't retry every re-render, and leave the
-        // GIF playing normally.
-        img.dataset.hoverPauseReady = '1';
-    }
+    const probe = new Image();
+    probe.crossOrigin = 'anonymous';
+    probe.onload = () => {
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = probe.naturalWidth || probe.width;
+            canvas.height = probe.naturalHeight || probe.height;
+            if (!canvas.width || !canvas.height) return;
+            canvas.getContext('2d').drawImage(probe, 0, 0, canvas.width, canvas.height);
+            const poster = canvas.toDataURL('image/png');
+            img.dataset.gifSrc = src;
+            img.src = poster;
+            img.addEventListener('mouseenter', () => { img.src = img.dataset.gifSrc; });
+            img.addEventListener('mouseleave', () => { img.src = poster; });
+        } catch (e) {
+            // Tainted canvas despite CORS mode succeeding at the network level
+            // (shouldn't normally happen) — leave the GIF playing normally.
+        }
+    };
+    probe.onerror = () => {}; // CORS not permitted for this host — leave the GIF playing normally
+    probe.src = src;
 }
 
 // Pause SSR/UR prismatic/gem animations when off-screen — keeps the effect while
