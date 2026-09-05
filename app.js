@@ -14674,6 +14674,7 @@ document.addEventListener('mousemove', function(e) {
 window._tcgSetupGifHoverPause = function(img) {
     if (img.dataset.hoverPauseReady) return;
     img.dataset.hoverPauseReady = '1'; // set up at most once per element, success or not
+    if (img.closest('[data-gif-always-play]')) return; // e.g. the single-card details modal — just let it play
     const src = img.src || '';
     if (!/\.gif(\?|#|$)/i.test(src)) return;
     const probe = new Image();
@@ -14930,7 +14931,7 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
             <div style="font-size:16px;font-weight:800;">Card Details</div>
             <button onclick="document.getElementById('tcg-card-viewer-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
         </div>
-        <div style="margin:6px 0;">${_tcgBuildCardFace(card)}</div>
+        <div style="margin:6px 0;" data-gif-always-play="1">${_tcgBuildCardFace(card)}</div>
         ${ownershipHTML}
         <div style="width:100%;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text-dark);">
             <div><strong>Character:</strong> ${card.name}</div>
@@ -15240,7 +15241,7 @@ window._tcgViewCardSnapshot = async function(snapId) {
                 <div style="font-size:16px;font-weight:800;">Card Details</div>
                 <button onclick="document.getElementById('tcg-card-viewer-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;"><span class="material-symbols-outlined">close</span></button>
             </div>
-            <div style="margin:6px 0;">${_tcgBuildCardFace(card)}</div>
+            <div style="margin:6px 0;" data-gif-always-play="1">${_tcgBuildCardFace(card)}</div>
             ${ownershipHTML}
             <div style="width:100%;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text-dark);">
                 <div><strong>Character:</strong> ${card.name || '—'}</div>
