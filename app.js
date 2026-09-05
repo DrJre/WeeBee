@@ -14696,7 +14696,13 @@ function _tcgSetupGifHoverPause(img) {
         }
     };
     probe.onerror = () => {}; // CORS not permitted for this host — leave the GIF playing normally
-    probe.src = src;
+    // The visible <img> above already fetched this exact URL without CORS
+    // mode. Reusing the identical URL here risks the browser serving that
+    // cached non-CORS response back to this CORS-mode request instead of
+    // making a fresh one — which taints the canvas regardless of what the
+    // server now allows. A harmless cache-busting param forces a distinct,
+    // genuinely CORS-validated fetch.
+    probe.src = src + (src.includes('?') ? '&' : '?') + 'corsProbe=1';
 }
 
 // Pause SSR/UR prismatic/gem animations when off-screen — keeps the effect while
