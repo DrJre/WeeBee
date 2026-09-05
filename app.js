@@ -7707,7 +7707,7 @@ window._tcgRenderEventCardPreview = function() {
         const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" loading="lazy">` : '';
         return `
         <div style="isolation:isolate;">
-          <div class="astral-event-frame rarity-pr wb-card--prismatic tcg-anim-in-view">
+          <div class="astral-event-frame rarity-pr wb-card--prismatic">
             <div class="wb-card-inner">
               <div class="wb-card-header"><span class="wb-mark">WEEBEE</span><span class="wb-rarity-gem wb-rarity-gem--star">★</span></div>
               <div class="wb-card-art">${art}</div>
@@ -13821,8 +13821,8 @@ window._tcgSearchCards = async function(queryStr) {
             ${shown.map(c => `<div class="tcg-card-cell" data-name="${(c.name||'').replace(/"/g,'&quot;')}" data-anime="${(c.anime||'').replace(/"/g,'&quot;')}" data-rarity="${c.rarity||''}" onclick="window._tcgOpenVersionsView(this.dataset.name,this.dataset.anime,this.dataset.rarity)" style="cursor:pointer;" title="View all versions of ${(c.name||'').replace(/"/g,'&quot;')}"><div class="tcg-card-scale-wrap"><div class="tcg-card-scale">${_tcgBuildCardFace(c)}</div></div></div>`).join('')}
         </div>`;
     _tcgObserveSSRCardsHoverOnly(el);
-    // PR and SET cards always show their animation — no hover needed
-    el.querySelectorAll('.wb-card--prismatic, .wb-card--set').forEach(c => c.classList.add('tcg-anim-in-view'));
+    // SET cards always show their animation — no hover needed
+    el.querySelectorAll('.wb-card--set').forEach(c => c.classList.add('tcg-anim-in-view'));
 };
 
 window._tcgGrantTestAmber = async function() {
@@ -14550,7 +14550,7 @@ function _tcgBuildCardFace(card) {
             `--flicker-delay:${card.flickerDelay || '0s'}`,
         ].filter(Boolean).join(';');
         const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" onload="window._tcgSetupGifHoverPause(this);" onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
-        return `<div style="isolation:isolate;"><div class="neon-event-frame rarity-pr wb-card--prismatic tcg-anim-in-view${extraClass}" style="${vars}">
+        return `<div style="isolation:isolate;"><div class="neon-event-frame rarity-pr wb-card--prismatic${extraClass}" style="${vars}">
             <div class="wb-card-inner">
                 <div class="wb-card-header"><span class="wb-mark">WEEBEE</span><span class="wb-rarity-gem wb-rarity-gem--star">★</span></div>
                 <div class="wb-card-art">${art}</div>
@@ -14568,7 +14568,7 @@ function _tcgBuildCardFace(card) {
         const eName = (card.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         const eAnime = (card.anime || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" onload="window._tcgSetupGifHoverPause(this);" onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
-        return `<div style="isolation:isolate;"><div class="astral-event-frame rarity-pr wb-card--prismatic tcg-anim-in-view">
+        return `<div style="isolation:isolate;"><div class="astral-event-frame rarity-pr wb-card--prismatic">
             <div class="wb-card-inner">
                 <div class="wb-card-header"><span class="wb-mark">WEEBEE</span><span class="wb-rarity-gem wb-rarity-gem--star">★</span></div>
                 <div class="wb-card-art">${art}</div>
@@ -14709,14 +14709,15 @@ window._tcgSetupGifHoverPause = function(img) {
 // same reasoning as the GIF hover-pause above: a big grid of SSR/UR cards
 // otherwise means every one of those CSS animations runs simultaneously the
 // whole time they're on screen, whether or not anyone's looking at any of
-// them. Prismatic/Set cards are exempted (always-on) — they're rare enough
-// that always shimmering to stand out is the intended design.
+// them. Set cards are exempted (always-on) — set-completion cards are rare
+// enough that always shimmering to stand out is the intended design.
 function _tcgObserveSSRCards(root = document) {
-    const cards = root.matches?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr, .wb-card.rarity-set') ? [root] : root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr, .wb-card.rarity-set') || [];
+    const SEL = '.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr, .wb-card.rarity-set, .neon-event-frame, .astral-event-frame';
+    const cards = root.matches?.(SEL) ? [root] : root.querySelectorAll?.(SEL) || [];
     cards.forEach(el => {
         if (el.dataset.ssrObserved || el.closest('[data-hover-anim-only]')) return;
         el.dataset.ssrObserved = '1';
-        if (el.classList.contains('wb-card--prismatic') || el.classList.contains('wb-card--set')) return;
+        if (el.classList.contains('wb-card--set')) return;
         el.addEventListener('mouseenter', () => el.classList.add('tcg-anim-in-view'));
         el.addEventListener('mouseleave', () => el.classList.remove('tcg-anim-in-view'));
     });
@@ -14727,11 +14728,11 @@ function _tcgObserveSSRCards(root = document) {
 // its cards data-hover-anim-only="1" so the general scanner skips them and
 // this gets called explicitly instead.
 function _tcgObserveSSRCardsHoverOnly(root) {
-    const cards = root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr, .wb-card.rarity-set') || [];
+    const cards = root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr, .wb-card.rarity-set, .neon-event-frame, .astral-event-frame') || [];
     cards.forEach(card => {
         if (card.dataset.hoverOnly) return;
         card.dataset.hoverOnly = '1';
-        if (card.classList.contains('wb-card--prismatic') || card.classList.contains('wb-card--set')) return; // always-on, skip hover toggle
+        if (card.classList.contains('wb-card--set')) return; // always-on, skip hover toggle
         card.addEventListener('mouseenter', () => card.classList.add('tcg-anim-in-view'));
         card.addEventListener('mouseleave', () => card.classList.remove('tcg-anim-in-view'));
     });
