@@ -14705,25 +14705,27 @@ window._tcgSetupGifHoverPause = function(img) {
     probe.src = src + (src.includes('?') ? '&' : '?') + 'corsProbe=1';
 };
 
-// Pause SSR/UR prismatic/gem animations when off-screen — keeps the effect while
-// avoiding constant repaints for cards the user isn't currently looking at.
-const _ssrAnimObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => entry.target.classList.toggle('tcg-anim-in-view', entry.isIntersecting));
-}, { rootMargin: '150px' });
-
+// Border/gem/sparkle shimmer effects (tcg-anim-in-view) only play on hover —
+// same reasoning as the GIF hover-pause above: a big grid of SSR/UR cards
+// otherwise means every one of those CSS animations runs simultaneously the
+// whole time they're on screen, whether or not anyone's looking at any of
+// them. Prismatic/Set cards are exempted (always-on) — they're rare enough
+// that always shimmering to stand out is the intended design.
 function _tcgObserveSSRCards(root = document) {
     const cards = root.matches?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr, .wb-card.rarity-set') ? [root] : root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr, .wb-card.rarity-set') || [];
     cards.forEach(el => {
         if (el.dataset.ssrObserved || el.closest('[data-hover-anim-only]')) return;
         el.dataset.ssrObserved = '1';
-        _ssrAnimObserver.observe(el);
+        if (el.classList.contains('wb-card--prismatic') || el.classList.contains('wb-card--set')) return;
+        el.addEventListener('mouseenter', () => el.classList.add('tcg-anim-in-view'));
+        el.addEventListener('mouseleave', () => el.classList.remove('tcg-anim-in-view'));
     });
 }
 
-// Hover-only variant for the store search grid — CSS prismatic/glow animations only play on hover.
-// GIF art now also only plays on hover via _tcgSetupGifHoverPause (wired into every art <img> in
-// _tcgBuildCardFace), independent of this class toggle. The parent grid must have
-// data-hover-anim-only="1" so _tcgObserveSSRCards skips adding these cards to the IntersectionObserver.
+// Hover-only variant for the store search grid — same behavior as the default
+// _tcgObserveSSRCards above now, kept separate only because this grid marks
+// its cards data-hover-anim-only="1" so the general scanner skips them and
+// this gets called explicitly instead.
 function _tcgObserveSSRCardsHoverOnly(root) {
     const cards = root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr, .wb-card.rarity-set') || [];
     cards.forEach(card => {
