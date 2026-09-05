@@ -14549,7 +14549,7 @@ function _tcgBuildCardFace(card) {
             card.neonC ? `--neon-c:${card.neonC}` : '',
             `--flicker-delay:${card.flickerDelay || '0s'}`,
         ].filter(Boolean).join(';');
-        const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
+        const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" onload="window._tcgSetupGifHoverPause(this);" onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
         return `<div style="isolation:isolate;"><div class="neon-event-frame rarity-pr wb-card--prismatic tcg-anim-in-view${extraClass}" style="${vars}">
             <div class="wb-card-inner">
                 <div class="wb-card-header"><span class="wb-mark">WEEBEE</span><span class="wb-rarity-gem wb-rarity-gem--star">★</span></div>
@@ -14567,7 +14567,7 @@ function _tcgBuildCardFace(card) {
     if (rarity === 'ar') {
         const eName = (card.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         const eAnime = (card.anime || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
+        const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" onload="window._tcgSetupGifHoverPause(this);" onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
         return `<div style="isolation:isolate;"><div class="astral-event-frame rarity-pr wb-card--prismatic tcg-anim-in-view">
             <div class="wb-card-inner">
                 <div class="wb-card-header"><span class="wb-mark">WEEBEE</span><span class="wb-rarity-gem wb-rarity-gem--star">★</span></div>
@@ -14583,7 +14583,7 @@ function _tcgBuildCardFace(card) {
     }
     // SET — Celestial Gold collection-completion card
     if (rarity === 'set') {
-        const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" onerror="this.style.display='none'">` : '';
+        const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}" onload="window._tcgSetupGifHoverPause(this);" onerror="this.style.display='none'">` : '';
         return `<div class="wb-card rarity-set wb-card--set">
             <div class="wb-card-inner">
                 <div class="wb-set-sparkles">${'<span class="wb-set-sparkle">✦</span>'.repeat(14)}</div>
@@ -14610,8 +14610,9 @@ function _tcgBuildCardFace(card) {
     const eName = (card.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const eAnime = (card.anime || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const _needsCache = card.image && !card.image.startsWith(_R2_PUBLIC_BASE) && !card.image.includes('firebasestorage.googleapis.com');
-    const _cacheAttrs = _needsCache ? ` data-char-cache="${(card.name+'|'+card.anime).replace(/"/g,'&quot;')}" onload="window._tcgLazyCacheCharacterImage('${eName}','${eAnime}',this.src)"` : '';
-    const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}"${_cacheAttrs} onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
+    const _cacheAttrs = _needsCache ? ` data-char-cache="${(card.name+'|'+card.anime).replace(/"/g,'&quot;')}"` : '';
+    const _onload = `window._tcgSetupGifHoverPause(this);${_needsCache ? `window._tcgLazyCacheCharacterImage('${eName}','${eAnime}',this.src);` : ''}`;
+    const art = card.image ? `<img src="${_toR2Url(card.image)}" alt="${card.name}"${_cacheAttrs} onload="${_onload}" onerror="if(!this.dataset.fb){this.dataset.fb=1;var u=window._tcgImgFallback('${eName}','${eAnime}');if(u&&u!==this.src)this.src=u;}">` : '';
     const gem = (baseRarity === 'sr' || baseRarity === 'ssr' || baseRarity === 'ur') ? `<span class="wb-rarity-gem"><span>⬡</span></span>` : (rarity === 'pr' ? `<span class="wb-rarity-gem wb-rarity-gem--star">★</span>` : `<span class="wb-rarity-gem">⬡</span>`);
     const maxV = card.maxVersions || RARITY_MAX_VERSIONS[rarity] || 5000;
     const serialInner = card.founder
@@ -14656,6 +14657,37 @@ document.addEventListener('mousemove', function(e) {
     card.style.setProperty('--my', ((e.clientY - r.top) / r.height).toFixed(3));
 });
 
+// Animated (GIF) card art only plays while hovered — a big grid of UR cards
+// otherwise means the browser is decoding/repainting every GIF at once, all
+// the time, whether or not anyone's looking at any of them. Freezes the art
+// on its first frame via a one-time canvas snapshot, then swaps back to the
+// real animated src on mouseenter/mouseleave. If the snapshot fails (e.g. the
+// art host doesn't send CORS headers permitting canvas reads), this just
+// leaves the GIF animating as it always has — no broken image, no regression.
+function _tcgSetupGifHoverPause(img) {
+    if (img.dataset.hoverPauseReady) return;
+    const src = img.src || '';
+    if (!/\.gif(\?|#|$)/i.test(src)) return;
+    try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        if (!canvas.width || !canvas.height) return;
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const poster = canvas.toDataURL('image/png');
+        img.dataset.hoverPauseReady = '1';
+        img.dataset.gifSrc = src;
+        img.src = poster;
+        img.addEventListener('mouseenter', () => { img.src = img.dataset.gifSrc; });
+        img.addEventListener('mouseleave', () => { img.src = poster; });
+    } catch (e) {
+        // Canvas tainted (cross-origin without CORS) or another failure —
+        // mark it handled so we don't retry every re-render, and leave the
+        // GIF playing normally.
+        img.dataset.hoverPauseReady = '1';
+    }
+}
+
 // Pause SSR/UR prismatic/gem animations when off-screen — keeps the effect while
 // avoiding constant repaints for cards the user isn't currently looking at.
 const _ssrAnimObserver = new IntersectionObserver((entries) => {
@@ -14672,7 +14704,8 @@ function _tcgObserveSSRCards(root = document) {
 }
 
 // Hover-only variant for the store search grid — CSS prismatic/glow animations only play on hover.
-// GIFs play normally (they're low overhead compared to CSS repaints). The parent grid must have
+// GIF art now also only plays on hover via _tcgSetupGifHoverPause (wired into every art <img> in
+// _tcgBuildCardFace), independent of this class toggle. The parent grid must have
 // data-hover-anim-only="1" so _tcgObserveSSRCards skips adding these cards to the IntersectionObserver.
 function _tcgObserveSSRCardsHoverOnly(root) {
     const cards = root.querySelectorAll?.('.wb-card.rarity-ssr, .wb-card.rarity-ur, .wb-card.rarity-pr, .wb-card.rarity-set') || [];
