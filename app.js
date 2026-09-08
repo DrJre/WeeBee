@@ -4820,8 +4820,7 @@ window.loadProfileSocial = async function(uidToFetch) {
         const { docId, mal_id } = missingAnimeData[i];
         if(i > 0) await new Promise(r => setTimeout(r, 400));
         try {
-            const res = await fetch(`${JIKAN_BASE}/v4/anime/${mal_id}`);
-            const { data: anime } = await res.json();
+            const { data: anime } = await window.jikanFetch(`${JIKAN_BASE}/v4/anime/${mal_id}`, `full_${mal_id}`);
             if(!anime) continue;
             const newTitle = anime.title_english || anime.title;
             const newImg = anime.images.jpg.image_url;
@@ -6298,8 +6297,7 @@ window.selectTierSource = async function(malId, title, imageUrl) {
     const zone = document.getElementById('tl-unranked-zone');
     if (zone) zone.innerHTML = '<div class="loading" style="padding:10px;">Loading characters...</div>';
     try {
-        const res = await fetch(`${JIKAN_BASE}/v4/anime/${malId}/characters`);
-        const { data } = await res.json();
+        const { data } = await window.jikanFetch(`${JIKAN_BASE}/v4/anime/${malId}/characters`, `chars_${malId}`);
         const validChar = c => !/^(narrator|singer|announcer|voice actor)$/i.test(c.character.name.trim());
         const toItem = c => ({ id:`char_${c.character.mal_id}`, title:c.character.name, image:c.character.images?.jpg?.image_url||'', animeTitle:title });
         const mains = (data||[]).filter(c=>c.role==='Main' && validChar(c)).sort((a,b)=>(b.favorites||0)-(a.favorites||0)).map(toItem);
@@ -6622,8 +6620,7 @@ window.selectTierBulkAnime = async function(malId, title, imageUrl) {
     label.textContent = `Characters from ${title}`;
     grid.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:13px;text-align:center;">Loading characters...</div>';
     try {
-        const res = await fetch(`${JIKAN_BASE}/v4/anime/${malId}/characters`);
-        const { data } = await res.json();
+        const { data } = await window.jikanFetch(`${JIKAN_BASE}/v4/anime/${malId}/characters`, `chars_${malId}`);
         const validChar = c => !/^(narrator|singer|announcer|voice actor)$/i.test(c.character.name.trim());
         const toItem = c => ({ id:`char_${c.character.mal_id}`, title:c.character.name, image:c.character.images?.jpg?.image_url||'', animeTitle: title });
         const mains = (data||[]).filter(c=>c.role==='Main' && validChar(c)).sort((a,b)=>(b.favorites||0)-(a.favorites||0)).map(toItem);
@@ -23932,16 +23929,15 @@ window.fetchGlobalNews = async function() {
     const container = document.getElementById('global-news-feed');
     container.innerHTML = '<div class="loading">Sourcing latest headlines...</div>';
     try {
-        const res = await fetch(`${JIKAN_BASE}/v4/seasons/now?limit=6`);
-        const { data: seasonal } = await res.json();
+        // Both the seasonal list and each anime's news are cached (24h TTL) —
+        // this used to be 6 uncached Jikan calls every time anyone opened News.
+        const { data: seasonal } = await window.jikanFetch(`${JIKAN_BASE}/v4/seasons/now?limit=6`, 'news_seasonal_top6', JIKAN_CAROUSEL_TTL_MS);
         const topAnime = (seasonal || []).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 5);
         let allNews = [];
         const seenTitles = new Set();
         for (const anime of topAnime) {
-            await new Promise(r => setTimeout(r, 420));
             try {
-                const newsRes = await fetch(`${JIKAN_BASE}/v4/anime/${anime.mal_id}/news?limit=5`);
-                const { data: news } = await newsRes.json();
+                const { data: news } = await window.jikanFetch(`${JIKAN_BASE}/v4/anime/${anime.mal_id}/news?limit=5`, `news_${anime.mal_id}`, JIKAN_CAROUSEL_TTL_MS);
                 (news || []).slice(0, 5).forEach(item => {
                     if (!seenTitles.has(item.title)) {
                         seenTitles.add(item.title);
@@ -24471,13 +24467,12 @@ window.fetchDiscoverPage = async function() {
                             </div>
                         </div>
                     </div>`;
-                // Fetch synopsis + genres from Jikan (non-blocking)
+                // Fetch synopsis + genres from Jikan (non-blocking, cached — the
+                // #1 spot is the same anime for every visitor until rankings move)
                 ;(async () => {
                     try {
-                        await new Promise(r => setTimeout(r, 420));
-                        const res = await fetch(`${JIKAN_BASE}/v4/anime/${s.mal_id}`);
-                        if (!res.ok) return;
-                        const json = await res.json();
+                        const json = await window.jikanFetch(`${JIKAN_BASE}/v4/anime/${s.mal_id}`, `full_${s.mal_id}`);
+                        if (!json?.data) return;
                         const genres = json.data.genres?.slice(0, 3).map(g => g.name).join(' · ') || '';
                         const synopsis = (json.data.synopsis || '').replace(/\[Written by.*?\]/g, '').trim();
                         const el = document.getElementById('spotlight-meta-text');
@@ -25696,7 +25691,7 @@ window.onload = function() {
     history.replaceState({ view: 'home-view', profileUid: null, animeId: null }, '', window.location.pathname);
     const loadTrending = async () => {
         try {
-            const r = await fetch(`${JIKAN_BASE}/v4/seasons/now?limit=15`); const d = await r.json();
+            const d = await window.jikanFetch(`${JIKAN_BASE}/v4/seasons/now?limit=15`, 'seasons_now_15', JIKAN_CAROUSEL_TTL_MS);
             const c = document.getElementById('trending-carousel'); c.innerHTML = '';
             const seen = new Set();
             if(d.data) d.data.forEach(a => {
