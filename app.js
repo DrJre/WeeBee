@@ -32206,6 +32206,8 @@ window.loadPvpTab = async function() {
             </div>
         </div>
 
+        ${_pvpLadderInfoHTML()}
+
         ${_pvpWeeklyLadderHTML(ladderData, uid)}
 
         ${_pvpTournamentBannerHTML(tourney, myEntry, uid)}
@@ -34031,6 +34033,25 @@ async function _pvpLoadLadderData(uid) {
         console.error('[ladder] load error', e);
         return { week: null, myEntry: null, leaderboard: [], config: {}, alreadyEntered: false };
     }
+}
+
+// Compact, glanceable rules strip shown above the Weekly Ladder card — a
+// quick reference for how entry/matching/scoring works, not a full manual.
+function _pvpLadderInfoHTML() {
+    const item = (emoji, title, desc) => `
+        <div style="flex:1;min-width:150px;">
+            <div style="font-size:13px;font-weight:700;margin-bottom:2px;">${emoji} ${title}</div>
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.4;">${desc}</div>
+        </div>`;
+    return `<div style="border:1px solid var(--border-color);border-radius:14px;padding:14px 18px;margin-bottom:14px;">
+        <div style="font-weight:800;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;">⚔️ How the Ladder Works</div>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;">
+            ${item('🎴', 'Pick 3', 'Enter the pool with your best 3 cards — locked in for the week.')}
+            ${item('🕐', 'Hourly Matches', "Every hour you're randomly paired vs another entrant, or your own team if no one's around.")}
+            ${item('⚡', 'Best of 3', 'Your strongest card faces theirs, then 2nd vs 2nd, 3rd vs 3rd. Win 2 rounds to win the match.')}
+            ${item('🏆', 'Climb & Win', 'Most wins by Saturday 7PM ET takes the top spots on the leaderboard and their prizes.')}
+        </div>
+    </div>`;
 }
 
 function _pvpWeeklyLadderHTML(data, uid) {
