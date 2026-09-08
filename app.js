@@ -1,5 +1,5 @@
 ﻿﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, collectionGroup, addDoc, getDocs, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch, waitForPendingWrites, deleteField } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, collection, collectionGroup, addDoc, getDocs, getCountFromServer, query, where, deleteDoc, doc, orderBy, limit, startAfter, updateDoc, getDoc, setDoc, increment, runTransaction, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, writeBatch, waitForPendingWrites, deleteField } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-analytics.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-functions.js";
@@ -4072,6 +4072,7 @@ window.switchProfileTab = function(event, tabId) {
     if (tabId === 'p-achievements') window.loadProfileAchievements(window.currentProfileUid);
     if (tabId === 'p-friends')      window.loadFriendsTab(window.currentProfileUid);
     if (tabId === 'p-followers')    window.loadFollowersTab(window.currentProfileUid);
+    if (tabId === 'p-social')       window.loadProfileSocial(window.currentProfileUid);
 };
 
 function _statCard(label, value, icon) {
@@ -4361,30 +4362,56 @@ window.toggleStatsPrivacy = function() {
     setDoc(doc(db, 'profiles', auth.currentUser.uid), { statsPrivate: checked }, { merge: true }).catch(() => {});
 };
 
-window.loadProfileFeed = async function(uid) {
+// Default page size for profile Feed/Reviews on first load — "Load More"
+// grows it by PROFILE_FEED_MORE each click instead of dumping everything at
+// once. Keeps the initial profile open cheap on both query volume and DOM/
+// image render cost, which is what actually made profiles slow to open.
+const PROFILE_FEED_PAGE_SIZE = 3;
+const PROFILE_FEED_MORE = 10;
+
+window.loadProfileFeed = async function(uid, more = false) {
     const container = document.getElementById('user-profile-feed');
-    if (!container || container.dataset.loaded === uid) return;
-    container.innerHTML = '<div class="loading" style="padding:24px;text-align:center;">Loading...</div>';
+    if (!container) return;
+    if (!more) {
+        if (container.dataset.loaded === uid) return;
+        container.dataset.loaded = uid;
+        container.dataset.pageSize = String(PROFILE_FEED_PAGE_SIZE);
+        container.innerHTML = '<div class="loading" style="padding:24px;text-align:center;">Loading...</div>';
+    } else {
+        container.dataset.pageSize = String((parseInt(container.dataset.pageSize, 10) || PROFILE_FEED_PAGE_SIZE) + PROFILE_FEED_MORE);
+    }
+    const pageSize = parseInt(container.dataset.pageSize, 10);
     try {
         const isMe = uid === auth.currentUser?.uid;
         const tlFilter = isMe
-            ? query(collection(db, 'tier_lists'), where('uid', '==', uid), limit(30))
-            : query(collection(db, 'tier_lists'), where('uid', '==', uid), where('public', '==', true), limit(30));
+            ? query(collection(db, 'tier_lists'), where('uid', '==', uid), limit(pageSize))
+            : query(collection(db, 'tier_lists'), where('uid', '==', uid), where('public', '==', true), limit(pageSize));
         const _empty = { forEach: () => {}, docs: [] };
-        const [revSnap, tlSnap, htSnap, pollSnap, bracketSnap, bwSnap, triviaSnap, mbSnap, gpSnap, dungeonSnap] = await Promise.all([
-            getDocs(query(collection(db, 'reviews'), where('uid', '==', uid), limit(60))).catch(() => _empty),
+        // Reviews are reused from the full, already-sorted list fetchUserProfile
+        // stashes on open, instead of this running its own separate query —
+        // avoids fetching the same user's reviews 2-3x per profile visit.
+        const cachedReviews = window._profileReviewsFull?.uid === uid ? window._profileReviewsFull.reviews : null;
+        const [tlSnap, htSnap, pollSnap, bracketSnap, bwSnap, triviaSnap, mbSnap, gpSnap, dungeonSnap] = await Promise.all([
             getDocs(tlFilter).catch(() => _empty),
-            getDocs(query(collection(db, 'hot_takes'), where('uid', '==', uid), limit(30))).catch(() => _empty),
-            getDocs(query(collection(db, 'polls'), where('uid', '==', uid), limit(30))).catch(() => _empty),
-            getDocs(query(collection(db, 'brackets'), where('uid', '==', uid), limit(20))).catch(() => _empty),
-            getDocs(query(collection(db, 'bw_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
-            getDocs(query(collection(db, 'trivia_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
-            getDocs(query(collection(db, 'melobee_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
-            getDocs(query(collection(db, 'general_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
-            getDocs(query(collection(db, 'dungeon_posts'), where('uid', '==', uid), limit(30))).catch(() => _empty),
+            getDocs(query(collection(db, 'hot_takes'), where('uid', '==', uid), limit(pageSize))).catch(() => _empty),
+            getDocs(query(collection(db, 'polls'), where('uid', '==', uid), limit(pageSize))).catch(() => _empty),
+            getDocs(query(collection(db, 'brackets'), where('uid', '==', uid), limit(pageSize))).catch(() => _empty),
+            getDocs(query(collection(db, 'bw_posts'), where('uid', '==', uid), limit(pageSize))).catch(() => _empty),
+            getDocs(query(collection(db, 'trivia_posts'), where('uid', '==', uid), limit(pageSize))).catch(() => _empty),
+            getDocs(query(collection(db, 'melobee_posts'), where('uid', '==', uid), limit(pageSize))).catch(() => _empty),
+            getDocs(query(collection(db, 'general_posts'), where('uid', '==', uid), limit(pageSize))).catch(() => _empty),
+            getDocs(query(collection(db, 'dungeon_posts'), where('uid', '==', uid), limit(pageSize))).catch(() => _empty),
         ]);
         const items = [];
-        revSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'review', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+        let moreReviewsAvailable = false;
+        if (cachedReviews) {
+            cachedReviews.slice(0, pageSize).forEach(d => items.push({ ...d, _type: 'review', _ts: d.timestamp?.toMillis?.() || 0 }));
+            moreReviewsAvailable = cachedReviews.length > pageSize;
+        } else {
+            const revSnap = await getDocs(query(collection(db, 'reviews'), where('uid', '==', uid), limit(pageSize))).catch(() => _empty);
+            revSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'review', _ts: d.data().timestamp?.toMillis?.() || 0 }));
+            moreReviewsAvailable = revSnap.docs.length === pageSize;
+        }
         tlSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'tierlist', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         htSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'hot_take', _ts: d.data().timestamp?.toMillis?.() || 0 }));
         pollSnap.forEach(d => items.push({ ...d.data(), id: d.id, _type: 'poll', _ts: d.data().timestamp?.toMillis?.() || 0 }));
@@ -4397,12 +4424,16 @@ window.loadProfileFeed = async function(uid) {
         items.sort((a, b) => b._ts - a._ts);
         if (!items.length) {
             container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:32px;">No posts yet.</p>';
-            container.dataset.loaded = uid;
             return;
         }
+        const shown = items.slice(0, pageSize);
+        // "Might be more" heuristic: a source hit its own query cap (or, for
+        // reviews, the cached full list is longer than what we're showing).
+        const hasMore = moreReviewsAvailable
+            || [tlSnap, htSnap, pollSnap, bracketSnap, bwSnap, triviaSnap, mbSnap, gpSnap, dungeonSnap].some(s => s.docs.length === pageSize);
         const curUid = auth.currentUser?.uid;
         container.innerHTML = '';
-        items.forEach(item => {
+        shown.forEach(item => {
             let html = '';
             try {
                 if (item._type === 'review') html = window.generateReviewCardHTML(item);
@@ -4418,24 +4449,45 @@ window.loadProfileFeed = async function(uid) {
             } catch(e) { console.error('Profile feed render error:', item._type, e); }
             if (html) container.innerHTML += `<div>${html}</div>`;
         });
-        container.dataset.loaded = uid;
+        if (hasMore) {
+            container.innerHTML += `<div style="text-align:center;padding:16px;"><button onclick="window.loadProfileFeed('${uid}', true)" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);">Load 10 More</button></div>`;
+        }
     } catch(e) {
         console.error('loadProfileFeed error:', e);
         container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:32px;">Failed to load feed.</p>';
     }
 };
 
-window.loadProfileReviews = async function(uid) {
+window.loadProfileReviews = async function(uid, more = false) {
     const feed = document.getElementById('user-reviews-feed');
-    if (!feed || feed.dataset.loaded === uid) return;
-    feed.innerHTML = '<div class="loading" style="padding:24px;text-align:center;">Loading...</div>';
-    try {
-        const snap = await getDocs(query(collection(db, 'reviews'), where('uid', '==', uid)));
-        const reviews = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
-        feed.innerHTML = '';
-        if (!reviews.length) feed.innerHTML = '<p class="empty-msg" style="color:var(--text-muted);">No reviews yet.</p>';
-        else reviews.forEach(d => feed.innerHTML += window.generateReviewCardHTML(d));
+    if (!feed) return;
+    if (!more) {
+        if (feed.dataset.loaded === uid) return;
         feed.dataset.loaded = uid;
+        feed.dataset.pageSize = String(PROFILE_FEED_PAGE_SIZE);
+        feed.innerHTML = '<div class="loading" style="padding:24px;text-align:center;">Loading...</div>';
+    } else {
+        feed.dataset.pageSize = String((parseInt(feed.dataset.pageSize, 10) || PROFILE_FEED_PAGE_SIZE) + PROFILE_FEED_MORE);
+    }
+    const pageSize = parseInt(feed.dataset.pageSize, 10);
+    try {
+        // Reuse the full review list fetchUserProfile already fetched for the
+        // average-score calc — no extra query needed for pagination here at all.
+        let reviews;
+        if (window._profileReviewsFull?.uid === uid) {
+            reviews = window._profileReviewsFull.reviews;
+        } else {
+            const snap = await getDocs(query(collection(db, 'reviews'), where('uid', '==', uid)));
+            reviews = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+            window._profileReviewsFull = { uid, reviews };
+        }
+        const shown = reviews.slice(0, pageSize);
+        feed.innerHTML = '';
+        if (!shown.length) { feed.innerHTML = '<p class="empty-msg" style="color:var(--text-muted);">No reviews yet.</p>'; return; }
+        shown.forEach(d => feed.innerHTML += window.generateReviewCardHTML(d));
+        if (reviews.length > pageSize) {
+            feed.innerHTML += `<div style="text-align:center;padding:16px;"><button onclick="window.loadProfileReviews('${uid}', true)" class="action-btn" style="background:var(--bg-gray-darker);color:var(--text-dark);">Load 10 More</button></div>`;
+        }
     } catch(e) { feed.innerHTML = '<p style="color:var(--text-muted);">Failed to load reviews.</p>'; }
 };
 
@@ -4571,7 +4623,10 @@ window.fetchUserProfile = async function(targetUid = null) {
         if(data.type !== 'suggestion' && data.type !== 'series') { totalScore += parseFloat(data.score); localReviewCount++; }
         myReviews.push({ ...data, id: d.id });
     });
-    myReviews.sort((a,b) => b.timestamp - a.timestamp);
+    myReviews.sort((a,b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+    // Cache the full, sorted list so the Feed tab and Reviews tab can reuse it
+    // instead of each running their own separate full-collection query.
+    window._profileReviewsFull = { uid: uidToFetch, reviews: myReviews };
     const avg = localReviewCount > 0 ? (totalScore / localReviewCount).toFixed(1) : "0.0";
     // Use the stored reviewCount from the profile doc — it's the authoritative count
     // (includes in-depth + quick reviews). The live collection count can diverge from
@@ -4660,17 +4715,19 @@ window.fetchUserProfile = async function(targetUid = null) {
     if (statsEl) { statsEl.innerHTML = ''; delete statsEl.dataset.loaded; }
     const tcgBindersEl = document.getElementById('user-tcg-binders-container');
     if (tcgBindersEl) { tcgBindersEl.innerHTML = ''; delete tcgBindersEl.dataset.loaded; }
+    const socialTabEl = document.getElementById('p-social');
+    if (socialTabEl) { delete socialTabEl.dataset.loaded; }
     window.loadProfileFeed(uidToFetch);
 
-    // Follower / Following counts
-    const [followingSnap, followersSnap, friendsCountSnap] = await Promise.all([
-        getDocs(query(collection(db, "follows"), where("followerUid", "==", uidToFetch), where("type", "==", "user"))),
-        getDocs(query(collection(db, "follows"), where("targetId", "==", uidToFetch), where("type", "==", "user"))),
-        getDocs(query(collection(db, "friends"), where("uids", "array-contains", uidToFetch)))
+    // Follower / Following counts — server-side aggregation, no documents downloaded
+    const [followingCountSnap, followersCountSnap, friendsCountSnap] = await Promise.all([
+        getCountFromServer(query(collection(db, "follows"), where("followerUid", "==", uidToFetch), where("type", "==", "user"))),
+        getCountFromServer(query(collection(db, "follows"), where("targetId", "==", uidToFetch), where("type", "==", "user"))),
+        getCountFromServer(query(collection(db, "friends"), where("uids", "array-contains", uidToFetch)))
     ]);
-    const followingCount = followingSnap.size;
-    const followersCount = followersSnap.size;
-    const friendsCount = friendsCountSnap.size;
+    const followingCount = followingCountSnap.data().count;
+    const followersCount = followersCountSnap.data().count;
+    const friendsCount = friendsCountSnap.data().count;
     const countsEl = document.getElementById('profile-follow-counts');
     if (countsEl) countsEl.innerHTML = `
         <span style="cursor:pointer;" onclick="switchProfileTab({currentTarget: document.querySelector('.p-tab[onclick*=p-friends]')}, 'p-friends')">
@@ -4685,11 +4742,21 @@ window.fetchUserProfile = async function(targetUid = null) {
             <strong>${followersCount}</strong> <span style="color:var(--text-muted); font-size:13px;">Followers</span>
         </span>`;
 
-    // SOCIAL (FOLLOWING)
+    fetchProfileComments(uidToFetch);
+};
+
+// Following tab (anime + users this profile follows) — lazy-loaded on tab
+// click like Lists/Stats/Achievements/TCG Collection, instead of running on
+// every profile open regardless of which tab is actually being looked at.
+window.loadProfileSocial = async function(uidToFetch) {
+    const socialTab = document.getElementById('p-social');
+    if (!socialTab || socialTab.dataset.loaded === uidToFetch) return;
+    socialTab.dataset.loaded = uidToFetch;
+
     const followsSnap = await getDocs(query(collection(db, "follows"), where("followerUid", "==", uidToFetch)));
     const fAnimeList = document.getElementById('followed-anime-list'); fAnimeList.innerHTML = '';
     const fUserList = document.getElementById('followed-users-list'); fUserList.innerHTML = '';
-    
+
     let hasAnime = false; let hasUser = false;
     const missingAnimeData = [];
     followsSnap.forEach(d => {
@@ -4768,8 +4835,6 @@ window.fetchUserProfile = async function(targetUid = null) {
             if(titleEl) titleEl.textContent = 'Unknown Anime';
         }
     }
-
-    fetchProfileComments(uidToFetch);
 };
 
 window.submitProfileComment = async function() {
