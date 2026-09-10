@@ -1914,8 +1914,10 @@ async function _distributePrizes(db, tourneyId, tourneyData, totalRounds) {
         if (Object.keys(updates).length) await db.collection('profiles').doc(uid).update(updates);
         if (prize.cards?.length) {
             const collRef = db.collection('card_collections').doc(uid).collection('cards');
-            for (const card of prize.cards)
-                await collRef.add({ ...card, acquiredVia: 'tournament_prize', acquiredAt: new Date() });
+            for (const card of prize.cards) {
+                const { version, edition } = await assignSerial(db, card);
+                await collRef.add({ ...card, serial: version, edition, acquiredVia: 'tournament_prize', acquiredAt: new Date() });
+            }
         }
         const placeLabel = ['','🥇 1st','🥈 2nd','🥉 3rd–4th','🥉 3rd–4th'][place] || `${place}th`;
         await db.collection('notifications').add({
@@ -2107,6 +2109,28 @@ exports.adminKickTournamentEntry = onRequest({ invoker: 'public' }, async (req, 
     } catch(e) { return sendErr(res, 500, 'INTERNAL', e.message); }
     if (userError) return sendErr(res, ...userError);
     res.json({ result: { success: true } });
+});
+
+// One-off repair for cards granted before the tournament-prize serial bug
+// (below) was fixed — assigns a real serial/edition to a card that has
+// none, using the same shared assignSerial pool as every other source
+// (packs, fuses, etc.) so it can never collide with an existing serial.
+exports.adminFixCardSerial = onRequest({ invoker: 'public' }, async (req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    const callerUid = await getCallerUid(req);
+    if (callerUid !== ADMIN_UID) return sendErr(res, 403, 'PERMISSION_DENIED', 'Admin only.');
+    const { uid, cardId } = req.body?.data || {};
+    if (!uid || !cardId) return sendErr(res, 400, 'INVALID_ARGUMENT', 'uid and cardId required.');
+    const db = getFirestore();
+    const cardRef = db.collection('card_collections').doc(uid).collection('cards').doc(cardId);
+    const snap = await cardRef.get();
+    if (!snap.exists) return sendErr(res, 404, 'NOT_FOUND', 'Card not found.');
+    const card = snap.data();
+    if (card.serial != null) return sendErr(res, 400, 'FAILED_PRECONDITION', 'Card already has a serial.');
+    const { version, edition } = await assignSerial(db, card);
+    await cardRef.update({ serial: version, edition });
+    res.json({ result: { serial: version, edition } });
 });
 
 exports.adminGenerateBracket = onRequest({ invoker: 'public' }, async (req, res) => {

@@ -14975,6 +14975,10 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
     }
 
     const isCardOwner = auth.currentUser?.uid === ownerUid;
+    // Cards that should have a real serial but don't — e.g. tournament prizes
+    // granted before that path assigned one. Admin-only self-service repair.
+    const _missingSerial = window.isAdmin && card.serial == null && !card.founder
+        && !(card.monthlyUr || card.tradedMonthlyUr) && !['pr','nr','ar','set'].includes(card.rarity);
     const _dismantleAmt = TCG_DISMANTLE_RATES[card.rarity] || 0;
     const _shatterAmt = TCG_SHATTER_RATES[card.rarity] || 0;
     const _canFuse = !!TCG_FUSE_REQUIREMENTS[card.rarity];
@@ -15009,8 +15013,21 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
             <div><strong>Owner:</strong> <span onclick="document.getElementById('tcg-card-viewer-modal').remove();viewUserProfile('${safeOwnerUid}')" style="cursor:pointer;color:#f59e0b;font-weight:700;">${ownerName}</span></div>
         </div>
         ${isCardOwner ? `<div style="display:flex;gap:6px;flex-wrap:wrap;width:100%;margin-top:4px;">${_dismantleAmt ? `<button onclick="window._tcgDismantleCard('${cardId}','${card.rarity}','${_safeCardName}','${safeOwnerUid}')" style="flex:1;padding:9px 10px;border-radius:9px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:800;font-size:12px;cursor:pointer;">Dismantle 🟡 ${_dismantleAmt}</button>` : ""}${_shatterAmt ? `<button onclick="window._tcgShatterCard('${cardId}','${card.rarity}','${_safeCardName}','${safeOwnerUid}')" style="flex:1;padding:9px 10px;border-radius:9px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:800;font-size:12px;cursor:pointer;">Shatter 🔷 ${_shatterAmt}</button>` : ""}${_canFuse ? `<button onclick="window._tcgOpenFuseModal('${cardId}','${safeOwnerUid}')" style="flex:1;padding:9px 10px;border-radius:9px;border:1px solid rgba(167,139,250,0.4);background:transparent;color:#a78bfa;font-weight:800;font-size:12px;cursor:pointer;">⚗️ Fuse</button>` : ""}</div>` : ""}
+        ${_missingSerial ? `<button onclick="window._tcgAdminFixSerial('${safeOwnerUid}','${cardId}')" style="width:100%;padding:9px 10px;border-radius:9px;border:1px solid rgba(239,68,68,0.4);background:transparent;color:#ef4444;font-weight:800;font-size:12px;cursor:pointer;">🔧 Admin: Assign Missing Serial</button>` : ""}
         <button onclick="navigator.clipboard.writeText('${shareUrl}').then(()=>alert('Link copied! Anyone you send it to can view this card.')).catch(()=>alert('Could not copy link'))" style="width:100%;padding:10px 22px;border-radius:10px;border:none;background:var(--accent-yellow);color:#222;font-weight:800;font-size:13px;cursor:pointer;">🔗 Copy Share Link</button>`;
     _tcgObserveSSRCards(body);
+};
+
+window._tcgAdminFixSerial = async function(uid, cardId) {
+    if (!window.isAdmin) return;
+    if (!confirm('Assign a real serial number to this card? This cannot be undone.')) return;
+    try {
+        await _callFn('adminFixCardSerial', { uid, cardId });
+        alert('Serial assigned.');
+        window._tcgOpenCardViewer(uid, cardId);
+    } catch(e) {
+        alert('Failed: ' + (e.details || e.message));
+    }
 };
 
 // ── Card versions page — shows who owns each serial number of a given card ─────
