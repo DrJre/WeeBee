@@ -34185,8 +34185,9 @@ function _pvpLadderInfoHTML() {
     return `<div style="border:1px solid var(--border-color);border-radius:14px;padding:14px 18px;margin-bottom:14px;">
         <div style="font-weight:800;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;">⚔️ How the Ladder Works</div>
         <div style="display:flex;flex-wrap:wrap;gap:14px;">
-            ${item('🎴', 'Pick 3', 'Enter the pool with your best 3 cards — locked in for the week.')}
+            ${item('🎴', 'Pick 3', 'Enter the pool with your best 3 cards to be matched for that hour.')}
             ${item('🕐', 'Hourly Matches', "Every hour you're randomly paired vs another entrant, or your own team if no one's around.")}
+            ${item('🗓️', '5 Entries/Day', "Up to 5 pool entries per day — so it's a fair fight whether you're online all day or just checking in once.")}
             ${item('⚡', 'Best of 3', 'Your strongest card faces theirs, then 2nd vs 2nd, 3rd vs 3rd. Win 2 rounds to win the match.')}
             ${item('🏆', 'Climb & Win', 'Most wins by Saturday 7PM ET takes the top spots on the leaderboard and their prizes.')}
         </div>

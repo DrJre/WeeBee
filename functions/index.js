@@ -2486,6 +2486,17 @@ exports.pvpLadderEnterPool = onRequest({ invoker: 'public' }, async (req, res) =
     const now = new Date();
     if (now.getUTCMinutes() >= 30)
         return sendErr(res, 400, 'FAILED_PRECONDITION', 'Pool is closed. Opens again at the top of the next hour.');
+
+    // Daily entry cap — 5 pool entries per UTC day, so players who can't be
+    // online every hour still get a fair shot at the leaderboard against
+    // anyone who could enter all 24 hourly slots.
+    const dayId = now.toISOString().slice(0, 10);
+    const dailyRef = db.collection('pvp_ladder_daily_entries').doc(`${callerUid}_${dayId}`);
+    const dailySnap = await dailyRef.get();
+    const dailyCount = dailySnap.exists ? (dailySnap.data().count || 0) : 0;
+    if (dailyCount >= 5)
+        return sendErr(res, 400, 'RESOURCE_EXHAUSTED', "You've used all 5 of today's ladder entries. Come back tomorrow for more!");
+
     const slotId = _ladderSlotId(now);
     const slotRef = db.collection('pvp_ladder_pool').doc(slotId);
     const slotSnap = await slotRef.get();
@@ -2529,7 +2540,8 @@ exports.pvpLadderEnterPool = onRequest({ invoker: 'public' }, async (req, res) =
         submittedAt: now,
     });
     try { await slotRef.update({ entryCount: FieldValue.increment(1) }); } catch(e) {}
-    res.json({ result: { success: true, slotId, itemUsed: usedItem } });
+    try { await dailyRef.set({ uid: callerUid, day: dayId, count: FieldValue.increment(1) }, { merge: true }); } catch(e) {}
+    res.json({ result: { success: true, slotId, itemUsed: usedItem, dailyEntriesUsed: dailyCount + 1 } });
 });
 
 // Admin: set weekly ladder prize config (persists week-to-week)
