@@ -2289,9 +2289,11 @@ exports.pvpLadderHourlyClose = onSchedule({ schedule: '30 * * * *', timeZone: 'U
         if (isMirror) {
             // No opponent this hour — fight a mirror of your own party (same
             // cards on both sides) so there's a real best-of-3 to look at,
-            // not just a silent freebie win with no data behind it.
+            // not just a silent freebie win with no data behind it. The
+            // mirror side is the base team only — any item you used applies
+            // to your side alone, not copied onto the mirrored opponent.
             const boosts = e1.animeBoosts || {};
-            const battle = _ladderRunBattle(e1.cards, e1.cards, boosts, boosts, e1.item || null, e1.item || null);
+            const battle = _ladderRunBattle(e1.cards, e1.cards, boosts, boosts, e1.item || null, null);
             const playerWon = battle.winner === 0;
             batch.set(matchRef, {
                 uid1: e1.uid, uid1Name: e1.displayName||'', uid1Avatar: e1.avatar||'',
