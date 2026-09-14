@@ -13309,6 +13309,19 @@ async function _tcgLoadSetCards() {
     return _tcgSetCardsCache;
 }
 
+// True if `ownerCards` (a full card_collections list) currently owns every
+// required piece for `setDef` — live ownership by name+anime+rarity, not
+// tied to any specific card instance. Used both to gate the Claim button and
+// to self-heal a claimed SET card's setIntact flag when it's drifted from
+// reality (see callers).
+function _tcgIsSetComplete(setDef, ownerCards) {
+    const ownedSet = new Set(ownerCards.filter(c => !c.founder && c.rarity !== 'set')
+        .map(c => `${c.name}|||${_tcgNormalizeAnimeKey(c.anime)}|||${_tcgNormalizeRarityKey(c.rarity)}`));
+    const required = setDef.requiredCards || [];
+    const ownedCount = required.filter(r => ownedSet.has(`${r.name}|||${_tcgNormalizeAnimeKey(r.anime)}|||${_tcgNormalizeRarityKey(r.rarity)}`)).length;
+    return { ownedSet, required, ownedCount, complete: required.length >= 50 && ownedCount >= 50 };
+}
+
 // Normalizes an anime name for set-matching purposes — applies _normalizeSeriesName
 // and then collapses all Haikyu!! / Haikyuu!! variants to the canonical 'Haikyu!'
 // so that pool cards, user collection cards, and set definitions always compare equal
@@ -13402,13 +13415,25 @@ window._tcgOpenSetProgress = async function(setId) {
         const s = sets.find(x => x.id === setId);
         if (!s) { body.innerHTML = '<p style="color:var(--text-muted);padding:20px;">Set not found.</p>'; return; }
         const uid = auth.currentUser?.uid;
-        const nonFounderMine = myCards.filter(c => !c.founder && c.rarity !== 'set');
-        const ownedSet = new Set(nonFounderMine.map(c => `${c.name}|||${_tcgNormalizeAnimeKey(c.anime)}|||${_tcgNormalizeRarityKey(c.rarity)}`));
         const alreadyClaimed = myCards.some(c => c.rarity === 'set' && c.setId === s.id);
-        const required = s.requiredCards || [];
-        const ownedCount = required.filter(r => ownedSet.has(`${r.name}|||${_tcgNormalizeAnimeKey(r.anime)}|||${_tcgNormalizeRarityKey(r.rarity)}`)).length;
-        const complete = required.length >= 50 && ownedCount >= 50;
+        const { ownedSet, required, ownedCount, complete } = _tcgIsSetComplete(s, myCards);
         const pct = Math.min(100, Math.round((ownedCount / Math.max(required.length, 1)) * 100));
+
+        // Self-heal setIntact drift — it's only ever flipped to false when a
+        // required piece is removed (trade/dismantle/shatter), and nothing
+        // previously restored it if a replacement copy was reacquired later
+        // (or invalidated it if a piece was consumed via fuse, which skipped
+        // the check). This view already has true live ownership, so use it
+        // as the source of truth and correct the stored flag if it drifted.
+        if (alreadyClaimed && uid) {
+            const claimedCard = myCards.find(c => c.rarity === 'set' && c.setId === s.id);
+            if (claimedCard && (claimedCard.setIntact !== false) !== complete) {
+                updateDoc(doc(db, 'card_collections', uid, 'cards', claimedCard.id), { setIntact: complete }).catch(() => {});
+                claimedCard.setIntact = complete;
+                window._tcgCollectionCache.delete(uid);
+                try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
+            }
+        }
         body.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
                 <div style="font-size:18px;font-weight:900;color:var(--text-dark);">★ ${s.animeName} Set</div>
@@ -14949,6 +14974,25 @@ window._tcgOpenCardViewer = async function(ownerUid, cardId) {
         try { const pd = await getDoc(doc(db,'profiles',ownerUid)); if (pd.exists()) ownerName = pd.data().displayName || ownerName; } catch(e) {}
     } catch(e) { body.innerHTML = '<p style="color:var(--text-muted);">Failed to load card.</p>'; return; }
 
+    // Self-heal setIntact drift for this card's owner (see _tcgIsSetComplete) —
+    // catches it here too so viewing any SET card (yours or someone else's,
+    // e.g. from an admin/support context) fixes a stale flag on the spot.
+    if (card.rarity === 'set' && card.setId) {
+        try {
+            const [sets, ownerCards] = await Promise.all([_tcgLoadSetCards(), _tcgLoadCollection(ownerUid)]);
+            const setDef = sets.find(x => x.id === card.setId);
+            if (setDef) {
+                const { complete } = _tcgIsSetComplete(setDef, ownerCards);
+                if ((card.setIntact !== false) !== complete) {
+                    updateDoc(doc(db, 'card_collections', ownerUid, 'cards', cardId), { setIntact: complete }).catch(() => {});
+                    card.setIntact = complete;
+                    window._tcgCollectionCache.delete(ownerUid);
+                    try { localStorage.removeItem(`tcg_coll_${ownerUid}`); } catch {}
+                }
+            }
+        } catch(e) {}
+    }
+
     const maxV = card.maxVersions || RARITY_MAX_VERSIONS[card.rarity] || 5000;
     const isSet = card.rarity === 'set';
     const isPR = card.rarity === 'pr' || card.rarity === 'nr' || isSet;
@@ -15617,11 +15661,26 @@ window._tcgOpenFuseModal = async function(cardId, uid) {
         const filled = slots.filter(Boolean).length;
         if (filled < required) return;
         if (!confirm(`Fuse ${required} ${rarity.toUpperCase()} copies into ${resultLabel}? The ${required} selected cards will be permanently destroyed.`)) return;
+        // Block fusing away any card that's still SET-locked — same rule as
+        // dismantle/shatter/trade.
+        const lockedSlot = slots.find(c => {
+            if (!c?.setLockUntil) return false;
+            const lockDate = c.setLockUntil?.toDate?.() || new Date(c.setLockUntil);
+            return lockDate > new Date();
+        });
+        if (lockedSlot) {
+            const daysLeft = Math.ceil((((lockedSlot.setLockUntil?.toDate?.() || new Date(lockedSlot.setLockUntil))) - new Date()) / (1000 * 60 * 60 * 24));
+            alert(`"${lockedSlot.name}" is part of a SET collection and is locked for ${daysLeft} more day${daysLeft !== 1 ? 's' : ''}. You cannot fuse it until the lock expires.`);
+            return;
+        }
         fusing = true;
         const btn = document.getElementById('fuse-confirm-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Fusing…'; }
         try {
             const minSerial = Math.min(...slots.map(c => c?.serial ?? Infinity));
+            // Invalidate any SET card these fused-away copies were backing —
+            // same as dismantle/shatter/trade do when a required piece is consumed.
+            const setCardIdsToInvalidate = new Set(slots.filter(c => c?.setCardId).map(c => c.setCardId));
             // If any of the fused copies carries a special-provenance badge (wheel-prize
             // UR month stamp, founder edition), the result should keep it — otherwise
             // fusing silently strips it since the new doc is built fresh, not merged
@@ -15635,6 +15694,9 @@ window._tcgOpenFuseModal = async function(cardId, uid) {
             } : {};
             for (const card of slots.filter(Boolean)) {
                 await deleteDoc(doc(db, 'card_collections', uid, 'cards', card.id));
+            }
+            for (const setCardId of setCardIdsToInvalidate) {
+                updateDoc(doc(db, 'card_collections', uid, 'cards', setCardId), { setIntact: false }).catch(() => {});
             }
             await addDoc(collection(db, 'card_collections', uid, 'cards'), {
                 name: sourceCard.name,
