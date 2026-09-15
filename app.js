@@ -7837,6 +7837,26 @@ const TCG_FOUNDER_CARDS = [
         founder: true,
     },
     {
+        id: 'dreaded_left_arm', name: 'Left Arm of the Dreaded', anime: 'WeeBee Original', rarity: 'ur',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dreaded/Left%20arm.jpg',
+        founder: true,
+    },
+    {
+        id: 'dreaded_right_arm', name: 'Right Arm of the Dreaded', anime: 'WeeBee Original', rarity: 'ur',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dreaded/Right%20arm.jpg',
+        founder: true,
+    },
+    {
+        id: 'dreaded_left_leg', name: 'Left Leg of the Dreaded', anime: 'WeeBee Original', rarity: 'ur',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dreaded/Left%20leg.jpg',
+        founder: true,
+    },
+    {
+        id: 'dreaded_right_leg', name: 'Right Leg of the Dreaded', anime: 'WeeBee Original', rarity: 'ur',
+        image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Dreaded/Right%20leg.jpg',
+        founder: true,
+    },
+    {
         id: 'zoro', name: 'Zoro', anime: 'One Piece', rarity: 'ur',
         image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/UR/Zoro.gif',
         founder: true,
