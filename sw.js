@@ -4,14 +4,14 @@
 //
 // Bump CACHE_VERSION whenever app.js/styles.css version query strings change
 // in index.html, so returning users get the new shell instead of a stale one.
-const CACHE_VERSION = 'v847';
+const CACHE_VERSION = 'v848';
 const CACHE_NAME = `weebee-shell-${CACHE_VERSION}`;
 
 const SHELL_URLS = [
     '/',
     '/index.html',
     '/styles.css?v=170',
-    '/app.js?v=808',
+    '/app.js?v=809',
     '/characters.js',
     '/manifest.json',
     '/favicon.svg',

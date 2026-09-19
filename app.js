@@ -29570,13 +29570,17 @@ function _obBaseTitle(t) {
         .trim();
 }
 
-// Normalize for answer comparison: base title → lowercase → punctuation stripped
+// Normalize for answer comparison: base title → strip accents → lowercase →
+// strip everything but letters/digits (punctuation AND spacing both dropped).
+// Spacing has to go entirely, not just collapse — MAL/Jikan titles routinely
+// disagree with how a title "should" be spaced (e.g. "Dan Da Dan" vs
+// "Dandadan"), and the autocomplete dropdown feeds the user whatever MAL
+// says. Stripping accents the same way catches "Pokémon" vs "Pokemon".
 function _obNorm(t) {
     return _obBaseTitle(t)
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
         .toLowerCase()
-        .replace(/[:\-–—!?.,'"()[\]]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+        .replace(/[^a-z0-9]/g, '');
 }
 
 let _obSearchTimer = null;
