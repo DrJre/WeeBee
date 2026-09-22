@@ -15419,6 +15419,33 @@ const TCG_CRAFT_COSTS = { common: 25, rare: 60, sr: 250 };
 // Dupe copies required to fuse into the next + rarity (base rarities only)
 const TCG_FUSE_REQUIREMENTS = { sr: 6, ssr: 4, ur: 3 };
 
+// Splits a bulk dismantle/shatter selection into cards that are safe to
+// consume vs. ones still SET-locked — same rule single dismantle/shatter
+// already enforce, just applied across a whole selection at once.
+function _tcgSplitSetLocked(cards) {
+    const now = new Date();
+    const locked = [];
+    const allowed = [];
+    for (const c of cards) {
+        if (c.setLockUntil) {
+            const lockDate = c.setLockUntil?.toDate?.() || new Date(c.setLockUntil);
+            if (lockDate > now) { locked.push(c); continue; }
+        }
+        allowed.push(c);
+    }
+    return { allowed, lockedCount: locked.length };
+}
+
+// Invalidates setIntact on any SET card whose required piece is among
+// removedCards — best-effort, non-transactional, matching the single-card
+// dismantle/shatter/trade/fuse paths.
+function _tcgInvalidateSetCardsFor(uid, removedCards) {
+    const setCardIds = new Set(removedCards.filter(c => c.setCardId).map(c => c.setCardId));
+    setCardIds.forEach(setCardId => {
+        updateDoc(doc(db, 'card_collections', uid, 'cards', setCardId), { setIntact: false }).catch(() => {});
+    });
+}
+
 // Dismantles an owned card for a flat amber payout based on rarity
 window._tcgDismantling = false;
 window._tcgDismantleCard = async function(cardId, rarity, name, profileUid) {
@@ -16710,19 +16737,37 @@ window._tcgSmartDismantleModal = async function(uid) {
 
     window._sdConfirmDismantle = async function() {
         if (window._tcgDismantling) return;
-        const toDismantle = previewCards.filter(c => selectedIds.has(c.id));
-        if (!toDismantle.length) return;
+        const rawSelection = previewCards.filter(c => selectedIds.has(c.id));
+        if (!rawSelection.length) return;
+        const { allowed: toDismantle, lockedCount } = _tcgSplitSetLocked(rawSelection);
+        if (!toDismantle.length) { alert('All selected cards are still SET-locked and cannot be dismantled yet.'); return; }
         const total = toDismantle.reduce((s, c) => s + (TCG_DISMANTLE_RATES[c.rarity] || 0), 0);
-        if (!confirm(`Dismantle ${toDismantle.length} card(s) for 🟡 ${total.toLocaleString()} Amber? This cannot be undone.`)) return;
+        const lockedNote = lockedCount ? ` (${lockedCount} SET-locked card${lockedCount>1?'s':''} skipped)` : '';
+        if (!confirm(`Dismantle ${toDismantle.length} card(s) for 🟡 ${total.toLocaleString()} Amber?${lockedNote} This cannot be undone.`)) return;
         window._tcgDismantling = true;
         const btn = document.getElementById('sd-dismantle-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Dismantling…'; }
         try {
-            for (const c of toDismantle) {
-                await deleteDoc(doc(db, 'card_collections', uid, 'cards', c.id));
+            // Award amber FIRST via a throwing write (not _awardAmber, which
+            // silently swallows failures) so a card never disappears without
+            // paying out. Then batch-delete instead of one await per card —
+            // sequential deletes were what made large dismantles slow enough
+            // to abandon mid-way.
+            if (total > 0) {
+                await updateDoc(doc(db, 'profiles', uid), { amber: increment(total) });
+                addDoc(collection(db, 'amber_log'), { uid, amount: total, reason: 'tcg:dismantle', timestamp: new Date() }).catch(() => {});
+                _incrementUserStats({ amberEarned: total }).catch(() => {});
             }
-            if (total > 0) await _awardAmber(total, 'tcg:dismantle');
             _incrementUserStats({ cardsDismantled: toDismantle.length }).catch(() => {});
+            const BATCH_SIZE = 499;
+            for (let i = 0; i < toDismantle.length; i += BATCH_SIZE) {
+                const batch = writeBatch(db);
+                toDismantle.slice(i, i + BATCH_SIZE).forEach(c => {
+                    batch.delete(doc(db, 'card_collections', uid, 'cards', c.id));
+                });
+                await batch.commit();
+            }
+            _tcgInvalidateSetCardsFor(uid, toDismantle);
             window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
             document.getElementById('smart-dismantle-modal')?.remove();
             window._tcgRenderMyCollection('mycards', true);
@@ -16947,21 +16992,33 @@ window._tcgSmartShatterModal = async function(uid) {
 
     window._ssConfirmShatter = async function() {
         if (window._tcgShattering) return;
-        const toShatter = previewCards.filter(c => selectedIds.has(c.id));
-        if (!toShatter.length) return;
+        const rawSelection = previewCards.filter(c => selectedIds.has(c.id));
+        if (!rawSelection.length) return;
+        const { allowed: toShatter, lockedCount } = _tcgSplitSetLocked(rawSelection);
+        if (!toShatter.length) { alert('All selected cards are still SET-locked and cannot be shattered yet.'); return; }
         const total = toShatter.reduce((s, c) => s + (TCG_SHATTER_RATES[c.rarity] || 0), 0);
-        if (!confirm(`Shatter ${toShatter.length} card(s) for 🔷 ${total.toLocaleString()} Shards? This cannot be undone.`)) return;
+        const lockedNote = lockedCount ? ` (${lockedCount} SET-locked card${lockedCount>1?'s':''} skipped)` : '';
+        if (!confirm(`Shatter ${toShatter.length} card(s) for 🔷 ${total.toLocaleString()} Shards?${lockedNote} This cannot be undone.`)) return;
         window._tcgShattering = true;
         const btn = document.getElementById('ss-shatter-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Shattering…'; }
         try {
-            for (const c of toShatter) {
-                await deleteDoc(doc(db, 'card_collections', uid, 'cards', c.id));
-            }
+            // Award first, then batch-delete — same reasoning as dismantle:
+            // a throwing write before any deletion, and one batch commit
+            // instead of one await per card.
             if (total > 0) {
                 await updateDoc(doc(db, 'profiles', uid), { shards: increment(total) });
                 if (window._myProfile) window._myProfile.shards = (window._myProfile.shards || 0) + total;
             }
+            const BATCH_SIZE = 499;
+            for (let i = 0; i < toShatter.length; i += BATCH_SIZE) {
+                const batch = writeBatch(db);
+                toShatter.slice(i, i + BATCH_SIZE).forEach(c => {
+                    batch.delete(doc(db, 'card_collections', uid, 'cards', c.id));
+                });
+                await batch.commit();
+            }
+            _tcgInvalidateSetCardsFor(uid, toShatter);
             window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
             document.getElementById('smart-shatter-modal')?.remove();
             window._tcgRenderMyCollection('mycards', true);
@@ -16993,11 +17050,13 @@ window._tcgBulkDismantle = async function(uid, profileUid) {
     let cards;
     try { cards = await _tcgLoadCollection(uid); } catch(e) { window._tcgDismantling = false; return; }
     const favSet = window._tcgFavoriteIds || new Set();
-    const selectedCards = cards.filter(c => sel.has(c.id) && !favSet.has(c.id));
+    const favFiltered = cards.filter(c => sel.has(c.id) && !favSet.has(c.id));
     const skippedFavs = cards.filter(c => sel.has(c.id) && favSet.has(c.id)).length;
-    if (!selectedCards.length) { alert(skippedFavs ? 'All selected cards are favorited. Unfavorite them first.' : 'No cards selected.'); window._tcgDismantling = false; return; }
+    const { allowed: selectedCards, lockedCount } = _tcgSplitSetLocked(favFiltered);
+    if (!selectedCards.length) { alert(skippedFavs ? 'All selected cards are favorited. Unfavorite them first.' : lockedCount ? 'All selected cards are still SET-locked and cannot be dismantled yet.' : 'No cards selected.'); window._tcgDismantling = false; return; }
     const total = selectedCards.reduce((sum, c) => sum + (TCG_DISMANTLE_RATES[c.rarity] || 0), 0);
-    const favNote = skippedFavs ? ` (${skippedFavs} favorited card${skippedFavs>1?'s':''} skipped)` : '';
+    const skipNotes = [skippedFavs ? `${skippedFavs} favorited` : '', lockedCount ? `${lockedCount} SET-locked` : ''].filter(Boolean).join(', ');
+    const favNote = skipNotes ? ` (${skipNotes} card${(skippedFavs+lockedCount)>1?'s':''} skipped)` : '';
     if (!confirm(`Dismantle ${selectedCards.length} card(s) for 🟡 ${total.toLocaleString()} Amber total?${favNote} This cannot be undone.`)) { window._tcgDismantling = false; return; }
     try {
         // Award amber FIRST so that if deletion fails the user keeps their cards.
@@ -17019,6 +17078,7 @@ window._tcgBulkDismantle = async function(uid, profileUid) {
             });
             await batch.commit();
         }
+        _tcgInvalidateSetCardsFor(uid, selectedCards);
         window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
         window._tcgMultiSelect.active = false;
         window._tcgMultiSelect.selected.clear();
@@ -17045,16 +17105,18 @@ window._tcgBulkShatter = async function(uid, profileUid) {
     let cards;
     try { cards = await _tcgLoadCollection(uid); } catch(e) { window._tcgShattering = false; return; }
     const favSet = window._tcgFavoriteIds || new Set();
-    const selectedCards = cards.filter(c => sel.has(c.id) && !favSet.has(c.id) && (TCG_SHATTER_RATES[c.rarity] > 0));
+    const eventFiltered = cards.filter(c => sel.has(c.id) && !favSet.has(c.id) && (TCG_SHATTER_RATES[c.rarity] > 0));
     const skippedFavs = cards.filter(c => sel.has(c.id) && favSet.has(c.id)).length;
     const skippedEvent = cards.filter(c => sel.has(c.id) && !favSet.has(c.id) && !(TCG_SHATTER_RATES[c.rarity] > 0)).length;
+    const { allowed: selectedCards, lockedCount } = _tcgSplitSetLocked(eventFiltered);
     if (!selectedCards.length) {
-        const note = skippedFavs ? ' (favorited cards skipped)' : skippedEvent ? ' (event/set cards cannot be shattered)' : '';
+        const note = skippedFavs ? ' (favorited cards skipped)' : skippedEvent ? ' (event/set cards cannot be shattered)' : lockedCount ? ' (SET-locked cards skipped)' : '';
         alert('No shatterable cards selected.' + note);
         window._tcgShattering = false; return;
     }
     const total = selectedCards.reduce((sum, c) => sum + (TCG_SHATTER_RATES[c.rarity] || 0), 0);
-    const skippedNote = (skippedFavs + skippedEvent) ? ` (${skippedFavs + skippedEvent} card${(skippedFavs+skippedEvent)>1?'s':''} skipped)` : '';
+    const skippedTotal = skippedFavs + skippedEvent + lockedCount;
+    const skippedNote = skippedTotal ? ` (${skippedTotal} card${skippedTotal>1?'s':''} skipped)` : '';
     if (!confirm(`Shatter ${selectedCards.length} card(s) for 🔷 ${total.toLocaleString()} Shards total?${skippedNote} This cannot be undone.`)) { window._tcgShattering = false; return; }
     try {
         if (total > 0) {
@@ -17069,6 +17131,7 @@ window._tcgBulkShatter = async function(uid, profileUid) {
             });
             await batch.commit();
         }
+        _tcgInvalidateSetCardsFor(uid, selectedCards);
         window._tcgCollectionCache.delete(uid); try { localStorage.removeItem(`tcg_coll_${uid}`); } catch {}
         window._tcgMultiSelect.active = false;
         window._tcgMultiSelect.selected.clear();
