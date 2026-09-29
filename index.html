@@ -1978,7 +1978,40 @@
                             </div>
 
                             <div id="p-lists" class="p-tab-content" style="display:none;">
-                                <div id="user-lists-container"></div>
+                                <div class="profile-tabs list-tabs" id="profile-list-tabs">
+                                    <button class="p-tab active" onclick="switchProfileListTab(event, 'all')">All Anime</button>
+                                    <button class="p-tab" onclick="switchProfileListTab(event, 'watching')">Currently Watching</button>
+                                    <button class="p-tab" onclick="switchProfileListTab(event, 'completed')">Completed</button>
+                                    <button class="p-tab" onclick="switchProfileListTab(event, 'on-hold')">On Hold</button>
+                                    <button class="p-tab" onclick="switchProfileListTab(event, 'dropped')">Dropped</button>
+                                    <button class="p-tab" onclick="switchProfileListTab(event, 'plan-to-watch')">Plan to Watch</button>
+                                    <button class="p-tab" onclick="switchProfileListTab(event, 'my-lists')"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle;">format_list_bulleted</span> My Lists</button>
+                                </div>
+
+                                <div id="profile-my-lists-section" style="display:none;margin-top:16px;">
+                                    <div id="user-lists-container"></div>
+                                </div>
+
+                                <div id="profile-list-table-container" class="list-table-container">
+                                    <div id="profile-list-private-msg" style="display:none;text-align:center;padding:40px;color:var(--text-muted);">
+                                        <span class="material-symbols-outlined" style="font-size:48px;">lock</span>
+                                        <p style="margin-top:12px;">This list is private. You need to be friends to see it.</p>
+                                    </div>
+                                    <table class="anime-list-table" id="profile-anime-list-table">
+                                        <thead>
+                                            <tr>
+                                                <th onclick="sortProfileAnimeList('rank')" class="sortable-col" style="width: 60px; text-align:center;">Rank <span class="sort-icon" id="profile-sort-icon-rank"><span class="material-symbols-outlined">unfold_more</span></span></th>
+                                                <th style="width: 70px;">Image</th>
+                                                <th onclick="sortProfileAnimeList('title')" class="sortable-col">Anime Title <span class="sort-icon" id="profile-sort-icon-title"><span class="material-symbols-outlined">unfold_more</span></span></th>
+                                                <th onclick="sortProfileAnimeList('score')" class="sortable-col" style="width: 100px; text-align:center;">Score <span class="sort-icon" id="profile-sort-icon-score"><span class="material-symbols-outlined">unfold_more</span></span></th>
+                                                <th style="width: 120px; text-align:center;">Progress</th>
+                                                <th style="width: 100px; text-align:center;">Status</th>
+                                                <th style="width: 80px; text-align:center;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="profile-anime-list-tbody"></tbody>
+                                    </table>
+                                </div>
                             </div>
 
                             <div id="p-tcg-binders" class="p-tab-content" style="display:none;">
@@ -3048,6 +3081,6 @@
 
     <script src="characters.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
-    <script type="module" src="app.js?v=810"></script>
+    <script type="module" src="app.js?v=811"></script>
 </body>
 </html>

@@ -2932,6 +2932,164 @@ window.openReviewFromList = async function(malId, title, image) {
     await window.openReviewModal();
 };
 
+// --- Profile "Lists" tab: same table as the My List page, for any user's
+// profile. Kept fully separate from window.myAnimeList/currentListTab so
+// browsing someone else's profile can never clobber your own My List state.
+window._profileListState = { uid: null, list: [], reviewScoreMap: {}, currentTab: 'all', currentSort: { key: 'score', desc: true } };
+
+window.loadProfileListsTab = async function(uid) {
+    const tabsEl = document.getElementById('profile-list-tabs');
+    if (tabsEl) {
+        tabsEl.querySelectorAll('.p-tab').forEach(t => t.classList.remove('active'));
+        tabsEl.querySelector('.p-tab')?.classList.add('active');
+    }
+    document.getElementById('profile-my-lists-section')?.style.setProperty('display', 'none');
+    const tableContainer = document.getElementById('profile-list-table-container');
+    if (tableContainer) tableContainer.style.display = '';
+    window._profileListState.currentTab = 'all';
+    window._profileListState.currentSort = { key: 'score', desc: true };
+
+    if (window._profileListState.uid === uid && tableContainer?.dataset.loaded === uid) {
+        renderProfileAnimeList();
+        return;
+    }
+    if (tableContainer) tableContainer.dataset.loaded = uid;
+    await window._fetchProfileAnimeList(uid);
+};
+
+window._fetchProfileAnimeList = async function(uid) {
+    const table = document.getElementById('profile-anime-list-table');
+    const privateMsg = document.getElementById('profile-list-private-msg');
+    if (table) table.style.display = '';
+    if (privateMsg) privateMsg.style.display = 'none';
+    window._profileListState.uid = uid;
+    try {
+        const isMe = auth.currentUser?.uid === uid;
+        const [ownerProfile, snap, revSnap] = await Promise.all([
+            getDoc(doc(db, "profiles", uid)),
+            getDocs(query(collection(db, "anime_lists"), where("uid", "==", uid))),
+            getDocs(query(collection(db, "reviews"), where("uid", "==", uid)))
+        ]);
+        const listPrivate = ownerProfile.exists() ? ownerProfile.data().listPrivate : false;
+        if (listPrivate && !isMe && !window.myFriendIds?.has(uid)) {
+            if (table) table.style.display = 'none';
+            if (privateMsg) privateMsg.style.display = 'block';
+            window._profileListState.list = [];
+            window._profileListState.reviewScoreMap = {};
+            return;
+        }
+        window._profileListState.list = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+        const reviewScoreMap = {};
+        revSnap.forEach(d => {
+            const data = d.data();
+            if (data.type !== 'suggestion' && data.score != null) reviewScoreMap[data.mal_id] = data.score;
+        });
+        window._profileListState.reviewScoreMap = reviewScoreMap;
+        renderProfileAnimeList();
+    } catch(e) {
+        console.error('_fetchProfileAnimeList:', e);
+        const tbody = document.getElementById('profile-anime-list-tbody');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">Failed to load list.</td></tr>`;
+    }
+};
+
+window.switchProfileListTab = function(event, tabId) {
+    document.querySelectorAll('#profile-list-tabs .p-tab').forEach(t => t.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+
+    const tableSection = document.getElementById('profile-list-table-container');
+    const listsSection = document.getElementById('profile-my-lists-section');
+    const uid = window._profileListState.uid;
+
+    if (tabId === 'my-lists') {
+        if (tableSection) tableSection.style.display = 'none';
+        if (listsSection) listsSection.style.display = 'block';
+        if (uid) {
+            const container = document.getElementById('user-lists-container');
+            if (container) {
+                container.dataset.loaded = '';
+                window._renderListsInto(container, uid, uid === auth.currentUser?.uid);
+            }
+        }
+        return;
+    }
+
+    if (tableSection) tableSection.style.display = '';
+    if (listsSection) listsSection.style.display = 'none';
+    window._profileListState.currentTab = tabId;
+    window._profileListState.currentSort = { key: 'score', desc: true };
+    renderProfileAnimeList();
+};
+
+window.sortProfileAnimeList = function(key) {
+    const s = window._profileListState.currentSort;
+    if (s.key === key) { s.desc = !s.desc; }
+    else { s.key = key; s.desc = key !== 'title'; }
+    renderProfileAnimeList();
+    ['rank', 'title', 'score'].forEach(k => {
+        const el = document.getElementById(`profile-sort-icon-${k}`);
+        if (!el) return;
+        const isActive = s.key === k;
+        el.classList.toggle('active', isActive);
+        el.innerHTML = `<span class="material-symbols-outlined">${isActive ? (s.desc ? 'arrow_downward' : 'arrow_upward') : 'unfold_more'}</span>`;
+    });
+};
+
+function renderProfileAnimeList() {
+    const { list, reviewScoreMap, currentTab, currentSort } = window._profileListState;
+    let filteredList = list;
+    if (currentTab !== 'all') filteredList = list.filter(a => a.status === currentTab);
+
+    const scoreFor = a => reviewScoreMap[a.mal_id] ?? 0;
+    let rankedList = [...filteredList].sort((a, b) => scoreFor(b) - scoreFor(a));
+    rankedList.forEach((item, index) => item._absoluteRank = index + 1);
+
+    const { key, desc } = currentSort;
+    rankedList.sort((a, b) => {
+        if (key === 'title') return desc ? b.title.localeCompare(a.title) : a.title.localeCompare(b.title);
+        if (key === 'score') return desc ? scoreFor(b) - scoreFor(a) : scoreFor(a) - scoreFor(b);
+        if (key === 'rank') return desc ? b._absoluteRank - a._absoluteRank : a._absoluteRank - b._absoluteRank;
+        return 0;
+    });
+
+    const tbody = document.getElementById('profile-anime-list-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (rankedList.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">No anime found in this category.</td></tr>`;
+        return;
+    }
+
+    const statusClasses = {
+        'watching': 'status-watching', 'completed': 'status-completed',
+        'on-hold': 'status-on-hold', 'dropped': 'status-dropped', 'plan-to-watch': 'status-plan-to-watch'
+    };
+    const statusLabels = {
+        'watching': 'Watching', 'completed': 'Completed', 'on-hold': 'On Hold',
+        'dropped': 'Dropped', 'plan-to-watch': 'Plan to Watch'
+    };
+
+    rankedList.forEach(anime => {
+        const safeTitle = anime.title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        tbody.innerHTML += `
+            <tr>
+                <td style="text-align:center; font-weight:bold; font-size:16px; color:var(--text-muted);">${anime._absoluteRank}</td>
+                <td><img src="${anime.image}" style="width:50px; height:70px; border-radius:4px; object-fit:cover; cursor:pointer;" onclick="loadAnimeDetails(${anime.mal_id})"></td>
+                <td style="font-weight:600; cursor:pointer;" onclick="loadAnimeDetails(${anime.mal_id})">${anime.title}</td>
+                <td style="text-align:center; font-weight:800; font-size:16px;">${reviewScoreMap[anime.mal_id] != null ? Number(reviewScoreMap[anime.mal_id]).toFixed(1) : '-'}</td>
+                <td style="text-align:center; color:var(--text-muted);">
+                    <strong style="color:var(--text-dark);">${anime.watchedEpisodes}</strong> / ${anime.totalEpisodes > 0 ? anime.totalEpisodes : '?'}
+                </td>
+                <td style="text-align:center;"><span class="list-status-badge ${statusClasses[anime.status]}">${statusLabels[anime.status]}</span></td>
+                <td style="text-align:center;">
+                    <button class="action-btn" style="padding:6px; min-width:unset; margin:0;" title="Write review" onclick="openReviewFromList(${anime.mal_id}, '${safeTitle}', '${anime.image}')"><span class="material-symbols-outlined" style="font-size:18px;">rate_review</span></button>
+                </td>
+            </tr>
+        `;
+    });
+}
+
 // --- Ranked Top Anime System ---
 window.currentTopAnimeList = [];
 
@@ -4066,7 +4224,7 @@ window.switchProfileTab = function(event, tabId) {
     event.currentTarget.classList.add('active');
     if (tabId === 'p-feed')         window.loadProfileFeed(window.currentProfileUid);
     if (tabId === 'p-reviews')      window.loadProfileReviews(window.currentProfileUid);
-    if (tabId === 'p-lists')        window.loadProfileLists(window.currentProfileUid);
+    if (tabId === 'p-lists')        window.loadProfileListsTab(window.currentProfileUid);
     if (tabId === 'p-tcg-binders')  window.loadProfileTcgBinders(window.currentProfileUid);
     if (tabId === 'p-stats')        window.loadProfileStats(window.currentProfileUid);
     if (tabId === 'p-achievements') window.loadProfileAchievements(window.currentProfileUid);
@@ -4717,6 +4875,9 @@ window.fetchUserProfile = async function(targetUid = null) {
     if (tcgBindersEl) { tcgBindersEl.innerHTML = ''; delete tcgBindersEl.dataset.loaded; }
     const socialTabEl = document.getElementById('p-social');
     if (socialTabEl) { delete socialTabEl.dataset.loaded; }
+    const profileListTableEl = document.getElementById('profile-list-table-container');
+    if (profileListTableEl) { delete profileListTableEl.dataset.loaded; }
+    window._profileListState.uid = null;
     window.loadProfileFeed(uidToFetch);
 
     // Follower / Following counts — server-side aggregation, no documents downloaded
