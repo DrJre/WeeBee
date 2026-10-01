@@ -9313,6 +9313,7 @@ const WHEEL_MONTHLY_UR_BACKLOG = [
     { name: 'Yamato', anime: 'One Piece', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/One%20Piece/UR/Yamato%20Monthly%20UR.gif' },
     { name: 'Zenitsu', anime: 'Demon Slayer', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Demon%20Slayer/UR/Zenitsu.gif' },
     { name: 'Yoruichi Shihoin', anime: 'Bleach', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/Bleach/UR/Yoruichi%20UR.gif' },
+    { name: 'Nanami', anime: 'Jujutsu Kaisen', image: 'https://pub-b241667abcf649f48658584322a083c1.r2.dev/tcg-art/JJK/UR/NanamiUR-ezgif.com-crop.gif' },
 ];
 const WHEEL_UR_BACKLOG_EPOCH = { year: 2026, month: 6 }; // June 2026 = backlog[0]
 
