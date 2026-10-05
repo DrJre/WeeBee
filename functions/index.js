@@ -2059,6 +2059,61 @@ exports.adminSaveTournamentPrizes = onRequest({ invoker: 'public' }, async (req,
     res.json({ result: { success: true } });
 });
 
+// Fixed amber/shards payout per placement, same every tournament. Card prizes
+// (place 1: 1 random SSR, place 2: 3 random SRs, place 3: 5 random Rares) are
+// rolled fresh at creation time in autoCreateTournament below — serials are
+// assigned later, automatically, when _distributePrizes actually pays out.
+const TOURNAMENT_PRIZE_TABLE = {
+    1: { amber: 7500, shards: 250 },
+    2: { amber: 5000, shards: 100 },
+    3: { amber: 3750, shards: 50 },
+    4: { amber: 2500 },
+    5: { amber: 2000 },
+    6: { amber: 1500 },
+    7: { amber: 1000 },
+    8: { amber: 800 },
+    9: { amber: 300 },
+    10: { amber: 150 },
+};
+
+// Strips the fields _distributePrizes doesn't need (rarityTier, series, etc.)
+// down to the {name, anime, image, rarity} shape pickCard() already returns.
+function _tourneyRollPrizeCards(pool) {
+    const prizes = JSON.parse(JSON.stringify(TOURNAMENT_PRIZE_TABLE));
+    prizes[1].cards = [pickCard(pool, 'ssr')];
+    prizes[2].cards = [pickCard(pool, 'sr'), pickCard(pool, 'sr'), pickCard(pool, 'sr')];
+    prizes[3].cards = [pickCard(pool, 'rare'), pickCard(pool, 'rare'), pickCard(pool, 'rare'), pickCard(pool, 'rare'), pickCard(pool, 'rare')];
+    const out = {};
+    for (const [place, prize] of Object.entries(prizes)) out[place] = prize;
+    return out;
+}
+
+// Creates the next WeeBee Tournament automatically — fires at the moment
+// registration opens (Sun/Thu 7PM ET), exactly 24h before the Mon/Fri 7PM ET
+// start time, mirroring adminCreateTournament's regOpenDate formula. Prize
+// amber/shards are fixed (TOURNAMENT_PRIZE_TABLE); prize cards are rolled
+// randomly from the normal released pack pool via pickCard(), which never
+// touches the separate founder/event (PR/NR)/wheel-prize card arrays.
+exports.autoCreateTournament = onSchedule({ schedule: '0 19 * * 0,4', timeZone: 'America/New_York' }, async () => {
+    const db = getFirestore();
+    const regOpenDate = new Date();
+    const startDate = new Date(regOpenDate.getTime() + 24 * 3600 * 1000);
+    const pool = await ensureCardPool(db);
+    const prizes = _tourneyRollPrizeCards(pool);
+    const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: 'America/New_York' }).format(startDate);
+    await db.collection('pvp_tournaments').add({
+        name: `WeeBee Tournament — ${dayName}`,
+        status: 'registration',
+        startTime: startDate,
+        registrationOpenTime: regOpenDate,
+        entryCost: 1000,
+        prizes,
+        playerCount: 0,
+        currentRound: 0, totalRounds: 0,
+        createdAt: new Date(), createdBy: 'auto',
+    });
+});
+
 exports.adminCancelTournament = onRequest({ invoker: 'public' }, async (req, res) => {
     setCORS(res);
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
