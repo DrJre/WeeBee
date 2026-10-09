@@ -26266,6 +26266,15 @@ const BW_NRT_CHARS = [
     {id:'chojuro',    name:'Chojuro',            img:'https://s4.anilist.co/file/anilistcdn/character/large/23418.jpg',                 gender:'Male',   affiliation:['Mist'],                                  jutsuType:['Ninjutsu','Taijutsu','Kenjutsu'],                                             nature:['Water'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Five Kage Summit'},
     {id:'ao',         name:'Ao',                 img:'https://cdn.myanimelist.net/images/characters/13/631929.jpg',                     gender:'Male',   affiliation:['Mist'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Water','Fire','Earth'],                          kekkeiGenkai:false, attribute:[],                    debutArc:'Five Kage Summit'},
     {id:'genma',      name:'Genma Shiranui',      img:'https://s4.anilist.co/file/anilistcdn/character/large/n3735-IRx14wSYNVSE.png',    gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Fuinjutsu'],                                            nature:['Fire','Earth'],                                  kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    // ── New additions ──
+    {id:'shisui',     name:'Shisui Uchiha',       img:'',  gender:'Male',   affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Taijutsu','Genjutsu'],                                             nature:['Fire'],                                          kekkeiGenkai:true,  attribute:['Anbu'],              debutArc:'Fated Battle Between Brothers'},
+    {id:'yahiko',     name:'Yahiko',              img:'',  gender:'Male',   affiliation:['Missing-nin','Akatsuki'],                jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Earth'],                                         kekkeiGenkai:false, attribute:[],                    debutArc:'Itachi Pursuit'},
+    {id:'shizune',    name:'Shizune',             img:'',  gender:'Female', affiliation:['Leaf'],                                  jutsuType:['Ninjutsu','Medical Ninjutsu'],                                                nature:['Water','Earth'],                                 kekkeiGenkai:false, attribute:[],                    debutArc:'Search for Tsunade'},
+    {id:'anko',       name:'Anko Mitarashi',      img:'',  gender:'Female', affiliation:['Leaf','Sound'],                          jutsuType:['Ninjutsu','Fuinjutsu'],                                                       nature:['Fire','Earth'],                                  kekkeiGenkai:false, attribute:[],                    debutArc:'Chunin Exams'},
+    {id:'kurotsuchi', name:'Kurotsuchi',          img:'',  gender:'Female', affiliation:['Stone'],                                 jutsuType:['Ninjutsu','Taijutsu'],                                                        nature:['Earth','Fire','Lightning'],                      kekkeiGenkai:true,  attribute:[],                    debutArc:'Five Kage Summit'},
+    {id:'samui',      name:'Samui',               img:'',  gender:'Female', affiliation:['Cloud'],                                 jutsuType:['Kenjutsu','Ninjutsu'],                                                        nature:['Lightning'],                                     kekkeiGenkai:false, attribute:[],                    debutArc:'Five Kage Summit'},
+    {id:'omoi',       name:'Omoi',                img:'',  gender:'Male',   affiliation:['Cloud'],                                 jutsuType:['Kenjutsu','Ninjutsu'],                                                        nature:['Lightning'],                                     kekkeiGenkai:false, attribute:[],                    debutArc:'Five Kage Summit'},
+    {id:'mifune',     name:'Mifune',              img:'',  gender:'Male',   affiliation:['Samurai'],                               jutsuType:['Kenjutsu'],                                                                   nature:[],                                                kekkeiGenkai:false, attribute:[],                    debutArc:'Five Kage Summit'},
 ];
 
 // --- BuzzWord: Naruto — Image System ---
@@ -27077,6 +27086,17 @@ const BW_OP_CHARS = [
     {id:'judge',name:'Vinsmoke Judge',img:'https://s4.anilist.co/file/anilistcdn/character/large/b127895-Io7YzfaJSW7t.png',gender:'Male',affiliation:'Vinsmoke Family',df:{has:false,type:null,name:null},haki:[],bounty:0,height:262,firstArc:'Whole Cake Island'},
     {id:'corazon',name:'Donquixote Rosinante',img:'https://s4.anilist.co/file/anilistcdn/character/large/b120536-PxdNxEhQwE8d.png',gender:'Male',affiliation:'Donquixote Pirates',df:{has:true,type:'Paramecia',name:'Nagi Nagi no Mi'},haki:[],bounty:0,height:293,firstArc:'Dressrosa'},
     {id:'bepo',name:'Bepo',img:'https://s4.anilist.co/file/anilistcdn/character/large/b17492-PCFNvded635o.png',gender:'Male',affiliation:'Heart Pirates',df:{has:false,type:null,name:null},haki:['Armament'],bounty:500,height:211,firstArc:'Sabaody Archipelago'},
+    // ── New additions ──
+    {id:'donkrieg',name:'Don Krieg',img:'',gender:'Male',affiliation:'Krieg Pirates',df:{has:false,type:null,name:null},haki:[],bounty:17000000,height:243,firstArc:'Baratie'},
+    {id:'kuro',name:'Captain Kuro',img:'',gender:'Male',affiliation:'Black Cat Pirates',df:{has:false,type:null,name:null},haki:[],bounty:16000000,height:181,firstArc:'Syrup Village'},
+    {id:'bonclay',name:'Mr. 2 Bon Clay',img:'',gender:'Male',affiliation:'Baroque Works',df:{has:true,type:'Paramecia',name:'Mane Mane no Mi'},haki:[],bounty:0,height:218,firstArc:'Alabasta'},
+    {id:'magellan',name:'Magellan',img:'',gender:'Male',affiliation:'Impel Down',df:{has:true,type:'Paramecia',name:'Doku Doku no Mi'},haki:[],bounty:0,height:666,firstArc:'Impel Down'},
+    {id:'kaku',name:'Kaku',img:'',gender:'Male',affiliation:'CP9',df:{has:true,type:'Zoan',name:'Tori Tori no Mi, Model: Giraffe'},haki:['Armament'],bounty:0,height:185,firstArc:'Water 7'},
+    {id:'kalifa',name:'Kalifa',img:'',gender:'Female',affiliation:'CP9',df:{has:true,type:'Paramecia',name:'Awa Awa no Mi'},haki:[],bounty:0,height:185,firstArc:'Water 7'},
+    {id:'alvida',name:'Alvida',img:'',gender:'Female',affiliation:'Alvida Pirates',df:{has:true,type:'Paramecia',name:'Sube Sube no Mi'},haki:[],bounty:5000000,height:198,firstArc:'Romance Dawn'},
+    {id:'iceburg',name:'Iceburg',img:'',gender:'Male',affiliation:'Galley-La Company',df:{has:false,type:null,name:null},haki:[],bounty:0,height:199,firstArc:'Water 7'},
+    {id:'spandam',name:'Spandam',img:'',gender:'Male',affiliation:'CP9',df:{has:false,type:null,name:null},haki:[],bounty:0,height:192,firstArc:'Water 7'},
+    {id:'wyper',name:'Wyper',img:'',gender:'Male',affiliation:'Shandia',df:{has:false,type:null,name:null},haki:[],bounty:0,height:183,firstArc:'Skypiea'},
 ];
 
 // --- BuzzWord: One Piece — Image System ---
@@ -27692,6 +27712,17 @@ const BW_BLC_CHARS = [
     {id:'nelliel',   name:'Nelliel Tu Odelschwanck',  img:'https://cdn.myanimelist.net/images/characters/6/368248.jpg',  gender:'Female', race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Hueco Mundo'},
     {id:'yammy',     name:'Yammy Llargo',              img:'https://cdn.myanimelist.net/images/characters/15/92015.jpg',  gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Melee',    hasBankai:false, debutArc:'Arrancar'},
     {id:'loly',      name:'Loly Aivirrne',             img:'https://cdn.myanimelist.net/images/characters/5/56720.jpg',   gender:'Female', race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'None',        zanpakutoType:'Melee',    hasBankai:false, debutArc:'Hueco Mundo'},
+    // ── New additions ──
+    {id:'soifon',    name:'Soi Fon',                   img:'',  gender:'Female', race:'Shinigami', affiliation:'Soul Society', rank:'Captain',     zanpakutoType:'Other',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'ikkaku',    name:'Ikkaku Madarame',           img:'',  gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'None',        zanpakutoType:'Melee',    hasBankai:true,  debutArc:'Soul Society'},
+    {id:'omaeda',    name:'Marechiyo Omaeda',          img:'',  gender:'Male',   race:'Shinigami', affiliation:'Soul Society', rank:'Lieutenant',  zanpakutoType:'Melee',    hasBankai:false, debutArc:'Soul Society'},
+    {id:'kukaku',    name:'Kukaku Shiba',              img:'',  gender:'Female', race:'Shinigami', affiliation:'Neutral',      rank:'None',        zanpakutoType:'N/A',      hasBankai:false, debutArc:'Soul Society'},
+    {id:'ganju',     name:'Ganju Shiba',               img:'',  gender:'Male',   race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'N/A',      hasBankai:false, debutArc:'Soul Society'},
+    {id:'wonderweiss',name:'Wonderweiss Margela',      img:'',  gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'None',        zanpakutoType:'Other',    hasBankai:false, debutArc:'Arrancar'},
+    {id:'zommari',   name:'Zommari Rureaux',           img:'',  gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Arrancar'},
+    {id:'aaroniero', name:'Aaroniero Arruruerie',      img:'',  gender:'Male',   race:'Arrancar',  affiliation:'Hueco Mundo',  rank:'Espada',      zanpakutoType:'Other',    hasBankai:false, debutArc:'Arrancar'},
+    {id:'yuzu',      name:'Yuzu Kurosaki',             img:'',  gender:'Female', race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
+    {id:'karin',     name:'Karin Kurosaki',            img:'',  gender:'Female', race:'Human',     affiliation:'Neutral',      rank:'None',        zanpakutoType:'N/A',      hasBankai:false, debutArc:'Agent of the Shinigami'},
 ];
 
 // --- BuzzWord: Bleach — Image System ---
@@ -28105,6 +28136,14 @@ const BW_DB_CHARS = [
     {id:'caulifla',    name:'Caulifla',       img:'https://cdn.myanimelist.net/images/characters/13/358997.jpg', gender:'Female', race:'Saiyan',      origin:'Planet Sadala', affiliation:['Other','Z Fighters'],                   transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
     {id:'jiren',       name:'Jiren',          img:'https://cdn.myanimelist.net/images/characters/12/380618.jpg', gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Other','Villain'],                      transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
     {id:'toppo',       name:'Toppo',          img:'https://cdn.myanimelist.net/images/characters/15/358958.jpg', gender:'Male',   race:'Other',       origin:'Unknown',       affiliation:['Other','Villain'],                      transformation:true,  debutSeries:'DBS', debutArc:'Universe Survival'},
+    // ── New additions ──
+    {id:'dende',       name:'Dende',          img:'', gender:'Male',   race:'Namekian', origin:'Namek', affiliation:['Z Fighters'],                 transformation:false, debutSeries:'DBZ', debutArc:'Namek'},
+    {id:'pilaf',       name:'Pilaf',          img:'', gender:'Male',   race:'Human',    origin:'Earth', affiliation:['Villain'],                    transformation:false, debutSeries:'DB',  debutArc:'Emperor Pilaf'},
+    {id:'tao',         name:'Mercenary Tao',  img:'', gender:'Male',   race:'Human',    origin:'Earth', affiliation:['Red Ribbon Army','Villain'],  transformation:false, debutSeries:'DB',  debutArc:'Red Ribbon Army'},
+    {id:'general-blue',name:'General Blue',   img:'', gender:'Male',   race:'Human',    origin:'Earth', affiliation:['Red Ribbon Army','Villain'],  transformation:false, debutSeries:'DB',  debutArc:'Red Ribbon Army'},
+    {id:'launch',      name:'Launch',         img:'', gender:'Female', race:'Human',    origin:'Earth', affiliation:['Other'],                      transformation:false, debutSeries:'DB',  debutArc:'Red Ribbon Army'},
+    {id:'uub',         name:'Uub',            img:'', gender:'Male',   race:'Human',    origin:'Earth', affiliation:['Z Fighters'],                 transformation:false, debutSeries:'DBZ', debutArc:'Buu'},
+    {id:'jaco',        name:'Jaco',           img:'', gender:'Male',   race:'Other',    origin:'Unknown', affiliation:['Galactic Patrol'],          transformation:false, debutSeries:'DBS', debutArc:'Galactic Patrol'},
 ];
 
 // --- BuzzWord: Dragon Ball — Image System ---
